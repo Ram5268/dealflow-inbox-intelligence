@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Category {
+  COMING_SOON_SALE
+  OFF_MARKET_SALE
+  ACTIVE_SALE_LISTING
+  RENTAL_LISTING
+  BUYER_ISO
+  RENTER_INQUIRY
+  SELLER_LEAD
+  LANDLORD_LEAD
+  DEVELOPMENT_INVENTORY
+  OPEN_HOUSE
+  PRICE_DROP
+  BACK_ON_MARKET
+  NOISE
+}
+
+enum TransactionType {
+  SALE
+  RENTAL
+  BUYER_NEED
+  RENTER_NEED
+  SELLER_LEAD
+  LANDLORD_LEAD
+  UNKNOWN
+}
+
+model User {
+  id              String   @id @default(cuid())
+  email           String   @unique
+  name            String?
+  microsoftUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  mailboxes ConnectedMailbox[]
+  emails    RawEmail[]
+}
+
+model ConnectedMailbox {
+  id                    String    @id @default(cuid())
+  userId                String?
+  email                 String
+  provider              String    @default("microsoft")
+  accessTokenEncrypted  String?
+  refreshTokenEncrypted String?
+  lastSyncAt            DateTime?
+  deltaLink             String?
+  readOnlyMode          Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user   User?      @relation(fields: [userId], references: [id])
+  emails RawEmail[]
+}
+
+model RawEmail {
+  id                String    @id @default(cuid())
+  userId            String?
+  mailboxId         String?
+  graphMessageId    String    @unique
+  internetMessageId String?
+  subject           String
+  senderName        String?
+  senderEmail       String?
+  receivedDateTime  DateTime
+  bodyPreview       String?
+  bodyContent       String?
+  bodyContentType   String?
+  attachmentsText   String?
+  webLink           String?
+  rawJson           Json?
+  processed         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user          User?             @relation(fields: [userId], references: [id])
+  mailbox       ConnectedMailbox? @relation(fields: [mailboxId], references: [id])
+  opportunities ExtractedOpportunity[]
+}
+
+model ExtractedOpportunity {
+  id                   String          @id @default(cuid())
+  rawEmailId           String
+  category             Category
+  transactionType      TransactionType
+  propertyType         String?
+  address              String?
+  neighborhood         String?
+  borough              String?
+  city                 String?
+  state                String?
+  zip                  String?
+  price                Float?
+  minPrice             Float?
+  maxPrice             Float?
+  beds                 Float?
+  baths                Float?
+  units                Float?
+  squareFeet           Float?
+  availabilityDate     String?
+  sourceAgentName      String?
+  sourceAgentEmail     String?
+  sourceBrokerage      String?
+  clientSide           String?
+  status               String?
+  extractedTitle       String
+  extractedSummary     String
+  classificationReason String
+  confidenceScore      Float
+  isDuplicate          Boolean  @default(false)
+  duplicateGroupId     String?
+  embedding            Unsupported("vector(1536)")?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  rawEmail RawEmail @relation(fields: [rawEmailId], references: [id])
+}
+
+model SearchQuery {
+  id                 String   @id @default(cuid())
+  queryText          String
+  parsedCriteriaJson Json?
+  resultCount        Int
+  createdAt          DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  action      String
+  detailsJson Json?
+  createdAt   DateTime @default(now())
+}
+
+model ChatSession {
+  id        String        @id @default(cuid())
+  title     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+}
+
+model ChatMessage {
+  id          String      @id @default(cuid())
+  sessionId   String
+  session     ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role        String      // "user" | "assistant"
+  content     String
+  dealsJson   Json?
+  suggestions Json?
+  createdAt   DateTime    @default(now())
+}

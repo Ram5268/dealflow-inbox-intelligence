@@ -1,26 +1,159 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────
+   SUNRISE DESIGN SYSTEM
+   Tokens, glass, motion, themes — scoped to .sr-* classes.
+   Existing --df-* variables below are untouched.
+───────────────────────────────────────────────────────────── */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Palette */
+  --sr-cream:       #E0C090;
+  --sr-ivory:       #EDE0CC;
+  --sr-peach:       #C88050;
+  --sr-terracotta:  #9A6838;
+  --sr-clay:        #3A1C0C;
+  --sr-ink-1:       #19181E;
+  --sr-ink-2:       #070505;
+  --sr-ink-rail:    #3a1810;
+
+  /* Background gradient stops */
+  --sr-s0: #B88C58;
+  --sr-s1: #9A6838;
+  --sr-s2: #7A4A28;
+  --sr-s3: #3A1C0C;
+  --sr-s4: #1C0A06;
+
+  /* Glass */
+  --sr-glass-bg:     rgba(255,255,255,0.12);
+  --sr-glass-border: rgba(255,255,255,0.14);
+  --sr-glass-blur:   blur(28px) saturate(170%);
+  --sr-glass-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 16px 30px rgba(0,0,0,0.35);
+
+  /* Motion */
+  --sr-spring: cubic-bezier(.22,1,.36,1);
+
+  /* Font slots — overridden by ChatSurfaceShell */
+  --font-display: var(--font-geist, system-ui);
+  --font-ui:      var(--font-geist, system-ui);
+  --font-mono:    var(--font-geist, monospace);
+}
+
+/* Background — top-to-bottom warm brown gradient */
+.sr-bg {
+  background: linear-gradient(
+    to bottom,
+    var(--sr-s0) 0%,
+    var(--sr-s1) 22%,
+    var(--sr-s2) 48%,
+    var(--sr-s3) 75%,
+    var(--sr-s4) 100%
+  );
+}
+
+/* Theme overrides — applied via class on ChatSurfaceShell root */
+.theme-sunshine    { --sr-s0:#E8D4A8; --sr-s1:#D4A060; --sr-s2:#A05028; --sr-s3:#4A2010; --sr-s4:#2A1008; }
+.theme-sunny-night { --sr-s0:#C07840; --sr-s1:#8C4820; --sr-s2:#5C2810; --sr-s3:#2A1008; --sr-s4:#180804; }
+.theme-ember       { --sr-s0:#D4956A; --sr-s1:#A05028; --sr-s2:#7C3818; --sr-s3:#4A1C08; --sr-s4:#2A0E04; }
+
+/* Glass surface */
+.sr-glass {
+  background: var(--sr-glass-bg);
+  border: 1px solid var(--sr-glass-border);
+  backdrop-filter: var(--sr-glass-blur);
+  -webkit-backdrop-filter: var(--sr-glass-blur);
+  box-shadow: var(--sr-glass-shadow);
+  border-radius: 20px;
+}
+.sr-glass-sm { border-radius: 16px; }
+
+/* Screen enter animation */
+.sr-anim-up {
+  animation: sr-slide-up 320ms ease-out both;
+}
+@keyframes sr-slide-up {
+  from { transform: translateY(8px); opacity: 0; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+
+/* Press feedback */
+.sr-press { transition: transform 120ms ease; }
+.sr-press:active { transform: scale(0.99); }
+
+/* Live dot pulse */
+@keyframes sr-live {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.6); }
+  50%      { box-shadow: 0 0 10px 2px rgba(255,255,255,0.7); }
+}
+.sr-live-dot { animation: sr-live 2s ease-in-out infinite; }
+
+/* ─────────────────────────────────────────────────────────────
+   EXISTING TOKENS (untouched)
+───────────────────────────────────────────────────────────── */
+:root {
+  --df-bg:          #7C3818;
+  --df-bg-mid:      #A05028;
+  --df-bg-light:    #BC7838;
+  --df-accent:      #CBA470;
+  --df-text:        #ffffff;
+  --df-muted:       rgba(255,255,255,0.60);
+  --df-faint:       rgba(255,255,255,0.30);
+  --df-card:        rgba(255,255,255,0.08);
+  --df-card-border: rgba(255,255,255,0.14);
+  --df-input:       rgba(255,255,255,0.10);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-geist);
+  --font-serif: var(--font-playfair);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+* { box-sizing: border-box; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(to bottom, #B88C58 0%, #9A6838 22%, #7A4A28 48%, #3A1C0C 75%, #1C0A06 100%);
+  color: var(--df-text);
+  font-family: var(--font-geist), -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* All pages — warm brown vertical gradient */
+.df-bg {
+  background: linear-gradient(to bottom, #B88C58 0%, #9A6838 22%, #7A4A28 48%, #3A1C0C 75%, #1C0A06 100%);
+}
+
+/* Glass card */
+.df-card {
+  background: var(--df-card);
+  border: 1px solid var(--df-card-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 16px;
+}
+
+/* Primary white button */
+.df-btn {
+  background: rgba(255,255,255,0.95);
+  color: var(--df-bg);
+  border: none;
+  border-radius: 50px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.df-btn:active { transform: scale(0.97); opacity: 0.9; }
+.df-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Ghost button */
+.df-btn-ghost {
+  background: transparent;
+  color: var(--df-muted);
+  border: 1px solid var(--df-card-border);
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.df-btn-ghost:hover { background: var(--df-card); color: var(--df-text); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 0px; }
