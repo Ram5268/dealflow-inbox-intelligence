@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import TopNav from '@/components/TopNav'
 
 interface ConnectionResult {
@@ -8,9 +8,15 @@ interface ConnectionResult {
 }
 interface PreviewResult {
   ok: boolean
-  messages?: Array<{ id: string; subject: string; from: { name?: string }; receivedDateTime: string; bodyPreview?: string }>
+  messages?: Array<{ id: string; subject: string; from: { name?: string }; receivedDateTime: string }>
   error?: string
 }
+interface TokenStatus {
+  status: 'ok' | 'expiring' | 'expired' | 'unknown'
+  expiresAt: string | null
+  minutesLeft: number | null
+}
+
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -23,12 +29,9 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function Btn({ onClick, disabled, children, variant = 'primary' }: { onClick?: () => void; disabled?: boolean; children: React.ReactNode; variant?: 'primary' | 'ghost' }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
+    <button onClick={onClick} disabled={disabled}
       className={variant === 'primary' ? 'df-btn' : 'df-btn-ghost'}
-      style={{ width: '100%', padding: '13px', fontSize: 14, fontWeight: 600 }}
-    >
+      style={{ width: '100%', padding: '13px', fontSize: 14, fontWeight: 600 }}>
       {children}
     </button>
   )
@@ -42,6 +45,11 @@ export default function SettingsPage() {
   const [token, setToken] = useState('')
   const [tokenSaving, setTokenSaving] = useState(false)
   const [tokenResult, setTokenResult] = useState<{ ok: boolean; message?: string; error?: string } | null>(null)
+  const [tokenStatus, setTokenStatus] = useState<TokenStatus | null>(null)
+
+  useEffect(() => {
+    fetch('/api/microsoft/token-status').then(r => r.json()).then(setTokenStatus).catch(() => {})
+  }, [])
 
   async function testConn() {
     setTestLoading(true); setTestResult(null)
@@ -63,15 +71,45 @@ export default function SettingsPage() {
     const r = await fetch('/api/microsoft/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: token.trim() }) })
     const result = await r.json()
     setTokenResult(result)
-    if (result.ok) setToken('')
+    if (result.ok) {
+      setToken('')
+      fetch('/api/microsoft/token-status').then(r => r.json()).then(setTokenStatus).catch(() => {})
+    }
     setTokenSaving(false)
   }
+
+  const statusColor = tokenStatus?.status === 'ok' ? 'rgba(150,255,180,0.85)'
+    : tokenStatus?.status === 'expiring' ? 'rgba(255,210,100,0.9)'
+    : tokenStatus?.status === 'expired' ? 'rgba(255,130,130,0.9)'
+    : 'rgba(255,255,255,0.35)'
+
+  const statusLabel = tokenStatus?.status === 'ok'
+    ? `Active — expires in ${tokenStatus.minutesLeft} min`
+    : tokenStatus?.status === 'expiring'
+    ? `Expiring soon — ${tokenStatus.minutesLeft} min left`
+    : tokenStatus?.status === 'expired'
+    ? 'Expired — refresh needed'
+    : 'Unknown — paste a token to check'
 
   return (
     <div className="df-bg min-h-screen" style={{ minHeight: '100dvh' }}>
       <TopNav />
 
       <div style={{ padding: '4px 16px 48px' }}>
+
+        {/* Token status pill */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '10px 14px', marginBottom: 12,
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 12,
+        }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
+          <span style={{ fontSize: 12, color: statusColor }}>{statusLabel}</span>
+        </div>
+
+
         {/* Test */}
         <Section title="Connection Status">
           <Btn onClick={testConn} disabled={testLoading} variant="ghost">
@@ -111,16 +149,13 @@ export default function SettingsPage() {
           )}
         </Section>
 
-        {/* Manual token */}
-        <Section title="Graph Explorer Token">
+        {/* Manual token fallback */}
+        <Section title="Manual Token (Fallback)">
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 12, lineHeight: 1.5 }}>
-            Paste a bearer token from Graph Explorer. Expires in ~60 min — refresh as needed.
+            Paste directly from Graph Explorer if the bookmarklet isn't working.
           </p>
-          <textarea
-            value={token}
-            onChange={e => setToken(e.target.value)}
-            placeholder="Paste token here..."
-            rows={2}
+          <textarea value={token} onChange={e => setToken(e.target.value)}
+            placeholder="Paste token here..." rows={2}
             style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', outline: 'none', resize: 'none', fontFamily: 'monospace', marginBottom: 10 }}
           />
           <Btn onClick={saveToken} disabled={tokenSaving || !token.trim()} variant="ghost">

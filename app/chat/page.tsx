@@ -74,6 +74,23 @@ function buildOpacityMap(messages: Message[]): Map<string, number> {
 
 interface Chip { label: string; query: string }
 
+const GREETINGS = [
+  'What are we looking at?',
+  'What just came in?',
+  'Who needs a deal?',
+  'What\'s moving today?',
+  'Where do we start?',
+  'What\'s on your radar?',
+  'Any leads worth chasing?',
+  'What\'s the ask?',
+  'Who\'s looking?',
+  'What landed overnight?',
+]
+
+function pickGreeting() {
+  return GREETINGS[Math.floor(Math.random() * GREETINGS.length)]
+}
+
 // ─── Shared atoms ─────────────────────────────────────────
 
 function BackBtn({ onClick }: { onClick: () => void }) {
@@ -246,7 +263,7 @@ function Composer({
 
 function MemoryView({
   messages, loading, loadingHistory, fresh,
-  chips, input, setInput, onSend, onOpenThread, onBack,
+  chips, greeting, input, setInput, onSend, onOpenThread, onBack,
   bottomRef,
 }: {
   messages: Message[]
@@ -254,6 +271,7 @@ function MemoryView({
   loadingHistory: boolean
   fresh: boolean
   chips: Chip[]
+  greeting: string
   input: string
   setInput: (v: string) => void
   onSend: (text?: string, files?: File[]) => void
@@ -301,25 +319,12 @@ function MemoryView({
           <div style={{
             flex: 1, display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
-            gap: 14, padding: '0 20px', textAlign: 'center',
+            gap: 18, padding: '0 20px', textAlign: 'center',
           }}>
-            <div style={{
-              width: 46, height: 46, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.08)',
-              border: '1px solid rgba(255,255,255,0.18)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.4" strokeLinecap="round">
-                <path d="M12 5v14M5 12h14" />
-              </svg>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 300, letterSpacing: '-0.016em', lineHeight: 1.15, color: '#fff' }}>
+              {greeting}
             </div>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 300, letterSpacing: '-0.012em', lineHeight: 1.15, color: '#fff' }}>
-              What are we looking at?
-            </div>
-            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 300, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5, maxWidth: 240 }}>
-              Ask about a client, a neighborhood, a price band — Drift will pick up from there.
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 6 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
               {chips.map(c => (
                 <span
                   key={c.label}
@@ -814,12 +819,14 @@ function ChatPageInner() {
   const [messages, setMessages] = useState<Message[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [chips, setChips] = useState<Chip[]>([])
+  const [greeting, setGreeting] = useState(GREETINGS[0])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    setGreeting(pickGreeting())
     fetch('/api/chat/chips').then(r => r.json()).then(d => setChips(d.chips ?? [])).catch(() => {})
   }, [])
 
@@ -897,7 +904,7 @@ function ChatPageInner() {
         <MemoryView
           messages={messages} loading={loading} loadingHistory={loadingHistory}
           fresh={cs.view === 'memory_new'}
-          chips={chips}
+          chips={chips} greeting={greeting}
           input={input} setInput={setInput} onSend={send}
           onOpenThread={msg => dispatch({ type: 'OPEN_THREAD', msg })}
           onBack={() => window.history.back()}
