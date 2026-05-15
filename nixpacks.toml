@@ -5,4 +5,4 @@ nixPkgs = ["cairo", "pango", "libpng", "libjpeg", "giflib", "librsvg", "pixman",
 cmds = ["npm ci", "npm run build"]
 
 [start]
-cmd = "npm run start"
+cmd = "node node_modules/.bin/next start -p $PORT"
