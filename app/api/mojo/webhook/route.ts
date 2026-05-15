@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+export const dynamic = 'force-dynamic'
 
 async function embedContact(c: {
   fullName: string; address?: string | null; city?: string | null;
   neighborhood?: string | null; notes?: string | null; tags?: string[]
 }) {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   const text = [c.fullName, c.address, c.city, c.neighborhood, c.notes, ...(c.tags ?? [])]
     .filter(Boolean).join(' ')
   const res = await openai.embeddings.create({ model: 'text-embedding-3-small', input: text })
