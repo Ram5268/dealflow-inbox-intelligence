@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import OpenAI from 'openai'
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+export const dynamic = 'force-dynamic'
 
 function deriveNeighborhood(city: string, address: string, zip: string): string | null {
   const combined = `${city} ${address} ${zip}`.toLowerCase()
@@ -60,6 +60,7 @@ export async function POST() {
     let embedding: number[] | null = null
     try {
       const text = [fullName, address, city, neighborhood, notes, ...tags].filter(Boolean).join(' ')
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
       const res = await openai.embeddings.create({ model: 'text-embedding-3-small', input: text })
       embedding = res.data[0].embedding
     } catch { /* non-fatal — contact still saved without embedding */ }
