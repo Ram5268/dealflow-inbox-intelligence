@@ -14,6 +14,9 @@ const SYSTEM_PROMPT = `You are DealFlow — Ryan Martin's private deal intellige
 
 Your database contains opportunities extracted from Ryan's inbox: coming soon, off-market, active listings, price drops, buyer ISOs from other agents, renter inquiries, seller leads, landlord leads, open houses, new development inventory, and full attachment data from listing PDFs and flyers.
 
+CALENDAR:
+You have direct access to Ryan's Outlook calendar. You can read his schedule and CREATE calendar events. When Ryan asks you to schedule, book, add, or create any meeting, call, showing, or appointment — use the create_calendar_event tool immediately. Do not give instructions. Do not say you can't. Just create it. After creating it, confirm with one line: what was scheduled, when, and who's invited if applicable.
+
 BUYER ISO CONTEXT:
 BUYER_ISO and RENTER_INQUIRY records are NOT Ryan's own clients — they are other agents' buyers/renters broadcasting their needs. When a listing matches a BUYER_ISO, that's a co-brokering opportunity: Ryan has the listing, the other agent has the buyer. Always name the source agent and brokerage when flagging these matches.
 
@@ -428,7 +431,7 @@ export async function POST(req: NextRequest) {
 
     // Calendar context — injected when query is schedule-related
     const isCalendarReadQuery  = /\bshowing|\bappointment|\bcalendar|\bschedule|\btoday\b|\btomorrow\b|\bthis week\b|\bwhat.*have|\bavailab/.test(queryText)
-    const isCalendarCreateQuery = /\bschedul|\badd.*(?:event|meeting|showing|call)|\bcreate.*(?:event|meeting)|\bput.*calendar|\bbook.*showing|\bset up.*meeting|\bblock.*time/.test(queryText)
+    const isCalendarCreateQuery = /\bschedul|\bbook\b|\bset up\b|\bblock.*time|\badd.*(?:event|meeting|showing|call|appointment)|\bcreate.*(?:event|meeting|appointment)|\bput.*calendar|\bcalendar.*invite|\bsend.*invite/.test(queryText)
 
     let calendarContext = ''
     if (isCalendarReadQuery || isCalendarCreateQuery) {
@@ -475,7 +478,10 @@ export async function POST(req: NextRequest) {
       messages,
       temperature: 0.3,
       max_tokens: 1500,
-      ...(isCalendarCreateQuery ? { tools: [calendarTool], tool_choice: 'auto' } : {}),
+      ...(isCalendarCreateQuery ? {
+        tools: [calendarTool],
+        tool_choice: { type: 'function' as const, function: { name: 'create_calendar_event' } },
+      } : {}),
     })
 
     let raw = (firstCompletion.choices[0].message.content ?? '').trim()
