@@ -12,8 +12,8 @@ export async function POST() {
 
   let updated = 0
   for (const session of sessions) {
-    const userMsg   = session.messages.find(m => m.role === 'user')
-    const assistMsg = session.messages.find(m => m.role === 'assistant')
+    const userMsg   = session.messages.find((m: { role: string }) => m.role === 'user')
+    const assistMsg = session.messages.find((m: { role: string }) => m.role === 'assistant')
     if (!userMsg) continue
 
     try {
