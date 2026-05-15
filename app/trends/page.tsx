@@ -55,7 +55,7 @@ export default function TrendsPage() {
 
   const topCat = data?.byCategory[0]
   const forYouText = topCat
-    ? `Most active: ${CATEGORY_LABELS[topCat.category] ?? topCat.category} — ${topCat.count} opportunities extracted.`
+    ? `Most active: ${(CATEGORY_LABELS as Record<string, string>)[topCat.category] ?? topCat.category} — ${topCat.count} opportunities extracted.`
     : null
 
   const movers = (data?.topBrokerages ?? []).slice(0, 5)
@@ -95,7 +95,7 @@ export default function TrendsPage() {
               <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {data.byCategory.slice(0, 6).map(c => (
                   <div key={c.category} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 300, color: 'rgba(255,255,255,0.6)' }}>{CATEGORY_LABELS[c.category] ?? c.category}</span>
+                    <span style={{ fontFamily: 'var(--font-ui)', fontSize: 11, fontWeight: 300, color: 'rgba(255,255,255,0.6)' }}>{(CATEGORY_LABELS as Record<string, string>)[c.category] ?? c.category}</span>
                     <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.5)' }}>{c.count}</span>
                   </div>
                 ))}

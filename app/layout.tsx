@@ -14,6 +14,15 @@ const ibmPlexMono = IBM_Plex_Mono({ variable: '--font-plex-mono', subsets: ['lat
 export const metadata: Metadata = {
   title: 'DealFlow',
   description: 'Real estate deal intelligence from your inbox',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'DealFlow',
+  },
+  icons: {
+    apple: '/icon-180.png',
+  },
 }
 
 export const viewport: Viewport = {

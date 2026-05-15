@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
           })
 
           // Re-embed with updated fields
-          upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...ext, id: opp.id })).catch(() => {})
+          upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...ext, id: opp.id } as Parameters<typeof buildOpportunityText>[0])).catch(() => {})
 
           reclassified++
           if (category !== prevCategory) {

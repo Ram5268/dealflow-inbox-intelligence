@@ -6,6 +6,8 @@ import { ExtractedOpportunity } from '@prisma/client'
 import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import MatchArc from '@/components/MatchArc'
+import ChatShaderBg from '@/components/ChatShaderBg'
+import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────
@@ -43,7 +45,7 @@ function reducer(s: ChatState, a: Action): ChatState {
       return { ...s, view: prev, stack }
     }
     case 'OPEN_THREAD':
-      return { ...s, stack: [...s.stack, s.view], view: 'thread', focusedMsg: a.msg, activeDealIdx: 0 }
+      return { ...s, stack: [...s.stack, s.view], view: 'raised', focusedMsg: a.msg, activeDealIdx: 0 }
     case 'SET_ACTIVE':
       return { ...s, activeDealIdx: a.idx }
     case 'RESET_NEW':
@@ -263,7 +265,7 @@ function Composer({
 
 function MemoryView({
   messages, loading, loadingHistory, fresh,
-  chips, greeting, input, setInput, onSend, onOpenThread, onBack,
+  chips, greeting, sessionKey, input, setInput, onSend, onOpenThread,
   bottomRef,
 }: {
   messages: Message[]
@@ -272,11 +274,11 @@ function MemoryView({
   fresh: boolean
   chips: Chip[]
   greeting: string
+  sessionKey: number
   input: string
   setInput: (v: string) => void
   onSend: (text?: string, files?: File[]) => void
   onOpenThread: (msg: Message) => void
-  onBack: () => void
   bottomRef: React.RefObject<HTMLDivElement | null>
 }) {
   const opacityMap = buildOpacityMap(messages)
@@ -292,14 +294,7 @@ function MemoryView({
 
   return (
     <>
-      {/* Top bar: BackBtn left, TopIcons center */}
-      <div style={{ padding: '4px 22px 6px', position: 'relative', zIndex: 5 }}>
-        <div style={{ position: 'absolute', left: 22, top: 4, zIndex: 6 }}>
-          <BackBtn onClick={onBack} />
-        </div>
-        {/* TopIcons is already rendered by ChatSurfaceShell — this is the per-screen override placeholder.
-            The shell renders TopIcons globally; Memory just adds the BackBtn overlay. */}
-      </div>
+      {/* TopIcons rendered by ChatSurfaceShell — no back button on main chat view */}
 
       {/* Scrollable log — outer div scrolls, inner div anchors content to bottom */}
       <div style={{
@@ -321,25 +316,29 @@ function MemoryView({
             alignItems: 'center', justifyContent: 'center',
             gap: 18, padding: '0 20px', textAlign: 'center',
           }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 300, letterSpacing: '-0.016em', lineHeight: 1.15, color: '#fff' }}>
-              {greeting}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
-              {chips.map(c => (
-                <span
-                  key={c.label}
-                  onClick={() => onSend(c.query)}
-                  style={{
-                    fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 300,
-                    letterSpacing: '-0.005em',
-                    padding: '7px 13px', borderRadius: 999,
-                    background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)',
-                    color: 'rgba(255,255,255,0.78)', cursor: 'pointer',
-                  }}
-                >
-                  {c.label}
-                </span>
-              ))}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
+              <BlurFade key={sessionKey} duration={0.25} delay={0.02} yOffset={6} blur="6px">
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 26, fontWeight: 300, letterSpacing: '-0.016em', lineHeight: 1.15, color: '#fff' }}>
+                  {greeting}
+                </div>
+              </BlurFade>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+                {chips.map(c => (
+                  <span
+                    key={c.label}
+                    onClick={() => onSend(c.query)}
+                    style={{
+                      fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 300,
+                      letterSpacing: '-0.005em',
+                      padding: '7px 13px', borderRadius: 999,
+                      background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)',
+                      color: 'rgba(255,255,255,0.78)', cursor: 'pointer',
+                    }}
+                  >
+                    {c.label}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         ) : (
@@ -408,21 +407,6 @@ function MemoryView({
                         </div>
                       )}
 
-                      {/* Suggestion chips */}
-                      {isLatestAI && (m.suggestions?.length ?? 0) > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8, marginLeft: 4 }}>
-                          {m.suggestions!.map((s, si) => (
-                            <button key={si} onClick={() => onSend(s)} style={{
-                              background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.12)',
-                              borderRadius: 999, padding: '5px 12px',
-                              fontFamily: 'var(--font-ui)', fontSize: 12,
-                              color: 'rgba(255,255,255,0.6)', cursor: 'pointer',
-                            }}>
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -603,7 +587,6 @@ function ThreadView({
 
 // ─── Raised view — wallet stack ───────────────────────────
 
-const PEEK = 58   // px visible from each stacked card
 
 function RaisedView({
   msg, userQuestion, activeDealIdx, onSetActive, onBack,
@@ -661,8 +644,9 @@ function RaisedView({
       </div>
 
       {/* Wallet stage */}
-      <div style={{ flex: 1, position: 'relative', padding: '0 16px 16px' }}>
-        {/* Active card */}
+      {/* Single scrollable container — active card + stacked deck flow together */}
+      <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none', padding: '0 16px 16px' }}>
+        {/* Active card — in normal flow */}
         {active && (
           <div
             className="sr-anim-up"
@@ -693,7 +677,7 @@ function RaisedView({
               <MatchArc pct={pct} size={48} strokeWidth={1.5} />
             </div>
 
-            {/* Price / PSF / Era strip */}
+            {/* Price / date strip */}
             <div style={{
               display: 'flex', gap: 14, marginTop: 14, paddingTop: 12,
               borderTop: '0.5px solid rgba(255,255,255,0.14)',
@@ -730,49 +714,50 @@ function RaisedView({
           </div>
         )}
 
-        {/* Wallet stack — absolutely positioned cards peeking below */}
-        <div style={{ position: 'absolute', left: 16, right: 16, top: 330, bottom: 16 }}>
-          {others.map(({ d, i }, si) => (
-            <div
-              key={d.id}
-              onClick={() => onSetActive(i)}
-              style={{
-                position: 'absolute', left: 0, right: 0,
-                top: si * PEEK,
-                height: 180,
-                padding: '14px 18px',
-                borderRadius: 22,
-                color: '#fff',
-                background: `rgba(255,255,255,${Math.min(0.18, 0.12 + si * 0.02)})`,
-                border: '1px solid rgba(255,255,255,0.14)',
-                backdropFilter: 'blur(28px) saturate(170%)',
-                WebkitBackdropFilter: 'blur(28px) saturate(170%)',
-                boxShadow: '0 -8px 22px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.18)',
-                cursor: 'pointer',
-                transition: 'top .42s cubic-bezier(.22,1,.36,1), box-shadow .25s',
-                zIndex: 10 + si,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.top = `${si * PEEK - 6}px` }}
-              onMouseLeave={e => { e.currentTarget.style.top = `${si * PEEK}px` }}
-            >
-              {/* Peek row — tag · address · price · match% */}
-              <div style={{ display: 'grid', gridTemplateColumns: '82px 1fr auto auto', gap: 10, alignItems: 'center', height: 28 }}>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--sr-cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {(CATEGORY_LABELS[d.category] ?? d.category).slice(0, 12).toUpperCase()}
-                </span>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 400, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {d.extractedTitle?.split('–')[0]?.trim() ?? d.address ?? 'Untitled'}
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'rgba(255,255,255,0.78)' }}>
-                  {d.price ? formatPriceRange(d.minPrice, d.maxPrice, d.price) : '—'}
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: '#fff', width: 32, textAlign: 'right' }}>
-                  {Math.round((d.confidenceScore ?? 0.7) * 100)}%
-                </span>
+        {/* Wallet stack — absolutely positioned within a tall spacer that follows the active card */}
+        {others.length > 0 && (
+          <div style={{ position: 'relative', height: (others.length - 1) * 58 + 180, marginTop: 10 }}>
+            {others.map(({ d, i }, si) => (
+              <div
+                key={d.id}
+                onClick={() => onSetActive(i)}
+                style={{
+                  position: 'absolute', left: 0, right: 0,
+                  top: si * 58,
+                  height: 180,
+                  padding: '14px 18px',
+                  borderRadius: 22,
+                  color: '#fff',
+                  background: `rgba(255,255,255,${Math.min(0.18, 0.12 + si * 0.02)})`,
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  backdropFilter: 'blur(28px) saturate(170%)',
+                  WebkitBackdropFilter: 'blur(28px) saturate(170%)',
+                  boxShadow: '0 -8px 22px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.18)',
+                  cursor: 'pointer',
+                  transition: 'top .3s cubic-bezier(.22,1,.36,1)',
+                  zIndex: 10 + si,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.top = `${si * 58 - 6}px` }}
+                onMouseLeave={e => { e.currentTarget.style.top = `${si * 58}px` }}
+              >
+                <div style={{ display: 'grid', gridTemplateColumns: '82px 1fr auto auto', gap: 10, alignItems: 'center', height: 28 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--sr-cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {(CATEGORY_LABELS[d.category] ?? d.category).slice(0, 12).toUpperCase()}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 400, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {d.extractedTitle?.split('–')[0]?.trim() ?? d.address ?? 'Untitled'}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'rgba(255,255,255,0.78)' }}>
+                    {d.price ? formatPriceRange(d.minPrice, d.maxPrice, d.price) : '—'}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: '#fff', width: 32, textAlign: 'right' }}>
+                    {Math.round((d.confidenceScore ?? 0.7) * 100)}%
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   )
@@ -820,6 +805,8 @@ function ChatPageInner() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [chips, setChips] = useState<Chip[]>([])
   const [greeting, setGreeting] = useState(GREETINGS[0])
+  const [showShader, setShowShader] = useState(true)
+  const [sessionKey, setSessionKey] = useState(0)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
@@ -837,9 +824,11 @@ function ChatPageInner() {
       dispatch({ type: 'RESET_NEW' })
       setCurrentSessionId(null)
       setMessages([])
+      setShowShader(true); setSessionKey(k => k + 1)
       window.history.replaceState({}, '', '/chat')
     } else if (sessionParam) {
       setCurrentSessionId(sessionParam)
+      setShowShader(true); setSessionKey(k => k + 1)
       setLoadingHistory(true)
       fetch(`/api/chat?sessionId=${sessionParam}`)
         .then(r => r.json())
@@ -866,6 +855,7 @@ function ChatPageInner() {
     dispatch({ type: 'RESET_NEW' })
     setCurrentSessionId(null)
     setMessages([])
+    setShowShader(true); setSessionKey(k => k + 1)
   }, [])
 
   async function send(text?: string, files?: File[]) {
@@ -900,14 +890,14 @@ function ChatPageInner() {
 
   return (
     <ChatSurfaceShell onNewChat={handleNewChat}>
+      {showShader && <ChatShaderBg onDone={() => setShowShader(false)} />}
       {(cs.view === 'memory' || cs.view === 'memory_new') && (
         <MemoryView
           messages={messages} loading={loading} loadingHistory={loadingHistory}
           fresh={cs.view === 'memory_new'}
-          chips={chips} greeting={greeting}
+          chips={chips} greeting={greeting} sessionKey={sessionKey}
           input={input} setInput={setInput} onSend={send}
           onOpenThread={msg => dispatch({ type: 'OPEN_THREAD', msg })}
-          onBack={() => window.history.back()}
           bottomRef={bottomRef}
         />
       )}

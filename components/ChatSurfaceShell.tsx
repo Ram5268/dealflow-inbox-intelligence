@@ -31,7 +31,7 @@ export default function ChatSurfaceShell({ children, theme = 'sunrise', onNewCha
       .then(r => r.json())
       .then(d => {
         _cachedName = d.givenName ?? null
-        setGivenName(_cachedName)
+        setGivenName(_cachedName as string | null)
       })
       .catch(() => { _cachedName = null })
   }, [])

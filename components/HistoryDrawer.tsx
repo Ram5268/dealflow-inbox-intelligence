@@ -29,63 +29,116 @@ function dateGroup(updatedAt: string): 'Today' | 'Yesterday' | 'This week' | 'Ea
 
 // ─── Sub-components ────────────────────────────────────────
 
-function ThreadRow({ session, isLive, onClick }: { session: Session; isLive: boolean; onClick: () => void }) {
+function ThreadRow({ session, isLive, onClick, onArchive }: {
+  session: Session; isLive: boolean; onClick: () => void; onArchive: () => void
+}) {
   const time = new Date(session.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   const title = session.title ?? (session.preview.slice(0, 48) || 'New conversation')
 
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: '100%', textAlign: 'left',
-        background: 'none', border: 'none',
-        padding: '11px 20px',
-        display: 'flex', alignItems: 'center', gap: 12,
-        cursor: 'pointer',
-        transition: 'background 150ms ease',
-      }}
-      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
-      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-    >
-      {/* Live dot */}
-      <span style={{
-        width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
-        background: isLive ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)',
-        ...(isLive ? { boxShadow: '0 0 6px rgba(255,255,255,0.6)', animation: 'sr-live 2s ease-in-out infinite' } : {}),
-      }} />
+  const [offsetX, setOffsetX] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const [collapsing, setCollapsing] = useState(false)
+  const startX = useRef(0)
+  const THRESHOLD = 72
 
-      {/* Text */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 14, fontWeight: 400,
-          color: 'rgba(255,255,255,0.88)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          marginBottom: 2,
-        }}>
-          {title}
-        </div>
-        {session.preview && (
-          <div style={{
-            fontFamily: 'var(--font-ui)',
-            fontSize: 12, fontWeight: 300,
-            color: 'rgba(255,255,255,0.4)',
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {session.preview}
-          </div>
-        )}
+  function onTouchStart(e: React.TouchEvent) {
+    startX.current = e.touches[0].clientX
+    setDragging(true)
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    const dx = e.touches[0].clientX - startX.current
+    if (dx < 0) setOffsetX(Math.max(dx, -THRESHOLD - 20))
+  }
+  function onTouchEnd() {
+    setDragging(false)
+    if (offsetX <= -THRESHOLD) {
+      setOffsetX(-THRESHOLD) // snap to reveal
+    } else {
+      setOffsetX(0)
+    }
+  }
+
+  function handleArchive() {
+    setCollapsing(true)
+    setTimeout(onArchive, 320)
+  }
+
+  return (
+    <div style={{
+      position: 'relative', overflow: 'hidden',
+      height: collapsing ? 0 : undefined,
+      opacity: collapsing ? 0 : 1,
+      transition: collapsing ? 'height 300ms ease, opacity 280ms ease' : undefined,
+    }}>
+      {/* Archive action revealed behind row */}
+      <div style={{
+        position: 'absolute', right: 0, top: 0, bottom: 0,
+        width: THRESHOLD,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'rgba(180,60,40,0.85)',
+      }}>
+        <button
+          onClick={handleArchive}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round">
+            <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/>
+            <line x1="10" y1="12" x2="14" y2="12"/>
+          </svg>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 8, letterSpacing: '0.1em', color: '#fff' }}>ARCHIVE</span>
+        </button>
       </div>
 
-      {/* Time */}
-      <span style={{
-        fontFamily: 'var(--font-mono)',
-        fontSize: 10, color: 'rgba(255,255,255,0.3)',
-        letterSpacing: '0.06em', flexShrink: 0,
-      }}>
-        {time}
-      </span>
-    </button>
+      {/* Swipeable row */}
+      <button
+        onClick={() => { if (offsetX !== 0) { setOffsetX(0) } else { onClick() } }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          width: '100%', textAlign: 'left',
+          background: 'none', border: 'none',
+          padding: '11px 20px',
+          display: 'flex', alignItems: 'center', gap: 12,
+          cursor: 'pointer',
+          transform: `translateX(${offsetX}px)`,
+          transition: dragging ? 'none' : 'transform 240ms cubic-bezier(.22,1,.36,1)',
+          position: 'relative', zIndex: 1,
+          backgroundColor: 'var(--sr-ink-1)',
+        }}
+        onMouseEnter={e => { if (offsetX === 0) e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+        onMouseLeave={e => (e.currentTarget.style.background = 'var(--sr-ink-1)')}
+      >
+        <span style={{
+          width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+          background: isLive ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.2)',
+          ...(isLive ? { boxShadow: '0 0 6px rgba(255,255,255,0.6)', animation: 'sr-live 2s ease-in-out infinite' } : {}),
+        }} />
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 400,
+            color: 'rgba(255,255,255,0.88)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2,
+          }}>
+            {title}
+          </div>
+          {session.preview && (
+            <div style={{
+              fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 300,
+              color: 'rgba(255,255,255,0.4)',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {session.preview}
+            </div>
+          )}
+        </div>
+
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.06em', flexShrink: 0 }}>
+          {time}
+        </span>
+      </button>
+    </div>
   )
 }
 
@@ -105,7 +158,7 @@ function GroupLabel({ label }: { label: string }) {
 
 // ─── Action sheet ──────────────────────────────────────────
 
-function ActionSheet({ onClose, onSettings }: { onClose: () => void; onSettings: () => void }) {
+function ActionSheet({ onClose, onSettings, onSignOut }: { onClose: () => void; onSettings: () => void; onSignOut: () => void }) {
   return (
     <>
       <div
@@ -123,8 +176,7 @@ function ActionSheet({ onClose, onSettings }: { onClose: () => void; onSettings:
       }}>
         {[
           { label: 'Settings', action: onSettings },
-          { label: 'Archive', action: onClose },
-          { label: 'Sign out', action: onClose, danger: true },
+          { label: 'Sign out', action: onSignOut, danger: true },
         ].map(({ label, action, danger }) => (
           <button
             key={label}
@@ -153,6 +205,7 @@ function ActionSheet({ onClose, onSettings }: { onClose: () => void; onSettings:
 export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }: Props) {
   const router = useRouter()
   const [sessions, setSessions] = useState<Session[]>([])
+  const [showArchived, setShowArchived] = useState(false)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [actionSheetOpen, setActionSheetOpen] = useState(false)
@@ -173,25 +226,30 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
     }
   }, [isOpen])
 
+  async function archiveSession(id: string) {
+    await fetch(`/api/chat/sessions/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ archived: true }) })
+    setSessions(prev => prev.filter(s => s.id !== id))
+  }
+
   // Fetch sessions; backfill untitled ones in background
   useEffect(() => {
     if (!isOpen) return
-    fetch('/api/chat/sessions')
+    fetch(`/api/chat/sessions${showArchived ? '?archived=true' : ''}`)
       .then(r => r.json())
       .then(async d => {
         setSessions(d.sessions ?? [])
-        const hasUntitled = (d.sessions ?? []).some((s: Session) => !s.title)
+        const hasUntitled = (d.sessions ?? []).some((s: Session) => !s.title) && !showArchived
         if (hasUntitled) {
           try {
             await fetch('/api/chat/retitle', { method: 'POST' })
-            const r2 = await fetch('/api/chat/sessions')
+            const r2 = await fetch(`/api/chat/sessions${showArchived ? '?archived=true' : ''}`)
             const d2 = await r2.json()
             setSessions(d2.sessions ?? [])
           } catch { /* non-fatal */ }
         }
       })
       .catch(() => {})
-  }, [isOpen])
+  }, [isOpen, showArchived])
 
   // Close on Escape
   useEffect(() => {
@@ -240,8 +298,9 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
           borderTopRightRadius: 20,
           borderBottomRightRadius: 20,
           display: 'flex', flexDirection: 'column',
-          transform: animOpen ? 'translateX(0)' : 'translateX(-100%)',
-          transition: `transform 320ms var(--sr-spring)`,
+          opacity: animOpen ? 1 : 0,
+          transform: animOpen ? 'translateX(0) scale(1)' : 'translateX(-8px) scale(0.98)',
+          transition: 'opacity 220ms ease, transform 220ms ease',
           overflowY: 'auto',
           overscrollBehavior: 'contain',
         }}
@@ -323,7 +382,7 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
           {(['All', 'Today', 'This week'] as const).map(name => (
             <button
               key={name}
-              onClick={() => setFilter(name)}
+              onClick={() => { setFilter(name); setShowArchived(false) }}
               style={{
                 flexShrink: 0,
                 background: filter === name ? 'rgba(224,192,144,0.18)' : 'rgba(255,255,255,0.06)',
@@ -363,6 +422,7 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
                       onClose()
                       router.push(`/chat?sessionId=${session.id}`)
                     }}
+                    onArchive={() => archiveSession(session.id)}
                   />
                 ))}
               </div>
@@ -392,6 +452,7 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
             <ActionSheet
               onClose={() => setActionSheetOpen(false)}
               onSettings={() => { setActionSheetOpen(false); onClose(); router.push('/settings') }}
+              onSignOut={() => { setActionSheetOpen(false); onClose(); router.push('/') }}
             />
           )}
 
@@ -431,7 +492,7 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
                 color: 'rgba(255,255,255,0.3)',
                 textTransform: 'uppercase',
               }}>
-                Settings · Archive
+                Settings
               </div>
             </div>
 

@@ -17,9 +17,18 @@ function greetWord(): string {
   return 'evening'
 }
 
+function timePeriod(): string {
+  const h = new Date().getHours()
+  if (h >= 4  && h < 7)  return 'DAWN'
+  if (h >= 7  && h < 12) return 'MORNING'
+  if (h >= 12 && h < 17) return 'AFTERNOON'
+  if (h >= 17 && h < 21) return 'EVENING'
+  return 'NIGHT'
+}
+
 function eyebrowDate(): string {
   const d = new Date()
-  const day = d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()
+  const day = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
   const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })
   return `${day} · ${time}`
 }
@@ -30,19 +39,37 @@ function formatTime(iso: string): string {
   })
 }
 
+interface CalToday {
+  todayCount: number
+  nextEvent: { subject: string; start: string; location: string | null } | null
+}
+
 export default function GreetPage() {
   const router = useRouter()
   const [givenName, setGivenName] = useState<string | null>(null)
   const [data, setData] = useState<GreetData | null>(null)
-  const [dotActive, setDotActive] = useState(false)
+  const [calData, setCalData] = useState<CalToday | null | undefined>(undefined)
+  const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
     fetch('/api/user/profile').then(r => r.json()).then(d => setGivenName(d.givenName ?? null)).catch(() => {})
     fetch('/api/user/greeting').then(r => r.json()).then(setData).catch(() => {})
+    fetch('/api/calendar/today').then(r => r.json()).then(setCalData).catch(() => setCalData(null))
   }, [])
 
-  // Derive real pulse bodies from live data
+  async function handleCheckIn() {
+    setSyncing(true)
+    // Fire both syncs in background — don't block navigation
+    fetch('/api/sync/run', { method: 'POST' }).catch(() => {})
+    fetch('/api/mojo/process', { method: 'POST' }).catch(() => {})
+    // Small delay so user sees the button respond, then navigate
+    await new Promise(r => setTimeout(r, 320))
+    router.push('/chat?new=1')
+  }
+
   const lastSyncTime = data?.lastSync ? formatTime(data.lastSync) : '—'
+  const oppCount = data?.overnightOpps ?? 0
+
   const pulse = [
     {
       tag: 'OVERNIGHT',
@@ -53,12 +80,26 @@ export default function GreetPage() {
     {
       tag: `NEW · ${lastSyncTime}`,
       body: data
-        ? <span><span style={{ color: '#fff', fontWeight: 400 }}>{data.overnightOpps}</span> new {data.overnightOpps === 1 ? 'opportunity' : 'opportunities'} extracted.</span>
+        ? <span><span style={{ color: '#fff', fontWeight: 400 }}>{oppCount}</span> new {oppCount === 1 ? 'opportunity' : 'opportunities'} extracted.</span>
         : <span style={{ color: 'rgba(255,255,255,0.35)' }}>Loading…</span>,
     },
     {
       tag: 'CALENDAR',
-      body: <span style={{ color: 'rgba(255,255,255,0.45)' }}>Not connected yet.</span>,
+      body: calData === undefined
+        ? <span style={{ color: 'rgba(255,255,255,0.35)' }}>Loading…</span>
+        : calData === null || calData.todayCount === 0
+        ? <span style={{ color: 'rgba(255,255,255,0.55)' }}>Clear schedule today.</span>
+        : <span>
+            <span style={{ color: '#fff', fontWeight: 400 }}>{calData.todayCount}</span>
+            {calData.todayCount === 1 ? ' event' : ' events'} today
+            {calData.nextEvent && (
+              <span style={{ color: 'rgba(255,255,255,0.6)' }}>
+                {' · next: '}
+                {new Date(calData.nextEvent.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                {' — '}{calData.nextEvent.subject.length > 38 ? calData.nextEvent.subject.slice(0, 38) + '…' : calData.nextEvent.subject}
+              </span>
+            )}
+          </span>,
     },
   ]
 
@@ -75,113 +116,87 @@ export default function GreetPage() {
           minHeight: 0,
         }}
       >
+        {/* Top-left indicator: opp count · time period */}
+        <div style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 10,
+          letterSpacing: '0.22em',
+          color: 'rgba(255,255,255,0.45)',
+          paddingTop: 4,
+          paddingBottom: 2,
+        }}>
+          {data ? String(oppCount).padStart(2, '0') : '—'} · {timePeriod()}
+        </div>
+
         {/* Content — vertically centered */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', paddingBottom: 24 }}>
           {/* Eyebrow date */}
-          <div
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10,
-              letterSpacing: '0.22em',
-              color: 'rgba(255,255,255,0.55)',
-            }}
-          >
+          <div style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 10,
+            letterSpacing: '0.22em',
+            color: 'rgba(255,255,255,0.55)',
+            marginBottom: 10,
+          }}>
             {eyebrowDate()}
           </div>
 
           {/* Greeting */}
-          <div
-            style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 34,
-              fontWeight: 300,
-              letterSpacing: '-0.018em',
-              lineHeight: 1.05,
-              marginTop: 14,
-              color: '#fff',
-            }}
-          >
+          <div style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 38,
+            fontWeight: 300,
+            letterSpacing: '-0.018em',
+            lineHeight: 1.05,
+            color: '#fff',
+          }}>
             Good {greetWord()},<br />
-            <span style={{
-              fontStyle: 'italic',
-              color: 'rgba(255,255,255,0.85)',
-            }}>
-              {givenName ?? 'there'}.
+            <span style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.85)' }}>
+              {givenName ?? 'Ryan'}.
             </span>
           </div>
 
-          {/* Context */}
-          <div
-            style={{
-              fontFamily: 'var(--font-ui)',
-              fontSize: 14,
-              fontWeight: 300,
-              lineHeight: 1.55,
-              color: 'rgba(255,255,255,0.7)',
-              marginTop: 18,
-              maxWidth: 260,
-            }}
-          >
+          {/* Context line */}
+          <div style={{
+            fontFamily: 'var(--font-ui)',
+            fontSize: 14,
+            fontWeight: 300,
+            lineHeight: 1.55,
+            color: 'rgba(255,255,255,0.7)',
+            marginTop: 14,
+          }}>
             {data
               ? `${data.overnightEmails > 0 ? 'A few things' : 'Nothing major'} moved while you slept.`
               : 'Checking your inbox…'
             }
           </div>
 
-          {/* Pulse rows — left bar + text (not glass cards) */}
-          <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Pulse rows */}
+          <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {pulse.map((p, i) => (
               <div
                 key={i}
                 className="sr-anim-up"
-                style={{
-                  animationDelay: `${0.1 + i * 0.12}s`,
-                  display: 'flex',
-                  gap: 14,
-                  alignItems: 'flex-start',
-                }}
+                style={{ animationDelay: `${0.1 + i * 0.12}s`, display: 'flex', gap: 14, alignItems: 'flex-start' }}
               >
-                {/* Left accent bar */}
-                <span style={{
-                  width: 3,
-                  alignSelf: 'stretch',
-                  background: 'rgba(255,255,255,0.18)',
-                  borderRadius: 2,
-                  marginTop: 2,
-                  flexShrink: 0,
-                }} />
+                <span style={{ width: 3, alignSelf: 'stretch', background: 'rgba(255,255,255,0.18)', borderRadius: 2, marginTop: 2, flexShrink: 0 }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontFamily: 'var(--font-mono)',
-                    fontSize: 9,
-                    letterSpacing: '0.18em',
-                    color: 'rgba(255,255,255,0.5)',
-                  }}>
-                    {p.tag}
-                  </div>
-                  <div style={{
-                    fontFamily: 'var(--font-ui)',
-                    fontSize: 13,
-                    fontWeight: 300,
-                    lineHeight: 1.45,
-                    color: 'rgba(255,255,255,0.82)',
-                    marginTop: 3,
-                  }}>
-                    {p.body}
-                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.5)' }}>{p.tag}</div>
+                  <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: 300, lineHeight: 1.45, color: 'rgba(255,255,255,0.82)', marginTop: 3 }}>{p.body}</div>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* CTA */}
+        {/* Check In CTA */}
         <div>
           <button
-            onClick={() => router.push('/chat?new=1')}
+            onClick={handleCheckIn}
+            disabled={syncing}
             style={{
               width: '100%',
-              background: '#fff',
+              background: syncing ? 'rgba(255,255,255,0.85)' : '#fff',
               color: '#0a1f2a',
               border: 'none',
               borderRadius: 999,
@@ -190,32 +205,32 @@ export default function GreetPage() {
               fontSize: 13.5,
               fontWeight: 500,
               letterSpacing: '-0.005em',
-              cursor: 'pointer',
+              cursor: syncing ? 'default' : 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 10,
+              transition: 'background 0.2s',
             }}
           >
-            {/* Pulsing live dot */}
             <span style={{
               width: 6, height: 6, borderRadius: '50%',
               background: '#0a1f2a',
               animation: 'sr-pulse-dot 1.6s ease-in-out infinite',
               display: 'inline-block',
             }} />
-            Pick up where we left off
+            {syncing ? 'Syncing…' : 'Check In'}
           </button>
 
           <div style={{
             fontFamily: 'var(--font-ui)',
             fontSize: 11,
             fontWeight: 300,
-            color: 'rgba(255,255,255,0.45)',
+            color: 'rgba(255,255,255,0.35)',
             textAlign: 'center',
             marginTop: 10,
           }}>
-            or just say what you need
+            syncs your inbox + leads
           </div>
         </div>
       </div>

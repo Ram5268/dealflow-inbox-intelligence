@@ -6,17 +6,16 @@ Build a private, read-only Outlook inbox intelligence system for real estate dea
 The app reads the user's Microsoft Outlook inbox through Microsoft Graph, classifies real estate-related emails, extracts structured opportunity data, stores it in PostgreSQL, and provides a mobile-first AI search/chat UI.
 
 ## Absolute Safety Rules
-- Microsoft Graph integration must be read-only in MVP.
-- Only use Graph GET requests.
+- Email access is strictly read-only. Only GET requests against Graph mail endpoints.
 - Never send emails.
 - Never delete emails.
 - Never archive emails.
 - Never move emails.
-- Never create calendar events.
 - Never modify Microsoft 365 tenant settings.
-- Never use POST/PATCH/PUT/DELETE against Microsoft Graph.
+- Calendar writes are permitted: POST /me/events only, and only when the user explicitly requests it via chat.
+- Never delete or modify existing calendar events.
 - Store audit logs for sync activity.
-- Every UI page should make clear this is read-only.
+- Every UI page should make clear this is read-only for email.
 
 ## MVP Scope
 Start with only one connected Outlook inbox: Ryan's Douglas Elliman Outlook inbox.

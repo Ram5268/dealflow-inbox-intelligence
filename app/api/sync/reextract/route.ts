@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
 
     // Find the target email(s)
     // Accepts: rawEmailId (specific), subjectContains (search by subject), limit (batch)
-    const where: Parameters<typeof prisma.rawEmail.findMany>[0]['where'] = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const where: any = {
       graphMessageId: { not: 'streeteasy-hotsheet-synthetic' },
     }
     if (body.rawEmailId) {

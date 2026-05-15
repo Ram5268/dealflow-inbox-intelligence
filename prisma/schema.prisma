@@ -142,6 +142,7 @@ model AuditLog {
 model ChatSession {
   id        String        @id @default(cuid())
   title     String?
+  archived  Boolean       @default(false)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
   messages  ChatMessage[]
@@ -156,4 +157,51 @@ model ChatMessage {
   dealsJson   Json?
   suggestions Json?
   createdAt   DateTime    @default(now())
+}
+
+// Staging table — API Nation writes raw Mojo rows here. /api/mojo/process transforms them into MojoContact.
+model MojoRaw {
+  id         Int      @id @default(autoincrement())
+  mojoId     String?
+  firstName  String?
+  lastName   String?
+  phone      String?
+  phone2     String?
+  email      String?
+  address    String?
+  city       String?
+  state      String?
+  zipCode    String?
+  status     String?
+  notes      String?
+  tags       String?
+  mojoList   String?
+  lastCalled String?
+  processed  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@map("mojo_raw")
+}
+
+model MojoContact {
+  id           String   @id @default(cuid())
+  mojoId       String   @unique
+  fullName     String
+  phone        String?
+  email        String?
+  address      String?
+  city         String?
+  state        String?
+  zipCode      String?
+  neighborhood String?
+  status       String?
+  tags         String[]
+  notes        String?
+  mojoGroup    String?
+  mojoList     String?
+  lastCalled   DateTime?
+  embedding    Unsupported("vector(1536)")?
+  syncedAt     DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }

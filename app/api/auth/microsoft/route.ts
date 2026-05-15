@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 const SCOPES = [
   'https://graph.microsoft.com/Mail.Read',
   'https://graph.microsoft.com/User.Read',
+  'https://graph.microsoft.com/Calendars.ReadWrite',
   'offline_access',
   'openid',
   'profile',

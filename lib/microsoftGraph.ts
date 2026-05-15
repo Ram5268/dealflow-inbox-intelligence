@@ -1,5 +1,5 @@
-// READ-ONLY Microsoft Graph service.
-// Only GET requests are used here. No POST/PATCH/PUT/DELETE against Graph.
+// Microsoft Graph service. Email access is read-only (GET only).
+// Calendar writes (POST /me/events) are permitted — user's own calendar only.
 
 import { prisma } from './prisma'
 
@@ -22,7 +22,7 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
         client_secret: clientSecret,
         refresh_token: refreshToken,
         grant_type: 'refresh_token',
-        scope: 'https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read offline_access',
+        scope: 'https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/User.Read https://graph.microsoft.com/Calendars.ReadWrite offline_access',
       }),
     }
   )
@@ -47,7 +47,7 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
   return access_token
 }
 
-async function getToken(): Promise<string> {
+export async function getToken(): Promise<string> {
   try {
     const record = await prisma.connectedMailbox.findUnique({
       where: { id: 'runtime-token' },
