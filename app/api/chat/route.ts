@@ -10,95 +10,34 @@ import OpenAI from 'openai'
 
 export const maxDuration = 60
 
-const SYSTEM_PROMPT = `You are DealFlow — Ryan Martin's private deal intelligence layer. Ryan is a Douglas Elliman agent working NYC residential real estate: sales, rentals, buyers, sellers, landlords, new dev.
+const SYSTEM_PROMPT = `You are Drift — Ryan Martin's private real estate deal intelligence layer. Ryan is a Douglas Elliman agent working NYC residential real estate across all transaction types.
 
-Your database contains opportunities extracted from Ryan's inbox: coming soon, off-market, active listings, price drops, buyer ISOs from other agents, renter inquiries, seller leads, landlord leads, open houses, new development inventory, and full attachment data from listing PDFs and flyers.
+Your full behavior rules are defined in DEALFLOW_AI.md. Follow them exactly. Key rules summarized here:
 
-CALENDAR:
-You have direct access to Ryan's Outlook calendar. You can read his schedule and CREATE calendar events. When Ryan asks you to schedule, book, add, or create any meeting, call, showing, or appointment — use the create_calendar_event tool immediately. Do not give instructions. Do not say you can't. Just create it. After creating it, confirm with one line: what was scheduled, when, and who's invited if applicable.
+DATA AVAILABLE:
+- DATABASE: Up to 60 classified email opportunities (all 19 categories) with full details, prices, attachments
+- MOJO CRM: Ryan's personal NYC seller leads — real property owners he's prospecting. Shown under MOJO SELLER LEADS. Always include name + phone when flagging a Mojo match.
+- CALENDAR: Ryan's Outlook schedule (read + propose with confirmation)
+- ACRIS: NYC property records (when triggered)
+- MORTGAGE RATES: Current rate context (always present)
 
-BUYER ISO CONTEXT:
-BUYER_ISO and RENTER_INQUIRY records are NOT Ryan's own clients — they are other agents' buyers/renters broadcasting their needs. When a listing matches a BUYER_ISO, that's a co-brokering opportunity: Ryan has the listing, the other agent has the buyer. Always name the source agent and brokerage when flagging these matches.
+BUYER ISO RULE: BUYER_ISO and RENTER_INQUIRY are OTHER agents' clients — not Ryan's. When a listing matches a BUYER_ISO, it's a co-brokering opportunity. Always name the source agent and brokerage.
 
-MOJO CRM LEADS:
-The database also contains Ryan's personal seller leads from his Mojo Dialer CRM, listed under MOJO SELLER LEADS. These are real homeowners Ryan is prospecting — not inbox emails. When querying seller leads or matching a buyer to a potential seller, check these contacts. Each has a name, address, neighborhood, status (Hot/Warm/Nurture), list (NYC Hot, NYC Nurture, etc.), phone number, and notes. A ⚡ MATCHES BUYER ISO flag means that contact's property neighborhood aligns with an active buyer ISO from the inbox. When flagging a Mojo match, always include the contact's name and phone number so Ryan can call them immediately.
+CALENDAR PROTOCOL: When Ryan asks to schedule anything — PROPOSE first, do not create immediately.
+Format: I'll create: [title], [Day Date] at [time][, at [location]]. Reply "confirm" to add it to your Outlook.
+Only create after receiving "confirm", "yes", "do it", or similar explicit confirmation.
 
-CORE JOB:
-- Surface the right deals fast. Lead with the most actionable info.
-- Proactively match: listing vs buyer ISO, rental vs renter inquiry, seller lead vs buyer need.
-- When Ryan describes a client need, scan for matches and rank them — exact first, then close, then adjacent.
-- Never end with "nothing found." If no exact match exists, always offer the closest alternatives with one sentence explaining why they might still work.
+MATCHING: Three tiers — EXACT (all criteria met), CLOSE (off on one: ±1BR, adjacent neighborhood, within 15% price, within 7 days date), STRETCH (off on two). Show ALL results in every tier — no cap. "Available now" is NEVER a date mismatch.
 
-MATCHING LOGIC — always think in three tiers. LIST ALL RESULTS IN EVERY TIER — there is no cap:
-1. EXACT MATCH: Meets all stated criteria (neighborhood, size, price, date). List ALL exact matches.
-2. CLOSE MATCH: Off on one criterion. List ALL close matches — label each "(close match — [what's different])".
-   - Date: "available now" always counts as date-flexible — it is NEVER a mismatch. Only a specific requested move-in date (e.g. "June 15") creates a date criterion.
-   - Size: ±1 bedroom = close if price range overlaps.
-   - Neighborhood: adjacent neighborhood = close (see adjacency list below).
-   - Price: within 15% = close.
-3. STRETCH: Off on two criteria. List ALL stretch matches — label each "(stretch — [what's different])". No cap.
+RESPONSE FORMAT: Plain text only. No markdown, no bold, no italics, no bullet dashes. One line per listing: [Address] — $[exact price], [beds]BR, [neighborhood]. [key detail]. Available [date]. (exact match)
 
-There is NO limit on how many results to show. If there are 8 relevant deals, show all 8. Hiding results is always wrong.
-
-NYC NEIGHBORHOOD ADJACENCY (if nothing in requested area, check these automatically):
-- UES ↔ Yorkville, Carnegie Hill, Lenox Hill, East Harlem
-- UWS ↔ Morningside Heights, Manhattan Valley, Lincoln Square
-- Midtown ↔ Murray Hill, Kips Bay, Hell's Kitchen, Chelsea, Gramercy
-- Chelsea ↔ West Village, Flatiron, Hell's Kitchen
-- Tribeca ↔ Soho, Financial District, Two Bridges
-- Williamsburg ↔ Greenpoint, Bushwick, Bed-Stuy
-- Park Slope ↔ Carroll Gardens, Cobble Hill, Prospect Heights, Gowanus
-- LIC ↔ Astoria, Sunnyside, Woodside
-- Little Neck ↔ Douglaston, Great Neck (Nassau), Bayside, Oakland Gardens
-- Forest Hills ↔ Rego Park, Kew Gardens, Jamaica Estates
-- Jackson Heights ↔ Elmhurst, Woodside, Corona
-
-DATE LOGIC FOR RENTALS:
-- "Available now" or "immediate" = tenant can negotiate move-in date → treat as flexible, mention it
-- Exact date match (e.g., June 4) = flag as exact
-- Within 7 days of requested date = close match, mention the delta
-- 8–21 days off = mention as a stretch with caveat
-- 30+ days off = only mention if nothing closer exists
-
-NYC REAL ESTATE KNOWLEDGE:
-- Understand NYC-specific context: no-fee vs fee, net effective vs gross rent, co-op vs condo vs condop, sponsor units, REBNY, StreetEasy, OLR, RLS, exclusives.
-- Understand deal mechanics: commission splits, co-broking, dual agency, referral fees.
-- Know price ranges by neighborhood and unit type — call out if something is priced well or off.
-
-RESPONSE STYLE:
-- Be direct and brief. Ryan is busy. No filler, no "feel free to ask", no "I hope that helps".
-- Lead with exact matches. Then close matches labeled "(close match — [what's different])".
-- For listings: address → price → size → key detail → availability. One line each.
-- For matches: state the match clearly, one sentence on why it works or what to watch.
-- Never say "I cannot find" without immediately offering alternatives.
-- NEVER use markdown formatting (no **bold**, no *italic*, no bullet dashes). Plain text only.
-
-DATA RULES:
-- Only reference deals in the database. Never invent addresses, prices, or agents.
-- When the same property appears in multiple emails, use the MOST RECENT version.
-- If attachment data is available (📎), use it — it's more detailed than the summary.
-- ALWAYS use the exact price from the database. Never round. $9,895 stays $9,895 — not "$10K" or "$10,000". $6,395 stays $6,395 — not "$6K" or "$6,400". Copy the number exactly.
-- The database includes an AVAIL DATE field for each rental. A rental whose AVAIL DATE is in the future is "coming soon." A rental whose AVAIL DATE is today or earlier is "available now."
-- Label each result clearly: write "(exact match)" when it meets ALL query criteria, "(close match — [reason])" when off on one criterion.
-
-DEAL CARDS:
-- The UI automatically shows deal cards for all matching properties — you do NOT need to tag deals with [DEAL:id].
-- Your job is to write accurate, concise response text describing the results. The cards handle the display.
-- Write one line per property: address — price, size, key detail, availability. Label exact vs close matches.
-
-SUGGESTIONS RULES:
-- Always return exactly 2 suggestions — short follow-up questions Ryan would actually ask next.
-- Make them specific to what was just discussed. Examples: "Any 2BR version of these?", "Which one is no-fee?", "Show me open houses this weekend", "Does either match my Reyes buyer?"
-- Never return generic or placeholder text.
-
-IMAGES AND FILES:
-- You can see any image or file Ryan shares. Read and extract everything visible.
-- For email screenshots: read the full content, then check if it matches a database deal.
-- For listing flyers/PDFs: extract all addresses, prices, beds, baths, availability.
-- Never say you cannot see an image.
+PRICES: Never round. $9,895 stays $9,895. Copy exactly.
+ATTACHMENTS: If 📎 attachment data exists, use it — it's more detailed than the summary.
+SUGGESTIONS: Always return exactly 2 specific follow-up questions.
+NO FILLER: No "feel free to ask", no "I hope that helps", no "I cannot find" without an alternative.
 
 Respond with this exact JSON (no markdown, no code fences):
-{"response":"your plain text response with [DEAL:id] tags inline","suggestions":["specific follow-up question 1","specific follow-up question 2"]}`
+{"response":"your plain text response","suggestions":["specific follow-up 1","specific follow-up 2"],"pendingEvent":null}`
 
 interface FileData {
   name: string
@@ -165,79 +104,224 @@ export async function POST(req: NextRequest) {
       if (queryText) semanticIds = await semanticSearch(queryText, 60)
     } catch { /* fall back to recency */ }
 
-    // Infer which DB categories are relevant from the query.
-    // This prevents e.g. BUYER_ISO records from being injected when asking about rental listings.
-    // Check renter inquiry BEFORE rental — "renter inquiries" contains "renter" which would
-    // otherwise match isRentalQuery and return RENTAL_LISTING instead of RENTER_INQUIRY.
-    const isRenterInquiryQuery = /\brenter inq|\brenter look|\brenters look/.test(queryText)
-    const isRentalQuery        = !isRenterInquiryQuery && /\brent|\bleas|\btenant|\brenter/.test(queryText)
-    // "my buyer" / "i have a buyer" = Ryan's OWN buyer → he wants SALE LISTINGS, not BUYER_ISOs
-    const isMyBuyerQuery       = /\bmy buyer\b|\bi have a buyer\b|\bhave a buyer\b|\bfor my buyer\b|\bmy client\b|\bclient look|\bclient need/.test(queryText)
-    // BUYER_ISO = other agents broadcasting buyer needs (plural "buyers" OR explicit ISO language)
-    // Excluded when Ryan is describing his own buyer (isMyBuyerQuery)
-    const isBuyerISOQuery      = !isMyBuyerQuery && /\bbuyer iso|\bbuyers look|\bbuyers search|\bisos?\b|\biso for/.test(queryText)
-    const isOpenHouseQuery     = /\bopen house|\bevent/.test(queryText)
-    const isPriceDropQuery     = /\bprice drop|\bprice reduc|\breduced price/.test(queryText)
-    const isSellerLeadQuery    = /\bseller lead|\bsellers? lead/.test(queryText)
-    const isLandlordLeadQuery  = /\blandlord lead|\blandlords? lead/.test(queryText)
-    // SALE includes when Ryan describes his own buyer's needs (isMyBuyerQuery)
-    const isSaleQuery          = (isMyBuyerQuery || /\bfor sale\b|\bbuy\b|\bbuying\b|\bpurchas|\bcondo|\bco-op|\btownhouse\b|\bsponsor unit|\boff.?market|\bcoming soon|\bnew dev|\bback.?on.?market/.test(queryText))
-                                 && !isRentalQuery && !isRenterInquiryQuery
+    // ── INTENT DETECTION ──────────────────────────────────────────────────────
+    // Priority order matters — check more specific patterns before general ones.
 
+    // Demand-side queries (other agents' clients)
+    const isRenterInquiryQuery  = /\brenter inq|\brenter look|\brenters look|\brenter inquir/.test(queryText)
+    const isBuyerISOQuery       = !(/\bmy buyer|\bi have a buyer|\bhave a buyer|\bfor my buyer|\bmy client|\bclient look|\bclient need/.test(queryText))
+                                  && /\bbuyer iso|\bbuyers? look|\bbuyers? search|\bisos?\b|\biso for|\bany iso|\bany buyer/.test(queryText)
+
+    // Ryan's own clients (wants listings not ISOs)
+    const isMyBuyerQuery        = /\bmy buyer\b|\bi have a buyer\b|\bhave a buyer\b|\bfor my buyer\b|\bmy client\b|\bclient look|\bclient need/.test(queryText)
+
+    // Rental-side
+    const isComingSoonRentalQuery = /\bcoming soon rental|\brental coming soon|\bcoming available|\bavailability coming|\bunits coming/.test(queryText)
+    const isRentalQuery           = !isRenterInquiryQuery && !isComingSoonRentalQuery
+                                    && /\brent|\bleas|\btenant|\brenter|\bapartment|\bapts?\b/.test(queryText)
+                                    && !/\bfor sale|\bbuy|\bpurchas|\bcondo|\bco-op|\bcoming soon sale/.test(queryText)
+
+    // Sale-side
+    const isComingSoonSaleQuery   = /\bcoming soon sale|\bpre-?market|\boff.?market coming|\bcoming soon\b/.test(queryText)
+                                    && !isComingSoonRentalQuery
+    const isOffMarketQuery        = /\boff.?market|\bpocket listing|\bquiet sale|\bprivate listing/.test(queryText)
+    const isSponsorUnitQuery      = /\bsponsor unit|\boffering plan|\bsponsor sale|\bno board/.test(queryText)
+    const isNewDevQuery           = /\bnew dev|\bnew development|\bnew construction|\bdevelopment inventory/.test(queryText)
+    const isPriceDropQuery        = /\bprice drop|\bprice reduc|\breduced price|\bjust reduced|\bprice cut/.test(queryText)
+    const isBackOnMarketQuery     = /\bback on market|\bback.?on.?market|\breturned to market/.test(queryText)
+    const isOpenHouseQuery        = /\bopen house|\bbroker open|\bbroker preview/.test(queryText)
+    const isSaleQuery             = (isMyBuyerQuery || /\bfor sale\b|\bbuy\b|\bbuying\b|\bpurchas|\bcondo\b|\bco-op\b|\btownhouse\b|\bsponsor\b|\boff.?market|\bback.?on.?market|\bnew dev|\bcoming soon/.test(queryText))
+                                    && !isRentalQuery && !isRenterInquiryQuery && !isComingSoonRentalQuery
+
+    // Lead-side
+    const isSellerLeadQuery     = /\bseller lead|\bsellers? lead|\bwho can i call|\bpotential seller|\bcold call|\bprospect/.test(queryText)
+    const isLandlordLeadQuery   = /\blandlord lead|\blandlords? lead|\blandlord prospect|\brental owner/.test(queryText)
+
+    // Informational
+    const isMarketReportQuery   = /\bmarket report|\bmarket stat|\babsorption|\bmarket data|\bwhat.?s the market|\bmarket condition/.test(queryText)
+    const isRealEstateEventQuery = /\bnetworking event|\bgrand opening|\bbroker event|\bcompany event|\bnew dev event/.test(queryText)
+
+    // Calendar
+    const isCalendarReadQuery   = /\bshowing|\bappointment|\bcalendar|\bschedule|\btoday\b|\btomorrow\b|\bthis week\b|\bwhat.*have|\bavailab/.test(queryText)
+    const isCalendarCreateQuery = /\bschedul|\bbook\b|\bset up\b|\bblock.*time|\badd.*(?:event|meeting|showing|call|appointment)|\bcreate.*(?:event|meeting|appointment)|\bput.*calendar|\bcalendar.*invite|\bsend.*invite/.test(queryText)
+
+    // Check for pending confirmation from last AI message
+    const lastAssistantMsg = history.filter(m => m.role === 'assistant').slice(-1)[0]
+    let lastPendingEvent: Record<string, string> | null = null
+    if (lastAssistantMsg?.content) {
+      try {
+        const parsed = JSON.parse(lastAssistantMsg.content)
+        if (parsed?.pendingEvent) lastPendingEvent = parsed.pendingEvent
+      } catch { /* not JSON */ }
+    }
+    const isConfirmMessage = lastPendingEvent != null
+      && /\bconfirm\b|\byes\b|\bdo it\b|\blooks good\b|\bgo ahead\b|\badd it\b/.test(queryText)
+
+    // ── CATEGORY FILTER ───────────────────────────────────────────────────────
     const categoryFilter: Category[] | null =
-      isRenterInquiryQuery ? [Category.RENTER_INQUIRY] :
-      isRentalQuery        ? [Category.RENTAL_LISTING] :
-      isBuyerISOQuery      ? [Category.BUYER_ISO] :
-      isOpenHouseQuery     ? [Category.OPEN_HOUSE] :
-      isPriceDropQuery     ? [Category.PRICE_DROP, Category.BACK_ON_MARKET] :
-      isSellerLeadQuery    ? [Category.SELLER_LEAD] :
-      isLandlordLeadQuery  ? [Category.LANDLORD_LEAD] :
-      isSaleQuery          ? [Category.ACTIVE_SALE_LISTING, Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE,
-                              Category.PRICE_DROP, Category.BACK_ON_MARKET, Category.DEVELOPMENT_INVENTORY] :
-      null  // no keyword → no filter, AI sees everything
+      isRenterInquiryQuery      ? [Category.RENTER_INQUIRY] :
+      isComingSoonRentalQuery   ? [Category.COMING_SOON_RENTAL] :
+      isRentalQuery             ? [Category.RENTAL_LISTING, Category.COMING_SOON_RENTAL] :
+      isBuyerISOQuery           ? [Category.BUYER_ISO] :
+      isOpenHouseQuery          ? [Category.OPEN_HOUSE] :
+      isPriceDropQuery          ? [Category.PRICE_DROP, Category.BACK_ON_MARKET] :
+      isBackOnMarketQuery       ? [Category.BACK_ON_MARKET] :
+      isSellerLeadQuery         ? [Category.SELLER_LEAD] :
+      isLandlordLeadQuery       ? [Category.LANDLORD_LEAD] :
+      isSponsorUnitQuery        ? [Category.SPONSOR_UNIT, Category.DEVELOPMENT_INVENTORY] :
+      isNewDevQuery             ? [Category.DEVELOPMENT_INVENTORY, Category.SPONSOR_UNIT, Category.COMING_SOON_SALE] :
+      isOffMarketQuery          ? [Category.OFF_MARKET_SALE, Category.COMING_SOON_SALE] :
+      isComingSoonSaleQuery     ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE] :
+      isMarketReportQuery       ? [Category.MARKET_REPORT] :
+      isRealEstateEventQuery    ? [Category.REAL_ESTATE_EVENT, Category.OPEN_HOUSE] :
+      isSaleQuery               ? [Category.ACTIVE_SALE_LISTING, Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE,
+                                   Category.PRICE_DROP, Category.BACK_ON_MARKET, Category.DEVELOPMENT_INVENTORY,
+                                   Category.SPONSOR_UNIT] :
+      null  // general query — no filter, but defaultExclude still applies below
 
-    // Neighborhood extraction with adjacency expansion.
-    // No bed-count filter — beds are context for the AI, not a hard DB filter.
-    // Filtering by beds would exclude valid close-match alternatives.
+    // ── NEIGHBORHOOD EXTRACTION (multi-neighborhood, full NYC map) ─────────
     const ADJACENCY: Record<string, string[]> = {
-      'dumbo':             ['dumbo', 'fort greene', 'brooklyn heights', 'vinegar hill', 'boerum hill'],
-      'williamsburg':      ['williamsburg', 'greenpoint', 'bushwick', 'bed-stuy'],
-      'park slope':        ['park slope', 'carroll gardens', 'cobble hill', 'prospect heights', 'gowanus'],
-      'carroll gardens':   ['carroll gardens', 'park slope', 'cobble hill', 'red hook'],
-      'tribeca':           ['tribeca', 'soho', 'financial district', 'two bridges'],
-      'soho':              ['soho', 'tribeca', 'noho', 'nolita', 'little italy'],
-      'chelsea':           ['chelsea', 'west village', 'flatiron', "hell's kitchen"],
-      'west village':      ['west village', 'chelsea', 'greenwich village'],
-      'upper east side':   ['upper east side', 'ues', 'yorkville', 'carnegie hill', 'lenox hill'],
-      'ues':               ['upper east side', 'ues', 'yorkville', 'carnegie hill', 'lenox hill'],
-      'upper west side':   ['upper west side', 'uws', 'morningside heights', 'manhattan valley'],
-      'uws':               ['upper west side', 'uws', 'morningside heights', 'manhattan valley'],
-      'long island city':  ['long island city', 'lic', 'astoria', 'sunnyside'],
-      'lic':               ['long island city', 'lic', 'astoria', 'sunnyside'],
-      'astoria':           ['astoria', 'long island city', 'lic', 'sunnyside'],
-      'forest hills':      ['forest hills', 'rego park', 'kew gardens', 'jamaica estates'],
-      'jackson heights':   ['jackson heights', 'elmhurst', 'woodside', 'corona'],
-      'harlem':            ['harlem', 'east harlem', 'morningside heights', 'washington heights'],
-      'midtown':           ['midtown', 'murray hill', 'kips bay', "hell's kitchen", 'chelsea', 'gramercy'],
-      'financial district':['financial district', 'fidi', 'tribeca', 'battery park', 'two bridges'],
-      'fidi':              ['financial district', 'fidi', 'tribeca', 'battery park'],
-      'crown heights':     ['crown heights', 'prospect heights', 'flatbush', 'bed-stuy'],
-      'bushwick':          ['bushwick', 'williamsburg', 'bed-stuy', 'ridgewood'],
-      'greenpoint':        ['greenpoint', 'williamsburg', 'long island city'],
+      // Manhattan Downtown
+      'tribeca':            ['tribeca', 'soho', 'financial district', 'two bridges', 'battery park city', 'little italy'],
+      'soho':               ['soho', 'tribeca', 'noho', 'nolita', 'little italy', 'west village', 'hudson square'],
+      'noho':               ['noho', 'soho', 'nolita', 'east village', 'greenwich village'],
+      'nolita':             ['nolita', 'soho', 'noho', 'little italy', 'lower east side'],
+      'little italy':       ['little italy', 'soho', 'nolita', 'chinatown', 'lower east side'],
+      'chinatown':          ['chinatown', 'lower east side', 'two bridges', 'little italy', 'financial district'],
+      'lower east side':    ['lower east side', 'les', 'east village', 'chinatown', 'two bridges', 'nolita'],
+      'les':                ['lower east side', 'les', 'east village', 'chinatown', 'two bridges'],
+      'two bridges':        ['two bridges', 'lower east side', 'chinatown', 'financial district'],
+      'financial district': ['financial district', 'fidi', 'tribeca', 'battery park city', 'two bridges', 'chinatown'],
+      'fidi':               ['financial district', 'fidi', 'tribeca', 'battery park city', 'two bridges'],
+      'battery park city':  ['battery park city', 'financial district', 'tribeca'],
+      // Manhattan Mid
+      'west village':       ['west village', 'chelsea', 'greenwich village', 'hudson square', 'soho'],
+      'greenwich village':  ['greenwich village', 'west village', 'noho', 'east village', 'chelsea'],
+      'east village':       ['east village', 'lower east side', 'greenwich village', 'noho', 'kips bay'],
+      'chelsea':            ["chelsea", 'west village', "hell's kitchen", 'flatiron', 'hudson yards'],
+      "hell's kitchen":     ["hell's kitchen", 'chelsea', 'midtown west', 'hudson yards'],
+      'hells kitchen':      ["hell's kitchen", 'chelsea', 'midtown west'],
+      'flatiron':           ['flatiron', 'chelsea', 'gramercy', 'union square', 'midtown south'],
+      'gramercy':           ['gramercy', 'flatiron', 'kips bay', 'murray hill', 'union square'],
+      'union square':       ['union square', 'flatiron', 'gramercy', 'east village', 'chelsea'],
+      'kips bay':           ['kips bay', 'gramercy', 'murray hill', 'east village', 'turtle bay'],
+      'murray hill':        ['murray hill', 'kips bay', 'midtown east', 'gramercy', 'turtle bay'],
+      'turtle bay':         ['turtle bay', 'midtown east', 'murray hill', 'kips bay'],
+      'hudson yards':       ['hudson yards', 'chelsea', "hell's kitchen", 'midtown west'],
+      'hudson square':      ['hudson square', 'soho', 'west village', 'tribeca'],
+      // Manhattan Midtown
+      'midtown':            ['midtown', 'murray hill', 'kips bay', "hell's kitchen", 'chelsea', 'gramercy', 'midtown east', 'midtown west'],
+      'midtown east':       ['midtown east', 'midtown', 'turtle bay', 'murray hill', 'upper east side'],
+      'midtown west':       ['midtown west', 'midtown', "hell's kitchen", 'hudson yards'],
+      // Manhattan Upper
+      'upper west side':    ['upper west side', 'uws', 'morningside heights', 'manhattan valley', 'lincoln square', 'riverside'],
+      'uws':                ['upper west side', 'uws', 'morningside heights', 'manhattan valley', 'lincoln square'],
+      'upper east side':    ['upper east side', 'ues', 'yorkville', 'carnegie hill', 'lenox hill', 'east harlem'],
+      'ues':                ['upper east side', 'ues', 'yorkville', 'carnegie hill', 'lenox hill'],
+      'yorkville':          ['yorkville', 'upper east side', 'carnegie hill', 'east harlem'],
+      'carnegie hill':      ['carnegie hill', 'upper east side', 'yorkville', 'upper west side'],
+      'lenox hill':         ['lenox hill', 'upper east side', 'midtown east'],
+      'morningside heights':['morningside heights', 'upper west side', 'harlem', 'washington heights'],
+      'manhattan valley':   ['manhattan valley', 'upper west side', 'harlem'],
+      'lincoln square':     ['lincoln square', 'upper west side'],
+      'riverside':          ['riverside', 'upper west side'],
+      'harlem':             ['harlem', 'east harlem', 'morningside heights', 'washington heights', 'manhattan valley'],
+      'east harlem':        ['east harlem', 'harlem', 'yorkville', 'upper east side'],
+      'washington heights': ['washington heights', 'harlem', 'inwood', 'morningside heights'],
+      'inwood':             ['inwood', 'washington heights'],
+      'riverdale':          ['riverdale', 'kingsbridge', 'fieldston'],
+      'kingsbridge':        ['kingsbridge', 'riverdale', 'marble hill'],
+      // Brooklyn
+      'williamsburg':       ['williamsburg', 'greenpoint', 'bushwick', 'bed-stuy', 'east williamsburg'],
+      'greenpoint':         ['greenpoint', 'williamsburg', 'long island city', 'hunters point'],
+      'bushwick':           ['bushwick', 'williamsburg', 'bed-stuy', 'ridgewood', 'east williamsburg'],
+      'bed-stuy':           ['bed-stuy', 'bedford-stuyvesant', 'bushwick', 'crown heights', 'fort greene', 'clinton hill'],
+      'bedford-stuyvesant': ['bed-stuy', 'bedford-stuyvesant', 'bushwick', 'crown heights', 'fort greene'],
+      'crown heights':      ['crown heights', 'bed-stuy', 'prospect heights', 'flatbush', 'east flatbush'],
+      'prospect heights':   ['prospect heights', 'crown heights', 'park slope', 'fort greene', 'flatbush'],
+      'park slope':         ['park slope', 'prospect heights', 'carroll gardens', 'cobble hill', 'gowanus', 'south slope'],
+      'south slope':        ['south slope', 'park slope', 'gowanus', 'greenwood heights'],
+      'carroll gardens':    ['carroll gardens', 'park slope', 'cobble hill', 'red hook', 'boerum hill'],
+      'cobble hill':        ['cobble hill', 'carroll gardens', 'park slope', 'boerum hill', 'brooklyn heights'],
+      'boerum hill':        ['boerum hill', 'cobble hill', 'carroll gardens', 'fort greene', 'downtown brooklyn'],
+      'fort greene':        ['fort greene', 'boerum hill', 'clinton hill', 'bed-stuy', 'downtown brooklyn'],
+      'clinton hill':       ['clinton hill', 'fort greene', 'bed-stuy', 'prospect heights'],
+      'brooklyn heights':   ['brooklyn heights', 'cobble hill', 'downtown brooklyn', 'dumbo', 'boerum hill'],
+      'dumbo':              ['dumbo', 'brooklyn heights', 'vinegar hill', 'downtown brooklyn', 'fort greene'],
+      'vinegar hill':       ['vinegar hill', 'dumbo', 'brooklyn heights'],
+      'downtown brooklyn':  ['downtown brooklyn', 'brooklyn heights', 'boerum hill', 'dumbo', 'fort greene'],
+      'red hook':           ['red hook', 'carroll gardens', 'gowanus', 'sunset park'],
+      'gowanus':            ['gowanus', 'park slope', 'carroll gardens', 'red hook', 'sunset park'],
+      'greenwood heights':  ['greenwood heights', 'park slope', 'sunset park', 'south slope'],
+      'sunset park':        ['sunset park', 'bay ridge', 'gowanus', 'borough park', 'red hook'],
+      'bay ridge':          ['bay ridge', 'sunset park', 'dyker heights', 'fort hamilton'],
+      'flatbush':           ['flatbush', 'crown heights', 'prospect heights', 'east flatbush', 'ditmas park'],
+      'ditmas park':        ['ditmas park', 'flatbush', 'kensington', 'prospect park south'],
+      'east flatbush':      ['east flatbush', 'flatbush', 'crown heights', 'brownsville'],
+      'brownsville':        ['brownsville', 'bed-stuy', 'east new york', 'crown heights'],
+      'ridgewood':          ['ridgewood', 'bushwick', 'maspeth', 'glendale'],
+      // Queens
+      'long island city':   ['long island city', 'lic', 'astoria', 'sunnyside', 'hunters point', 'greenpoint'],
+      'lic':                ['long island city', 'lic', 'astoria', 'sunnyside', 'hunters point'],
+      'hunters point':      ['hunters point', 'long island city', 'lic', 'sunnyside'],
+      'astoria':            ['astoria', 'long island city', 'lic', 'sunnyside', 'jackson heights'],
+      'sunnyside':          ['sunnyside', 'astoria', 'long island city', 'woodside', 'jackson heights'],
+      'jackson heights':    ['jackson heights', 'elmhurst', 'woodside', 'corona', 'sunnyside'],
+      'elmhurst':           ['elmhurst', 'jackson heights', 'corona', 'woodside', 'maspeth', 'rego park'],
+      'woodside':           ['woodside', 'sunnyside', 'jackson heights', 'elmhurst', 'maspeth'],
+      'corona':             ['corona', 'jackson heights', 'elmhurst', 'flushing', 'rego park'],
+      'rego park':          ['rego park', 'forest hills', 'elmhurst', 'corona', 'kew gardens'],
+      'forest hills':       ['forest hills', 'rego park', 'kew gardens', 'jamaica estates', 'fresh meadows'],
+      'kew gardens':        ['kew gardens', 'forest hills', 'rego park', 'richmond hill', 'jamaica'],
+      'jamaica':            ['jamaica', 'kew gardens', 'richmond hill', 'south jamaica', 'hollis'],
+      'richmond hill':      ['richmond hill', 'kew gardens', 'jamaica', 'ozone park', 'woodhaven'],
+      'ozone park':         ['ozone park', 'richmond hill', 'woodhaven', 'howard beach'],
+      'howard beach':       ['howard beach', 'ozone park', 'lindenwood'],
+      'flushing':           ['flushing', 'fresh meadows', 'corona', 'bayside', 'murray hill queens'],
+      'bayside':            ['bayside', 'flushing', 'little neck', 'douglaston', 'fresh meadows'],
+      'little neck':        ['little neck', 'bayside', 'douglaston', 'great neck'],
+      'douglaston':         ['douglaston', 'little neck', 'bayside'],
+      'maspeth':            ['maspeth', 'ridgewood', 'woodside', 'elmhurst', 'middle village', 'glendale'],
+      'middle village':     ['middle village', 'maspeth', 'glendale', 'ridgewood'],
+      'glendale':           ['glendale', 'ridgewood', 'middle village', 'maspeth'],
     }
 
-    const foundNeighborhood = Object.keys(ADJACENCY).find(n => queryText.includes(n))
-      ?? ['tribeca','soho','noho','nolita','chelsea','flatiron','gramercy','kips bay','murray hill',
-          'les','lower east side','east village','little italy','chinatown','two bridges',
-          'battery park','inwood','washington heights','yorkville','lenox hill','morningside heights',
-          'riverside','sunnyside','woodside','elmhurst','corona','rego park','kew gardens',
-          'flatbush','gowanus','red hook','cobble hill','boerum hill','fort greene','vinegar hill',
-          'prospect heights','bed-stuy','bedford-stuyvesant','carnegie hill','manhattan valley',
-        ].find(n => queryText.includes(n))
+    // Extract ALL neighborhoods mentioned in query (not just first)
+    const allFoundNeighborhoods = Object.keys(ADJACENCY).filter(n => queryText.includes(n))
 
-    const searchNeighborhoods: string[] = foundNeighborhood
-      ? (ADJACENCY[foundNeighborhood] ?? [foundNeighborhood])
-      : []
+    // Also check secondary list for neighborhoods not in adjacency map
+    const secondaryNeighborhoods = [
+      'tribeca','soho','noho','nolita','chelsea','flatiron','gramercy','kips bay','murray hill',
+      'lower east side','east village','little italy','chinatown','two bridges','battery park',
+      'inwood','washington heights','yorkville','lenox hill','morningside heights','harlem',
+      'east harlem','sunnyside','woodside','elmhurst','corona','rego park','kew gardens',
+      'flatbush','gowanus','red hook','cobble hill','boerum hill','fort greene','vinegar hill',
+      'prospect heights','bed-stuy','bedford-stuyvesant','carnegie hill','manhattan valley',
+      'greenwood heights','south slope','clinton hill','east flatbush','ditmas park','brownsville',
+      'hunters point','fresh meadows','jamaica estates','hollis','woodhaven',
+    ].filter(n => !allFoundNeighborhoods.includes(n) && queryText.includes(n))
+
+    const mentionedNeighborhoods = [...allFoundNeighborhoods, ...secondaryNeighborhoods]
+
+    // Borough-level fallback
+    const boroughFallback: string[] = []
+    if (mentionedNeighborhoods.length === 0) {
+      if (queryText.includes('brooklyn')) boroughFallback.push('brooklyn')
+      if (queryText.includes('queens')) boroughFallback.push('queens')
+      if (queryText.includes('bronx')) boroughFallback.push('bronx')
+      if (queryText.includes('staten island')) boroughFallback.push('staten island')
+      if (queryText.includes('manhattan') && !queryText.includes('lower manhattan')) boroughFallback.push('manhattan')
+    }
+
+    // Expand each mentioned neighborhood with its adjacents, dedup
+    const expandedNeighborhoods = new Set<string>()
+    for (const n of mentionedNeighborhoods) {
+      const adjacents = ADJACENCY[n] ?? [n]
+      adjacents.forEach(a => expandedNeighborhoods.add(a))
+    }
+    for (const b of boroughFallback) expandedNeighborhoods.add(b)
+
+    const searchNeighborhoods: string[] = [...expandedNeighborhoods]
 
     const catClause = categoryFilter ? [{ category: { in: categoryFilter } }] : []
 
@@ -300,10 +384,9 @@ export async function POST(req: NextRequest) {
     const bedMatch = queryText.match(/\b(\d+)\s*(?:br|bed|bedroom)/)
     const queryBeds = bedMatch ? parseInt(bedMatch[1]) : null
 
-    // For location-based queries with no explicit category, exclude "seeking" records.
-    // BUYER_ISO and RENTER_INQUIRY are people looking for property — not properties.
-    // They should only surface when explicitly requested.
-    const defaultExclude: Category[] = (!categoryFilter && searchNeighborhoods.length > 0)
+    // Always exclude BUYER_ISO and RENTER_INQUIRY from general queries.
+    // They are "seeking" records, not inventory — only show when explicitly requested.
+    const defaultExclude: Category[] = !categoryFilter
       ? [Category.BUYER_ISO, Category.RENTER_INQUIRY]
       : []
 
@@ -429,9 +512,32 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Calendar context — injected when query is schedule-related
-    const isCalendarReadQuery  = /\bshowing|\bappointment|\bcalendar|\bschedule|\btoday\b|\btomorrow\b|\bthis week\b|\bwhat.*have|\bavailab/.test(queryText)
-    const isCalendarCreateQuery = /\bschedul|\bbook\b|\bset up\b|\bblock.*time|\badd.*(?:event|meeting|showing|call|appointment)|\bcreate.*(?:event|meeting|appointment)|\bput.*calendar|\bcalendar.*invite|\bsend.*invite/.test(queryText)
+    // Handle confirm fast-path — create the pending calendar event directly
+    if (isConfirmMessage && lastPendingEvent) {
+      try {
+        const endISO = lastPendingEvent.endISO || (() => {
+          const d = new Date(lastPendingEvent.startISO)
+          d.setMinutes(d.getMinutes() + 30)
+          return d.toISOString()
+        })()
+        await createCalendarEvent({
+          subject:  lastPendingEvent.subject,
+          startISO: lastPendingEvent.startISO,
+          endISO,
+          location: lastPendingEvent.location,
+          notes:    lastPendingEvent.notes,
+        })
+        const confirmText = `Done — added to your Outlook: ${lastPendingEvent.subject} on ${new Date(lastPendingEvent.startISO).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${new Date(lastPendingEvent.startISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}.`
+        const storedUser = userMessage
+        await prisma.chatMessage.create({ data: { sessionId: session.id, role: 'user', content: storedUser } })
+        await prisma.chatMessage.create({ data: { sessionId: session.id, role: 'assistant', content: confirmText, dealsJson: [], suggestions: [] } })
+        await prisma.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
+        return NextResponse.json({ sessionId: session.id, response: confirmText, deals: [], suggestions: [] })
+      } catch (err) {
+        // Fall through to normal AI if creation fails
+        console.error('[DealFlow] Calendar confirm error:', err)
+      }
+    }
 
     let calendarContext = ''
     if (isCalendarReadQuery || isCalendarCreateQuery) {
@@ -453,88 +559,18 @@ export async function POST(req: NextRequest) {
       { role: 'user', content: userContent },
     ]
 
-    // Calendar event creation tool — only offered when query implies scheduling
-    const calendarTool: OpenAI.Chat.ChatCompletionTool = {
-      type: 'function',
-      function: {
-        name: 'create_calendar_event',
-        description: 'Creates a calendar event in the user\'s Outlook calendar. Only call this when the user explicitly asks to schedule, book, create, or add a calendar event or showing.',
-        parameters: {
-          type: 'object',
-          properties: {
-            subject:  { type: 'string', description: 'Event title, e.g. "Showing — 123 Main St"' },
-            startISO: { type: 'string', description: 'Start datetime in ISO 8601 format, e.g. "2024-05-15T14:00:00"' },
-            endISO:   { type: 'string', description: 'End datetime in ISO 8601 format (optional — defaults to 30 min after start)' },
-            location: { type: 'string', description: 'Property address or meeting location (optional)' },
-            notes:    { type: 'string', description: 'Notes or description for the event (optional)' },
-          },
-          required: ['subject', 'startISO'],
-        },
-      },
-    }
-
     const firstCompletion = await client.chat.completions.create({
       model: 'gpt-4o',
       messages,
       temperature: 0.3,
       max_tokens: 1500,
-      ...(isCalendarCreateQuery ? {
-        tools: [calendarTool],
-        tool_choice: { type: 'function' as const, function: { name: 'create_calendar_event' } },
-      } : {}),
     })
 
-    let raw = (firstCompletion.choices[0].message.content ?? '').trim()
-
-    // Handle calendar tool call if AI chose to create an event
-    const toolCalls = firstCompletion.choices[0].message.tool_calls
-    if (toolCalls && toolCalls.length > 0) {
-      const toolMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        ...messages,
-        firstCompletion.choices[0].message as OpenAI.Chat.ChatCompletionMessageParam,
-      ]
-
-      for (const tc of toolCalls) {
-        let toolResult: string
-        const fnCall = tc as { type: string; id: string; function: { name: string; arguments: string } }
-        if (fnCall.type === 'function' && fnCall.function.name === 'create_calendar_event') {
-          try {
-            const args = JSON.parse(fnCall.function.arguments)
-            const endISO = args.endISO || (() => {
-              const d = new Date(args.startISO)
-              d.setMinutes(d.getMinutes() + 30)
-              return d.toISOString()
-            })()
-            const created = await createCalendarEvent({
-              subject:  args.subject,
-              startISO: args.startISO,
-              endISO,
-              location: args.location,
-              notes:    args.notes,
-            })
-            toolResult = JSON.stringify({ ok: true, eventId: created.id, webLink: created.webLink })
-          } catch (err) {
-            toolResult = JSON.stringify({ ok: false, error: String(err) })
-          }
-        } else {
-          toolResult = JSON.stringify({ error: 'Unknown tool' })
-        }
-        toolMessages.push({ role: 'tool', tool_call_id: fnCall.id, content: toolResult })
-      }
-
-      // Second call to get the final natural-language response
-      const finalCompletion = await client.chat.completions.create({
-        model: 'gpt-4o',
-        messages: toolMessages,
-        temperature: 0.3,
-        max_tokens: 800,
-      })
-      raw = (finalCompletion.choices[0].message.content ?? '').trim()
-    }
+    const raw = (firstCompletion.choices[0].message.content ?? '').trim()
     console.log('[DealFlow] Raw AI response:', raw.slice(0, 200))
 
     // Parse JSON robustly
-    let aiResult: { response: string; suggestions: string[] }
+    let aiResult: { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null }
     try {
       aiResult = JSON.parse(raw)
     } catch {
@@ -563,12 +599,18 @@ export async function POST(req: NextRequest) {
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`
       : userMessage
 
+    // Store pendingEvent in assistant message content as JSON so confirm flow can read it
+    const pendingEvent = aiResult.pendingEvent ?? null
+    const storedAssistantContent = pendingEvent
+      ? JSON.stringify({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent })
+      : cleanResponse
+
     // Save messages to this session
     await prisma.chatMessage.create({ data: { sessionId: session.id, role: 'user', content: storedMsg } })
     await prisma.chatMessage.create({
       data: {
         sessionId: session.id,
-        role: 'assistant', content: cleanResponse,
+        role: 'assistant', content: storedAssistantContent,
         dealsJson: deals as unknown as object[],
         suggestions: (aiResult.suggestions ?? []) as unknown as string[],
       },

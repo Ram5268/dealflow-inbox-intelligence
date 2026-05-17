@@ -1,7 +1,8 @@
 import { Category, TransactionType } from '@prisma/client'
 
 export const CATEGORY_LABELS: Record<Category, string> = {
-  COMING_SOON_SALE: 'Coming Soon',
+  COMING_SOON_SALE: 'Coming Soon (Sale)',
+  COMING_SOON_RENTAL: 'Coming Soon (Rental)',
   OFF_MARKET_SALE: 'Off Market',
   ACTIVE_SALE_LISTING: 'Active Listing',
   RENTAL_LISTING: 'Rental',
@@ -10,14 +11,20 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   SELLER_LEAD: 'Seller Lead',
   LANDLORD_LEAD: 'Landlord Lead',
   DEVELOPMENT_INVENTORY: 'New Development',
+  SPONSOR_UNIT: 'Sponsor Unit',
   OPEN_HOUSE: 'Open House',
   PRICE_DROP: 'Price Drop',
   BACK_ON_MARKET: 'Back on Market',
+  MARKET_REPORT: 'Market Report',
+  REAL_ESTATE_EVENT: 'RE Event',
+  CLIENT_CONVERSATION: 'Client Conversation',
+  SHOWING_CONFIRMATION: 'Showing Confirmation',
   NOISE: 'Noise',
 }
 
 export const CATEGORY_COLORS: Record<Category, string> = {
   COMING_SOON_SALE: 'bg-purple-100 text-purple-800',
+  COMING_SOON_RENTAL: 'bg-violet-100 text-violet-800',
   OFF_MARKET_SALE: 'bg-indigo-100 text-indigo-800',
   ACTIVE_SALE_LISTING: 'bg-green-100 text-green-800',
   RENTAL_LISTING: 'bg-blue-100 text-blue-800',
@@ -26,9 +33,14 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   SELLER_LEAD: 'bg-rose-100 text-rose-800',
   LANDLORD_LEAD: 'bg-amber-100 text-amber-800',
   DEVELOPMENT_INVENTORY: 'bg-teal-100 text-teal-800',
+  SPONSOR_UNIT: 'bg-emerald-100 text-emerald-800',
   OPEN_HOUSE: 'bg-lime-100 text-lime-800',
   PRICE_DROP: 'bg-red-100 text-red-800',
   BACK_ON_MARKET: 'bg-yellow-100 text-yellow-800',
+  MARKET_REPORT: 'bg-slate-100 text-slate-700',
+  REAL_ESTATE_EVENT: 'bg-pink-100 text-pink-800',
+  CLIENT_CONVERSATION: 'bg-sky-100 text-sky-800',
+  SHOWING_CONFIRMATION: 'bg-fuchsia-100 text-fuchsia-800',
   NOISE: 'bg-gray-100 text-gray-500',
 }
 

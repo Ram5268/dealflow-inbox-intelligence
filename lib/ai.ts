@@ -43,52 +43,56 @@ export interface ExtractionResult {
 
 const SYSTEM_PROMPT = `You are a real estate deal intelligence classifier for Ryan Martin, a NYC Douglas Elliman agent.
 
-Before classifying each listing, reason through these three questions:
+Before classifying, answer these three questions:
 1. SENDER ROLE: Who is this person? (listing agent, buyer's agent, property owner, building manager, developer, vendor, unknown)
-2. OFFERING OR SEEKING: Are they offering something (a property, a unit, a deal) — or seeking something (a buyer, a renter, representation)?
+2. OFFERING OR SEEKING: Are they offering something or seeking something?
 3. TRANSACTION TYPE: Sale, rental, or unclear?
 
-Your answers to those three questions determine the category. Use this decision tree:
+FULL CATEGORY LIST — use exactly these strings:
 
-OFFERING a property for SALE:
-  Not yet public, quietly marketing → COMING_SOON_SALE
-    Signals: "coming soon", "not yet on StreetEasy/MLS/OLR", "pre-market", "before it hits the market", "first access", "advance notice", "will be listing", Compass Coming Soon label
-  Private, no public listing, pocket listing → OFF_MARKET_SALE
-    Signals: "off market", "off-market", "not listed", "private exclusive", "pocket listing", "quiet sale", "quietly marketing", "private repositioning", "select agents only", "not publicly available", "price upon request" with no public listing context, agent-to-agent only with no MLS reference
-  Actively listed on market now → ACTIVE_SALE_LISTING
-    Note: "Exclusive listing" = agent holds the exclusive listing agreement (standard MLS listing, NOT off-market). Do NOT classify as OFF_MARKET_SALE just because "exclusive" appears.
-  Previously listed, now back active → BACK_ON_MARKET
-  Existing listing with price reduced → PRICE_DROP
-  New construction, sponsor units, new dev → DEVELOPMENT_INVENTORY
-  Open house announcement → OPEN_HOUSE
+SUPPLY-SIDE (Properties Available):
+  COMING_SOON_SALE — Off-market sale coming soon. Signals: "coming soon", "pre-market", "advance notice", "not yet on StreetEasy/MLS", "will be listing", Compass Coming Soon label
+  COMING_SOON_RENTAL — Rental becoming available soon. Signals: rental context + future availability date, "coming available", "will be free [date]"
+  OFF_MARKET_SALE — Private sale, no public listing. Signals: "off market", "pocket listing", "quiet sale", "select agents only", "not publicly available". NOTE: "Exclusive listing" = standard MLS listing, NOT off-market.
+  ACTIVE_SALE_LISTING — Currently listed for sale publicly
+  RENTAL_LISTING — Currently listed for rent publicly
+  BACK_ON_MARKET — Was listed, went off, now back
+  PRICE_DROP — Existing listing with price reduction
+  DEVELOPMENT_INVENTORY — New construction, bulk new dev inventory, new buildings
+  SPONSOR_UNIT — Developer/sponsor selling direct from offering plan (condo or co-op). Signals: "sponsor unit", "from offering plan", "sponsor sale", "no board approval"
 
-OFFERING a unit for RENT → RENTAL_LISTING
+DEMAND-SIDE (People Looking):
+  BUYER_ISO — Another agent's buyer broadcasting search criteria. Ryan does NOT represent this buyer. Signals: "ISO", "my buyer needs", "client looking for", "buyer is searching", "in the market for"
+  RENTER_INQUIRY — Another agent's renter or direct renter searching. Signals: "looking for rental", "needs apartment", "tenant needs", "renter inquiry"
 
-SEEKING a property to BUY:
-  Any phrasing counts: "ISO", "my client needs", "buyer is looking", "in the market for", "searching for", "needs a home", "wants to purchase" → BUYER_ISO
+LEAD-SIDE (Owners Ryan Can Pursue):
+  SELLER_LEAD — Property owner considering selling. Homeowner outreach, sphere of influence.
+  LANDLORD_LEAD — Property owner/manager with rental units seeking representation.
 
-SEEKING a place to RENT:
-  Any phrasing counts: "looking for an apartment", "needs a rental", "moving to NYC", "renter inquiry", "tenant needs", "searching for a place" → RENTER_INQUIRY
+INFORMATIONAL:
+  OPEN_HOUSE — Open house or broker preview announcement
+  MARKET_REPORT — Market analysis, stats, absorption rates, reports, market newsletters with data
+  REAL_ESTATE_EVENT — Grand openings, networking events, company events, new dev celebrations, broker events
+  CLIENT_CONVERSATION — Two-way email thread with a buyer, seller, renter, landlord, or prospect. Contains acquisition criteria, preferences, or relationship context.
+  SHOWING_CONFIRMATION — Confirmed showing appointment. Must contain: property address + confirmed date/time + contact name.
 
-Property OWNER considering selling (homeowner outreach, sphere of influence, "thinking of selling") → SELLER_LEAD
-
-Property OWNER or BUILDING MANAGER with units to rent, seeking representation → LANDLORD_LEAD
-
-Not real estate relevant (admin, personal, spam, billing, newsletters) → NOISE (isRelevant: false)
+  NOISE — Not real estate relevant (admin, spam, billing, unrelated personal emails). isRelevant: false.
 
 MULTI-LISTING RULE:
-If the email or attachment contains multiple distinct listings (e.g., an availability report with several units or buildings, a broker blast with multiple properties), extract EACH listing as a SEPARATE entry in the opportunities array. Do not merge them into one. A single email can produce many entries.
-- For an availability report: one entry per unit (include unit number in address, e.g. "225 East 95th Street, Unit D7L")
-- For a broker blast: one entry per property
-- For a single-listing email: array with exactly one entry
-- For NOISE: array with one entry where isRelevant is false
+If the email contains multiple distinct listings (availability report, broker blast), extract EACH as a SEPARATE entry. One email = many entries.
+- Availability report: one entry per unit (include unit number in address)
+- Broker blast: one entry per property
+- Single listing: one entry
+- NOISE: one entry with isRelevant false
 
 CRITICAL RULES:
-- Classify by INTENT and RELATIONSHIP — not by specific words or phrases. The exact wording never matters.
-- Never invent addresses, prices, neighborhoods, beds, baths, or unit counts. Use null if not explicitly stated.
-- classificationReason must state your answers to the 3 questions, then the category they point to.
-- confidenceScore: 0.9+ = unambiguous, 0.7–0.9 = probable, 0.5–0.7 = ambiguous, below 0.5 = guessing.
-- availabilityDate: extract move-in or available date if stated (e.g. "June 4" → "2026-06-04"). Use null if not stated.
+- Classify by INTENT and RELATIONSHIP, not by specific words.
+- Never invent addresses, prices, neighborhoods, beds, baths, or unit counts. Use null if not stated.
+- classificationReason must answer the 3 questions then state the category.
+- confidenceScore: 0.9+ unambiguous, 0.7-0.9 probable, 0.5-0.7 ambiguous, below 0.5 guessing.
+- availabilityDate: extract move-in or available date (e.g. "June 4" → "2026-06-04"). Null if not stated.
+- For SHOWING_CONFIRMATION: extract the showing date/time into availabilityDate field.
+- For CLIENT_CONVERSATION: extract any buyer/renter criteria into the price/beds/neighborhood fields.
 
 Return ONLY a valid JSON object with key "opportunities" containing an array. No markdown, no explanation outside the JSON.`
 
@@ -230,7 +234,7 @@ Return ONLY valid JSON with these fields (use null for missing values):
   "desiredCategories": string[] | null
 }
 
-Categories to use: COMING_SOON_SALE, OFF_MARKET_SALE, ACTIVE_SALE_LISTING, RENTAL_LISTING, BUYER_ISO, RENTER_INQUIRY, SELLER_LEAD, LANDLORD_LEAD, DEVELOPMENT_INVENTORY, OPEN_HOUSE, PRICE_DROP, BACK_ON_MARKET
+Categories to use: COMING_SOON_SALE, COMING_SOON_RENTAL, OFF_MARKET_SALE, ACTIVE_SALE_LISTING, RENTAL_LISTING, BUYER_ISO, RENTER_INQUIRY, SELLER_LEAD, LANDLORD_LEAD, DEVELOPMENT_INVENTORY, SPONSOR_UNIT, OPEN_HOUSE, PRICE_DROP, BACK_ON_MARKET, MARKET_REPORT, REAL_ESTATE_EVENT, CLIENT_CONVERSATION, SHOWING_CONFIRMATION
 Transaction types: SALE, RENTAL, BUYER_NEED, RENTER_NEED, SELLER_LEAD, LANDLORD_LEAD, UNKNOWN`
 
 export async function parseSearchQuery(query: string): Promise<SearchCriteria> {
