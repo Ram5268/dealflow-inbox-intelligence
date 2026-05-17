@@ -5,6 +5,7 @@ import { parseAttachment } from './attachmentParser'
 import { buildOpportunityText, upsertOpportunityEmbedding } from './embeddings'
 import { runMatchmaking } from './matchmaking'
 import { sendPushToAll } from './pushNotifications'
+import { checkStreetEasyStatuses } from './streetEasyStatus'
 import { Category, TransactionType } from '@prisma/client'
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
@@ -161,23 +162,42 @@ export async function runIncrementalSync(): Promise<{
       },
     })
 
+    // Detect showing confirmations — create high-priority match records for calendar proposals
+    const showingConfirmations = newOppIds.length > 0
+      ? await prisma.extractedOpportunity.findMany({
+          where: { id: { in: newOppIds }, category: Category.SHOWING_CONFIRMATION },
+          select: { id: true, extractedTitle: true, address: true, availabilityDate: true, sourceAgentName: true },
+        })
+      : []
+
+    for (const sc of showingConfirmations) {
+      const reason = `Showing confirmation: ${sc.extractedTitle}${sc.address ? ' at ' + sc.address : ''}${sc.availabilityDate ? ' on ' + sc.availabilityDate : ''}. Add to your Outlook calendar?`
+      await prisma.match.create({
+        data: { opportunityId: sc.id, counterpartId: sc.id, counterpartType: 'showing_confirmation', score: 90, reason },
+      }).catch(() => {})
+    }
+
     // Run matchmaking on new opportunities
     let matchCount = 0
     if (newOppIds.length > 0) {
       try {
         const matchResult = await runMatchmaking(newOppIds)
-        matchCount = matchResult.total
-        if (matchResult.highConfidence > 0) {
-          const top = matchResult.topMatches[0]
-          const body = matchResult.highConfidence === 1
-            ? `${top?.reason ?? 'New match found'}`
-            : `${matchResult.highConfidence} new high-confidence matches found`
-          await sendPushToAll('DealFlow — New Match', body, '/').catch(() => {})
+        matchCount = matchResult.total + showingConfirmations.length
+        const totalHighConf = matchResult.highConfidence + showingConfirmations.length
+        if (totalHighConf > 0) {
+          const scText = showingConfirmations.length > 0 ? ` + ${showingConfirmations.length} showing confirmation${showingConfirmations.length > 1 ? 's' : ''}` : ''
+          const body = `${matchResult.highConfidence} new match${matchResult.highConfidence !== 1 ? 'es' : ''}${scText} found`
+          await sendPushToAll('DealFlow', body, '/').catch(() => {})
         }
       } catch (e) {
         console.error('[DealFlow sync] Matchmaking error:', (e as Error).message)
       }
     }
+
+    // Check StreetEasy status on existing listings (background, non-blocking)
+    checkStreetEasyStatuses(25).catch(e =>
+      console.error('[DealFlow sync] StreetEasy status check error:', (e as Error).message)
+    )
 
     return { fetched: messages.length, newEmails, newOpps, skipped: false, matches: matchCount }
   } catch (err) {

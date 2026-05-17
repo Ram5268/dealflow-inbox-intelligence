@@ -6,6 +6,7 @@ import { semanticSearch } from '@/lib/embeddings'
 import { getCurrentMortgageRate, formatRateContext, estimateMonthlyPayment } from '@/lib/mortgageRates'
 import { lookupProperty, formatForChat, extractAddressFromText } from '@/lib/acris'
 import { getCalendarEvents, createCalendarEvent, formatEventsForAI } from '@/lib/microsoftCalendar'
+import { lookupDOB, formatDobForChat } from '@/lib/dobLookup'
 import OpenAI from 'openai'
 
 export const maxDuration = 60
@@ -547,6 +548,48 @@ export async function POST(req: NextRequest) {
       } catch { /* non-fatal */ }
     }
 
+    // DOB lookup — triggered when message asks about permits, violations, air rights, development activity
+    const DOB_KEYWORDS = ['permit', 'violation', 'dob', 'department of buildings', 'air rights',
+      'underbuilt', 'renovation permit', 'alteration', 'new building', 'stop work', 'filing',
+      'zoning', 'far ', 'floor area ratio', 'landmark', 'lpc', 'historic district']
+    const dobTrigger = DOB_KEYWORDS.some(k => messageLower.includes(k))
+    let dobContext = ''
+    if (dobTrigger) {
+      const detectedAddress = extractAddressFromText(userMessage)
+      if (detectedAddress) {
+        try {
+          const dobData = await lookupDOB(detectedAddress)
+          if (dobData) dobContext = formatDobForChat(dobData)
+        } catch { /* non-fatal */ }
+      }
+    }
+
+    // Match context — injected when coming from check-in "See them →" link or asking about matches
+    const isMatchQuery = queryText.includes('match') || body.showMatches === true
+    let matchContext = ''
+    if (isMatchQuery) {
+      const unseenMatches = await prisma.match.findMany({
+        where: { seen: false, score: { gte: 50 } },
+        orderBy: [{ score: 'desc' }, { createdAt: 'desc' }],
+        take: 20,
+        include: { opportunity: { select: { extractedTitle: true, category: true, neighborhood: true, price: true } } },
+      })
+      if (unseenMatches.length > 0) {
+        matchContext = `\n\nNEW MATCHES FROM LAST SYNC (${unseenMatches.length} total):\n` +
+          unseenMatches.map(m => {
+            if (m.counterpartType === 'showing_confirmation') {
+              return `[SHOWING] ${m.reason}`
+            }
+            return `[MATCH score:${m.score}] ${m.reason}`
+          }).join('\n')
+        // Mark as seen
+        await prisma.match.updateMany({
+          where: { id: { in: unseenMatches.map(m => m.id) } },
+          data: { seen: true },
+        })
+      }
+    }
+
     // Fetch current mortgage rate for market context
     const mortgageRate = await getCurrentMortgageRate()
     const rateContext = mortgageRate
@@ -554,7 +597,7 @@ export async function POST(req: NextRequest) {
       : ''
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: `${SYSTEM_PROMPT}${rateContext}${acrisContext}${calendarContext}\n\n${dbContext}${mojoContext}` },
+      { role: 'system', content: `${SYSTEM_PROMPT}${rateContext}${acrisContext}${dobContext}${calendarContext}${matchContext}\n\n${dbContext}${mojoContext}` },
       ...conversationHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user', content: userContent },
     ]

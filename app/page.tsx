@@ -9,6 +9,7 @@ interface GreetData {
   overnightOpps: number
   lastSync: string | null
   newMatches?: number
+  newShowingConfirmations?: number
 }
 
 function greetWord(): string {
@@ -131,16 +132,22 @@ export default function GreetPage() {
       tag: 'MATCHES',
       body: !data
         ? <span style={{ color: 'rgba(255,255,255,0.35)' }}>Loading…</span>
-        : (data.newMatches ?? 0) === 0
+        : (data.newMatches ?? 0) === 0 && (data.newShowingConfirmations ?? 0) === 0
         ? <span style={{ color: 'rgba(255,255,255,0.45)' }}>No new matches since last sync.</span>
         : <span>
-            <span style={{ color: 'var(--sr-cream)', fontWeight: 400 }}>{data.newMatches}</span>
-            {' '}new high-confidence {(data.newMatches ?? 0) === 1 ? 'match' : 'matches'} found.{' '}
+            {(data.newMatches ?? 0) > 0 && (
+              <span><span style={{ color: 'var(--sr-cream)', fontWeight: 400 }}>{data.newMatches}</span> new {(data.newMatches ?? 0) === 1 ? 'match' : 'matches'}</span>
+            )}
+            {(data.newMatches ?? 0) > 0 && (data.newShowingConfirmations ?? 0) > 0 && <span> · </span>}
+            {(data.newShowingConfirmations ?? 0) > 0 && (
+              <span><span style={{ color: '#7dd3a8', fontWeight: 400 }}>{data.newShowingConfirmations}</span> showing {(data.newShowingConfirmations ?? 0) === 1 ? 'confirmation' : 'confirmations'}</span>
+            )}
+            {' — '}
             <span
               onClick={() => router.push('/chat?match=1')}
               style={{ color: 'var(--sr-cream)', textDecoration: 'underline', cursor: 'pointer' }}
             >
-              See them →
+              Review →
             </span>
           </span>,
     },
