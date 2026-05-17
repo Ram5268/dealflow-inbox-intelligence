@@ -740,7 +740,7 @@ function RaisedView({
                 onMouseEnter={e => { e.currentTarget.style.top = `${si * 58 - 6}px` }}
                 onMouseLeave={e => { e.currentTarget.style.top = `${si * 58}px` }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '82px 1fr auto auto', gap: 10, alignItems: 'center', height: 28 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '82px 1fr auto', gap: 10, alignItems: 'center', height: 28 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--sr-cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {(CATEGORY_LABELS[d.category] ?? d.category).slice(0, 12).toUpperCase()}
                   </span>
@@ -749,9 +749,6 @@ function RaisedView({
                   </span>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'rgba(255,255,255,0.78)' }}>
                     {d.price ? formatPriceRange(d.minPrice, d.maxPrice, d.price) : '—'}
-                  </span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: '#fff', width: 32, textAlign: 'right' }}>
-                    {Math.round((d.confidenceScore ?? 0.7) * 100)}%
                   </span>
                 </div>
               </div>
