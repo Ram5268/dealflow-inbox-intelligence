@@ -3,21 +3,24 @@ import { getRecentMessages, getMessageAttachments } from './microsoftGraph'
 import { classifyAndExtractEmail } from './ai'
 import { parseAttachment } from './attachmentParser'
 import { buildOpportunityText, upsertOpportunityEmbedding } from './embeddings'
+import { runMatchmaking } from './matchmaking'
+import { sendPushToAll } from './pushNotifications'
 import { Category, TransactionType } from '@prisma/client'
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 const VALID_CATEGORIES = new Set([
-  'COMING_SOON_SALE','OFF_MARKET_SALE','ACTIVE_SALE_LISTING','RENTAL_LISTING',
+  'COMING_SOON_SALE','COMING_SOON_RENTAL','OFF_MARKET_SALE','ACTIVE_SALE_LISTING','RENTAL_LISTING',
   'BUYER_ISO','RENTER_INQUIRY','SELLER_LEAD','LANDLORD_LEAD',
-  'DEVELOPMENT_INVENTORY','OPEN_HOUSE','PRICE_DROP','BACK_ON_MARKET','NOISE',
+  'DEVELOPMENT_INVENTORY','SPONSOR_UNIT','OPEN_HOUSE','PRICE_DROP','BACK_ON_MARKET',
+  'MARKET_REPORT','REAL_ESTATE_EVENT','CLIENT_CONVERSATION','SHOWING_CONFIRMATION','NOISE',
 ])
 const VALID_TX = new Set([
   'SALE','RENTAL','BUYER_NEED','RENTER_NEED','SELLER_LEAD','LANDLORD_LEAD','UNKNOWN',
 ])
 
 export async function runIncrementalSync(): Promise<{
-  fetched: number; newEmails: number; newOpps: number; skipped: boolean; error?: string
+  fetched: number; newEmails: number; newOpps: number; skipped: boolean; matches?: number; error?: string
 }> {
   try {
     // Determine date range: 90 days on first run, incremental after
@@ -47,6 +50,7 @@ export async function runIncrementalSync(): Promise<{
 
     let newEmails = 0
     let newOpps = 0
+    const newOppIds: string[] = []
 
     for (const msg of messages) {
       const exists = await prisma.rawEmail.findUnique({
@@ -137,6 +141,7 @@ export async function runIncrementalSync(): Promise<{
             },
           })
           newOpps++
+          newOppIds.push(opp.id)
 
           upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...ext, ...opp })).catch(
             e => console.error('[DealFlow sync] Embedding error:', (e as Error).message)
@@ -156,7 +161,25 @@ export async function runIncrementalSync(): Promise<{
       },
     })
 
-    return { fetched: messages.length, newEmails, newOpps, skipped: false }
+    // Run matchmaking on new opportunities
+    let matchCount = 0
+    if (newOppIds.length > 0) {
+      try {
+        const matchResult = await runMatchmaking(newOppIds)
+        matchCount = matchResult.total
+        if (matchResult.highConfidence > 0) {
+          const top = matchResult.topMatches[0]
+          const body = matchResult.highConfidence === 1
+            ? `${top?.reason ?? 'New match found'}`
+            : `${matchResult.highConfidence} new high-confidence matches found`
+          await sendPushToAll('DealFlow — New Match', body, '/').catch(() => {})
+        }
+      } catch (e) {
+        console.error('[DealFlow sync] Matchmaking error:', (e as Error).message)
+      }
+    }
+
+    return { fetched: messages.length, newEmails, newOpps, skipped: false, matches: matchCount }
   } catch (err) {
     const msg = (err as Error).message
     const isTokenError = msg.includes('expired') || msg.includes('not found') || msg.includes('401') || msg.includes('token')

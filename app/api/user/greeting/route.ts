@@ -8,7 +8,7 @@ export async function GET() {
   const midnight = new Date()
   midnight.setHours(0, 0, 0, 0)
 
-  const [overnightEmails, overnightOpps, totalOpps, lastAudit] = await Promise.all([
+  const [overnightEmails, overnightOpps, totalOpps, lastAudit, newMatches] = await Promise.all([
     prisma.rawEmail.count({
       where: { receivedDateTime: { gte: midnight } },
     }),
@@ -23,6 +23,7 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
       select: { createdAt: true },
     }),
+    prisma.match.count({ where: { seen: false, score: { gte: 70 } } }),
   ])
 
   return NextResponse.json({
@@ -30,5 +31,6 @@ export async function GET() {
     overnightOpps,
     totalOpps,
     lastSync: lastAudit?.createdAt ?? null,
+    newMatches,
   })
 }

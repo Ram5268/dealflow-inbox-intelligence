@@ -8,6 +8,7 @@ interface GreetData {
   overnightEmails: number
   overnightOpps: number
   lastSync: string | null
+  newMatches?: number
 }
 
 function greetWord(): string {
@@ -55,6 +56,31 @@ export default function GreetPage() {
     fetch('/api/user/profile').then(r => r.json()).then(d => setGivenName(d.givenName ?? null)).catch(() => {})
     fetch('/api/user/greeting').then(r => r.json()).then(setData).catch(() => {})
     fetch('/api/calendar/today').then(r => r.json()).then(setCalData).catch(() => setCalData(null))
+
+    // Register service worker + subscribe to push notifications
+    if ('serviceWorker' in navigator && 'PushManager' in window) {
+      navigator.serviceWorker.register('/sw.js').then(async reg => {
+        const vapidRes = await fetch('/api/push/key')
+        const { publicKey } = await vapidRes.json()
+        if (!publicKey) return
+
+        const existing = await reg.pushManager.getSubscription()
+        if (existing) return // already subscribed
+
+        const permission = await Notification.requestPermission()
+        if (permission !== 'granted') return
+
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: publicKey,
+        })
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sub),
+        })
+      }).catch(() => {})
+    }
   }, [])
 
   async function handleCheckIn() {
@@ -99,6 +125,23 @@ export default function GreetPage() {
                 {' — '}{calData.nextEvent.subject.length > 38 ? calData.nextEvent.subject.slice(0, 38) + '…' : calData.nextEvent.subject}
               </span>
             )}
+          </span>,
+    },
+    {
+      tag: 'MATCHES',
+      body: !data
+        ? <span style={{ color: 'rgba(255,255,255,0.35)' }}>Loading…</span>
+        : (data.newMatches ?? 0) === 0
+        ? <span style={{ color: 'rgba(255,255,255,0.45)' }}>No new matches since last sync.</span>
+        : <span>
+            <span style={{ color: 'var(--sr-cream)', fontWeight: 400 }}>{data.newMatches}</span>
+            {' '}new high-confidence {(data.newMatches ?? 0) === 1 ? 'match' : 'matches'} found.{' '}
+            <span
+              onClick={() => router.push('/chat?match=1')}
+              style={{ color: 'var(--sr-cream)', textDecoration: 'underline', cursor: 'pointer' }}
+            >
+              See them →
+            </span>
           </span>,
     },
   ]
