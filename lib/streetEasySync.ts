@@ -275,16 +275,84 @@ export async function sweepForDelistings(daysBack = 3): Promise<number> {
   return delistedCount
 }
 
+// ── Sweep for coming-soon developments that have gone active on StreetEasy ────
+// When COMING_SOON_DEVELOPMENT is found listed as active → upgrade to DEVELOPMENT_INVENTORY
+// When COMING_SOON_SALE is found listed as active → upgrade to ACTIVE_SALE_LISTING
+export async function sweepForActivations(): Promise<number> {
+  const comingSoon = await prisma.extractedOpportunity.findMany({
+    where: {
+      processingStatus: 'active',
+      category: { in: ['COMING_SOON_DEVELOPMENT', 'COMING_SOON_SALE'] as never[] },
+      address: { not: null },
+    },
+    select: { id: true, address: true, neighborhood: true, category: true, streetEasyId: true },
+  })
+
+  if (comingSoon.length === 0) return 0
+
+  let activatedCount = 0
+
+  for (const opp of comingSoon) {
+    try {
+      const type: 'sale' | 'rental' = 'sale'
+
+      // Check by known SE ID first
+      let listing: SEListing | null = null
+      if (opp.streetEasyId) {
+        listing = await getListingById(opp.streetEasyId, type)
+      }
+      if (!listing && opp.address) {
+        listing = await findListingByAddress(opp.address, opp.neighborhood, type)
+      }
+
+      if (!listing) {
+        await new Promise(r => setTimeout(r, 200))
+        continue
+      }
+
+      const seStatus = listing.status?.toLowerCase() ?? ''
+      const isNowActive = seStatus === 'active' || seStatus === 'for sale'
+
+      if (isNowActive) {
+        const newCategory = opp.category === 'COMING_SOON_DEVELOPMENT'
+          ? 'DEVELOPMENT_INVENTORY'
+          : 'ACTIVE_SALE_LISTING'
+
+        await prisma.extractedOpportunity.update({
+          where: { id: opp.id },
+          data: {
+            category:            newCategory as never,
+            streetEasyId:        listing.id,
+            streetEasyStatus:    'active',
+            streetEasyCheckedAt: new Date(),
+          },
+        })
+        activatedCount++
+      }
+
+      await new Promise(r => setTimeout(r, 200))
+    } catch {
+      // Non-fatal — skip to next
+    }
+  }
+
+  return activatedCount
+}
+
 // ── Run full daily status sweep ───────────────────────────────────────────────
 export async function runDailyStatusSweep(): Promise<{
   checked: number
   updated: number
   delistedFound: number
+  activatedFound: number
 }> {
   // 1. Sweep for recently delisted listings
   const delistedFound = await sweepForDelistings(3)
 
-  // 2. Re-verify any opportunity not checked in 7+ days
+  // 2. Sweep for coming-soon developments that have gone active
+  const activatedFound = await sweepForActivations()
+
+  // 3. Re-verify any opportunity not checked in 7+ days
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000)
   const staleChecks = await prisma.extractedOpportunity.findMany({
     where: {
@@ -297,7 +365,7 @@ export async function runDailyStatusSweep(): Promise<{
       ],
     },
     select: { id: true },
-    take: 50,  // cap per run to stay within rate limits
+    take: 50,
     orderBy: { streetEasyCheckedAt: 'asc' },
   })
 
@@ -305,9 +373,8 @@ export async function runDailyStatusSweep(): Promise<{
   for (const { id } of staleChecks) {
     const result = await syncOpportunityStatus(id)
     if (result.updated) updated++
-    // Small delay to avoid rate limiting
     await new Promise(r => setTimeout(r, 200))
   }
 
-  return { checked: staleChecks.length, updated, delistedFound }
+  return { checked: staleChecks.length, updated, delistedFound, activatedFound }
 }

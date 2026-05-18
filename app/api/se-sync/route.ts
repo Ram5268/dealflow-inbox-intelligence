@@ -19,6 +19,7 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await runDailyStatusSweep()
+    console.log('[se-sync]', result)
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     console.error('[se-sync]', err)
