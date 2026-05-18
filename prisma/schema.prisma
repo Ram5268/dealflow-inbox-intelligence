@@ -17,6 +17,7 @@ enum Category {
   SELLER_LEAD
   LANDLORD_LEAD
   DEVELOPMENT_INVENTORY
+  COMING_SOON_DEVELOPMENT
   SPONSOR_UNIT
   OPEN_HOUSE
   PRICE_DROP
@@ -146,6 +147,11 @@ model ExtractedOpportunity {
   processingStatus     String   @default("active")
   // Values: "active" | "needs_review" | "draft" | "rejected" | "duplicate" | "stale"
   propertyId           String?
+
+  // ── StreetEasy sync ──
+  streetEasyId         String?
+  streetEasyStatus     String?   // "active" | "delisted" | "in_contract" | "sold" | "unknown"
+  streetEasyCheckedAt  DateTime?
 
   rawEmail  RawEmail  @relation(fields: [rawEmailId], references: [id])
   matches   Match[]

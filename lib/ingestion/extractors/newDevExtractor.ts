@@ -40,8 +40,9 @@ const ResponseSchema = z.object({
 const SYSTEM_PROMPT = `You are a NYC new development real estate extractor. Extract structured data from new development building announcements and sponsor unit emails.
 
 CATEGORIES:
-- DEVELOPMENT_INVENTORY — building-level launch: price sheets, inventory emails, announcements with multiple unit types or "starting from" prices, full building introductions
-- SPONSOR_UNIT — single specific sponsor unit in a new or conversion development (has a specific unit number, e.g. "Residence 4B" or "Unit 12A")
+- DEVELOPMENT_INVENTORY — building IS actively selling NOW: "Now Selling", "Sales Gallery Open", "Now Available", "Grand Opening", current pricing, "immediate occupancy", "last remaining units"
+- COMING_SOON_DEVELOPMENT — building NOT yet on market: "Coming Soon", "pre-launch", "VIP preview", "now accepting reservations", "estimated closings YYYY", "anticipated completion", pricing is future/indicative, no sales gallery open yet
+- SPONSOR_UNIT — single specific sponsor unit with its own unit number and price (not a full building announcement)
 
 EXTRACTION RULES:
 - Extract one entry per UNIT TYPE when the email gives tier-based pricing (1BR, 2BR, 3BR, etc.)

@@ -16,14 +16,15 @@ If the subject contains ANY of the following, classify as the appropriate real e
 Real estate emails often have generic or boilerplate bodies — the SUBJECT is what matters.
 
 STEP 2 — CATEGORIES (classify into one):
-Supply-side: COMING_SOON_SALE, COMING_SOON_RENTAL, OFF_MARKET_SALE, ACTIVE_SALE_LISTING, RENTAL_LISTING, BACK_ON_MARKET, PRICE_DROP, DEVELOPMENT_INVENTORY, SPONSOR_UNIT
+Supply-side: COMING_SOON_SALE, COMING_SOON_RENTAL, OFF_MARKET_SALE, ACTIVE_SALE_LISTING, RENTAL_LISTING, BACK_ON_MARKET, PRICE_DROP, DEVELOPMENT_INVENTORY, COMING_SOON_DEVELOPMENT, SPONSOR_UNIT
 Demand-side: BUYER_ISO, RENTER_INQUIRY
 Lead-side: SELLER_LEAD, LANDLORD_LEAD
 Informational: OPEN_HOUSE, MARKET_REPORT, REAL_ESTATE_EVENT, CLIENT_CONVERSATION, SHOWING_CONFIRMATION
 NOISE — ONLY for emails with NO real estate content in the subject AND no useful body: IT support, billing, personal emails, vendor software pitches.
 
 KEY DISTINCTIONS:
-- DEVELOPMENT_INVENTORY vs COMING_SOON_SALE: Use DEVELOPMENT_INVENTORY for building-level new development launches (full building, multiple unit tiers, "1BR from $X, 2BR from $Y", "65 residences", building name as headline). Use COMING_SOON_SALE for a single specific unit at a known address that isn't on the market yet.
+- COMING_SOON_DEVELOPMENT vs DEVELOPMENT_INVENTORY: Both are building-level new developments. Use COMING_SOON_DEVELOPMENT when the building is NOT yet on market — signals: "Coming Soon", "pre-launch", "VIP preview", "now accepting reservations", "estimated closings YYYY", "anticipated completion", "expected delivery", pricing TBD or future-oriented. Use DEVELOPMENT_INVENTORY when the building IS actively selling NOW — signals: "Now Selling", "Sales Gallery Open", "Now Available", "Grand Opening", current pricing listed, "immediate occupancy", "last remaining units".
+- DEVELOPMENT_INVENTORY vs COMING_SOON_SALE: DEVELOPMENT_INVENTORY/COMING_SOON_DEVELOPMENT are building-level (multiple unit tiers, building name as headline, 10+ units). COMING_SOON_SALE is a single specific unit at a known address not yet on market.
 - SPONSOR_UNIT: A single specific unit in a new development with its own unit number and price (not a full building announcement).
 - SELLER_LEAD vs ACTIVE_SALE_LISTING: SELLER_LEAD = owner/agent reaching out to Ryan to list. ACTIVE_SALE_LISTING = already listed by another broker.
 - CLIENT_CONVERSATION vs BUYER_ISO/RENTER_INQUIRY: CLIENT_CONVERSATION = direct back-and-forth with one person. BUYER_ISO/RENTER_INQUIRY = blast email broadcasting a client's criteria to many agents.

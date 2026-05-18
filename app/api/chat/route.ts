@@ -468,6 +468,38 @@ export async function POST(req: NextRequest) {
           return `[DEAL:${o.id}] ${o.extractedTitle} | ${o.category} | ${o.neighborhood ?? ''}${o.borough ? ', ' + o.borough : ''} | ${o.price ? '$' + o.price.toLocaleString() : o.maxPrice ? 'up to $' + o.maxPrice.toLocaleString() : 'no price'} | ${o.propertyType ?? ''} | ${o.beds ? o.beds + 'BR' : ''} ${o.units ? o.units + ' units' : ''} | ${o.sourceBrokerage ?? ''} | ${Math.round(o.confidenceScore * 100)}%${dateTag}${availTag} | ${o.extractedSummary}${attachSnippet}${bodySnippet}`
         }).join('\n')
 
+    // ── NEW RETRIEVAL PIPELINE (shadow mode) ─────────────────────────────────
+    // Runs in parallel with old pipeline. When USE_NEW_RETRIEVAL_PIPELINE=true,
+    // its context replaces the old dbContext. When false, results are logged only.
+    let newPipelineActive = false
+    let shadowContext = dbContext  // default: old context
+
+    try {
+      const flagRow = await prisma.featureFlag.findUnique({ where: { id: 'USE_NEW_RETRIEVAL_PIPELINE' } })
+      newPipelineActive = flagRow?.enabled ?? false
+    } catch { /* flag table not available — stay on old pipeline */ }
+
+    if (queryText) {
+      // Run new pipeline in background — don't await unless it's active
+      const newPipelinePromise = import('@/lib/retrieval').then(({ runRetrieval }) =>
+        runRetrieval(queryText).catch(() => null)
+      )
+
+      if (newPipelineActive) {
+        // Phase 8: use new pipeline context
+        const result = await newPipelinePromise
+        if (result?.context) {
+          shadowContext = result.context
+          console.log('[Retrieval v2] active | intent:', result.parsed.intent, '| records:', result.records.length, '| usedLLM:', result.parsed.usedLLM)
+        }
+      } else {
+        // Shadow mode: log but don't change response
+        newPipelinePromise.then(result => {
+          if (result) console.log('[Retrieval v2 SHADOW]', JSON.stringify(result.shadowLog))
+        }).catch(() => {})
+      }
+    }
+
     // Process files into text chunks and image parts
     type Part = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'high' } }
     const imageParts: Part[] = []
@@ -597,7 +629,7 @@ export async function POST(req: NextRequest) {
       : ''
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: `${SYSTEM_PROMPT}${rateContext}${acrisContext}${dobContext}${calendarContext}${matchContext}\n\n${dbContext}${mojoContext}` },
+      { role: 'system', content: `${SYSTEM_PROMPT}${rateContext}${acrisContext}${dobContext}${calendarContext}${matchContext}\n\n${shadowContext}${mojoContext}` },
       ...conversationHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user', content: userContent },
     ]

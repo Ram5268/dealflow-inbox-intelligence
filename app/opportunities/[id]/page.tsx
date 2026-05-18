@@ -45,6 +45,16 @@ export default function OpportunityDetailPage() {
     <div className="df-bg min-h-screen" style={{ minHeight: '100dvh' }}>
       <TopNav />
 
+      {/* Back button */}
+      <div style={{ padding: '4px 16px 0' }}>
+        <button
+          onClick={() => router.back()}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0' }}
+        >
+          ← Back
+        </button>
+      </div>
+
       <div style={{ padding: '0 16px 48px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {/* Title */}
         <div>
