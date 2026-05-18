@@ -397,14 +397,17 @@ export async function POST(req: NextRequest) {
         !defaultExclude.includes(o.category)
       )
       .sort((a, b) => b.confidenceScore - a.confidenceScore)
-      .slice(0, 20)
+      .slice(0, 40)
 
-    // Fallback: if no neighborhood match, use top semantic results
+    // Fallback: if no neighborhood match, use full merged opportunity set
     const rawDealsToReturn = selectedDeals.length > 0
       ? selectedDeals
-      : semanticOpps
-          .filter(o => queryBeds == null || o.beds == null || o.beds === queryBeds)
-          .slice(0, 10)
+      : opportunities
+          .filter(o =>
+            (queryBeds == null || o.beds == null || o.beds === queryBeds) &&
+            !defaultExclude.includes(o.category)
+          )
+          .slice(0, 40)
 
     // JS-level category guard — bulletproof final filter regardless of DB/cache quirks
     const dealsToReturn = categoryFilter
