@@ -203,86 +203,106 @@ export async function syncOpportunityStatus(opportunityId: string): Promise<{
   return { updated: changed, streetEasyStatus, previous }
 }
 
-// ── Sweep for recently delisted listings by neighborhood ─────────────────────
-// Matches delisted results against our active database records
+// ── Shared: cross-reference a list of SE delisted listings against our DB ─────
+async function markDelistedMatches(
+  delistedListings: SEListing[],
+  activeOpps: Array<{ id: string; address: string | null; streetEasyId: string | null }>,
+): Promise<number> {
+  let count = 0
+  for (const delisted of delistedListings) {
+    if (!delisted.address) continue
+    const normDelisted = normalizeAddress(delisted.address)?.normalizedFull ?? null
+
+    const match = activeOpps.find(o => {
+      if (o.streetEasyId === delisted.id) return true
+      if (!o.address) return false
+      const normOpp = normalizeAddress(o.address)?.normalizedFull ?? null
+      return normOpp && normDelisted && normOpp === normDelisted
+    })
+
+    if (match) {
+      await prisma.extractedOpportunity.update({
+        where: { id: match.id },
+        data: {
+          streetEasyId:        delisted.id,
+          streetEasyStatus:    'delisted',
+          streetEasyCheckedAt: new Date(),
+          processingStatus:    'stale',
+        },
+      })
+      count++
+    }
+  }
+  return count
+}
+
+// ── Sweep for recently delisted SALES and RENTALS ────────────────────────────
 export async function sweepForDelistings(daysBack = 3): Promise<number> {
-  const date = new Date(Date.now() - daysBack * 86_400_000)
-  const closedAfter = date.toISOString().split('T')[0]
+  const closedAfter = new Date(Date.now() - daysBack * 86_400_000).toISOString().split('T')[0]
 
-  // Get all unique SE area slugs we have active opportunities in
-  const activeOpps = await prisma.extractedOpportunity.findMany({
-    where: { processingStatus: 'active', category: { in: [...CHECKABLE_CATEGORIES] as never[] } },
-    select: { id: true, address: true, neighborhood: true, streetEasyId: true, transactionType: true },
-  })
+  const SALE_CATS   = ['ACTIVE_SALE_LISTING','OFF_MARKET_SALE','BACK_ON_MARKET','PRICE_DROP',
+                       'DEVELOPMENT_INVENTORY','COMING_SOON_DEVELOPMENT','SPONSOR_UNIT','OPEN_HOUSE']
+  const RENTAL_CATS = ['RENTAL_LISTING','COMING_SOON_RENTAL']
 
-  const areas = [...new Set(
-    activeOpps
-      .map(o => o.neighborhood && NEIGHBORHOOD_TO_SE_AREA[o.neighborhood])
-      .filter(Boolean) as string[]
-  )]
+  const [saleOpps, rentalOpps] = await Promise.all([
+    prisma.extractedOpportunity.findMany({
+      where: { processingStatus: 'active', category: { in: SALE_CATS as never[] } },
+      select: { id: true, address: true, neighborhood: true, streetEasyId: true },
+    }),
+    prisma.extractedOpportunity.findMany({
+      where: { processingStatus: 'active', category: { in: RENTAL_CATS as never[] } },
+      select: { id: true, address: true, neighborhood: true, streetEasyId: true },
+    }),
+  ])
 
-  if (areas.length === 0) return 0
+  const saleAreas   = [...new Set(saleOpps.map(o => o.neighborhood && NEIGHBORHOOD_TO_SE_AREA[o.neighborhood]).filter(Boolean) as string[])]
+  const rentalAreas = [...new Set(rentalOpps.map(o => o.neighborhood && NEIGHBORHOOD_TO_SE_AREA[o.neighborhood]).filter(Boolean) as string[])]
 
   let delistedCount = 0
 
-  for (const area of areas) {
+  // Sales delistings
+  for (const area of saleAreas) {
     try {
       let offset = 0
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const data = await seRequest(
           `/sales/past/search?areas=${area}&status=delisted&closedAfter=${closedAfter}&minPrice=100000&limit=50&offset=${offset}`
-        ) as { listings?: SEListing[]; pagination?: { nextOffset?: number; count?: number } }
-
+        ) as { listings?: SEListing[]; pagination?: { nextOffset?: number } }
         const listings = data.listings ?? []
         if (listings.length === 0) break
-
-        // Cross-reference against our active opportunities
-        for (const delisted of listings) {
-          if (!delisted.address) continue
-          const normDelisted = normalizeAddress(delisted.address)?.normalizedFull ?? null
-
-          // Check if we have this listing (by SE ID or address match)
-          const match = activeOpps.find(o => {
-            if (o.streetEasyId === delisted.id) return true
-            if (!o.address) return false
-            const normOpp = normalizeAddress(o.address)?.normalizedFull ?? null
-            return normOpp && normDelisted && normOpp === normDelisted
-          })
-
-          if (match) {
-            await prisma.extractedOpportunity.update({
-              where: { id: match.id },
-              data: {
-                streetEasyId:        delisted.id,
-                streetEasyStatus:    'delisted',
-                streetEasyCheckedAt: new Date(),
-                processingStatus:    'stale',
-              },
-            })
-            delistedCount++
-          }
-        }
-
+        delistedCount += await markDelistedMatches(listings, saleOpps)
         if (!data.pagination?.nextOffset) break
         offset = data.pagination.nextOffset
       }
-    } catch {
-      // Non-fatal — continue to next area
-    }
+    } catch { /* non-fatal */ }
+  }
+
+  // Rental delistings
+  for (const area of rentalAreas) {
+    try {
+      let offset = 0
+      while (true) {
+        const data = await seRequest(
+          `/rentals/past/search?areas=${area}&status=delisted&closedAfter=${closedAfter}&limit=50&offset=${offset}`
+        ) as { listings?: SEListing[]; pagination?: { nextOffset?: number } }
+        const listings = data.listings ?? []
+        if (listings.length === 0) break
+        delistedCount += await markDelistedMatches(listings, rentalOpps)
+        if (!data.pagination?.nextOffset) break
+        offset = data.pagination.nextOffset
+      }
+    } catch { /* non-fatal */ }
   }
 
   return delistedCount
 }
 
-// ── Sweep for coming-soon developments that have gone active on StreetEasy ────
-// When COMING_SOON_DEVELOPMENT is found listed as active → upgrade to DEVELOPMENT_INVENTORY
-// When COMING_SOON_SALE is found listed as active → upgrade to ACTIVE_SALE_LISTING
+// ── Sweep for coming-soon that have gone active (sales + rentals) ─────────────
 export async function sweepForActivations(): Promise<number> {
   const comingSoon = await prisma.extractedOpportunity.findMany({
     where: {
       processingStatus: 'active',
-      category: { in: ['COMING_SOON_DEVELOPMENT', 'COMING_SOON_SALE'] as never[] },
+      category: { in: ['COMING_SOON_DEVELOPMENT', 'COMING_SOON_SALE', 'COMING_SOON_RENTAL'] as never[] },
       address: { not: null },
     },
     select: { id: true, address: true, neighborhood: true, category: true, streetEasyId: true },
@@ -294,29 +314,18 @@ export async function sweepForActivations(): Promise<number> {
 
   for (const opp of comingSoon) {
     try {
-      const type: 'sale' | 'rental' = 'sale'
+      const isRental = opp.category === 'COMING_SOON_RENTAL'
+      const type: 'sale' | 'rental' = isRental ? 'rental' : 'sale'
 
-      // Check by known SE ID first
       let listing: SEListing | null = null
-      if (opp.streetEasyId) {
-        listing = await getListingById(opp.streetEasyId, type)
-      }
-      if (!listing && opp.address) {
-        listing = await findListingByAddress(opp.address, opp.neighborhood, type)
-      }
+      if (opp.streetEasyId) listing = await getListingById(opp.streetEasyId, type)
+      if (!listing && opp.address) listing = await findListingByAddress(opp.address, opp.neighborhood, type)
 
-      if (!listing) {
-        await new Promise(r => setTimeout(r, 200))
-        continue
-      }
-
-      const seStatus = listing.status?.toLowerCase() ?? ''
-      const isNowActive = seStatus === 'active' || seStatus === 'for sale'
-
-      if (isNowActive) {
-        const newCategory = opp.category === 'COMING_SOON_DEVELOPMENT'
-          ? 'DEVELOPMENT_INVENTORY'
-          : 'ACTIVE_SALE_LISTING'
+      if (listing && ['active', 'for sale', 'for rent'].includes(listing.status?.toLowerCase() ?? '')) {
+        const newCategory =
+          opp.category === 'COMING_SOON_DEVELOPMENT' ? 'DEVELOPMENT_INVENTORY' :
+          opp.category === 'COMING_SOON_RENTAL'       ? 'RENTAL_LISTING'        :
+                                                        'ACTIVE_SALE_LISTING'
 
         await prisma.extractedOpportunity.update({
           where: { id: opp.id },
@@ -331,12 +340,79 @@ export async function sweepForActivations(): Promise<number> {
       }
 
       await new Promise(r => setTimeout(r, 200))
-    } catch {
-      // Non-fatal — skip to next
-    }
+    } catch { /* non-fatal */ }
   }
 
   return activatedCount
+}
+
+// ── Date-based expiration (no StreetEasy needed) ─────────────────────────────
+// Group 3: categories that expire purely based on time
+export async function sweepDateExpirations(): Promise<number> {
+  const now  = new Date()
+  const ago30 = new Date(Date.now() - 30 * 86_400_000)
+  let expiredCount = 0
+
+  // OPEN_HOUSE and SHOWING_CONFIRMATION — stale once the event date has passed
+  const pastEvents = await prisma.extractedOpportunity.findMany({
+    where: {
+      processingStatus: 'active',
+      category: { in: ['OPEN_HOUSE', 'SHOWING_CONFIRMATION'] as never[] },
+      availabilityDate: { not: null, lt: now.toISOString() },
+    },
+    select: { id: true },
+  })
+
+  for (const { id } of pastEvents) {
+    await prisma.extractedOpportunity.update({
+      where: { id },
+      data: { processingStatus: 'stale' },
+    })
+    expiredCount++
+  }
+
+  // COMING_SOON_SALE / COMING_SOON_RENTAL with a past availability date
+  // that was never upgraded to active — assume it fell through or was already handled
+  const staleComing = await prisma.extractedOpportunity.findMany({
+    where: {
+      processingStatus: 'active',
+      category: { in: ['COMING_SOON_SALE', 'COMING_SOON_RENTAL'] as never[] },
+      availabilityDate: { not: null, lt: ago30.toISOString() },
+    },
+    select: { id: true },
+  })
+
+  for (const { id } of staleComing) {
+    await prisma.extractedOpportunity.update({
+      where: { id },
+      data: { processingStatus: 'stale' },
+    })
+    expiredCount++
+  }
+
+  // General staleness: any active supply-side listing older than 90 days
+  // with no StreetEasy verification — mark needs_review, not auto-stale
+  const ago90 = new Date(Date.now() - 90 * 86_400_000)
+  const aged = await prisma.extractedOpportunity.findMany({
+    where: {
+      processingStatus: 'active',
+      category: { in: ['ACTIVE_SALE_LISTING','RENTAL_LISTING','OFF_MARKET_SALE',
+                        'BACK_ON_MARKET','PRICE_DROP'] as never[] },
+      streetEasyCheckedAt: null,
+      createdAt: { lt: ago90 },
+    },
+    select: { id: true },
+  })
+
+  for (const { id } of aged) {
+    await prisma.extractedOpportunity.update({
+      where: { id },
+      data: { processingStatus: 'needs_review' },
+    })
+    expiredCount++
+  }
+
+  return expiredCount
 }
 
 // ── Run full daily status sweep ───────────────────────────────────────────────
@@ -345,14 +421,18 @@ export async function runDailyStatusSweep(): Promise<{
   updated: number
   delistedFound: number
   activatedFound: number
+  expiredFound: number
 }> {
-  // 1. Sweep for recently delisted listings
-  const delistedFound = await sweepForDelistings(3)
+  // 1. Sweep for recently delisted (sales + rentals)
+  const delistedFound  = await sweepForDelistings(3)
 
-  // 2. Sweep for coming-soon developments that have gone active
+  // 2. Sweep for coming-soon that have gone active (sales + rentals + new dev)
   const activatedFound = await sweepForActivations()
 
-  // 3. Re-verify any opportunity not checked in 7+ days
+  // 3. Date-based expirations (open houses, stale coming-soons, aged listings)
+  const expiredFound   = await sweepDateExpirations()
+
+  // 4. Re-verify individual records not checked in 7+ days
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000)
   const staleChecks = await prisma.extractedOpportunity.findMany({
     where: {
@@ -376,5 +456,5 @@ export async function runDailyStatusSweep(): Promise<{
     await new Promise(r => setTimeout(r, 200))
   }
 
-  return { checked: staleChecks.length, updated, delistedFound, activatedFound }
+  return { checked: staleChecks.length, updated, delistedFound, activatedFound, expiredFound }
 }
