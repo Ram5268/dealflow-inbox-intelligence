@@ -148,6 +148,9 @@ model ExtractedOpportunity {
   // Values: "active" | "needs_review" | "draft" | "rejected" | "duplicate" | "stale"
   propertyId           String?
 
+  // ── Test data flag ──
+  isTestData           Boolean  @default(false)
+
   // ── StreetEasy sync ──
   streetEasyId         String?
   streetEasyStatus     String?   // "active" | "delisted" | "in_contract" | "sold" | "unknown"
