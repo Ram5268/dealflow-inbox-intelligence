@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
-import TopNav from '@/components/TopNav'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
 type FlagReason = 'low_confidence' | 'ambiguous_category' | 'missing_address' | 'possible_duplicate'
@@ -116,7 +115,6 @@ export default function ReviewPage() {
   if (loading) {
     return (
       <ChatSurfaceShell>
-        <TopNav />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.35)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>
           Loading…
         </div>
@@ -127,7 +125,6 @@ export default function ReviewPage() {
   if (items.length === 0) {
     return (
       <ChatSurfaceShell>
-        <TopNav />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
           <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.35)' }}>REVIEW QUEUE</div>
           <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>Queue is clear.</div>
@@ -139,7 +136,6 @@ export default function ReviewPage() {
 
   return (
     <ChatSurfaceShell>
-      <TopNav />
       <div style={{ padding: '0 16px 4px' }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)' }}>
           REVIEW QUEUE · {items.length} PENDING
