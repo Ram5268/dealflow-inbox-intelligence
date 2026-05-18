@@ -326,37 +326,31 @@ export async function POST(req: NextRequest) {
 
     const catClause = categoryFilter ? [{ category: { in: categoryFilter } }] : []
 
-    const [semanticOpps, structuredOpps] = await Promise.all([
+    const oppWhere = {
+      AND: [
+        { isDuplicate: false },
+        { category: { not: Category.NOISE } },
+        { processingStatus: { notIn: ['rejected', 'duplicate', 'stale'] } },
+        ...catClause,
+      ],
+    }
+    const oppInclude = { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } }
+
+    const [semanticOpps, structuredOpps, recentOpps] = await Promise.all([
+      // Semantic: vector-matched records
       semanticIds.length > 0
         ? prisma.extractedOpportunity.findMany({
-            where: {
-              AND: [
-                { id: { in: semanticIds } },
-                { isDuplicate: false },
-                { category: { not: Category.NOISE } },
-                ...catClause,
-              ],
-            },
-            include: { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } },
+            where: { AND: [{ id: { in: semanticIds } }, ...oppWhere.AND] },
+            include: oppInclude,
           })
-        : prisma.extractedOpportunity.findMany({
-            where: {
-              AND: [
-                { isDuplicate: false },
-                { category: { not: Category.NOISE } },
-                ...catClause,
-              ],
-            },
-            orderBy: { createdAt: 'desc' },
-            take: 60,
-            include: { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } },
-          }),
+        : Promise.resolve([]),
+
+      // Structured: neighborhood-filtered records
       searchNeighborhoods.length > 0
         ? prisma.extractedOpportunity.findMany({
             where: {
               AND: [
-                { isDuplicate: false },
-                ...catClause,
+                ...oppWhere.AND,
                 {
                   OR: searchNeighborhoods.flatMap(n => [
                     { neighborhood: { contains: n, mode: 'insensitive' as const } },
@@ -365,16 +359,24 @@ export async function POST(req: NextRequest) {
                 },
               ],
             },
-            include: { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } },
+            include: oppInclude,
             orderBy: { createdAt: 'desc' },
             take: 40,
           })
         : Promise.resolve([]),
+
+      // Recent: always fetch latest 40 as a baseline so we never show fewer than available
+      prisma.extractedOpportunity.findMany({
+        where: oppWhere,
+        orderBy: { createdAt: 'desc' },
+        take: 40,
+        include: oppInclude,
+      }),
     ])
 
-    // Merge — structured (neighborhood) results lead, semantic fills the rest
+    // Merge — structured first, then semantic, then recent fills any gaps
     const seen = new Set<string>()
-    const opportunities = [...structuredOpps, ...semanticOpps].filter(o => {
+    const opportunities = [...structuredOpps, ...semanticOpps, ...recentOpps].filter(o => {
       if (seen.has(o.id)) return false
       seen.add(o.id)
       return true
