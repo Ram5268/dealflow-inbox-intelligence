@@ -4,7 +4,16 @@ import { runDailyStatusSweep, syncOpportunityStatus } from '@/lib/streetEasySync
 
 // POST /api/se-sync              → run full daily sweep
 // POST /api/se-sync?id=<oppId>   → check one specific opportunity
+// Protected by CRON_SECRET header when set
 export async function POST(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret) {
+    const authHeader = req.headers.get('authorization')
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+  }
+
   if (!process.env.RAPIDAPI_KEY) {
     return NextResponse.json({ error: 'RAPIDAPI_KEY not configured' }, { status: 503 })
   }

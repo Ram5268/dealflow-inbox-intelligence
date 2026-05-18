@@ -43,9 +43,12 @@ export default function SettingsPage() {
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [token, setToken] = useState('')
+  const [refreshToken, setRefreshToken] = useState('')
   const [tokenSaving, setTokenSaving] = useState(false)
   const [tokenResult, setTokenResult] = useState<{ ok: boolean; message?: string; error?: string } | null>(null)
   const [tokenStatus, setTokenStatus] = useState<TokenStatus | null>(null)
+  const [deviceCode, setDeviceCode] = useState<{ userCode: string; verificationUri: string; message: string } | null>(null)
+  const [devicePolling, setDevicePolling] = useState(false)
   const [mojoCount, setMojoCount] = useState<number | null>(null)
   const [mojoLastSync, setMojoLastSync] = useState<string | null>(null)
   const [mojoImporting, setMojoImporting] = useState(false)
@@ -76,14 +79,53 @@ export default function SettingsPage() {
   async function saveToken() {
     if (!token.trim()) return
     setTokenSaving(true)
-    const r = await fetch('/api/microsoft/token', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: token.trim() }) })
+    const r = await fetch('/api/microsoft/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: token.trim(), refreshToken: refreshToken.trim() }),
+    })
     const result = await r.json()
     setTokenResult(result)
     if (result.ok) {
       setToken('')
+      setRefreshToken('')
       fetch('/api/microsoft/token-status').then(r => r.json()).then(setTokenStatus).catch(() => {})
     }
     setTokenSaving(false)
+  }
+
+  async function startDeviceFlow() {
+    setDevicePolling(true)
+    setDeviceCode(null)
+    try {
+      const r = await fetch('/api/microsoft/device-code', { method: 'POST' })
+      const data = await r.json()
+      if (data.userCode) {
+        setDeviceCode(data)
+        // Poll for completion
+        const poll = setInterval(async () => {
+          const pr = await fetch('/api/microsoft/device-code/poll', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ deviceCode: data.deviceCode }),
+          })
+          const pd = await pr.json()
+          if (pd.ok) {
+            clearInterval(poll)
+            setDeviceCode(null)
+            setDevicePolling(false)
+            setTokenResult({ ok: true, message: 'Connected! Token auto-refreshes every hour.' })
+            fetch('/api/microsoft/token-status').then(r => r.json()).then(setTokenStatus).catch(() => {})
+          } else if (pd.error === 'expired') {
+            clearInterval(poll)
+            setDevicePolling(false)
+            setDeviceCode(null)
+          }
+        }, 5000)
+      }
+    } catch {
+      setDevicePolling(false)
+    }
   }
 
   const statusColor = tokenStatus?.status === 'ok' ? 'rgba(150,255,180,0.85)'
@@ -157,13 +199,35 @@ export default function SettingsPage() {
           )}
         </Section>
 
+        {/* Device code flow — preferred method */}
+        <Section title="Auto-Connect (Recommended)">
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 12, lineHeight: 1.5 }}>
+            One-time sign-in that stores a refresh token. After this, the app auto-renews access without you needing to paste tokens.
+          </p>
+          {!deviceCode ? (
+            <Btn onClick={startDeviceFlow} disabled={devicePolling} variant="ghost">
+              {devicePolling ? 'Starting...' : 'Start Device Sign-In'}
+            </Btn>
+          ) : (
+            <div style={{ padding: '12px 14px', background: 'rgba(255,255,255,0.05)', borderRadius: 10 }}>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>1. Go to <span style={{ color: 'rgba(150,220,255,0.9)', fontFamily: 'monospace' }}>{deviceCode.verificationUri}</span></p>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>2. Enter code: <span style={{ fontFamily: 'monospace', fontSize: 18, color: '#fff', letterSpacing: 4 }}>{deviceCode.userCode}</span></p>
+              <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Waiting for sign-in…</p>
+            </div>
+          )}
+        </Section>
+
         {/* Manual token fallback */}
         <Section title="Manual Token (Fallback)">
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 12, lineHeight: 1.5 }}>
-            Paste directly from Graph Explorer if the bookmarklet isn't working.
+            Paste access token from Graph Explorer. Optionally add a refresh token to enable auto-renewal.
           </p>
           <textarea value={token} onChange={e => setToken(e.target.value)}
-            placeholder="Paste token here..." rows={2}
+            placeholder="Access token..." rows={2}
+            style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', outline: 'none', resize: 'none', fontFamily: 'monospace', marginBottom: 8 }}
+          />
+          <textarea value={refreshToken} onChange={e => setRefreshToken(e.target.value)}
+            placeholder="Refresh token (optional — enables auto-renewal)..." rows={2}
             style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', outline: 'none', resize: 'none', fontFamily: 'monospace', marginBottom: 10 }}
           />
           <Btn onClick={saveToken} disabled={tokenSaving || !token.trim()} variant="ghost">

@@ -1,0 +1,19 @@
+name: Daily StreetEasy Sweep
+
+on:
+  schedule:
+    - cron: '0 11 * * *'  # 7am ET (UTC-4 in summer, UTC-5 in winter — use 11 or 12)
+  workflow_dispatch:        # allows manual trigger from GitHub Actions tab
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run StreetEasy status sweep
+        run: |
+          curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            "${{ secrets.APP_URL }}/api/se-sync" \
+            | tee /dev/stderr | grep -q '"ok":true'
+        timeout-minutes: 10

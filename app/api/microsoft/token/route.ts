@@ -15,7 +15,8 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const token: string = body.token ?? ''
+  const token: string        = body.token ?? ''
+  const refreshToken: string = body.refreshToken ?? ''
 
   if (!token || token.length < 100) {
     return NextResponse.json(
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  // Decode expiry from the JWT payload (exp claim) so we know when it lapses
+  // Decode expiry from the JWT payload (exp claim)
   let expiresAt: Date | null = null
   try {
     const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString())
@@ -37,12 +38,14 @@ export async function POST(req: NextRequest) {
       id: 'runtime-token',
       email: 'runtime',
       provider: 'microsoft',
-      accessTokenEncrypted: token,
+      accessTokenEncrypted:  token,
+      refreshTokenEncrypted: refreshToken || null,
       lastSyncAt: expiresAt,
       readOnlyMode: true,
     },
     update: {
       accessTokenEncrypted: token,
+      ...(refreshToken ? { refreshTokenEncrypted: refreshToken } : {}),
       lastSyncAt: expiresAt,
       updatedAt: new Date(),
     },
