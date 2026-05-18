@@ -6,45 +6,33 @@ export const CLASSIFIER_VERSION = '1.0'
 
 const SYSTEM_PROMPT = `You are a real estate email classifier for a NYC Douglas Elliman agent.
 
-Your ONLY job: determine the category of this email and whether it needs deep extraction.
+STEP 1 — READ THE SUBJECT FIRST. It is the strongest signal.
+If the subject contains ANY of the following, classify as the appropriate real estate category, regardless of body content:
+- A price: "$650,000", "$3,500/mo", "asking $X", "priced at $X"
+- Bed/bath counts: "1 bed", "2BR", "1 bath", "studio"
+- Listing words: "just listed", "new listing", "for sale", "for rent", "available", "price drop", "back on market", "off market", "coming soon", "open house", "price reduced"
+- An address: any number followed by a street name ("317 East 18th St", "123 W 57th")
+- ISO words: "ISO", "buyer looking", "client needs", "seeking"
+Real estate emails often have generic or boilerplate bodies — the SUBJECT is what matters.
 
-CATEGORIES:
-Supply-side (properties available):
-  COMING_SOON_SALE, COMING_SOON_RENTAL, OFF_MARKET_SALE, ACTIVE_SALE_LISTING, RENTAL_LISTING,
-  BACK_ON_MARKET, PRICE_DROP, DEVELOPMENT_INVENTORY, SPONSOR_UNIT
+STEP 2 — CATEGORIES (classify into one):
+Supply-side: COMING_SOON_SALE, COMING_SOON_RENTAL, OFF_MARKET_SALE, ACTIVE_SALE_LISTING, RENTAL_LISTING, BACK_ON_MARKET, PRICE_DROP, DEVELOPMENT_INVENTORY, SPONSOR_UNIT
+Demand-side: BUYER_ISO, RENTER_INQUIRY
+Lead-side: SELLER_LEAD, LANDLORD_LEAD
+Informational: OPEN_HOUSE, MARKET_REPORT, REAL_ESTATE_EVENT, CLIENT_CONVERSATION, SHOWING_CONFIRMATION
+NOISE — ONLY for emails with NO real estate content in the subject AND no useful body: IT support, billing, personal emails, vendor software pitches.
 
-Demand-side (people looking):
-  BUYER_ISO — another agent's buyer broadcasting search criteria
-  RENTER_INQUIRY — another agent's renter or direct renter searching
+STEP 3 — needsDeepExtract:
+- true for all supply-side, demand-side, lead-side, OPEN_HOUSE, SHOWING_CONFIRMATION, CLIENT_CONVERSATION
+- false for NOISE, MARKET_REPORT, REAL_ESTATE_EVENT (informational only)
 
-Lead-side:
-  SELLER_LEAD, LANDLORD_LEAD
+ATTACHMENT GUIDANCE (only when subject is vague):
+- Vague subject + attachment named "*.pdf" with listing keywords → supply-side category
+- Vague subject + no attachments + body is generic newsletter text → NOISE
 
-Informational:
-  OPEN_HOUSE, MARKET_REPORT, REAL_ESTATE_EVENT, CLIENT_CONVERSATION, SHOWING_CONFIRMATION
+CONFIDENCE RULES: 0.9+ unambiguous, 0.7-0.89 probable, 0.5-0.69 ambiguous
 
-Not useful:
-  NOISE — spam, admin, billing, vendor pitches, unrelated content
-
-ATTACHMENT GUIDANCE:
-If the subject or preview is vague but attachment names suggest real estate content,
-route to a supply-side or demand-side category, not NOISE.
-Examples:
-- "Updated availability" + "Williamsburg_Rentals_June.pdf" → RENTAL_LISTING
-- "FYI" + "Tribeca_OffMarket_Condo.pdf" → OFF_MARKET_SALE
-- "See attached" + "BuyerISO_Chelsea_2BR.pdf" → BUYER_ISO
-- "Newsletter" + no attachments + generic body → NOISE
-
-CONFIDENCE RULES:
-0.9+ = unambiguous
-0.7-0.89 = probable
-0.5-0.69 = ambiguous
-<0.5 = guessing
-
-MULTI-LISTING: Set isMultiListing=true if email contains multiple distinct properties
-(e.g. availability report, broker blast with multiple addresses).
-
-NOISE check: Set needsDeepExtract=false ONLY when clearly not real estate relevant.
+MULTI-LISTING: Set isMultiListing=true when email contains multiple distinct listings.
 
 Return ONLY valid JSON, no markdown:
 {
@@ -54,14 +42,41 @@ Return ONLY valid JSON, no markdown:
   "isMultiListing": boolean
 }`
 
+// Email-client boilerplate that often appears as the first line of broker blast body previews.
+// When detected, the preview is not useful — fall back to body text or subject only.
+const BOILERPLATE_PATTERNS = [
+  /^trouble viewing/i,
+  /^view in browser/i,
+  /^having trouble/i,
+  /^if you.re having trouble/i,
+  /^unsubscribe/i,
+  /^powered by/i,
+  /^click here to view/i,
+]
+
+function cleanPreview(preview: string | null): string | null {
+  if (!preview) return null
+  // Strip HTML entities
+  const stripped = preview.replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&#\d+;/g, '').trim()
+  // If it starts with boilerplate, discard it
+  if (BOILERPLATE_PATTERNS.some(p => p.test(stripped))) return null
+  return stripped.length > 10 ? stripped : null
+}
+
 function buildPrompt(input: ClassifierInput): string {
   const attachInfo = input.attachmentCount > 0
     ? `\nAttachments (${input.attachmentCount}): ${input.attachmentNames.join(', ')} [types: ${input.attachmentMimeTypes.join(', ')}]`
     : '\nAttachments: none'
 
-  const bodyHint = input.bodyFirst500 && (!input.bodyPreview || input.bodyPreview.length < 100)
-    ? `\nBody sample: ${input.bodyFirst500.slice(0, 500)}`
-    : (input.bodyPreview ? `\nPreview: ${input.bodyPreview.slice(0, 300)}` : '')
+  // Clean both body sources — discard boilerplate so it doesn't mislead the classifier
+  const cleanedPreview  = cleanPreview(input.bodyPreview)
+  const cleanedBody500  = cleanPreview(input.bodyFirst500)
+
+  const bodyHint = cleanedPreview
+    ? `\nPreview: ${cleanedPreview.slice(0, 300)}`
+    : cleanedBody500
+    ? `\nBody sample: ${cleanedBody500.slice(0, 400)}`
+    : '\n(Body not useful — classify from subject and attachment names only)'
 
   return `Classify this email:
 Subject: ${input.subject}

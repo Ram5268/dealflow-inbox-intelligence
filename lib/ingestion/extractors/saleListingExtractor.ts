@@ -21,14 +21,14 @@ const ListingItemSchema = z.object({
   availabilityDate: z.string().nullable(),
   status:           z.string().nullable(),
   category:         z.string(),
-  transactionType:  z.string().default('SALE'),
+  transactionType:  z.string().nullish().transform(v => v ?? 'SALE'),
   sourceAgentName:  z.string().nullable(),
   sourceAgentEmail: z.string().nullable(),
   sourceBrokerage:  z.string().nullable(),
-  extractedTitle:   z.string(),
-  extractedSummary: z.string(),
-  classificationReason: z.string(),
-  confidenceScore:  z.number().min(0).max(1),
+  extractedTitle:   z.string().nullish().transform(v => v ?? ''),
+  extractedSummary: z.string().nullish().transform(v => v ?? ''),
+  classificationReason: z.string().nullish().transform(v => v ?? ''),
+  confidenceScore:  z.number().min(0).max(1).nullish().transform(v => v ?? 0.7),
 })
 
 const ResponseSchema = z.object({
@@ -44,18 +44,26 @@ CATEGORIES to assign (pick the most accurate one):
 - PRICE_DROP — existing listing with a price reduction
 - OPEN_HOUSE — open house or broker preview announcement
 
+SUBJECT LINE IS KEY: NYC broker blast emails often put the full listing details in the subject
+(address, price, beds, baths) while the body is boilerplate HTML ("Trouble viewing this email...").
+ALWAYS extract from the subject if it contains listing details, even if the body is empty or boilerplate.
+Example: Subject "JUST LISTED AT 317 E 18TH ST #4A - 1 BED 1 BATH - ASKING $650,000"
+→ address="317 East 18th Street #4A", beds=1, baths=1, price=650000, category=ACTIVE_SALE_LISTING
+
 MULTI-LISTING: If the email contains multiple properties, extract each as a separate entry.
 
 EXTRACTION RULES:
-- Never invent address, price, beds, baths, or neighborhood. Use null if not stated.
-- price: number only (e.g. 2100000, not "$2.1M")
+- Extract from subject line first, then body, then attachments.
+- Never invent address, price, beds, baths, or neighborhood. Use null if not stated anywhere.
+- price: number only (e.g. 650000, not "$650,000")
 - beds/baths: number (e.g. 2, not "2BR")
 - availabilityDate: ISO date string "YYYY-MM-DD" or null
 - propertyType: condo, co-op, townhouse, multi-family, single-family, land, commercial
 - transactionType: always "SALE"
 - confidenceScore: 0.9+ unambiguous, 0.7-0.9 probable, 0.5-0.7 ambiguous
 
-Return ONLY valid JSON: { "listings": [...] }`
+Return ONLY valid JSON: { "listings": [...] }
+If you can extract any listing details (even just from the subject), always return at least one entry.`
 
 function buildPrompt(input: ExtractorInput): string {
   const body = input.fullBody

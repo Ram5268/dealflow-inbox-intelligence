@@ -23,14 +23,14 @@ const RentalItemSchema = z.object({
   availabilityDate: z.string().nullable(),   // move-in date
   status:           z.string().nullable(),
   category:         z.string(),
-  transactionType:  z.string().default('RENTAL'),
+  transactionType:  z.string().nullish().transform(v => v ?? 'RENTAL'),
   sourceAgentName:  z.string().nullable(),
   sourceAgentEmail: z.string().nullable(),
   sourceBrokerage:  z.string().nullable(),
-  extractedTitle:   z.string(),
-  extractedSummary: z.string(),
-  classificationReason: z.string(),
-  confidenceScore:  z.number().min(0).max(1),
+  extractedTitle:   z.string().nullish().transform(v => v ?? ''),
+  extractedSummary: z.string().nullish().transform(v => v ?? ''),
+  classificationReason: z.string().nullish().transform(v => v ?? ''),
+  confidenceScore:  z.number().min(0).max(1).nullish().transform(v => v ?? 0.7),
 })
 
 const ResponseSchema = z.object({
@@ -43,11 +43,16 @@ CATEGORIES:
 - RENTAL_LISTING — currently listed for rent
 - COMING_SOON_RENTAL — rental becoming available soon (future move-in date, not yet on market)
 
+SUBJECT LINE IS KEY: Broker emails often put the key listing details in the subject while the body
+is boilerplate. Always extract from the subject first if it contains rental details.
+
 MULTI-LISTING: If the email has multiple units/apartments, extract each as a separate entry.
 Example: availability reports with "1BR $3,500 / 2BR $4,800" → two entries.
 
 EXTRACTION RULES:
-- Never invent address, rent, or beds. Use null if not stated.
+- Extract from subject line first, then body, then attachments.
+- Never invent address, rent, or beds. Use null if not stated anywhere.
+- Return at least one entry if any listing details are found (even just from the subject).
 - price: monthly rent as a number (e.g. 3500, not "$3,500/mo"). Use for exact rent.
 - minPrice/maxPrice: use when a range is given (e.g. "$3,500-$4,000/mo")
 - beds: number (2, not "2BR"). Studios = 0.
