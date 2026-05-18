@@ -10,6 +10,7 @@ interface GreetData {
   lastSync: string | null
   newMatches?: number
   newShowingConfirmations?: number
+  pendingReviewCount?: number
 }
 
 function greetWord(): string {
@@ -151,6 +152,20 @@ export default function GreetPage() {
             </span>
           </span>,
     },
+    ...(data?.pendingReviewCount && data.pendingReviewCount > 0 ? [{
+      tag: 'REVIEW',
+      body: <span>
+        <span style={{ color: 'rgba(230,200,100,0.9)', fontWeight: 400 }}>{data.pendingReviewCount}</span>
+        {' '}{data.pendingReviewCount === 1 ? 'extraction' : 'extractions'} flagged for review
+        {' — '}
+        <span
+          onClick={() => router.push('/review')}
+          style={{ color: 'rgba(230,200,100,0.85)', textDecoration: 'underline', cursor: 'pointer' }}
+        >
+          Review →
+        </span>
+      </span>,
+    }] : []),
   ]
 
   return (

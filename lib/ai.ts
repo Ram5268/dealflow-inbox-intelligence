@@ -39,6 +39,10 @@ export interface ExtractionResult {
   extractedSummary: string
   classificationReason: string
   confidenceScore: number
+  // Phase 1+ fields (present when using new ingestion pipeline)
+  processingStatus?: string
+  propertyId?:       string | null
+  flagReasons?:      string[]
 }
 
 const SYSTEM_PROMPT = `You are a real estate deal intelligence classifier for Ryan Martin, a NYC Douglas Elliman agent.

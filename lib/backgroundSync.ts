@@ -1,12 +1,24 @@
 import { prisma } from './prisma'
 import { getRecentMessages, getMessageAttachments } from './microsoftGraph'
 import { classifyAndExtractEmail } from './ai'
+import { ingestEmail } from './ingestion/ingestEmail'
+import { queueItem as queueReviewItem } from './ingestion/reviewQueueManager'
 import { parseAttachment } from './attachmentParser'
 import { buildOpportunityText, upsertOpportunityEmbedding } from './embeddings'
 import { runMatchmaking } from './matchmaking'
 import { sendPushToAll } from './pushNotifications'
 import { checkStreetEasyStatuses } from './streetEasyStatus'
 import { Category, TransactionType } from '@prisma/client'
+import type { ValidationFlag } from './ingestion/types'
+
+async function isFeatureFlagEnabled(id: string): Promise<boolean> {
+  try {
+    const flag = await prisma.featureFlag.findUnique({ where: { id } })
+    return flag?.enabled ?? false
+  } catch {
+    return false
+  }
+}
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
@@ -49,6 +61,10 @@ export async function runIncrementalSync(): Promise<{
       return { fetched: 0, newEmails: 0, newOpps: 0, skipped: false }
     }
 
+    // Read feature flags once at the start of the sync
+    const useNewPipeline      = await isFeatureFlagEnabled('USE_STRUCTURED_INGESTION_PIPELINE')
+    const useReviewEnforcement = await isFeatureFlagEnabled('USE_REVIEW_QUEUE_ENFORCEMENT')
+
     let newEmails = 0
     let newOpps = 0
     const newOppIds: string[] = []
@@ -65,13 +81,18 @@ export async function runIncrementalSync(): Promise<{
         ? rawBodyContent.replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim()
         : null
 
-      // Fetch and parse attachments
+      // Fetch and parse attachments — collect metadata for classifier
       let attachmentText: string | null = null
+      const attachmentNames: string[] = []
+      const attachmentMimeTypes: string[] = []
+
       if (msg.hasAttachments) {
         try {
           const attachments = await getMessageAttachments(msg.id)
           const parts: string[] = []
           for (const att of attachments) {
+            attachmentNames.push(att.name ?? '')
+            attachmentMimeTypes.push(att.contentType ?? '')
             if (att.size > MAX_ATTACHMENT_BYTES) {
               parts.push(`[attachment: ${att.name} — too large to parse]`)
               continue
@@ -106,15 +127,30 @@ export async function runIncrementalSync(): Promise<{
       newEmails++
 
       try {
-        const results = await classifyAndExtractEmail({
-          subject: raw.subject,
-          senderName: raw.senderName,
-          senderEmail: raw.senderEmail,
-          receivedDateTime: raw.receivedDateTime.toISOString(),
-          bodyPreview: raw.bodyPreview,
-          fullBody: bodyText,
-          attachmentText,
-        })
+        // ── Pipeline selection ────────────────────────────────────────────────
+        const results = useNewPipeline
+          ? await ingestEmail({
+              rawEmailId:          raw.id,
+              subject:             raw.subject,
+              senderName:          raw.senderName,
+              senderEmail:         raw.senderEmail,
+              bodyPreview:         raw.bodyPreview,
+              bodyFirst500:        bodyText ? bodyText.slice(0, 500) : null,
+              attachmentNames,
+              attachmentMimeTypes,
+              attachmentCount:     attachmentNames.length,
+              fullBody:            bodyText,
+              attachmentText,
+            })
+          : await classifyAndExtractEmail({
+              subject:             raw.subject,
+              senderName:          raw.senderName,
+              senderEmail:         raw.senderEmail,
+              receivedDateTime:    raw.receivedDateTime.toISOString(),
+              bodyPreview:         raw.bodyPreview,
+              fullBody:            bodyText,
+              attachmentText,
+            })
 
         for (const ext of results) {
           if (!ext.isRelevant || ext.category === 'NOISE') continue
@@ -122,6 +158,8 @@ export async function runIncrementalSync(): Promise<{
           const category = VALID_CATEGORIES.has(ext.category) ? ext.category as Category : Category.NOISE
           if (category === Category.NOISE) continue
           const transactionType = VALID_TX.has(ext.transactionType) ? ext.transactionType as TransactionType : TransactionType.UNKNOWN
+
+          const processingStatus = ext.processingStatus ?? 'active'
 
           const opp = await prisma.extractedOpportunity.create({
             data: {
@@ -139,14 +177,55 @@ export async function runIncrementalSync(): Promise<{
               status: ext.status ?? null, extractedTitle: ext.extractedTitle,
               extractedSummary: ext.extractedSummary, classificationReason: ext.classificationReason,
               confidenceScore: ext.confidenceScore,
+              processingStatus,
+              propertyId: ext.propertyId ?? null,
             },
           })
           newOpps++
-          newOppIds.push(opp.id)
 
-          upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...ext, ...opp })).catch(
-            e => console.error('[DealFlow sync] Embedding error:', (e as Error).message)
-          )
+          // Only add to matchmaking pool if the record is active (not flagged for review)
+          if (processingStatus === 'active') newOppIds.push(opp.id)
+
+          // Embed active records immediately; defer needs_review records until approved
+          if (processingStatus === 'active') {
+            upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...ext, ...opp })).catch(
+              e => console.error('[DealFlow sync] Embedding error:', (e as Error).message)
+            )
+          }
+
+          // Create CriteriaProfile for buyer ISOs with full criteria data
+          if (category === Category.BUYER_ISO) {
+            const cp = (ext as unknown as Record<string, unknown>)._criteriaProfile as Record<string, unknown> | undefined
+            if (cp) {
+              prisma.criteriaProfile.create({
+                data: {
+                  opportunityId: opp.id,
+                  type:          'buyer',
+                  neighborhoods: Array.isArray(cp.neighborhoods) ? cp.neighborhoods as string[] : [],
+                  borough:       (cp.borough as string | null) ?? null,
+                  minPrice:      (cp.minPrice as number | null) ?? null,
+                  maxPrice:      (cp.maxPrice as number | null) ?? null,
+                  minBeds:       (cp.minBeds as number | null) ?? null,
+                  maxBeds:       (cp.maxBeds as number | null) ?? null,
+                  propertyTypes: Array.isArray(cp.propertyTypes) ? cp.propertyTypes as string[] : [],
+                  notes:         (cp.notes as string | null) ?? null,
+                  agentName:     (cp.agentName as string | null) ?? null,
+                  agentEmail:    (cp.agentEmail as string | null) ?? null,
+                  brokerage:     (cp.brokerage as string | null) ?? null,
+                },
+              }).catch(() => {})
+            }
+          }
+
+          // Review queue (only when new pipeline + enforcement enabled)
+          if (useNewPipeline && useReviewEnforcement && ext.flagReasons?.length) {
+            const flags: ValidationFlag[] = ext.flagReasons.map(r => ({
+              reason: r as ValidationFlag['reason'],
+              severity: processingStatus === 'needs_review' ? 'block' : 'warning',
+              message: r,
+            }))
+            queueReviewItem(opp.id, raw.id, flags).catch(() => {})
+          }
         }
 
         await prisma.rawEmail.update({ where: { id: raw.id }, data: { processed: true } })
