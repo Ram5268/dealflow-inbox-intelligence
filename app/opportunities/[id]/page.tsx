@@ -46,12 +46,15 @@ export default function OpportunityDetailPage() {
       <TopNav />
 
       {/* Back button */}
-      <div style={{ padding: '4px 16px 0' }}>
+      <div style={{ padding: '8px 16px 0' }}>
         <button
           onClick={() => router.back()}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 4, padding: '4px 0' }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }}
+          aria-label="Back"
         >
-          ← Back
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
         </button>
       </div>
 
