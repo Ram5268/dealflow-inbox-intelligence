@@ -58,6 +58,7 @@ export default function ChatSurfaceShell({ children, theme = 'sunrise', onNewCha
         height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
+        zIndex: 10,
         borderLeft:  '1px solid rgba(255,255,255,0.09)',
         borderRight: '1px solid rgba(255,255,255,0.09)',
         boxShadow: '-8px 0 24px rgba(0,0,0,0.18), 8px 0 24px rgba(0,0,0,0.18)',
