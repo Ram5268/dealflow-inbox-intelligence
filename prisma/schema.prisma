@@ -87,9 +87,24 @@ model RawEmail {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  // ── Processing checkpoints (Phase 1) ──
+  classifierStatus     String?   // 'pending' | 'classified' | 'failed'
+  classifierCategory   String?
+  classifierConfidence Float?
+  extractionStatus     String?   // 'pending' | 'extracted' | 'failed' | 'skipped'
+  extractorType        String?
+  extractorVersion     String?
+  extractionAttempts   Int       @default(0)
+  lastProcessedAt      DateTime?
+  processingError      String?
+  embeddedAt           DateTime?
+  matchedAt            DateTime?
+  idempotencyKey       String?   // hash(rawEmailId + extractorType + promptVersion)
+
   user          User?             @relation(fields: [userId], references: [id])
   mailbox       ConnectedMailbox? @relation(fields: [mailboxId], references: [id])
   opportunities ExtractedOpportunity[]
+  attachments   Attachment[]
 }
 
 model ExtractedOpportunity {
@@ -127,8 +142,17 @@ model ExtractedOpportunity {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  rawEmail RawEmail @relation(fields: [rawEmailId], references: [id])
-  matches  Match[]
+  // ── Phase 1 additions ──
+  processingStatus     String   @default("active")
+  // Values: "active" | "needs_review" | "draft" | "rejected" | "duplicate" | "stale"
+  propertyId           String?
+
+  rawEmail  RawEmail  @relation(fields: [rawEmailId], references: [id])
+  matches   Match[]
+  property  Property? @relation(fields: [propertyId], references: [id])
+
+  @@index([processingStatus])
+  @@index([category, processingStatus])
 }
 
 model SearchQuery {
@@ -159,7 +183,7 @@ model ChatMessage {
   id          String      @id @default(cuid())
   sessionId   String
   session     ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role        String      // "user" | "assistant"
+  role        String
   content     String
   dealsJson   Json?
   suggestions Json?
@@ -217,8 +241,8 @@ model Match {
   id              String   @id @default(cuid())
   opportunityId   String
   counterpartId   String
-  counterpartType String   // 'opportunity' | 'mojo'
-  score           Int      // 0-100
+  counterpartType String
+  score           Int
   reason          String?
   seen            Boolean  @default(false)
   createdAt       DateTime @default(now())
@@ -235,4 +259,145 @@ model PushSubscription {
   p256dh    String
   auth      String
   createdAt DateTime @default(now())
+}
+
+// ── Phase 1 New Models ────────────────────────────────────────────────────────
+
+model Attachment {
+  id            String   @id @default(cuid())
+  rawEmailId    String
+  name          String
+  mimeType      String
+  sizeBytes     Int?
+  extractedText String?
+  parseError    String?
+  createdAt     DateTime @default(now())
+  rawEmail      RawEmail @relation(fields: [rawEmailId], references: [id])
+}
+
+model Property {
+  id                String   @id @default(cuid())
+  normalizedAddress String
+  unitNumber        String?
+  neighborhood      String?
+  borough           String?
+  zip               String?
+  propertyType      String?
+  block             String?
+  lot               String?
+  bbl               String?
+  currentOwner      String?
+  lastSaleDate      String?
+  lastSalePrice     Float?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  opportunities ExtractedOpportunity[]
+  statusHistory ListingStatusHistory[]
+  intelligence  PropertyIntelligence[]
+
+  @@index([normalizedAddress])
+  @@index([bbl])
+}
+
+model ListingStatusHistory {
+  id            String   @id @default(cuid())
+  propertyId    String?
+  opportunityId String?
+  fromStatus    String?
+  toStatus      String
+  source        String
+  detectedAt    DateTime @default(now())
+
+  property Property? @relation(fields: [propertyId], references: [id])
+}
+
+model PropertyIntelligence {
+  id         String   @id @default(cuid())
+  address    String
+  source     String
+  dataJson   Json
+  fetchedAt  DateTime @default(now())
+  expiresAt  DateTime
+  propertyId String?
+
+  property Property? @relation(fields: [propertyId], references: [id])
+
+  @@unique([address, source])
+  @@index([expiresAt])
+}
+
+model CriteriaProfile {
+  id            String   @id @default(cuid())
+  opportunityId String?  @unique
+  type          String
+  agentName     String?
+  agentEmail    String?
+  brokerage     String?
+  neighborhoods String[]
+  borough       String?
+  minPrice      Float?
+  maxPrice      Float?
+  minBeds       Int?
+  maxBeds       Int?
+  propertyTypes String[]
+  notes         String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ReviewQueueItem {
+  id                  String    @id @default(cuid())
+  opportunityId       String?
+  rawEmailId          String?
+  flagReason          String
+  suggestedAction     String?
+  status              String    @default("pending")
+  reviewedAt          DateTime?
+  reviewNotes         String?
+  userCorrectedFields Json?
+  createdAt           DateTime  @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AIExtractionLog {
+  id               String   @id @default(cuid())
+  rawEmailId       String?
+  opportunityId    String?
+  idempotencyKey   String?  @unique
+  model            String
+  extractorType    String?
+  extractorVersion String   @default("1.0")
+  promptVersion    String   @default("1.0")
+  schemaVersion    String   @default("1.0")
+  inputTokens      Int?
+  outputTokens     Int?
+  estimatedCostUsd Float?
+  confidenceScore  Float?
+  durationMs       Int?
+  error            String?
+  createdAt        DateTime @default(now())
+
+  @@index([rawEmailId])
+  @@index([createdAt])
+}
+
+model OutcomeFeedback {
+  id            String   @id @default(cuid())
+  opportunityId String?
+  matchId       String?
+  action        String
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([opportunityId])
+}
+
+model FeatureFlag {
+  id        String   @id
+  enabled   Boolean  @default(false)
+  updatedAt DateTime @updatedAt
 }
