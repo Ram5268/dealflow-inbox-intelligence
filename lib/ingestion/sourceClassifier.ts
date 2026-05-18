@@ -22,6 +22,12 @@ Lead-side: SELLER_LEAD, LANDLORD_LEAD
 Informational: OPEN_HOUSE, MARKET_REPORT, REAL_ESTATE_EVENT, CLIENT_CONVERSATION, SHOWING_CONFIRMATION
 NOISE — ONLY for emails with NO real estate content in the subject AND no useful body: IT support, billing, personal emails, vendor software pitches.
 
+KEY DISTINCTIONS:
+- DEVELOPMENT_INVENTORY vs COMING_SOON_SALE: Use DEVELOPMENT_INVENTORY for building-level new development launches (full building, multiple unit tiers, "1BR from $X, 2BR from $Y", "65 residences", building name as headline). Use COMING_SOON_SALE for a single specific unit at a known address that isn't on the market yet.
+- SPONSOR_UNIT: A single specific unit in a new development with its own unit number and price (not a full building announcement).
+- SELLER_LEAD vs ACTIVE_SALE_LISTING: SELLER_LEAD = owner/agent reaching out to Ryan to list. ACTIVE_SALE_LISTING = already listed by another broker.
+- CLIENT_CONVERSATION vs BUYER_ISO/RENTER_INQUIRY: CLIENT_CONVERSATION = direct back-and-forth with one person. BUYER_ISO/RENTER_INQUIRY = blast email broadcasting a client's criteria to many agents.
+
 STEP 3 — needsDeepExtract:
 - true for all supply-side, demand-side, lead-side, OPEN_HOUSE, SHOWING_CONFIRMATION, CLIENT_CONVERSATION
 - false for NOISE, MARKET_REPORT, REAL_ESTATE_EVENT (informational only)

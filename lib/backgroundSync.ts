@@ -193,14 +193,14 @@ export async function runIncrementalSync(): Promise<{
             )
           }
 
-          // Create CriteriaProfile for buyer ISOs with full criteria data
-          if (category === Category.BUYER_ISO) {
+          // Create CriteriaProfile for buyer ISOs and renter inquiries
+          if (category === Category.BUYER_ISO || category === Category.RENTER_INQUIRY) {
             const cp = (ext as unknown as Record<string, unknown>)._criteriaProfile as Record<string, unknown> | undefined
             if (cp) {
               prisma.criteriaProfile.create({
                 data: {
                   opportunityId: opp.id,
-                  type:          'buyer',
+                  type:          (cp.type as string) ?? (category === Category.BUYER_ISO ? 'buyer' : 'renter'),
                   neighborhoods: Array.isArray(cp.neighborhoods) ? cp.neighborhoods as string[] : [],
                   borough:       (cp.borough as string | null) ?? null,
                   minPrice:      (cp.minPrice as number | null) ?? null,
