@@ -41,14 +41,23 @@ export default function OpportunityDetailPage() {
 
   const categoryLabel = CATEGORY_LABELS[opp.category] ?? opp.category
   const isRentalCat = ['RENTAL_LISTING','COMING_SOON_RENTAL'].includes(opp.category)
-  // streetEasyId populated on first view via real-time SE API lookup (in the detail API route).
-  // Named developments (Newswalk Phase 3, etc.) can't be derived from address alone.
-  const seUrl: string | null = opp.streetEasyId
+  // seUrl: direct listing if streetEasyId is set, else search fallback
+  const HOOD_TO_BOROUGH_DETAIL: Record<string,string> = { williamsburg:'brooklyn',greenpoint:'brooklyn',bushwick:'brooklyn','bed-stuy':'brooklyn','crown heights':'brooklyn','park slope':'brooklyn','carroll gardens':'brooklyn','cobble hill':'brooklyn','boerum hill':'brooklyn','brooklyn heights':'brooklyn',dumbo:'brooklyn','fort greene':'brooklyn','clinton hill':'brooklyn','prospect heights':'brooklyn','red hook':'brooklyn',gowanus:'brooklyn','sunset park':'brooklyn','bay ridge':'brooklyn',flatbush:'brooklyn','ditmas park':'brooklyn','sheepshead bay':'brooklyn','brighton beach':'brooklyn','coney island':'brooklyn',greenwood:'brooklyn','downtown brooklyn':'brooklyn',astoria:'queens','long island city':'queens',sunnyside:'queens','jackson heights':'queens','forest hills':'queens','rego park':'queens',flushing:'queens',riverdale:'bronx',fordham:'bronx','mott haven':'bronx' }
+  const seDirectUrl: string | null = opp.streetEasyId
     ? (opp.streetEasyId.includes('/') ? `https://streeteasy.com/${opp.streetEasyId}` : `https://streeteasy.com/${isRentalCat ? 'rental' : 'sale'}/${opp.streetEasyId}`)
     : (() => {
         const bodyM = ((opp.rawEmail.bodyContent ?? '') + ((opp.rawEmail as {attachmentsText?: string|null}).attachmentsText ?? '')).match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
         return bodyM ? bodyM[0].replace(/[,\.!?]+$/, '') : null
       })()
+  const seSearchUrl: string | null = (!seDirectUrl && opp.address && ['ACTIVE_SALE_LISTING','COMING_SOON_SALE','OFF_MARKET_SALE','RENTAL_LISTING','COMING_SOON_RENTAL','DEVELOPMENT_INVENTORY','SPONSOR_UNIT','PRICE_DROP','BACK_ON_MARKET','OPEN_HOUSE'].includes(opp.category))
+    ? (() => {
+        const borough = HOOD_TO_BOROUGH_DETAIL[(opp.neighborhood ?? '').toLowerCase()] ?? 'new-york'
+        const bp = borough === 'new-york' ? 'manhattan' : borough
+        return `https://streeteasy.com/for-${isRentalCat ? 'rent' : 'sale'}/${bp}?q=${encodeURIComponent(opp.address!)}`
+      })()
+    : null
+  const seUrl = seDirectUrl ?? seSearchUrl
+  const seLabel = seDirectUrl ? 'View Listing →' : 'Search StreetEasy →'
 
   return (
     <div className="df-bg min-h-screen" style={{ minHeight: '100dvh' }}>
@@ -105,7 +114,7 @@ export default function OpportunityDetailPage() {
           {seUrl && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 13 }}>
               <span style={{ color: 'rgba(255,255,255,0.45)' }}>StreetEasy</span>
-              <a href={seUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(120,200,220,0.9)' }}>View Listing →</a>
+              <a href={seUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(120,200,220,0.9)' }}>{seLabel}</a>
             </div>
           )}
           {opp.rawEmail.webLink && (

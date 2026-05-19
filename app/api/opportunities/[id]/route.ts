@@ -26,12 +26,16 @@ export async function GET(
   if (!opp.streetEasyId && opp.address && SE_LISTABLE.has(opp.category)) {
     try {
       const { syncOpportunityStatus } = await import('@/lib/streetEasySync')
-      await syncOpportunityStatus(opp.id)
+      const result = await syncOpportunityStatus(opp.id)
+      console.log('[SE lookup]', opp.address, '→', result.streetEasyStatus, '| id:', opp.streetEasyId)
       opp = await prisma.extractedOpportunity.findUnique({
         where: { id },
         include: { rawEmail: true },
       }) ?? opp
-    } catch { /* non-fatal — SE API may be unavailable */ }
+      console.log('[SE lookup] stored streetEasyId:', opp.streetEasyId)
+    } catch (e) {
+      console.error('[SE lookup] failed:', e)
+    }
   }
 
   return NextResponse.json(opp)

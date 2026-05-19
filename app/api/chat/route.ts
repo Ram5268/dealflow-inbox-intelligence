@@ -87,9 +87,14 @@ function getStreetEasyUrl(
   const text = (bodyContent ?? '') + (attachmentsText ?? '')
   const m = text.match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
   if (m) return m[0].replace(/[,\.!?]+$/, '')
-  // 3. No reliable fallback without the API listing ID — named developments like
-  //    "Newswalk Phase 3" can't be derived from the street address alone.
-  //    The detail page API will trigger a real-time SE lookup on first view.
+  // 3. Search URL fallback — at least narrows to borough + address query
+  //    Label this differently in the UI ("Search StreetEasy" vs "View Listing")
+  if (address && SE_LISTABLE.has(category)) {
+    const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
+    const borough = HOOD_TO_BOROUGH[(neighborhood ?? '').toLowerCase()] ?? 'new-york'
+    const boroughPath = borough === 'new-york' ? 'manhattan' : borough
+    return `https://streeteasy.com/for-${isRental ? 'rent' : 'sale'}/${boroughPath}?q=${encodeURIComponent(address)}`
+  }
   return null
   return null
 }
