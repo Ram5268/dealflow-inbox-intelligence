@@ -7,31 +7,23 @@ export async function GET() {
 
   if (!key) return NextResponse.json({ error: 'RAPIDAPI_KEY not set' }, { status: 500 })
 
-  // Test 1: basic search, no filters — just see what comes back
-  const url1 = `https://${host}/sales/search?areas=williamsburg&limit=2`
-  const r1 = await fetch(url1, {
-    headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host },
-  })
-  const raw1 = await r1.json() as Record<string, unknown>
+  // Try different endpoint paths to find the active listings search
+  const endpoints = [
+    '/sales?areas=williamsburg&limit=2',
+    '/sales/active?areas=williamsburg&limit=2',
+    '/listings?areas=williamsburg&limit=2&status=active',
+    '/properties/search?areas=williamsburg&limit=2',
+    '/for-sale?areas=williamsburg&limit=2',
+  ]
 
-  // Show full first listing so we can see exact field names
-  const listings = (raw1.listings as Record<string, unknown>[] | undefined) ?? []
-  const firstListing = listings[0] ?? null
+  const results: Record<string, unknown>[] = []
+  for (const path of endpoints) {
+    const url = `https://${host}${path}`
+    const r = await fetch(url, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host } })
+    const body = await r.json()
+    results.push({ url, status: r.status, topKeys: Object.keys(body as object), snippet: JSON.stringify(body).slice(0, 200) })
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
 
-  // Test 2: same with beds and price params (our current param names)
-  const url2 = `https://${host}/sales/search?areas=williamsburg&limit=2&minBeds=2&maxBeds=2&maxPrice=1500000`
-  const r2 = await fetch(url2, {
-    headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host },
-  })
-  const raw2 = await r2.json() as Record<string, unknown>
-
-  return NextResponse.json({
-    test1_url: url1,
-    test1_status: r1.status,
-    test1_raw: raw1,               // full raw response
-    test1_topLevelKeys: Object.keys(raw1),
-    test2_url: url2,
-    test2_status: r2.status,
-    test2_raw: raw2,
-  })
+  return NextResponse.json({ results })
 }
