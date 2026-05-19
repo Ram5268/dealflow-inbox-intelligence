@@ -40,10 +40,13 @@ export function classifyIntent(input: ClassifyInput): IntentBucket {
     return 'market_question'
   }
 
-  // Match review — "my buyer", "my client", "I have a buyer", "got a buyer"
+  // Match review — any phrasing where Ryan is representing a client
   if (
     /\b(my buyer|my client|my investor|my renter|for my|what fits|anything for|good for|works for|match|matches)\b/.test(lower) ||
-    /(got|have|i'?ve?\s+got|representing)\s+a\s+(buyer|client|renter|investor)/i.test(lower)
+    /(got|have|i'?ve?\s+got|representing|working\s+with)\s+a\s+(buyer|client|renter|investor)/i.test(lower) ||
+    /\b(buyer|client|renter|investor)\s+of\s+mine\b/i.test(lower) ||
+    /\bmy\s+(buyer|client|investor|renter)\b/i.test(lower) ||
+    /\b(buyer|client)\s+(needs|wants|is\s+look|is\s+search)\b/i.test(lower)
   ) {
     return 'match_review'
   }

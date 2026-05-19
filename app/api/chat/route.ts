@@ -111,9 +111,12 @@ export async function POST(req: NextRequest) {
 
     // Demand-side queries (other agents' clients)
     const isRenterInquiryQuery  = /\brenter inq|\brenter look|\brenters look|\brenter inquir/.test(queryText)
-    // "got a buyer / have a buyer / my buyer" = Ryan representing a client → wants listings, NOT ISOs
-    const agentHasClient        = /(got|have|i'?ve?\s+got|representing)\s+a\s+(buyer|client|renter|investor)/i.test(queryText)
-                                  || /\bmy buyer\b|\bi have a buyer\b|\bhave a buyer\b|\bgot a buyer\b|\bfor my buyer\b|\bmy client\b|\bclient look|\bclient need/.test(queryText)
+    // Any phrasing where Ryan is representing a client → wants listings, NOT ISOs
+    const agentHasClient        = /(got|have|i'?ve?\s+got|representing|working\s+with)\s+a\s+(buyer|client|renter|investor)/i.test(queryText)
+                                  || /\b(buyer|client|renter|investor)\s+of\s+mine\b/i.test(queryText)
+                                  || /\bmy\s+(buyer|client|investor|renter)\b/i.test(queryText)
+                                  || /\b(buyer|client)\s+(needs|wants|is\s+look|is\s+search)\b/i.test(queryText)
+                                  || /\bhave a buyer\b|\bgot a buyer\b|\bfor my buyer\b|\bclient look|\bclient need/i.test(queryText)
     const isBuyerISOQuery       = !agentHasClient
                                   && /\bbuyer iso|\bbuyers? look|\bbuyers? search|\bisos?\b|\biso for|\bany iso|\bany buyer/.test(queryText)
 

@@ -134,8 +134,11 @@ function detectRentalSale(text: string): boolean | null {
 function detectCategorySignals(text: string): string[] {
   const lower = text.toLowerCase()
   const cats: string[] = []
-  // "buyer ISO" / explicit ISO — NOT "got a buyer looking" (that's the agent representing a buyer)
-  const agentHasBuyer = /(got|have|i'?ve?\s+got|representing)\s+a\s+(buyer|client|renter|investor)/i.test(lower)
+  // "buyer ISO" / explicit ISO — NOT when Ryan is representing a client
+  const agentHasBuyer =
+    /(got|have|i'?ve?\s+got|representing|working\s+with)\s+a\s+(buyer|client|renter|investor)/i.test(lower) ||
+    /\b(buyer|client|renter|investor)\s+of\s+mine\b/i.test(lower) ||
+    /\bmy\s+(buyer|client|investor|renter)\b/i.test(lower)
   if (!agentHasBuyer && /\biso\b|buyer.{0,10}iso/.test(lower)) cats.push('BUYER_ISO')
   if (/renter.{0,10}(?:iso|looking|need|inquiry)|renter inquiry/.test(lower)) cats.push('RENTER_INQUIRY')
   if (/off.?market|pocket listing/.test(lower)) cats.push('OFF_MARKET_SALE')
