@@ -445,7 +445,7 @@ export async function runDailyStatusSweep(): Promise<{
       ],
     },
     select: { id: true },
-    take: 50,
+    take: 200,
     orderBy: { streetEasyCheckedAt: 'asc' },
   })
 
