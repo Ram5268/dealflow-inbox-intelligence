@@ -7,18 +7,27 @@ export async function GET() {
 
   if (!key) return NextResponse.json({ error: 'RAPIDAPI_KEY not set' }, { status: 500 })
 
-  // Test only Dilan's known working endpoint — no status filter to see ALL listings
-  const url1 = `https://${host}/sales/past/search?areas=williamsburg&limit=2`
-  const r1 = await fetch(url1, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host } })
-  const body1 = await r1.json() as Record<string, unknown>
-  const listings1 = (body1.listings as Record<string, unknown>[] | undefined) ?? []
+  const paths = [
+    '/',
+    '/sale-listings?areas=williamsburg&limit=1',
+    '/v1/sales/search?areas=williamsburg&limit=1',
+    '/v2/sales/search?areas=williamsburg&limit=1',
+    '/api/sales/search?areas=williamsburg&limit=1',
+    '/search?areas=williamsburg&limit=1&type=sale',
+  ]
 
-  return NextResponse.json({
-    url: url1,
-    status: r1.status,
-    totalCount: (body1.pagination as Record<string, unknown> | undefined)?.count ?? null,
-    firstListingAllFields: listings1[0] ?? null,
-    secondListing: listings1[1] ?? null,
-    topLevelKeys: Object.keys(body1),
-  })
+  const results = []
+  for (const path of paths) {
+    const url = `https://${host}${path}`
+    try {
+      const r = await fetch(url, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host } })
+      const body = await r.json()
+      results.push({ path, status: r.status, response: JSON.stringify(body).slice(0, 150) })
+    } catch (e) {
+      results.push({ path, error: String(e) })
+    }
+    await new Promise(r => setTimeout(r, 1500))
+  }
+
+  return NextResponse.json({ host, results })
 }
