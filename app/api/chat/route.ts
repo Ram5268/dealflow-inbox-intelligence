@@ -110,11 +110,14 @@ export async function POST(req: NextRequest) {
 
     // Demand-side queries (other agents' clients)
     const isRenterInquiryQuery  = /\brenter inq|\brenter look|\brenters look|\brenter inquir/.test(queryText)
-    const isBuyerISOQuery       = !(/\bmy buyer|\bi have a buyer|\bhave a buyer|\bfor my buyer|\bmy client|\bclient look|\bclient need/.test(queryText))
+    // "got a buyer / have a buyer / my buyer" = Ryan representing a client → wants listings, NOT ISOs
+    const agentHasClient        = /(got|have|i'?ve?\s+got|representing)\s+a\s+(buyer|client|renter|investor)/i.test(queryText)
+                                  || /\bmy buyer\b|\bi have a buyer\b|\bhave a buyer\b|\bgot a buyer\b|\bfor my buyer\b|\bmy client\b|\bclient look|\bclient need/.test(queryText)
+    const isBuyerISOQuery       = !agentHasClient
                                   && /\bbuyer iso|\bbuyers? look|\bbuyers? search|\bisos?\b|\biso for|\bany iso|\bany buyer/.test(queryText)
 
     // Ryan's own clients (wants listings not ISOs)
-    const isMyBuyerQuery        = /\bmy buyer\b|\bi have a buyer\b|\bhave a buyer\b|\bfor my buyer\b|\bmy client\b|\bclient look|\bclient need/.test(queryText)
+    const isMyBuyerQuery        = agentHasClient
 
     // Rental-side
     const isComingSoonRentalQuery = /\bcoming soon rental|\brental coming soon|\bcoming available|\bavailability coming|\bunits coming/.test(queryText)
