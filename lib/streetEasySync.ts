@@ -106,15 +106,22 @@ export async function searchStreetEasyListings(params: {
 
   const { neighborhoods, minBeds, maxBeds, minPrice, maxPrice, isRental = false, limit = 12 } = params
 
-  // Map neighborhood names → SE area slugs, deduplicate
+  // Map neighborhood names → SE area slugs (case-insensitive — chat route passes lowercase)
+  const lowerAreaMap: Record<string, string> = Object.fromEntries(
+    Object.entries(NEIGHBORHOOD_TO_SE_AREA).map(([k, v]) => [k.toLowerCase(), v])
+  )
   const areas = [...new Set(
     neighborhoods.flatMap(n => {
-      const slug = NEIGHBORHOOD_TO_SE_AREA[n]
+      const slug = lowerAreaMap[n.toLowerCase()] ?? NEIGHBORHOOD_TO_SE_AREA[n]
       return slug ? [slug] : []
     })
   )].join(',')
 
-  if (!areas) return []
+  if (!areas) {
+    console.log('[SE search] no area slugs found for neighborhoods:', neighborhoods)
+    return []
+  }
+  console.log('[SE search] areas:', areas, '| beds:', minBeds, '-', maxBeds, '| price: -', maxPrice)
 
   const endpoint = isRental ? '/rentals/search' : '/sales/search'
   const qs = new URLSearchParams({ areas, limit: String(limit) })

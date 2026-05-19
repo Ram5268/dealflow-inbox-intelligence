@@ -125,7 +125,7 @@ SUGGESTIONS: Always return exactly 2 specific follow-up questions.
 NO FILLER: No "feel free to ask", no "I hope that helps", no "I cannot find" without an alternative.
 DEAL CITING: In "referencedDeals", list the exact IDs from [DEAL:id] tags for every deal you mention in your response. This controls which cards the user sees — if you mention it, cite it.
 STREETEASY LINKS: When a deal's data line contains "SE: https://..." include that URL in your response so Ryan can tap directly to the listing.
-LIVE STREETEASY RESULTS: When LIVE STREETEASY LISTINGS data is present, present those results clearly with their direct URLs. Label them as live market listings. Always include the full URL so Ryan can tap to open.
+LIVE STREETEASY RESULTS: When LIVE STREETEASY LISTINGS data is present, lead your response with those results. List each one on its own line: address, price, beds, and the full www.streeteasy.com URL. These are live on-market listings — present them as the primary answer to buyer/renter searches.
 
 Respond with this exact JSON (no markdown, no code fences):
 {"response":"your plain text response","suggestions":["specific follow-up 1","specific follow-up 2"],"pendingEvent":null,"referencedDeals":["deal_id_1","deal_id_2"]}`
