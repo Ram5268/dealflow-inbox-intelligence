@@ -68,6 +68,56 @@ function buildStreetEasyBuildingUrl(
   return `https://www.streeteasy.com/building/${slug}-${borough}`
 }
 
+// Build a properly filtered StreetEasy search URL using their native filter format:
+// https://streeteasy.com/for-sale/williamsburg/price:-1500000|beds:2?sort_by=se_score
+function buildStreetEasyFilterUrl(params: {
+  neighborhoods: string[]
+  minBeds?:  number | null
+  maxBeds?:  number | null
+  minPrice?: number | null
+  maxPrice?: number | null
+  isRental?: boolean
+}): string | null {
+  const { neighborhoods, minBeds, maxBeds, minPrice, maxPrice, isRental = false } = params
+  const lowerMap: Record<string, string> = Object.fromEntries(
+    Object.entries(HOOD_TO_BOROUGH).map(([k]) => [k, k])
+  )
+  // Find the first neighborhood that maps to a SE area slug
+  const seAreaMap: Record<string, string> = {
+    williamsburg: 'williamsburg', greenpoint: 'greenpoint', bushwick: 'bushwick',
+    'bed-stuy': 'bedford-stuyvesant', 'bedford-stuyvesant': 'bedford-stuyvesant',
+    'crown heights': 'crown-heights', 'park slope': 'park-slope',
+    'carroll gardens': 'carroll-gardens', 'cobble hill': 'cobble-hill',
+    'boerum hill': 'boerum-hill', 'brooklyn heights': 'brooklyn-heights',
+    dumbo: 'dumbo', 'fort greene': 'fort-greene', 'clinton hill': 'clinton-hill',
+    'prospect heights': 'prospect-heights', 'red hook': 'red-hook',
+    gowanus: 'gowanus', 'upper west side': 'upper-west-side',
+    'upper east side': 'upper-east-side', chelsea: 'chelsea',
+    tribeca: 'tribeca', soho: 'soho', 'west village': 'west-village',
+    'east village': 'east-village', 'lower east side': 'lower-east-side',
+    'hells kitchen': 'hells-kitchen', "hell's kitchen": 'hells-kitchen',
+    'gramercy': 'gramercy', 'murray hill': 'murray-hill',
+    midtown: 'midtown', harlem: 'harlem', astoria: 'astoria',
+    'long island city': 'long-island-city', 'downtown brooklyn': 'downtown-brooklyn',
+  }
+  const area = neighborhoods.map(n => seAreaMap[n.toLowerCase()]).find(Boolean)
+  if (!area) return null
+
+  const type = isRental ? 'for-rent' : 'for-sale'
+  const filters: string[] = []
+
+  if (minPrice && maxPrice) filters.push(`price:${minPrice}-${maxPrice}`)
+  else if (maxPrice)         filters.push(`price:-${maxPrice}`)
+  else if (minPrice)         filters.push(`price:${minPrice}-`)
+
+  if (minBeds != null && maxBeds != null && minBeds !== maxBeds) filters.push(`beds:${minBeds}-${maxBeds}`)
+  else if (minBeds != null)  filters.push(`beds:${minBeds}`)
+  else if (maxBeds != null)  filters.push(`beds:${maxBeds}`)
+
+  const filterPath = filters.length > 0 ? `/${filters.join('|')}` : ''
+  return `https://streeteasy.com/${type}/${area}${filterPath}?sort_by=se_score`
+}
+
 // Only returns a URL when we have a real direct listing link (streetEasyId from API sync
 // or a URL embedded in the email body). Never returns search/fallback URLs — those
 // mislead the user by showing unfiltered results.
@@ -586,6 +636,16 @@ export async function POST(req: NextRequest) {
     let seContext = ''
     const shouldSearchSE = (isMyBuyerQuery || isRentalQuery || isRenterInquiryQuery) && mentionedNeighborhoods.length > 0
     if (shouldSearchSE) {
+      // Build the filtered StreetEasy browse URL regardless of API results
+      const seFilterUrl = buildStreetEasyFilterUrl({
+        neighborhoods: mentionedNeighborhoods,
+        minBeds:  queryMinBeds,
+        maxBeds:  queryMaxBeds,
+        minPrice: queryMinPrice,
+        maxPrice: queryMaxPrice,
+        isRental: isRentalQuery || isRenterInquiryQuery,
+      })
+
       try {
         const { searchStreetEasyListings } = await import('@/lib/streetEasySync')
         const seListings = await searchStreetEasyListings({
@@ -597,13 +657,20 @@ export async function POST(req: NextRequest) {
           isRental: isRentalQuery || isRenterInquiryQuery,
           limit:    15,
         })
-        if (seListings.length > 0) {
-          seContext = `\n\nLIVE STREETEASY LISTINGS (${seListings.length} currently on market):\n` +
-            seListings.map(l =>
-              `- ${l.address}${l.beds != null ? ` | ${l.beds}BR` : ''}${l.baths != null ? ` | ${l.baths}BA` : ''}${l.sqft ? ` | ${l.sqft.toLocaleString()}sqft` : ''} | ${l.price ? '$' + l.price.toLocaleString() : 'price TBD'}${l.daysOnMarket != null ? ` | ${l.daysOnMarket}d on market` : ''} | ${l.url}`
-            ).join('\n')
+
+        const listingLines = seListings.map(l =>
+          `- ${l.address}${l.beds != null ? ` | ${l.beds}BR` : ''}${l.baths != null ? ` | ${l.baths}BA` : ''}${l.sqft ? ` | ${l.sqft.toLocaleString()}sqft` : ''} | ${l.price ? '$' + l.price.toLocaleString() : 'price TBD'}${l.daysOnMarket != null ? ` | ${l.daysOnMarket}d on market` : ''} | ${l.url}`
+        ).join('\n')
+
+        seContext = `\n\nLIVE STREETEASY LISTINGS (active on market, filtered to exact criteria):\n` +
+          (seListings.length > 0 ? listingLines : '(no individual listings returned by API this query)') +
+          (seFilterUrl ? `\n\nBrowse all matching listings on StreetEasy: ${seFilterUrl}` : '')
+      } catch {
+        // API unavailable — still show the filtered browse URL
+        if (seFilterUrl) {
+          seContext = `\n\nBrowse matching listings on StreetEasy: ${seFilterUrl}`
         }
-      } catch { /* non-fatal — SE API may be unavailable */ }
+      }
     }
 
     // ── NEW RETRIEVAL PIPELINE (shadow mode) ─────────────────────────────────
