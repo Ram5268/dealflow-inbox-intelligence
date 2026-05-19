@@ -16,7 +16,7 @@ interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  deals?: ExtractedOpportunity[]
+  deals?: (ExtractedOpportunity & { matchScore?: number })[]
   suggestions?: string[]
   createdAt: string
 }
