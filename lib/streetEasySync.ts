@@ -14,19 +14,36 @@ const CHECKABLE_CATEGORIES = new Set([
 
 // NYC neighborhood → StreetEasy area slug mapping
 const NEIGHBORHOOD_TO_SE_AREA: Record<string, string> = {
-  // Manhattan broad areas
-  'Financial District': 'all-downtown', 'Tribeca': 'all-downtown', 'SoHo': 'all-downtown',
-  'NoHo': 'all-downtown', 'Nolita': 'all-downtown', 'Lower East Side': 'all-downtown',
-  'Chinatown': 'all-downtown', 'Two Bridges': 'all-downtown', 'Battery Park City': 'all-downtown',
-  'Chelsea': 'all-midtown', 'Flatiron': 'all-midtown', 'NoMad': 'all-midtown',
-  "Hell's Kitchen": 'all-midtown', 'Gramercy': 'all-midtown', 'Murray Hill': 'all-midtown',
-  'Kips Bay': 'all-midtown', 'Midtown': 'all-midtown', 'Midtown West': 'all-midtown',
-  'Midtown East': 'all-midtown', 'Hudson Yards': 'all-midtown',
-  'Upper West Side': 'all-upper-west-side', 'Morningside Heights': 'all-upper-west-side',
-  'Upper East Side': 'all-upper-east-side', 'Yorkville': 'all-upper-east-side',
-  'Carnegie Hill': 'all-upper-east-side', 'Lenox Hill': 'all-upper-east-side',
-  'Harlem': 'harlem', 'East Harlem': 'east-harlem', 'Washington Heights': 'washington-heights',
-  'Inwood': 'inwood',
+  // Manhattan Downtown (below 14th St)
+  'Financial District': 'all-downtown', 'FiDi': 'all-downtown',
+  'Tribeca': 'all-downtown', 'SoHo': 'all-downtown', 'NoHo': 'all-downtown',
+  'Nolita': 'all-downtown', 'Little Italy': 'all-downtown', 'Chinatown': 'all-downtown',
+  'Lower East Side': 'all-downtown', 'LES': 'all-downtown',
+  'Two Bridges': 'all-downtown', 'Battery Park City': 'all-downtown',
+  'Greenwich Village': 'all-downtown', 'West Village': 'all-downtown',
+  'East Village': 'all-downtown', 'Hudson Square': 'all-downtown',
+  // Manhattan Midtown (14th–59th St)
+  'Chelsea': 'all-midtown', 'West Chelsea': 'all-midtown',
+  'Flatiron': 'all-midtown', 'NoMad': 'all-midtown',
+  "Hell's Kitchen": 'all-midtown', 'Hells Kitchen': 'all-midtown', 'Clinton': 'all-midtown',
+  'Gramercy': 'all-midtown', 'Gramercy Park': 'all-midtown',
+  'Murray Hill': 'all-midtown', 'Kips Bay': 'all-midtown',
+  'Midtown': 'all-midtown', 'Midtown West': 'all-midtown', 'Midtown East': 'all-midtown',
+  'Midtown South': 'all-midtown', 'Hudson Yards': 'all-midtown',
+  'Turtle Bay': 'all-midtown', 'Sutton Place': 'all-midtown',
+  'Stuyvesant Town': 'all-midtown', 'Peter Cooper Village': 'all-midtown',
+  // Manhattan Upper West Side + north (west of Central Park)
+  'Upper West Side': 'all-upper-west-side', 'Lincoln Square': 'all-upper-west-side',
+  'Manhattan Valley': 'all-upper-west-side', 'Riverside': 'all-upper-west-side',
+  'Morningside Heights': 'all-upper-west-side', 'Hamilton Heights': 'all-upper-west-side',
+  'Washington Heights': 'washington-heights', 'Inwood': 'inwood',
+  'Manhattanville': 'all-upper-west-side',
+  // Manhattan Upper East Side + north (east of Central Park)
+  'Upper East Side': 'all-upper-east-side', 'Lenox Hill': 'all-upper-east-side',
+  'Yorkville': 'all-upper-east-side', 'Carnegie Hill': 'all-upper-east-side',
+  'Upper Carnegie Hill': 'all-upper-east-side', 'Roosevelt Island': 'all-upper-east-side',
+  // Manhattan Harlem
+  'Harlem': 'harlem', 'East Harlem': 'east-harlem', 'Spanish Harlem': 'east-harlem',
   // Brooklyn
   'Williamsburg': 'williamsburg', 'Greenpoint': 'greenpoint', 'Bushwick': 'bushwick',
   'Bed-Stuy': 'bedford-stuyvesant', 'Bedford-Stuyvesant': 'bedford-stuyvesant',
@@ -165,50 +182,73 @@ function stripUnit(address: string): string {
   return address.slice(0, (last.index ?? 0) + last[0].length).trim()
 }
 
+// Borough → ordered list of SE area slugs to try when neighborhood isn't mapped
+const BOROUGH_AREAS: Record<string, string[]> = {
+  Manhattan: ['all-midtown', 'all-upper-east-side', 'all-upper-west-side', 'all-downtown', 'harlem'],
+  Brooklyn:  ['williamsburg', 'park-slope', 'brooklyn-heights', 'bedford-stuyvesant', 'crown-heights', 'fort-greene', 'clinton-hill', 'prospect-heights', 'boerum-hill', 'carroll-gardens', 'cobble-hill', 'dumbo', 'greenpoint', 'bushwick', 'red-hook', 'gowanus'],
+  Queens:    ['astoria', 'long-island-city', 'forest-hills', 'jackson-heights', 'flushing', 'sunnyside', 'rego-park'],
+  Bronx:     ['riverdale'],
+}
+
+async function matchInArea(
+  endpoint: string,
+  area: string,
+  normTarget: string,
+  targetNum: string,
+  targetStreet: string,
+): Promise<SEListing | null> {
+  try {
+    const data = await seRequest(`${endpoint}?areas=${area}&limit=50`) as { listings?: SEListing[] }
+    const listings = data.listings ?? []
+    // Exact match
+    for (const l of listings) {
+      if (!l.address) continue
+      if ((normalizeAddress(l.address)?.normalizedFull ?? null) === normTarget) return l
+    }
+    // Fuzzy: street number + first street word
+    for (const l of listings) {
+      if (!l.address) continue
+      const parts = (normalizeAddress(l.address)?.normalizedFull ?? '').split(' ')
+      if (parts[0] === targetNum && parts[1] === targetStreet) return l
+    }
+  } catch { /* non-fatal */ }
+  return null
+}
+
 export async function findListingByAddress(
   address: string,
   neighborhood: string | null,
   type: 'sale' | 'rental' = 'sale',
+  borough?: string | null,
 ): Promise<SEListing | null> {
-  const area = (neighborhood && NEIGHBORHOOD_TO_SE_AREA[neighborhood]) ?? 'all-downtown'
+  if (!RAPIDAPI_KEY) return null
+
   const endpoint = type === 'rental' ? '/rentals/search' : '/sales/search'
-
-  // Strip unit from address before matching — "535 Dean Street 204" → "535 Dean Street"
   const baseAddress = stripUnit(address)
+  const normTarget = normalizeAddress(baseAddress)?.normalizedFull ?? null
+  if (!normTarget) return null
 
-  try {
-    const data = await seRequest(`${endpoint}?areas=${area}&limit=50`) as {
-      listings?: SEListing[]
-    }
-    const listings = data.listings ?? []
-    if (listings.length === 0) return null
+  const targetParts = normTarget.split(' ')
+  const targetNum    = targetParts[0] ?? ''
+  const targetStreet = targetParts[1] ?? ''
 
-    const normTarget = normalizeAddress(baseAddress)?.normalizedFull ?? null
-
-    // Exact normalized match
-    for (const listing of listings) {
-      if (!listing.address) continue
-      const normListing = normalizeAddress(listing.address)?.normalizedFull ?? null
-      if (normTarget && normListing && normTarget === normListing) return listing
-    }
-
-    // Fuzzy: street number + first street word match (handles "Newswalk Phase 3" building names)
-    const targetParts = normTarget?.split(' ') ?? []
-    if (targetParts.length >= 2) {
-      const targetNum    = targetParts[0]
-      const targetStreet = targetParts[1]
-      for (const listing of listings) {
-        if (!listing.address) continue
-        const normListing = normalizeAddress(listing.address)?.normalizedFull ?? null
-        const lParts = normListing?.split(' ') ?? []
-        if (lParts[0] === targetNum && lParts[1] === targetStreet) return listing
-      }
-    }
-
-    return null
-  } catch {
-    return null
+  // 1. Try the mapped neighborhood area first
+  const primaryArea = neighborhood ? NEIGHBORHOOD_TO_SE_AREA[neighborhood] : null
+  if (primaryArea) {
+    const found = await matchInArea(endpoint, primaryArea, normTarget, targetNum, targetStreet)
+    if (found) return found
   }
+
+  // 2. Try borough fallback areas
+  const fallbackAreas = BOROUGH_AREAS[borough ?? ''] ?? BOROUGH_AREAS[neighborhood ? 'Manhattan' : 'Manhattan']
+  for (const area of fallbackAreas) {
+    if (area === primaryArea) continue  // already tried
+    const found = await matchInArea(endpoint, area, normTarget, targetNum, targetStreet)
+    if (found) return found
+    await new Promise(r => setTimeout(r, 150))  // rate limit
+  }
+
+  return null
 }
 
 // ── Map SE status to our processingStatus ────────────────────────────────────
@@ -239,7 +279,7 @@ export async function syncOpportunityStatus(opportunityId: string): Promise<{
   const opp = await prisma.extractedOpportunity.findUnique({
     where: { id: opportunityId },
     select: {
-      id: true, address: true, neighborhood: true, category: true,
+      id: true, address: true, neighborhood: true, borough: true, category: true,
       streetEasyId: true, streetEasyStatus: true, transactionType: true,
       processingStatus: true,
     },
@@ -258,9 +298,9 @@ export async function syncOpportunityStatus(opportunityId: string): Promise<{
     listing = await getListingById(opp.streetEasyId, type)
   }
 
-  // Otherwise search by address
+  // Otherwise search by address, passing borough for fallback area coverage
   if (!listing) {
-    listing = await findListingByAddress(opp.address, opp.neighborhood, type)
+    listing = await findListingByAddress(opp.address, opp.neighborhood, type, opp.borough)
   }
 
   if (!listing) {
