@@ -114,6 +114,7 @@ const OPPORTUNITY_SELECT = {
   extractedSummary: true,
   transactionType:  true,
   createdAt:        true,
+  streetEasyId:     true,
 } as const
 
 function toScoredRecord(o: {
@@ -122,7 +123,7 @@ function toScoredRecord(o: {
   beds: number | null; baths: number | null; propertyType: string | null
   availabilityDate: string | null; sourceAgentName: string | null; sourceAgentEmail: string | null
   sourceBrokerage: string | null; clientSide: string | null; extractedTitle: string
-  extractedSummary: string; transactionType: string; createdAt: Date
+  extractedSummary: string; transactionType: string; createdAt: Date; streetEasyId: string | null
 }): ScoredRecord {
   return {
     ...o,

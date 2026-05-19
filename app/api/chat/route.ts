@@ -11,6 +11,21 @@ import OpenAI from 'openai'
 
 export const maxDuration = 60
 
+function getStreetEasyUrl(
+  streetEasyId: string | null | undefined,
+  category: string,
+  bodyContent?: string | null,
+  attachmentsText?: string | null,
+): string | null {
+  if (streetEasyId) {
+    const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
+    return `https://streeteasy.com/${isRental ? 'rental' : 'sale'}/${streetEasyId}`
+  }
+  const text = bodyContent ?? attachmentsText ?? ''
+  const m = text.match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
+  return m ? m[0].replace(/[,\.!?]+$/, '') : null
+}
+
 const SYSTEM_PROMPT = `You are Drift — Ryan Martin's private real estate deal intelligence layer. Ryan is a Douglas Elliman agent working NYC residential real estate across all transaction types.
 
 Your full behavior rules are defined in DEALFLOW_AI.md. Follow them exactly. Key rules summarized here:
@@ -37,6 +52,7 @@ ATTACHMENTS: If 📎 attachment data exists, use it — it's more detailed than 
 SUGGESTIONS: Always return exactly 2 specific follow-up questions.
 NO FILLER: No "feel free to ask", no "I hope that helps", no "I cannot find" without an alternative.
 DEAL CITING: In "referencedDeals", list the exact IDs from [DEAL:id] tags for every deal you mention in your response. This controls which cards the user sees — if you mention it, cite it.
+STREETEASY LINKS: When a deal's data line contains "SE: https://..." include that URL in your response so Ryan can tap directly to the listing.
 
 Respond with this exact JSON (no markdown, no code fences):
 {"response":"your plain text response","suggestions":["specific follow-up 1","specific follow-up 2"],"pendingEvent":null,"referencedDeals":["deal_id_1","deal_id_2"]}`
@@ -483,7 +499,9 @@ export async function POST(req: NextRequest) {
             : ''
           const dateTag = emailDate ? ` | received ${emailDate}` : ''
           const availTag = o.availabilityDate ? ` | AVAIL DATE: ${o.availabilityDate}` : ''
-          return `[DEAL:${o.id}] ${o.extractedTitle} | ${o.category} | ${o.neighborhood ?? ''}${o.borough ? ', ' + o.borough : ''} | ${o.price ? '$' + o.price.toLocaleString() : o.maxPrice ? 'up to $' + o.maxPrice.toLocaleString() : 'no price'} | ${o.propertyType ?? ''} | ${o.beds ? o.beds + 'BR' : ''} ${o.units ? o.units + ' units' : ''} | ${o.sourceBrokerage ?? ''} | ${Math.round(o.confidenceScore * 100)}%${dateTag}${availTag} | ${o.extractedSummary}${attachSnippet}${bodySnippet}`
+          const seUrl = getStreetEasyUrl(o.streetEasyId, o.category, o.rawEmail?.bodyContent, o.rawEmail?.attachmentsText)
+          const seTag = seUrl ? ` | SE: ${seUrl}` : ''
+          return `[DEAL:${o.id}] ${o.extractedTitle} | ${o.category} | ${o.neighborhood ?? ''}${o.borough ? ', ' + o.borough : ''} | ${o.price ? '$' + o.price.toLocaleString() : o.maxPrice ? 'up to $' + o.maxPrice.toLocaleString() : 'no price'} | ${o.propertyType ?? ''} | ${o.beds ? o.beds + 'BR' : ''} ${o.units ? o.units + ' units' : ''} | ${o.sourceBrokerage ?? ''} | ${Math.round(o.confidenceScore * 100)}%${dateTag}${availTag}${seTag} | ${o.extractedSummary}${attachSnippet}${bodySnippet}`
         }).join('\n')
 
     // ── NEW RETRIEVAL PIPELINE (shadow mode) ─────────────────────────────────
@@ -691,7 +709,11 @@ export async function POST(req: NextRequest) {
     const referencedIds: string[] = Array.isArray(aiResult.referencedDeals) ? aiResult.referencedDeals : []
     const cited = referencedIds.length > 0 ? dealsToReturn.filter(d => referencedIds.includes(d.id)) : []
     const deals = (cited.length > 0 ? cited : dealsToReturn)
-      .map(d => ({ ...d, matchScore: d.confidenceScore }))
+      .map(d => ({
+        ...d,
+        matchScore: d.confidenceScore,
+        streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
+      }))
 
     const storedMsg = files.length > 0
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`

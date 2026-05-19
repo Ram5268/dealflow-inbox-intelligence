@@ -39,7 +39,11 @@ function formatOneLiner(r: ScoredRecord): string {
     ? ` | ${r.sourceAgentName}${r.sourceBrokerage ? ` @ ${r.sourceBrokerage}` : ''}`
     : ''
 
-  return `[${tierLabel(r)}] [DEAL:${r.id}] ${parts.join(' — ')}${agentLine}`
+  const seUrl = r.streetEasyId
+    ? ` | SE: https://streeteasy.com/${['RENTAL_LISTING','COMING_SOON_RENTAL'].includes(r.category) ? 'rental' : 'sale'}/${r.streetEasyId}`
+    : ''
+
+  return `[${tierLabel(r)}] [DEAL:${r.id}] ${parts.join(' — ')}${agentLine}${seUrl}`
 }
 
 export function buildContext(records: ScoredRecord[], plan: QueryPlan, rawQuery: string): string {

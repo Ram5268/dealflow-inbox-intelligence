@@ -40,6 +40,9 @@ export default function OpportunityDetailPage() {
   )
 
   const categoryLabel = CATEGORY_LABELS[opp.category] ?? opp.category
+  const seUrl = opp.streetEasyId
+    ? `https://streeteasy.com/${['RENTAL_LISTING','COMING_SOON_RENTAL'].includes(opp.category) ? 'rental' : 'sale'}/${opp.streetEasyId}`
+    : (opp.rawEmail.bodyContent ?? '').match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)?.[0]?.replace(/[,\.!?]+$/, '') ?? null
 
   return (
     <div className="df-bg min-h-screen" style={{ minHeight: '100dvh' }}>
@@ -93,6 +96,12 @@ export default function OpportunityDetailPage() {
           <Field label="Subject" value={opp.rawEmail.subject} />
           <Field label="Sender" value={opp.rawEmail.senderName} />
           <Field label="Received" value={new Date(opp.rawEmail.receivedDateTime).toLocaleDateString()} />
+          {seUrl && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 13 }}>
+              <span style={{ color: 'rgba(255,255,255,0.45)' }}>StreetEasy</span>
+              <a href={seUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(120,200,220,0.9)' }}>View Listing →</a>
+            </div>
+          )}
           {opp.rawEmail.webLink && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 13 }}>
               <span style={{ color: 'rgba(255,255,255,0.45)' }}>View in Outlook</span>

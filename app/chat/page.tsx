@@ -16,7 +16,7 @@ interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  deals?: (ExtractedOpportunity & { matchScore?: number })[]
+  deals?: (ExtractedOpportunity & { matchScore?: number; streetEasyUrl?: string | null })[]
   suggestions?: string[]
   createdAt: string
 }
@@ -711,6 +711,20 @@ function RaisedView({
                 Open ↗
               </button>
             </div>
+            {active.streetEasyUrl && (
+              <a
+                href={active.streetEasyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block', textAlign: 'center', marginTop: 10,
+                  fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+                  color: 'rgba(255,255,255,0.5)', textDecoration: 'none',
+                }}
+              >
+                VIEW ON STREETEASY ↗
+              </a>
+            )}
           </div>
         )}
 

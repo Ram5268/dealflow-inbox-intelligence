@@ -73,4 +73,5 @@ export interface ScoredRecord {
   extractedSummary: string
   transactionType:  string
   createdAt:        Date
+  streetEasyId:     string | null
 }

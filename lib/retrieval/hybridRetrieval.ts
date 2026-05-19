@@ -79,7 +79,7 @@ export async function hybridRetrieval(
         propertyType: true, availabilityDate: true, sourceAgentName: true,
         sourceAgentEmail: true, sourceBrokerage: true, clientSide: true,
         extractedTitle: true, extractedSummary: true,
-        transactionType: true, createdAt: true,
+        transactionType: true, createdAt: true, streetEasyId: true,
       },
     })
 
