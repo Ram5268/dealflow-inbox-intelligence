@@ -682,12 +682,12 @@ export async function POST(req: NextRequest) {
       .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
       .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
       .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
-    // Cards = the deals GPT actually cited. Fallback to full dealsToReturn if GPT didn't cite any.
+    // Cards = the deals GPT actually cited. Falls back to full dealsToReturn if:
+    // (a) GPT cited nothing, or (b) cited IDs that aren't in dealsToReturn (pipeline mismatch).
     const referencedIds: string[] = Array.isArray(aiResult.referencedDeals) ? aiResult.referencedDeals : []
-    const deals = (referencedIds.length > 0
-      ? dealsToReturn.filter(d => referencedIds.includes(d.id))
-      : dealsToReturn
-    ).map(d => ({ ...d, matchScore: d.confidenceScore }))
+    const cited = referencedIds.length > 0 ? dealsToReturn.filter(d => referencedIds.includes(d.id)) : []
+    const deals = (cited.length > 0 ? cited : dealsToReturn)
+      .map(d => ({ ...d, matchScore: d.confidenceScore }))
 
     const storedMsg = files.length > 0
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`

@@ -39,7 +39,7 @@ function formatOneLiner(r: ScoredRecord): string {
     ? ` | ${r.sourceAgentName}${r.sourceBrokerage ? ` @ ${r.sourceBrokerage}` : ''}`
     : ''
 
-  return `[${tierLabel(r)}] [${r.id}] ${parts.join(' — ')}${agentLine}`
+  return `[${tierLabel(r)}] [DEAL:${r.id}] ${parts.join(' — ')}${agentLine}`
 }
 
 export function buildContext(records: ScoredRecord[], plan: QueryPlan, rawQuery: string): string {

@@ -50,10 +50,16 @@ const DEMAND_ALL    = ['BUYER_ISO','RENTER_INQUIRY']
 const LEAD_ALL      = ['SELLER_LEAD','LANDLORD_LEAD']
 
 function categoriesForIntent(intent: IntentBucket, parsed: ParsedQuery): string[] {
-  // For supply-side intents, strip demand categories that may have snuck in via the parser
   const isSupplyIntent = intent === 'opportunity_search' || intent === 'match_review'
+  // For buyer queries (isRental=false), also strip rental categories
+  const isBuyerIntent  = isSupplyIntent && parsed.isRental === false
+
   const sanitized = isSupplyIntent
-    ? parsed.categories.filter(c => !DEMAND_ALL.includes(c))
+    ? parsed.categories.filter(c => {
+        if (DEMAND_ALL.includes(c)) return false
+        if (isBuyerIntent && (c === 'COMING_SOON_RENTAL' || c === 'RENTAL_LISTING')) return false
+        return true
+      })
     : parsed.categories
 
   if (sanitized.length > 0) return sanitized
