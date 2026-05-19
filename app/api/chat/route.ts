@@ -36,9 +36,10 @@ PRICES: Never round. $9,895 stays $9,895. Copy exactly.
 ATTACHMENTS: If 📎 attachment data exists, use it — it's more detailed than the summary.
 SUGGESTIONS: Always return exactly 2 specific follow-up questions.
 NO FILLER: No "feel free to ask", no "I hope that helps", no "I cannot find" without an alternative.
+DEAL CITING: In "referencedDeals", list the exact IDs from [DEAL:id] tags for every deal you mention in your response. This controls which cards the user sees — if you mention it, cite it.
 
 Respond with this exact JSON (no markdown, no code fences):
-{"response":"your plain text response","suggestions":["specific follow-up 1","specific follow-up 2"],"pendingEvent":null}`
+{"response":"your plain text response","suggestions":["specific follow-up 1","specific follow-up 2"],"pendingEvent":null,"referencedDeals":["deal_id_1","deal_id_2"]}`
 
 interface FileData {
   name: string
@@ -330,6 +331,18 @@ export async function POST(req: NextRequest) {
 
     const searchNeighborhoods: string[] = [...expandedNeighborhoods]
 
+    // Bed range extraction — "3-4 bedroom" → minBeds=3 maxBeds=4, "2BR" → min=max=2
+    // Applied at DB level so GPT never sees records outside the requested range.
+    // Prisma: beds >= N automatically excludes null-bed records (e.g. commercial properties).
+    const bedRangeMatch = queryText.match(/\b(\d+)\s*[-–]\s*(\d+)\s*(?:br|bed|bedroom)/i)
+    const bedSingleMatch = !bedRangeMatch ? queryText.match(/\b(\d+)\s*(?:br|bed|bedroom)/i) : null
+    const queryMinBeds = bedRangeMatch ? parseInt(bedRangeMatch[1]) : bedSingleMatch ? parseInt(bedSingleMatch[1]) : null
+    const queryMaxBeds = bedRangeMatch ? parseInt(bedRangeMatch[2]) : bedSingleMatch ? parseInt(bedSingleMatch[1]) : null
+    const bedsClause = [
+      ...(queryMinBeds != null ? [{ beds: { gte: queryMinBeds } }] : []),
+      ...(queryMaxBeds != null ? [{ beds: { lte: queryMaxBeds } }] : []),
+    ]
+
     const catClause = categoryFilter ? [{ category: { in: categoryFilter } }] : []
 
     const oppWhere = {
@@ -338,6 +351,7 @@ export async function POST(req: NextRequest) {
         { category: { not: Category.NOISE } },
         { processingStatus: { notIn: ['rejected', 'duplicate', 'stale'] } },
         ...catClause,
+        ...bedsClause,
       ],
     }
     const oppInclude = { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } }
@@ -388,22 +402,14 @@ export async function POST(req: NextRequest) {
       return true
     }).slice(0, 60)
 
-    // Server-selected deal cards — determined purely server-side, never by AI.
-    // structuredOpps is already category-filtered via catWhere, so this is always correct.
-    const bedMatch = queryText.match(/\b(\d+)\s*(?:br|bed|bedroom)/)
-    const queryBeds = bedMatch ? parseInt(bedMatch[1]) : null
-
+    // Bed filter is already applied at DB level via bedsClause in oppWhere.
     // Always exclude BUYER_ISO and RENTER_INQUIRY from general queries.
-    // They are "seeking" records, not inventory — only show when explicitly requested.
     const defaultExclude: Category[] = !categoryFilter
       ? [Category.BUYER_ISO, Category.RENTER_INQUIRY]
       : []
 
     const selectedDeals = structuredOpps
-      .filter(o =>
-        (queryBeds == null || o.beds == null || o.beds === queryBeds) &&
-        !defaultExclude.includes(o.category)
-      )
+      .filter(o => !defaultExclude.includes(o.category))
       .sort((a, b) => b.confidenceScore - a.confidenceScore)
       .slice(0, 40)
 
@@ -411,10 +417,7 @@ export async function POST(req: NextRequest) {
     const rawDealsToReturn = selectedDeals.length > 0
       ? selectedDeals
       : opportunities
-          .filter(o =>
-            (queryBeds == null || o.beds == null || o.beds === queryBeds) &&
-            !defaultExclude.includes(o.category)
-          )
+          .filter(o => !defaultExclude.includes(o.category))
           .slice(0, 40)
 
     // JS-level category guard — bulletproof final filter regardless of DB/cache quirks
@@ -656,7 +659,7 @@ export async function POST(req: NextRequest) {
     console.log('[DealFlow] Raw AI response:', raw.slice(0, 200))
 
     // Parse JSON robustly
-    let aiResult: { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null }
+    let aiResult: { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[] }
     try {
       aiResult = JSON.parse(raw)
     } catch {
@@ -679,7 +682,12 @@ export async function POST(req: NextRequest) {
       .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
       .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
       .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
-    const deals = dealsToReturn.map(d => ({ ...d, matchScore: d.confidenceScore }))
+    // Cards = the deals GPT actually cited. Fallback to full dealsToReturn if GPT didn't cite any.
+    const referencedIds: string[] = Array.isArray(aiResult.referencedDeals) ? aiResult.referencedDeals : []
+    const deals = (referencedIds.length > 0
+      ? dealsToReturn.filter(d => referencedIds.includes(d.id))
+      : dealsToReturn
+    ).map(d => ({ ...d, matchScore: d.confidenceScore }))
 
     const storedMsg = files.length > 0
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`
