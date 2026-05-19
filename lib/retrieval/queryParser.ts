@@ -134,7 +134,9 @@ function detectRentalSale(text: string): boolean | null {
 function detectCategorySignals(text: string): string[] {
   const lower = text.toLowerCase()
   const cats: string[] = []
-  if (/\biso\b|buyer.{0,10}iso|buyer.{0,10}looking|buyer.{0,10}need/.test(lower)) cats.push('BUYER_ISO')
+  // "buyer ISO" / explicit ISO — NOT "got a buyer looking" (that's the agent representing a buyer)
+  const agentHasBuyer = /(got|have|i'?ve?\s+got|representing)\s+a\s+(buyer|client|renter|investor)/i.test(lower)
+  if (!agentHasBuyer && /\biso\b|buyer.{0,10}iso/.test(lower)) cats.push('BUYER_ISO')
   if (/renter.{0,10}(?:iso|looking|need|inquiry)|renter inquiry/.test(lower)) cats.push('RENTER_INQUIRY')
   if (/off.?market|pocket listing/.test(lower)) cats.push('OFF_MARKET_SALE')
   if (/coming soon/.test(lower)) cats.push('COMING_SOON_SALE','COMING_SOON_RENTAL')
@@ -183,7 +185,9 @@ Examples:
 "2BR rentals in Williamsburg" → beds:2, isRental:true, neighborhoods:["Williamsburg"]
 "anything for my Brooklyn investor?" → boroughs:["Brooklyn"], isRental:false
 "who owns 123 West 57th?" → isACRIS:true
-"buyer ISOs for Tribeca" → categories:["BUYER_ISO"], neighborhoods:["Tribeca"]`
+"buyer ISOs for Tribeca" → categories:["BUYER_ISO"], neighborhoods:["Tribeca"]
+"got a buyer looking for 3BR in Clinton Hill, anything coming soon?" → categories:["COMING_SOON_SALE"], neighborhoods:["Clinton Hill"], minBeds:3, isRental:false
+"have a buyer for Brooklyn townhouse" → boroughs:["Brooklyn"], isRental:false, categories:[]`
 
 async function llmParse(query: string): Promise<Partial<ParsedQuery>> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })

@@ -40,13 +40,16 @@ export function classifyIntent(input: ClassifyInput): IntentBucket {
     return 'market_question'
   }
 
-  // Match review — "my buyer", "my client", "my investor", "what fits", "anything for"
-  if (/\b(my buyer|my client|my investor|my renter|for my|what fits|anything for|good for|works for|match|matches)\b/.test(lower)) {
+  // Match review — "my buyer", "my client", "I have a buyer", "got a buyer"
+  if (
+    /\b(my buyer|my client|my investor|my renter|for my|what fits|anything for|good for|works for|match|matches)\b/.test(lower) ||
+    /(got|have|i'?ve?\s+got|representing)\s+a\s+(buyer|client|renter|investor)/i.test(lower)
+  ) {
     return 'match_review'
   }
 
-  // Demand search
-  if (hasDemand || /\b(buyer iso|iso|buyer looking|renter looking|renter inquiry|seeking|wants to buy|needs an apartment)\b/.test(lower)) {
+  // Demand search — explicit ISO signals or plural "buyers/renters looking" (not the agent's own buyer)
+  if (hasDemand || /\b(buyer iso|iso|renter inquiry|seeking|wants to buy|needs an apartment)\b/.test(lower) || /\b(buyers|renters)\s+looking\b/.test(lower)) {
     return 'demand_search'
   }
 
