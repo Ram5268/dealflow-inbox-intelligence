@@ -44,7 +44,7 @@ export default function OpportunityDetailPage() {
   // seUrl: direct listing if streetEasyId is set, else search fallback
   const HOOD_TO_BOROUGH_DETAIL: Record<string,string> = { williamsburg:'brooklyn',greenpoint:'brooklyn',bushwick:'brooklyn','bed-stuy':'brooklyn','crown heights':'brooklyn','park slope':'brooklyn','carroll gardens':'brooklyn','cobble hill':'brooklyn','boerum hill':'brooklyn','brooklyn heights':'brooklyn',dumbo:'brooklyn','fort greene':'brooklyn','clinton hill':'brooklyn','prospect heights':'brooklyn','red hook':'brooklyn',gowanus:'brooklyn','sunset park':'brooklyn','bay ridge':'brooklyn',flatbush:'brooklyn','ditmas park':'brooklyn','sheepshead bay':'brooklyn','brighton beach':'brooklyn','coney island':'brooklyn',greenwood:'brooklyn','downtown brooklyn':'brooklyn',astoria:'queens','long island city':'queens',sunnyside:'queens','jackson heights':'queens','forest hills':'queens','rego park':'queens',flushing:'queens',riverdale:'bronx',fordham:'bronx','mott haven':'bronx' }
   const seDirectUrl: string | null = opp.streetEasyId
-    ? (opp.streetEasyId.includes('/') ? `https://streeteasy.com/${opp.streetEasyId}` : `https://streeteasy.com/${isRentalCat ? 'rental' : 'sale'}/${opp.streetEasyId}`)
+    ? (opp.streetEasyId.includes('/') ? `https://www.streeteasy.com/${opp.streetEasyId}` : `https://www.streeteasy.com/${isRentalCat ? 'rental' : 'sale'}/${opp.streetEasyId}`)
     : (() => {
         const bodyM = ((opp.rawEmail.bodyContent ?? '') + ((opp.rawEmail as {attachmentsText?: string|null}).attachmentsText ?? '')).match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
         return bodyM ? bodyM[0].replace(/[,\.!?]+$/, '') : null
@@ -53,7 +53,7 @@ export default function OpportunityDetailPage() {
     ? (() => {
         const borough = HOOD_TO_BOROUGH_DETAIL[(opp.neighborhood ?? '').toLowerCase()] ?? 'new-york'
         const bp = borough === 'new-york' ? 'manhattan' : borough
-        return `https://streeteasy.com/for-${isRentalCat ? 'rent' : 'sale'}/${bp}?q=${encodeURIComponent(opp.address!)}`
+        return `https://www.streeteasy.com/for-${isRentalCat ? 'rent' : 'sale'}/${bp}?q=${encodeURIComponent(opp.address!)}`
       })()
     : null
   const seUrl = seDirectUrl ?? seSearchUrl

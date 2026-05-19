@@ -65,7 +65,7 @@ function buildStreetEasyBuildingUrl(
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 
-  return `https://streeteasy.com/building/${slug}-${borough}`
+  return `https://www.streeteasy.com/building/${slug}-${borough}`
 }
 
 function getStreetEasyUrl(
@@ -79,9 +79,9 @@ function getStreetEasyUrl(
   // 1. URL from SE API sync — stored either as a path ("building/newswalk-phase-3/204")
   //    or a numeric ID ("5025543"). If it's already a path, use it directly.
   if (streetEasyId) {
-    if (streetEasyId.includes('/')) return `https://streeteasy.com/${streetEasyId}`
+    if (streetEasyId.includes('/')) return `https://www.streeteasy.com/${streetEasyId}`
     const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
-    return `https://streeteasy.com/${isRental ? 'rental' : 'sale'}/${streetEasyId}`
+    return `https://www.streeteasy.com/${isRental ? 'rental' : 'sale'}/${streetEasyId}`
   }
   // 2. Extract direct link embedded in email body (hotsheet emails contain the URL)
   const text = (bodyContent ?? '') + (attachmentsText ?? '')
@@ -93,9 +93,8 @@ function getStreetEasyUrl(
     const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
     const borough = HOOD_TO_BOROUGH[(neighborhood ?? '').toLowerCase()] ?? 'new-york'
     const boroughPath = borough === 'new-york' ? 'manhattan' : borough
-    return `https://streeteasy.com/for-${isRental ? 'rent' : 'sale'}/${boroughPath}?q=${encodeURIComponent(address)}`
+    return `https://www.streeteasy.com/for-${isRental ? 'rent' : 'sale'}/${boroughPath}?q=${encodeURIComponent(address)}`
   }
-  return null
   return null
 }
 

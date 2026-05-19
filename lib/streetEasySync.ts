@@ -133,7 +133,7 @@ export async function searchStreetEasyListings(params: {
         const id = String(l.id)
         return {
           id,
-          url:          l.url ? String(l.url) : `https://streeteasy.com/${isRental ? 'rental' : 'sale'}/${id}`,
+          url:          l.url ? String(l.url) : `https://www.streeteasy.com/${isRental ? 'rental' : 'sale'}/${id}`,
           address:      String(l.address ?? l.fullAddress ?? ''),
           price:        l.price != null ? Number(l.price) : null,
           beds:         l.bedrooms ?? l.beds != null ? Number(l.bedrooms ?? l.beds) : null,
