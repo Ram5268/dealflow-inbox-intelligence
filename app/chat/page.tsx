@@ -603,7 +603,7 @@ function RaisedView({
   // others in their original order, preserving original indices
   const others = deals.map((d, i) => ({ d, i })).filter(x => x.i !== activeDealIdx)
   const time = new Date(msg.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
-  const pct = active ? Math.round((active.confidenceScore ?? 0.75) * 100) : 75
+  const pct = active ? Math.round(((active.matchScore ?? active.confidenceScore) ?? 0.75) * 100) : 75
 
   return (
     <>
