@@ -68,33 +68,23 @@ function buildStreetEasyBuildingUrl(
   return `https://www.streeteasy.com/building/${slug}-${borough}`
 }
 
+// Only returns a URL when we have a real direct listing link (streetEasyId from API sync
+// or a URL embedded in the email body). Never returns search/fallback URLs — those
+// mislead the user by showing unfiltered results.
 function getStreetEasyUrl(
   streetEasyId: string | null | undefined,
   category: string,
-  address: string | null | undefined,
-  neighborhood: string | null | undefined,
   bodyContent?: string | null,
   attachmentsText?: string | null,
 ): string | null {
-  // 1. URL from SE API sync — stored either as a path ("building/newswalk-phase-3/204")
-  //    or a numeric ID ("5025543"). If it's already a path, use it directly.
   if (streetEasyId) {
     if (streetEasyId.includes('/')) return `https://www.streeteasy.com/${streetEasyId}`
     const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
     return `https://www.streeteasy.com/${isRental ? 'rental' : 'sale'}/${streetEasyId}`
   }
-  // 2. Extract direct link embedded in email body (hotsheet emails contain the URL)
   const text = (bodyContent ?? '') + (attachmentsText ?? '')
-  const m = text.match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
+  const m = text.match(/https?:\/\/(?:www\.)?streeteasy\.com\/[^\s"'<>)\]]+/i)
   if (m) return m[0].replace(/[,\.!?]+$/, '')
-  // 3. Search URL fallback — at least narrows to borough + address query
-  //    Label this differently in the UI ("Search StreetEasy" vs "View Listing")
-  if (address && SE_LISTABLE.has(category)) {
-    const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
-    const borough = HOOD_TO_BOROUGH[(neighborhood ?? '').toLowerCase()] ?? 'new-york'
-    const boroughPath = borough === 'new-york' ? 'manhattan' : borough
-    return `https://www.streeteasy.com/for-${isRental ? 'rent' : 'sale'}/${boroughPath}?q=${encodeURIComponent(address)}`
-  }
   return null
 }
 
@@ -585,7 +575,7 @@ export async function POST(req: NextRequest) {
             : ''
           const dateTag = emailDate ? ` | received ${emailDate}` : ''
           const availTag = o.availabilityDate ? ` | AVAIL DATE: ${o.availabilityDate}` : ''
-          const seUrl = getStreetEasyUrl(o.streetEasyId, o.category, o.address, o.neighborhood, o.rawEmail?.bodyContent, o.rawEmail?.attachmentsText)
+          const seUrl = getStreetEasyUrl(o.streetEasyId, o.category, o.rawEmail?.bodyContent, o.rawEmail?.attachmentsText)
           const seTag = seUrl ? ` | SE: ${seUrl}` : ''
           return `[DEAL:${o.id}] ${o.extractedTitle} | ${o.category} | ${o.neighborhood ?? ''}${o.borough ? ', ' + o.borough : ''} | ${o.price ? '$' + o.price.toLocaleString() : o.maxPrice ? 'up to $' + o.maxPrice.toLocaleString() : 'no price'} | ${o.propertyType ?? ''} | ${o.beds ? o.beds + 'BR' : ''} ${o.units ? o.units + ' units' : ''} | ${o.sourceBrokerage ?? ''} | ${Math.round(o.confidenceScore * 100)}%${dateTag}${availTag}${seTag} | ${o.extractedSummary}${attachSnippet}${bodySnippet}`
         }).join('\n')
@@ -777,7 +767,7 @@ export async function POST(req: NextRequest) {
       : ''
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: `${SYSTEM_PROMPT}${rateContext}${acrisContext}${dobContext}${calendarContext}${matchContext}\n\n${shadowContext}${mojoContext}${seContext}` },
+      { role: 'system', content: `${SYSTEM_PROMPT}${rateContext}${acrisContext}${dobContext}${calendarContext}${matchContext}${seContext}\n\n${shadowContext}${mojoContext}` },
       ...conversationHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user', content: userContent },
     ]
@@ -824,7 +814,7 @@ export async function POST(req: NextRequest) {
       .map(d => ({
         ...d,
         matchScore: d.confidenceScore,
-        streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.address, d.neighborhood, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
+        streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
       }))
 
     const storedMsg = files.length > 0
