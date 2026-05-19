@@ -11,19 +11,37 @@ import OpenAI from 'openai'
 
 export const maxDuration = 60
 
+// Categories that map to a specific property listing on StreetEasy
+const SE_LISTABLE = new Set([
+  'ACTIVE_SALE_LISTING','COMING_SOON_SALE','OFF_MARKET_SALE','RENTAL_LISTING',
+  'COMING_SOON_RENTAL','DEVELOPMENT_INVENTORY','SPONSOR_UNIT','PRICE_DROP',
+  'BACK_ON_MARKET','OPEN_HOUSE','SHOWING_CONFIRMATION','COMING_SOON_DEVELOPMENT',
+])
+
 function getStreetEasyUrl(
   streetEasyId: string | null | undefined,
   category: string,
+  address: string | null | undefined,
+  neighborhood: string | null | undefined,
   bodyContent?: string | null,
   attachmentsText?: string | null,
 ): string | null {
+  // 1. Direct URL from streetEasyId (most reliable — set by SE API sync)
   if (streetEasyId) {
     const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
     return `https://streeteasy.com/${isRental ? 'rental' : 'sale'}/${streetEasyId}`
   }
-  const text = bodyContent ?? attachmentsText ?? ''
+  // 2. Extract direct link from email body (hotsheet emails embed the URL)
+  const text = (bodyContent ?? '') + (attachmentsText ?? '')
   const m = text.match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
-  return m ? m[0].replace(/[,\.!?]+$/, '') : null
+  if (m) return m[0].replace(/[,\.!?]+$/, '')
+  // 3. Construct address search URL (fallback when body is empty)
+  if (address && SE_LISTABLE.has(category)) {
+    const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
+    const loc = (neighborhood ?? 'nyc').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+    return `https://streeteasy.com/${isRental ? 'for-rent' : 'for-sale'}/${loc}?q=${encodeURIComponent(address)}`
+  }
+  return null
 }
 
 const SYSTEM_PROMPT = `You are Drift — Ryan Martin's private real estate deal intelligence layer. Ryan is a Douglas Elliman agent working NYC residential real estate across all transaction types.
@@ -499,7 +517,7 @@ export async function POST(req: NextRequest) {
             : ''
           const dateTag = emailDate ? ` | received ${emailDate}` : ''
           const availTag = o.availabilityDate ? ` | AVAIL DATE: ${o.availabilityDate}` : ''
-          const seUrl = getStreetEasyUrl(o.streetEasyId, o.category, o.rawEmail?.bodyContent, o.rawEmail?.attachmentsText)
+          const seUrl = getStreetEasyUrl(o.streetEasyId, o.category, o.address, o.neighborhood, o.rawEmail?.bodyContent, o.rawEmail?.attachmentsText)
           const seTag = seUrl ? ` | SE: ${seUrl}` : ''
           return `[DEAL:${o.id}] ${o.extractedTitle} | ${o.category} | ${o.neighborhood ?? ''}${o.borough ? ', ' + o.borough : ''} | ${o.price ? '$' + o.price.toLocaleString() : o.maxPrice ? 'up to $' + o.maxPrice.toLocaleString() : 'no price'} | ${o.propertyType ?? ''} | ${o.beds ? o.beds + 'BR' : ''} ${o.units ? o.units + ' units' : ''} | ${o.sourceBrokerage ?? ''} | ${Math.round(o.confidenceScore * 100)}%${dateTag}${availTag}${seTag} | ${o.extractedSummary}${attachSnippet}${bodySnippet}`
         }).join('\n')
@@ -712,7 +730,7 @@ export async function POST(req: NextRequest) {
       .map(d => ({
         ...d,
         matchScore: d.confidenceScore,
-        streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
+        streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.address, d.neighborhood, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
       }))
 
     const storedMsg = files.length > 0

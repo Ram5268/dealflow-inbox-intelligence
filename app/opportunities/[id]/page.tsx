@@ -40,9 +40,19 @@ export default function OpportunityDetailPage() {
   )
 
   const categoryLabel = CATEGORY_LABELS[opp.category] ?? opp.category
-  const seUrl = opp.streetEasyId
-    ? `https://streeteasy.com/${['RENTAL_LISTING','COMING_SOON_RENTAL'].includes(opp.category) ? 'rental' : 'sale'}/${opp.streetEasyId}`
-    : (opp.rawEmail.bodyContent ?? '').match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)?.[0]?.replace(/[,\.!?]+$/, '') ?? null
+  const SE_LISTABLE = new Set(['ACTIVE_SALE_LISTING','COMING_SOON_SALE','OFF_MARKET_SALE','RENTAL_LISTING','COMING_SOON_RENTAL','DEVELOPMENT_INVENTORY','SPONSOR_UNIT','PRICE_DROP','BACK_ON_MARKET','OPEN_HOUSE','SHOWING_CONFIRMATION','COMING_SOON_DEVELOPMENT'])
+  const isRentalCat = ['RENTAL_LISTING','COMING_SOON_RENTAL'].includes(opp.category)
+  const seUrl: string | null = opp.streetEasyId
+    ? `https://streeteasy.com/${isRentalCat ? 'rental' : 'sale'}/${opp.streetEasyId}`
+    : (() => {
+        const bodyM = ((opp.rawEmail.bodyContent ?? '') + (opp.rawEmail.attachmentsText ?? '')).match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
+        if (bodyM) return bodyM[0].replace(/[,\.!?]+$/, '')
+        if (opp.address && SE_LISTABLE.has(opp.category)) {
+          const loc = (opp.neighborhood ?? 'nyc').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+          return `https://streeteasy.com/${isRentalCat ? 'for-rent' : 'for-sale'}/${loc}?q=${encodeURIComponent(opp.address)}`
+        }
+        return null
+      })()
 
   return (
     <div className="df-bg min-h-screen" style={{ minHeight: '100dvh' }}>
