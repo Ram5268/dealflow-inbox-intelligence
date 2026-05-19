@@ -7,23 +7,18 @@ export async function GET() {
 
   if (!key) return NextResponse.json({ error: 'RAPIDAPI_KEY not set' }, { status: 500 })
 
-  // Try different endpoint paths to find the active listings search
-  const endpoints = [
-    '/sales?areas=williamsburg&limit=2',
-    '/sales/active?areas=williamsburg&limit=2',
-    '/listings?areas=williamsburg&limit=2&status=active',
-    '/properties/search?areas=williamsburg&limit=2',
-    '/for-sale?areas=williamsburg&limit=2',
-  ]
+  // Test only Dilan's known working endpoint — no status filter to see ALL listings
+  const url1 = `https://${host}/sales/past/search?areas=williamsburg&limit=2`
+  const r1 = await fetch(url1, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host } })
+  const body1 = await r1.json() as Record<string, unknown>
+  const listings1 = (body1.listings as Record<string, unknown>[] | undefined) ?? []
 
-  const results: Record<string, unknown>[] = []
-  for (const path of endpoints) {
-    const url = `https://${host}${path}`
-    const r = await fetch(url, { headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': host } })
-    const body = await r.json()
-    results.push({ url, status: r.status, topKeys: Object.keys(body as object), snippet: JSON.stringify(body).slice(0, 200) })
-    await new Promise(resolve => setTimeout(resolve, 500))
-  }
-
-  return NextResponse.json({ results })
+  return NextResponse.json({
+    url: url1,
+    status: r1.status,
+    totalCount: (body1.pagination as Record<string, unknown> | undefined)?.count ?? null,
+    firstListingAllFields: listings1[0] ?? null,
+    secondListing: listings1[1] ?? null,
+    topLevelKeys: Object.keys(body1),
+  })
 }
