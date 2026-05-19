@@ -44,14 +44,19 @@ const SUPPLY_ALL = [
   'OFF_MARKET_SALE','BACK_ON_MARKET','PRICE_DROP','OPEN_HOUSE',
   'DEVELOPMENT_INVENTORY','COMING_SOON_DEVELOPMENT','SPONSOR_UNIT',
 ]
-const SUPPLY_SALE   = ['ACTIVE_SALE_LISTING','OFF_MARKET_SALE','COMING_SOON_SALE','BACK_ON_MARKET','PRICE_DROP','DEVELOPMENT_INVENTORY','COMING_SOON_DEVELOPMENT','SPONSOR_UNIT']
+// Active on-market sale listings only — default for buyer searches with no coming-soon intent
+const SUPPLY_SALE_ACTIVE   = ['ACTIVE_SALE_LISTING','BACK_ON_MARKET','PRICE_DROP','DEVELOPMENT_INVENTORY','SPONSOR_UNIT']
+// Pre-market only — returned when "coming soon" or "off market" is explicitly requested
+const SUPPLY_SALE_PREMARKET = ['COMING_SOON_SALE','OFF_MARKET_SALE','COMING_SOON_DEVELOPMENT']
 const SUPPLY_RENTAL = ['RENTAL_LISTING','COMING_SOON_RENTAL']
 const DEMAND_ALL    = ['BUYER_ISO','RENTER_INQUIRY']
 const LEAD_ALL      = ['SELLER_LEAD','LANDLORD_LEAD']
 
+// Pre-market signal keywords that expand to the full pre-market set
+const PREMARKET_CATS = new Set(['COMING_SOON_SALE','OFF_MARKET_SALE','COMING_SOON_DEVELOPMENT','COMING_SOON_RENTAL'])
+
 function categoriesForIntent(intent: IntentBucket, parsed: ParsedQuery): string[] {
   const isSupplyIntent = intent === 'opportunity_search' || intent === 'match_review'
-  // For buyer queries (isRental=false), also strip rental categories
   const isBuyerIntent  = isSupplyIntent && parsed.isRental === false
 
   const sanitized = isSupplyIntent
@@ -62,24 +67,28 @@ function categoriesForIntent(intent: IntentBucket, parsed: ParsedQuery): string[
       })
     : parsed.categories
 
-  if (sanitized.length > 0) return sanitized
+  if (sanitized.length > 0) {
+    // If any pre-market keyword was detected in a buyer query, return the full pre-market set
+    // (COMING_SOON_SALE, OFF_MARKET_SALE, COMING_SOON_DEVELOPMENT are synonymous to the user)
+    if (isBuyerIntent && sanitized.some(c => PREMARKET_CATS.has(c))) return SUPPLY_SALE_PREMARKET
+    return sanitized
+  }
 
   switch (intent) {
     case 'opportunity_search':
       if (parsed.isRental === true)  return SUPPLY_RENTAL
-      if (parsed.isRental === false) return SUPPLY_SALE
+      if (parsed.isRental === false) return SUPPLY_SALE_ACTIVE  // active listings only by default
       return SUPPLY_ALL
     case 'demand_search':
       return DEMAND_ALL
     case 'seller_lead_search':
       return LEAD_ALL
     case 'match_review':
-      // Match review: search supply-side to match against demand criteria
       if (parsed.isRental === true)  return SUPPLY_RENTAL
-      if (parsed.isRental === false) return SUPPLY_SALE
+      if (parsed.isRental === false) return SUPPLY_SALE_ACTIVE  // active listings only by default
       return SUPPLY_ALL
     case 'property_intelligence':
-      return []   // no opportunity search, just tools
+      return []
     case 'market_question':
       return ['MARKET_REPORT','REAL_ESTATE_EVENT']
     case 'calendar_scheduling':

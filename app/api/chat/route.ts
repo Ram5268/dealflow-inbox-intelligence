@@ -185,8 +185,9 @@ export async function POST(req: NextRequest) {
       isComingSoonSaleQuery     ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE, Category.COMING_SOON_DEVELOPMENT] :
       isMarketReportQuery       ? [Category.MARKET_REPORT] :
       isRealEstateEventQuery    ? [Category.REAL_ESTATE_EVENT, Category.OPEN_HOUSE] :
-      isSaleQuery               ? [Category.ACTIVE_SALE_LISTING, Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE,
-                                   Category.PRICE_DROP, Category.BACK_ON_MARKET, Category.DEVELOPMENT_INVENTORY,
+      // Active buyer search — no coming-soon/off-market (those need explicit request)
+      isSaleQuery               ? [Category.ACTIVE_SALE_LISTING, Category.BACK_ON_MARKET,
+                                   Category.PRICE_DROP, Category.DEVELOPMENT_INVENTORY,
                                    Category.SPONSOR_UNIT] :
       null  // general query — no filter, but defaultExclude still applies below
 
