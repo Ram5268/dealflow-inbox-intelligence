@@ -76,8 +76,10 @@ function getStreetEasyUrl(
   bodyContent?: string | null,
   attachmentsText?: string | null,
 ): string | null {
-  // 1. Direct numeric URL from streetEasyId (set by SE API sync — most reliable)
+  // 1. URL from SE API sync — stored either as a path ("building/newswalk-phase-3/204")
+  //    or a numeric ID ("5025543"). If it's already a path, use it directly.
   if (streetEasyId) {
+    if (streetEasyId.includes('/')) return `https://streeteasy.com/${streetEasyId}`
     const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
     return `https://streeteasy.com/${isRental ? 'rental' : 'sale'}/${streetEasyId}`
   }

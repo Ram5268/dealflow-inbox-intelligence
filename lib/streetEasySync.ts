@@ -141,6 +141,7 @@ type SEListing = {
   price?: number
   closedAt?: string
   daysOnMarket?: number
+  url?: string   // full StreetEasy listing URL returned by the API
 }
 
 export async function getListingById(id: string, type: 'sale' | 'rental' = 'sale'): Promise<SEListing | null> {
@@ -154,6 +155,16 @@ export async function getListingById(id: string, type: 'sale' | 'rental' = 'sale
 }
 
 // ── Search for a listing by address in a neighborhood ────────────────────────
+// Strip unit designator from address before address matching
+// "535 Dean Street 204" → "535 Dean Street", "109 Devoe Street GARDEN-2" → "109 Devoe Street"
+function stripUnit(address: string): string {
+  const STREET_TYPES = /\b(street|avenue|boulevard|road|drive|place|court|lane|terrace|circle|parkway|st|ave|blvd|rd|dr|pl|ct|ln|ter|pkwy)\b\.?/gi
+  const matches = [...address.matchAll(STREET_TYPES)]
+  if (matches.length === 0) return address
+  const last = matches[matches.length - 1]
+  return address.slice(0, (last.index ?? 0) + last[0].length).trim()
+}
+
 export async function findListingByAddress(
   address: string,
   neighborhood: string | null,
@@ -162,25 +173,26 @@ export async function findListingByAddress(
   const area = (neighborhood && NEIGHBORHOOD_TO_SE_AREA[neighborhood]) ?? 'all-downtown'
   const endpoint = type === 'rental' ? '/rentals/search' : '/sales/search'
 
+  // Strip unit from address before matching — "535 Dean Street 204" → "535 Dean Street"
+  const baseAddress = stripUnit(address)
+
   try {
     const data = await seRequest(`${endpoint}?areas=${area}&limit=50`) as {
       listings?: SEListing[]
     }
     const listings = data.listings ?? []
-
     if (listings.length === 0) return null
 
-    // Normalize target address for comparison
-    const normTarget = normalizeAddress(address)?.normalizedFull ?? null
+    const normTarget = normalizeAddress(baseAddress)?.normalizedFull ?? null
 
-    // Find best address match
+    // Exact normalized match
     for (const listing of listings) {
       if (!listing.address) continue
       const normListing = normalizeAddress(listing.address)?.normalizedFull ?? null
       if (normTarget && normListing && normTarget === normListing) return listing
     }
 
-    // Fuzzy: check if street number + first word of street match
+    // Fuzzy: street number + first street word match (handles "Newswalk Phase 3" building names)
     const targetParts = normTarget?.split(' ') ?? []
     if (targetParts.length >= 2) {
       const targetNum    = targetParts[0]
@@ -261,10 +273,18 @@ export async function syncOpportunityStatus(opportunityId: string): Promise<{
 
   const { streetEasyStatus, processingStatus } = mapStatus(listing.status)
 
+  // Prefer the URL path from the API (e.g. "building/newswalk-phase-3/204")
+  // over constructing one from the numeric ID — named developments need the slug form.
+  let seId = listing.id
+  if (listing.url) {
+    const m = listing.url.match(/streeteasy\.com\/(.+?)(?:\?.*)?$/)
+    if (m) seId = m[1].replace(/\/$/, '')
+  }
+
   await prisma.extractedOpportunity.update({
     where: { id: opportunityId },
     data: {
-      streetEasyId:        listing.id,
+      streetEasyId:        seId,
       streetEasyStatus,
       streetEasyCheckedAt: new Date(),
       ...(processingStatus ? { processingStatus } : {}),

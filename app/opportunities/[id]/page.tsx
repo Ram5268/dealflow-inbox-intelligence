@@ -44,7 +44,7 @@ export default function OpportunityDetailPage() {
   // streetEasyId populated on first view via real-time SE API lookup (in the detail API route).
   // Named developments (Newswalk Phase 3, etc.) can't be derived from address alone.
   const seUrl: string | null = opp.streetEasyId
-    ? `https://streeteasy.com/${isRentalCat ? 'rental' : 'sale'}/${opp.streetEasyId}`
+    ? (opp.streetEasyId.includes('/') ? `https://streeteasy.com/${opp.streetEasyId}` : `https://streeteasy.com/${isRentalCat ? 'rental' : 'sale'}/${opp.streetEasyId}`)
     : (() => {
         const bodyM = ((opp.rawEmail.bodyContent ?? '') + ((opp.rawEmail as {attachmentsText?: string|null}).attachmentsText ?? '')).match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
         return bodyM ? bodyM[0].replace(/[,\.!?]+$/, '') : null
