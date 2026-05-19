@@ -18,6 +18,70 @@ const SE_LISTABLE = new Set([
   'BACK_ON_MARKET','OPEN_HOUSE','SHOWING_CONFIRMATION','COMING_SOON_DEVELOPMENT',
 ])
 
+// Neighborhood → StreetEasy borough slug (SE uses "new-york" for Manhattan, not "manhattan")
+const HOOD_TO_BOROUGH: Record<string, string> = {
+  // Brooklyn
+  williamsburg: 'brooklyn', greenpoint: 'brooklyn', bushwick: 'brooklyn',
+  'bed-stuy': 'brooklyn', 'bedford-stuyvesant': 'brooklyn', 'crown heights': 'brooklyn',
+  'park slope': 'brooklyn', 'carroll gardens': 'brooklyn', 'cobble hill': 'brooklyn',
+  'boerum hill': 'brooklyn', 'brooklyn heights': 'brooklyn', dumbo: 'brooklyn',
+  'fort greene': 'brooklyn', 'clinton hill': 'brooklyn', 'prospect heights': 'brooklyn',
+  'red hook': 'brooklyn', gowanus: 'brooklyn', 'sunset park': 'brooklyn',
+  'bay ridge': 'brooklyn', flatbush: 'brooklyn', 'ditmas park': 'brooklyn',
+  kensington: 'brooklyn', midwood: 'brooklyn', 'sheepshead bay': 'brooklyn',
+  'brighton beach': 'brooklyn', 'coney island': 'brooklyn', bensonhurst: 'brooklyn',
+  gravesend: 'brooklyn', 'dyker heights': 'brooklyn', canarsie: 'brooklyn',
+  brownsville: 'brooklyn', 'east new york': 'brooklyn', 'windsor terrace': 'brooklyn',
+  'south slope': 'brooklyn', greenwood: 'brooklyn', 'downtown brooklyn': 'brooklyn',
+  // Queens
+  astoria: 'queens', 'long island city': 'queens', lic: 'queens',
+  sunnyside: 'queens', 'jackson heights': 'queens', 'forest hills': 'queens',
+  'rego park': 'queens', flushing: 'queens',
+  // Bronx
+  riverdale: 'bronx', fordham: 'bronx', 'mott haven': 'bronx',
+  // Staten Island
+  'st. george': 'staten-island', stapleton: 'staten-island',
+}
+
+function buildStreetEasySlugUrl(
+  address: string,
+  neighborhood: string | null,
+  category: string,
+): string {
+  const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
+  const type = isRental ? 'rental' : 'sale'
+
+  // Find the last street type suffix in the address, then anything after it is the unit.
+  // This correctly handles: "109 Devoe Street GARDEN-2", "535 Dean Street 204", "56 Court Street" (no unit)
+  const STREET_TYPES = /\b(street|avenue|boulevard|road|drive|place|court|lane|terrace|circle|parkway|highway|st|ave|blvd|rd|dr|pl|ct|ln|ter|pkwy)\b\.?/gi
+  const typeMatches = [...address.matchAll(STREET_TYPES)]
+
+  let street = address
+  let unit = ''
+
+  if (typeMatches.length > 0) {
+    const last = typeMatches[typeMatches.length - 1]
+    const afterType = address.slice((last.index ?? 0) + last[0].length).trim()
+    // Strip APT/UNIT/# prefix if present, then treat the rest as unit
+    const rawUnit = afterType.replace(/^(?:apt\.?\s*|unit\s*|#\s*)/i, '').trim()
+    // Exclude compass directions that are part of the street name (Park Ave South, etc.)
+    const COMPASS = new Set(['south', 'north', 'east', 'west'])
+    if (rawUnit && !COMPASS.has(rawUnit.toLowerCase())) {
+      street = address.slice(0, (last.index ?? 0) + last[0].length).trim()
+      unit = rawUnit
+    }
+  }
+
+  const borough = HOOD_TO_BOROUGH[(neighborhood ?? '').toLowerCase()] ?? 'new-york'
+  const streetSlug = street.toLowerCase()
+    .replace(/[.']/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+
+  const unitSlug = unit ? `/${unit.toLowerCase().replace(/[^a-z0-9-]/g, '-')}` : ''
+  return `https://streeteasy.com/${type}/${streetSlug}-${borough}${unitSlug}`
+}
+
 function getStreetEasyUrl(
   streetEasyId: string | null | undefined,
   category: string,
@@ -26,20 +90,19 @@ function getStreetEasyUrl(
   bodyContent?: string | null,
   attachmentsText?: string | null,
 ): string | null {
-  // 1. Direct URL from streetEasyId (most reliable — set by SE API sync)
+  // 1. Direct numeric URL from streetEasyId (set by SE API sync — most reliable)
   if (streetEasyId) {
     const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
     return `https://streeteasy.com/${isRental ? 'rental' : 'sale'}/${streetEasyId}`
   }
-  // 2. Extract direct link from email body (hotsheet emails embed the URL)
+  // 2. Extract direct link embedded in email body (hotsheet emails contain the URL)
   const text = (bodyContent ?? '') + (attachmentsText ?? '')
   const m = text.match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
   if (m) return m[0].replace(/[,\.!?]+$/, '')
-  // 3. Construct address search URL (fallback when body is empty)
+  // 3. Construct slug URL from address — goes to the exact building/unit page
+  //    e.g. streeteasy.com/sale/109-devoe-street-brooklyn/garden-2
   if (address && SE_LISTABLE.has(category)) {
-    const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
-    const loc = (neighborhood ?? 'nyc').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-    return `https://streeteasy.com/${isRental ? 'for-rent' : 'for-sale'}/${loc}?q=${encodeURIComponent(address)}`
+    return buildStreetEasySlugUrl(address, neighborhood ?? null, category)
   }
   return null
 }

@@ -40,17 +40,40 @@ export default function OpportunityDetailPage() {
   )
 
   const categoryLabel = CATEGORY_LABELS[opp.category] ?? opp.category
-  const SE_LISTABLE = new Set(['ACTIVE_SALE_LISTING','COMING_SOON_SALE','OFF_MARKET_SALE','RENTAL_LISTING','COMING_SOON_RENTAL','DEVELOPMENT_INVENTORY','SPONSOR_UNIT','PRICE_DROP','BACK_ON_MARKET','OPEN_HOUSE','SHOWING_CONFIRMATION','COMING_SOON_DEVELOPMENT'])
   const isRentalCat = ['RENTAL_LISTING','COMING_SOON_RENTAL'].includes(opp.category)
+  const SE_LISTABLE_SET = new Set(['ACTIVE_SALE_LISTING','COMING_SOON_SALE','OFF_MARKET_SALE','RENTAL_LISTING','COMING_SOON_RENTAL','DEVELOPMENT_INVENTORY','SPONSOR_UNIT','PRICE_DROP','BACK_ON_MARKET','OPEN_HOUSE','SHOWING_CONFIRMATION','COMING_SOON_DEVELOPMENT'])
+
+  function buildSlugUrl(addr: string, hood: string | null, rental: boolean): string {
+    const type = rental ? 'rental' : 'sale'
+    const HOOD_BOROUGH: Record<string,string> = {
+      williamsburg:'brooklyn',greenpoint:'brooklyn',bushwick:'brooklyn','bed-stuy':'brooklyn','bedford-stuyvesant':'brooklyn','crown heights':'brooklyn','park slope':'brooklyn','carroll gardens':'brooklyn','cobble hill':'brooklyn','boerum hill':'brooklyn','brooklyn heights':'brooklyn',dumbo:'brooklyn','fort greene':'brooklyn','clinton hill':'brooklyn','prospect heights':'brooklyn','red hook':'brooklyn',gowanus:'brooklyn','sunset park':'brooklyn','bay ridge':'brooklyn',flatbush:'brooklyn','ditmas park':'brooklyn',kensington:'brooklyn',midwood:'brooklyn','sheepshead bay':'brooklyn','brighton beach':'brooklyn','coney island':'brooklyn',bensonhurst:'brooklyn',gravesend:'brooklyn','dyker heights':'brooklyn',canarsie:'brooklyn',brownsville:'brooklyn','east new york':'brooklyn','windsor terrace':'brooklyn','south slope':'brooklyn',greenwood:'brooklyn','downtown brooklyn':'brooklyn',
+      astoria:'queens','long island city':'queens',lic:'queens',sunnyside:'queens','jackson heights':'queens','forest hills':'queens','rego park':'queens',flushing:'queens',
+      riverdale:'bronx',fordham:'bronx','mott haven':'bronx',
+    }
+    const STREET_TYPES = /\b(street|avenue|boulevard|road|drive|place|court|lane|terrace|circle|parkway|highway|st|ave|blvd|rd|dr|pl|ct|ln|ter|pkwy)\b\.?/gi
+    const typeMatches = [...addr.matchAll(STREET_TYPES)]
+    let street = addr, unit = ''
+    if (typeMatches.length > 0) {
+      const last = typeMatches[typeMatches.length - 1]
+      const afterType = addr.slice((last.index ?? 0) + last[0].length).trim()
+      const rawUnit = afterType.replace(/^(?:apt\.?\s*|unit\s*|#\s*)/i, '').trim()
+      const COMPASS = new Set(['south','north','east','west'])
+      if (rawUnit && !COMPASS.has(rawUnit.toLowerCase())) {
+        street = addr.slice(0, (last.index ?? 0) + last[0].length).trim(); unit = rawUnit
+      }
+    }
+    const borough = HOOD_BOROUGH[(hood ?? '').toLowerCase()] ?? 'new-york'
+    const slug = street.toLowerCase().replace(/[.']/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')
+    const unitSlug = unit ? `/${unit.toLowerCase().replace(/[^a-z0-9-]/g,'-')}` : ''
+    return `https://streeteasy.com/${type}/${slug}-${borough}${unitSlug}`
+  }
+
   const seUrl: string | null = opp.streetEasyId
     ? `https://streeteasy.com/${isRentalCat ? 'rental' : 'sale'}/${opp.streetEasyId}`
     : (() => {
-        const bodyM = ((opp.rawEmail.bodyContent ?? '') + (opp.rawEmail.attachmentsText ?? '')).match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
+        const bodyM = ((opp.rawEmail.bodyContent ?? '') + ((opp.rawEmail as {attachmentsText?: string|null}).attachmentsText ?? '')).match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
         if (bodyM) return bodyM[0].replace(/[,\.!?]+$/, '')
-        if (opp.address && SE_LISTABLE.has(opp.category)) {
-          const loc = (opp.neighborhood ?? 'nyc').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-          return `https://streeteasy.com/${isRentalCat ? 'for-rent' : 'for-sale'}/${loc}?q=${encodeURIComponent(opp.address)}`
-        }
+        if (opp.address && SE_LISTABLE_SET.has(opp.category)) return buildSlugUrl(opp.address, opp.neighborhood, isRentalCat)
         return null
       })()
 
