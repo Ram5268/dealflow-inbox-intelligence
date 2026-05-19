@@ -61,6 +61,78 @@ async function seRequest(path: string): Promise<unknown> {
   return res.json()
 }
 
+// ── Live search: query StreetEasy for current market listings ─────────────────
+export interface SESearchResult {
+  id:           string
+  url:          string
+  address:      string
+  price:        number | null
+  beds:         number | null
+  baths:        number | null
+  sqft:         number | null
+  neighborhood: string | null
+  status:       string
+  daysOnMarket: number | null
+  description:  string | null
+}
+
+export async function searchStreetEasyListings(params: {
+  neighborhoods: string[]
+  minBeds?:  number | null
+  maxBeds?:  number | null
+  minPrice?: number | null
+  maxPrice?: number | null
+  isRental?: boolean
+  limit?:    number
+}): Promise<SESearchResult[]> {
+  if (!RAPIDAPI_KEY) return []
+
+  const { neighborhoods, minBeds, maxBeds, minPrice, maxPrice, isRental = false, limit = 12 } = params
+
+  // Map neighborhood names → SE area slugs, deduplicate
+  const areas = [...new Set(
+    neighborhoods.flatMap(n => {
+      const slug = NEIGHBORHOOD_TO_SE_AREA[n]
+      return slug ? [slug] : []
+    })
+  )].join(',')
+
+  if (!areas) return []
+
+  const endpoint = isRental ? '/rentals/search' : '/sales/search'
+  const qs = new URLSearchParams({ areas, limit: String(limit) })
+  if (minBeds  != null) qs.set('minBeds',  String(minBeds))
+  if (maxBeds  != null) qs.set('maxBeds',  String(maxBeds))
+  if (minPrice != null) qs.set('minPrice', String(minPrice))
+  if (maxPrice != null) qs.set('maxPrice', String(maxPrice))
+
+  try {
+    const data = await seRequest(`${endpoint}?${qs}`) as { listings?: Record<string, unknown>[] }
+    const listings = data.listings ?? []
+
+    return listings
+      .filter(l => l.id)
+      .map(l => {
+        const id = String(l.id)
+        return {
+          id,
+          url:          l.url ? String(l.url) : `https://streeteasy.com/${isRental ? 'rental' : 'sale'}/${id}`,
+          address:      String(l.address ?? l.fullAddress ?? ''),
+          price:        l.price != null ? Number(l.price) : null,
+          beds:         l.bedrooms ?? l.beds != null ? Number(l.bedrooms ?? l.beds) : null,
+          baths:        l.bathrooms ?? l.baths != null ? Number(l.bathrooms ?? l.baths) : null,
+          sqft:         l.sqft ?? l.squareFeet != null ? Number(l.sqft ?? l.squareFeet) : null,
+          neighborhood: l.area ?? l.neighborhood != null ? String(l.area ?? l.neighborhood) : null,
+          status:       String(l.status ?? 'active'),
+          daysOnMarket: l.daysOnMarket != null ? Number(l.daysOnMarket) : null,
+          description:  l.description != null ? String(l.description).slice(0, 200) : null,
+        }
+      })
+  } catch {
+    return []
+  }
+}
+
 // ── Get status of a known listing by ID ──────────────────────────────────────
 type SEListing = {
   id: string

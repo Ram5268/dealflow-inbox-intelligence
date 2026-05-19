@@ -71,6 +71,7 @@ SUGGESTIONS: Always return exactly 2 specific follow-up questions.
 NO FILLER: No "feel free to ask", no "I hope that helps", no "I cannot find" without an alternative.
 DEAL CITING: In "referencedDeals", list the exact IDs from [DEAL:id] tags for every deal you mention in your response. This controls which cards the user sees — if you mention it, cite it.
 STREETEASY LINKS: When a deal's data line contains "SE: https://..." include that URL in your response so Ryan can tap directly to the listing.
+LIVE STREETEASY RESULTS: When LIVE STREETEASY LISTINGS data is present, present those results clearly with their direct URLs. Label them as live market listings. Always include the full URL so Ryan can tap to open.
 
 Respond with this exact JSON (no markdown, no code fences):
 {"response":"your plain text response","suggestions":["specific follow-up 1","specific follow-up 2"],"pendingEvent":null,"referencedDeals":["deal_id_1","deal_id_2"]}`
@@ -381,6 +382,19 @@ export async function POST(req: NextRequest) {
       ...(queryMaxBeds != null ? [{ beds: { lte: queryMaxBeds } }] : []),
     ]
 
+    // Price extraction for SE live search — "budget of 1.2M", "under $800k", "$1M-$2M"
+    function parsePrice(raw: string): number {
+      const m = raw.replace(/,/g, '').match(/([\d.]+)\s*([kKmM]?)/)
+      if (!m) return 0
+      const n = parseFloat(m[1])
+      const mult = /[mM]/.test(m[2]) ? 1_000_000 : /[kK]/.test(m[2]) ? 1_000 : 1
+      return Math.round(n * mult)
+    }
+    const priceRangeM = queryText.match(/\$?([\d.]+\s*[mMkK]?)\s*(?:to|-)\s*\$?([\d.]+\s*[mMkK]?)/i)
+    const priceUnderM = !priceRangeM ? queryText.match(/(?:under|below|max|budget(?:\s+of)?|up\s+to)\s+\$?([\d.]+\s*[mMkK]?)/i) : null
+    const queryMinPrice = priceRangeM ? parsePrice(priceRangeM[1]) : null
+    const queryMaxPrice = priceRangeM ? parsePrice(priceRangeM[2]) : priceUnderM ? parsePrice(priceUnderM[1]) : null
+
     const catClause = categoryFilter ? [{ category: { in: categoryFilter } }] : []
 
     const oppWhere = {
@@ -521,6 +535,32 @@ export async function POST(req: NextRequest) {
           const seTag = seUrl ? ` | SE: ${seUrl}` : ''
           return `[DEAL:${o.id}] ${o.extractedTitle} | ${o.category} | ${o.neighborhood ?? ''}${o.borough ? ', ' + o.borough : ''} | ${o.price ? '$' + o.price.toLocaleString() : o.maxPrice ? 'up to $' + o.maxPrice.toLocaleString() : 'no price'} | ${o.propertyType ?? ''} | ${o.beds ? o.beds + 'BR' : ''} ${o.units ? o.units + ' units' : ''} | ${o.sourceBrokerage ?? ''} | ${Math.round(o.confidenceScore * 100)}%${dateTag}${availTag}${seTag} | ${o.extractedSummary}${attachSnippet}${bodySnippet}`
         }).join('\n')
+
+    // ── LIVE STREETEASY SEARCH ────────────────────────────────────────────────
+    // For buyer/renter queries with specific neighborhoods, search SE in real-time
+    // so GPT has current market listings — not just inbox emails.
+    let seContext = ''
+    const shouldSearchSE = (isMyBuyerQuery || isRentalQuery || isRenterInquiryQuery) && mentionedNeighborhoods.length > 0
+    if (shouldSearchSE) {
+      try {
+        const { searchStreetEasyListings } = await import('@/lib/streetEasySync')
+        const seListings = await searchStreetEasyListings({
+          neighborhoods: mentionedNeighborhoods,
+          minBeds:  queryMinBeds,
+          maxBeds:  queryMaxBeds,
+          minPrice: queryMinPrice,
+          maxPrice: queryMaxPrice,
+          isRental: isRentalQuery || isRenterInquiryQuery,
+          limit:    15,
+        })
+        if (seListings.length > 0) {
+          seContext = `\n\nLIVE STREETEASY LISTINGS (${seListings.length} currently on market):\n` +
+            seListings.map(l =>
+              `- ${l.address}${l.beds != null ? ` | ${l.beds}BR` : ''}${l.baths != null ? ` | ${l.baths}BA` : ''}${l.sqft ? ` | ${l.sqft.toLocaleString()}sqft` : ''} | ${l.price ? '$' + l.price.toLocaleString() : 'price TBD'}${l.daysOnMarket != null ? ` | ${l.daysOnMarket}d on market` : ''} | ${l.url}`
+            ).join('\n')
+        }
+      } catch { /* non-fatal — SE API may be unavailable */ }
+    }
 
     // ── NEW RETRIEVAL PIPELINE (shadow mode) ─────────────────────────────────
     // Runs in parallel with old pipeline. When USE_NEW_RETRIEVAL_PIPELINE=true,
@@ -683,7 +723,7 @@ export async function POST(req: NextRequest) {
       : ''
 
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: `${SYSTEM_PROMPT}${rateContext}${acrisContext}${dobContext}${calendarContext}${matchContext}\n\n${shadowContext}${mojoContext}` },
+      { role: 'system', content: `${SYSTEM_PROMPT}${rateContext}${acrisContext}${dobContext}${calendarContext}${matchContext}\n\n${shadowContext}${mojoContext}${seContext}` },
       ...conversationHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
       { role: 'user', content: userContent },
     ]
