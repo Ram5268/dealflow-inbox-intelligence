@@ -175,8 +175,8 @@ export async function POST(req: NextRequest) {
       isSponsorUnitQuery        ? [Category.SPONSOR_UNIT, Category.DEVELOPMENT_INVENTORY] :
       isNewDevQuery             ? [Category.DEVELOPMENT_INVENTORY, Category.SPONSOR_UNIT, Category.COMING_SOON_SALE, Category.COMING_SOON_DEVELOPMENT] :
       isOffMarketQuery          ? [Category.OFF_MARKET_SALE, Category.COMING_SOON_SALE, Category.COMING_SOON_DEVELOPMENT] :
-      // Buyer + coming soon: pre-market sale-side primary, rental secondary (scored lower via matchScore)
-      (isMyBuyerQuery && isComingSoonSaleQuery) ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE, Category.COMING_SOON_DEVELOPMENT, Category.COMING_SOON_RENTAL] :
+      // Buyer + coming soon: pre-market sale-side only, no rentals
+      (isMyBuyerQuery && isComingSoonSaleQuery) ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE, Category.COMING_SOON_DEVELOPMENT] :
       // General coming soon = pre-market (coming soon + off-market are the same concept)
       isComingSoonSaleQuery     ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE, Category.COMING_SOON_DEVELOPMENT] :
       isMarketReportQuery       ? [Category.MARKET_REPORT] :
@@ -679,22 +679,7 @@ export async function POST(req: NextRequest) {
       .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
       .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
       .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
-    // Compute matchScore per deal — used by the UI ring instead of raw confidenceScore.
-    // COMING_SOON_RENTAL records are capped at 50% for buyer queries (secondary info only).
-    const deals = dealsToReturn
-      .sort((a, b) => {
-        if (isMyBuyerQuery && a.category !== b.category) {
-          if (a.category === Category.COMING_SOON_RENTAL) return 1
-          if (b.category === Category.COMING_SOON_RENTAL) return -1
-        }
-        return 0
-      })
-      .map(d => ({
-        ...d,
-        matchScore: (isMyBuyerQuery && d.category === Category.COMING_SOON_RENTAL)
-          ? Math.min(d.confidenceScore, 0.5)
-          : d.confidenceScore,
-      }))
+    const deals = dealsToReturn.map(d => ({ ...d, matchScore: d.confidenceScore }))
 
     const storedMsg = files.length > 0
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`
