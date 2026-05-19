@@ -43,43 +43,29 @@ const HOOD_TO_BOROUGH: Record<string, string> = {
   'st. george': 'staten-island', stapleton: 'staten-island',
 }
 
-function buildStreetEasySlugUrl(
+function buildStreetEasyBuildingUrl(
   address: string,
   neighborhood: string | null,
-  category: string,
 ): string {
-  const isRental = ['RENTAL_LISTING', 'COMING_SOON_RENTAL'].includes(category)
-  const type = isRental ? 'rental' : 'sale'
-
-  // Find the last street type suffix in the address, then anything after it is the unit.
-  // This correctly handles: "109 Devoe Street GARDEN-2", "535 Dean Street 204", "56 Court Street" (no unit)
+  // Strip unit designator — building page slug is street address only
+  // e.g. "109 Devoe Street GARDEN-2" → "109-devoe-street-brooklyn"
   const STREET_TYPES = /\b(street|avenue|boulevard|road|drive|place|court|lane|terrace|circle|parkway|highway|st|ave|blvd|rd|dr|pl|ct|ln|ter|pkwy)\b\.?/gi
   const typeMatches = [...address.matchAll(STREET_TYPES)]
 
-  let street = address
-  let unit = ''
-
+  let streetPart = address
   if (typeMatches.length > 0) {
     const last = typeMatches[typeMatches.length - 1]
-    const afterType = address.slice((last.index ?? 0) + last[0].length).trim()
-    // Strip APT/UNIT/# prefix if present, then treat the rest as unit
-    const rawUnit = afterType.replace(/^(?:apt\.?\s*|unit\s*|#\s*)/i, '').trim()
-    // Exclude compass directions that are part of the street name (Park Ave South, etc.)
-    const COMPASS = new Set(['south', 'north', 'east', 'west'])
-    if (rawUnit && !COMPASS.has(rawUnit.toLowerCase())) {
-      street = address.slice(0, (last.index ?? 0) + last[0].length).trim()
-      unit = rawUnit
-    }
+    // Keep everything up to and including the street type suffix, drop the unit
+    streetPart = address.slice(0, (last.index ?? 0) + last[0].length).trim()
   }
 
   const borough = HOOD_TO_BOROUGH[(neighborhood ?? '').toLowerCase()] ?? 'new-york'
-  const streetSlug = street.toLowerCase()
+  const slug = streetPart.toLowerCase()
     .replace(/[.']/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
 
-  const unitSlug = unit ? `/${unit.toLowerCase().replace(/[^a-z0-9-]/g, '-')}` : ''
-  return `https://streeteasy.com/${type}/${streetSlug}-${borough}${unitSlug}`
+  return `https://streeteasy.com/building/${slug}-${borough}`
 }
 
 function getStreetEasyUrl(
@@ -99,11 +85,10 @@ function getStreetEasyUrl(
   const text = (bodyContent ?? '') + (attachmentsText ?? '')
   const m = text.match(/https?:\/\/streeteasy\.com\/[^\s"'<>)\]]+/i)
   if (m) return m[0].replace(/[,\.!?]+$/, '')
-  // 3. Construct slug URL from address — goes to the exact building/unit page
-  //    e.g. streeteasy.com/sale/109-devoe-street-brooklyn/garden-2
-  if (address && SE_LISTABLE.has(category)) {
-    return buildStreetEasySlugUrl(address, neighborhood ?? null, category)
-  }
+  // 3. No reliable fallback without the API listing ID — named developments like
+  //    "Newswalk Phase 3" can't be derived from the street address alone.
+  //    The detail page API will trigger a real-time SE lookup on first view.
+  return null
   return null
 }
 
