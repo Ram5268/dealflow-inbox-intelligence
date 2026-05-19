@@ -414,13 +414,13 @@ function records(rawEmailId: string) {
       extractedSummary:'Confirmed: Friday May 23 at 11:00 AM at 230 Ashland Place #22C Fort Greene. Ask for Marcus at front desk.' },
 
     // ── MARKET REPORTS ───────────────────────────────────────────────────────
-    { ...base, category:'MARKET_REPORT', transactionType:'INFORMATIONAL',
+    { ...base, category:'MARKET_REPORT', transactionType:'UNKNOWN',
       neighborhood:'Brooklyn', borough:'Brooklyn',
       sourceAgentName:'Research Team', sourceBrokerage:'Douglas Elliman',
       extractedTitle:'Douglas Elliman Q1 2026 Brooklyn Market Report',
       extractedSummary:'Brooklyn Q1 2026: Median sale price $895K (+4.2% YoY). Days on market down to 38. Inventory tightest in Park Slope and Williamsburg. Rental market softening slightly in outer neighborhoods.' },
 
-    { ...base, category:'MARKET_REPORT', transactionType:'INFORMATIONAL',
+    { ...base, category:'MARKET_REPORT', transactionType:'UNKNOWN',
       neighborhood:'Manhattan', borough:'Manhattan',
       sourceBrokerage:'StreetEasy Research',
       extractedTitle:'StreetEasy April 2026 Manhattan Market Update',
@@ -436,14 +436,29 @@ async function main() {
   const data = records(rawEmailId)
   console.log(`Seeding ${data.length} test opportunities...`)
 
+  // Check if records already exist — if so, just generate missing embeddings
+  const existingCount = await prisma.extractedOpportunity.count({ where: { isTestData: true } })
+  const skipCreate = existingCount >= data.length
+  if (skipCreate) console.log(`  ${existingCount} records already exist — skipping create, generating embeddings only...`)
+
   let created = 0
   let embedded = 0
 
-  for (const record of data) {
+  const existingOpps = skipCreate
+    ? await prisma.extractedOpportunity.findMany({ where: { isTestData: true }, select: { id: true, category: true, address: true, neighborhood: true, borough: true, price: true, minPrice: true, maxPrice: true, beds: true, baths: true, propertyType: true, extractedTitle: true, extractedSummary: true, sourceBrokerage: true } })
+    : []
+
+  const oppsToEmbed = skipCreate ? existingOpps : []
+
+  for (const record of (skipCreate ? [] : data)) {
     const opp = await prisma.extractedOpportunity.create({ data: record as never })
     created++
+    oppsToEmbed.push(opp as never)
 
-    // Generate embedding for semantic search
+  }
+
+  const total = oppsToEmbed.length
+  for (const opp of oppsToEmbed) {
     try {
       const text = buildOpportunityText({
         category:         opp.category,
@@ -468,16 +483,14 @@ async function main() {
         WHERE id = ${opp.id}
       `
       embedded++
-      process.stdout.write(`\r  ${created}/${data.length} created, ${embedded} embedded`)
-    } catch (e) {
-      // Non-fatal — record exists without embedding
+      process.stdout.write(`\r  ${embedded}/${total} embeddings generated`)
+    } catch {
+      // Non-fatal
     }
-
-    // Small delay to avoid OpenAI rate limits
     await new Promise(r => setTimeout(r, 100))
   }
 
-  console.log(`\n\n✅ Done — ${created} opportunities created, ${embedded} embeddings generated.`)
+  console.log(`\n\n✅ Done — ${created} created, ${embedded}/${total} embeddings generated.`)
   console.log(`   To delete all test data: npx tsx --no-cache scripts/clear-test-data.ts`)
 }
 
