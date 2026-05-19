@@ -27,11 +27,11 @@ export async function GET() {
 
   return NextResponse.json({
     test1_url: url1,
-    test1_count: listings.length,
-    test1_firstListing: firstListing,
-    test1_allKeys: firstListing ? Object.keys(firstListing) : [],
+    test1_status: r1.status,
+    test1_raw: raw1,               // full raw response
+    test1_topLevelKeys: Object.keys(raw1),
     test2_url: url2,
-    test2_count: ((raw2.listings as unknown[]) ?? []).length,
-    test2_firstListing: ((raw2.listings as Record<string, unknown>[] | undefined) ?? [])[0] ?? null,
+    test2_status: r2.status,
+    test2_raw: raw2,
   })
 }
