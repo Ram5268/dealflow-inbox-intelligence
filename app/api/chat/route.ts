@@ -174,11 +174,11 @@ export async function POST(req: NextRequest) {
       isLandlordLeadQuery       ? [Category.LANDLORD_LEAD] :
       isSponsorUnitQuery        ? [Category.SPONSOR_UNIT, Category.DEVELOPMENT_INVENTORY] :
       isNewDevQuery             ? [Category.DEVELOPMENT_INVENTORY, Category.SPONSOR_UNIT, Category.COMING_SOON_SALE, Category.COMING_SOON_DEVELOPMENT] :
-      isOffMarketQuery          ? [Category.OFF_MARKET_SALE, Category.COMING_SOON_SALE] :
-      // Buyer + coming soon: sale-side primary, rental secondary (scored lower via matchScore)
-      (isMyBuyerQuery && isComingSoonSaleQuery) ? [Category.COMING_SOON_SALE, Category.COMING_SOON_DEVELOPMENT, Category.COMING_SOON_RENTAL] :
-      // General coming soon: strictly pre-market, no active/off-market
-      isComingSoonSaleQuery     ? [Category.COMING_SOON_SALE, Category.COMING_SOON_DEVELOPMENT] :
+      isOffMarketQuery          ? [Category.OFF_MARKET_SALE, Category.COMING_SOON_SALE, Category.COMING_SOON_DEVELOPMENT] :
+      // Buyer + coming soon: pre-market sale-side primary, rental secondary (scored lower via matchScore)
+      (isMyBuyerQuery && isComingSoonSaleQuery) ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE, Category.COMING_SOON_DEVELOPMENT, Category.COMING_SOON_RENTAL] :
+      // General coming soon = pre-market (coming soon + off-market are the same concept)
+      isComingSoonSaleQuery     ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE, Category.COMING_SOON_DEVELOPMENT] :
       isMarketReportQuery       ? [Category.MARKET_REPORT] :
       isRealEstateEventQuery    ? [Category.REAL_ESTATE_EVENT, Category.OPEN_HOUSE] :
       isSaleQuery               ? [Category.ACTIVE_SALE_LISTING, Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE,
