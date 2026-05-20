@@ -655,11 +655,11 @@ export async function POST(req: NextRequest) {
           minPrice: queryMinPrice,
           maxPrice: queryMaxPrice,
           isRental: isRentalQuery || isRenterInquiryQuery,
-          limit:    15,
+          limit:    200,
         })
 
         const listingLines = seListings.map(l =>
-          `- ${l.address}${l.beds != null ? ` | ${l.beds}BR` : ''}${l.baths != null ? ` | ${l.baths}BA` : ''}${l.sqft ? ` | ${l.sqft.toLocaleString()}sqft` : ''} | ${l.price ? '$' + l.price.toLocaleString() : 'price TBD'}${l.daysOnMarket != null ? ` | ${l.daysOnMarket}d on market` : ''} | ${l.url}`
+          `- $${l.price?.toLocaleString() ?? 'TBD'} | ${l.url}`
         ).join('\n')
 
         seContext = `\n\nLIVE STREETEASY LISTINGS (active on market, filtered to exact criteria):\n` +

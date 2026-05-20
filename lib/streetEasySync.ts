@@ -2,7 +2,7 @@ import { prisma } from './prisma'
 import { normalizeAddress } from './properties/normalizeAddress'
 
 const RAPIDAPI_KEY  = process.env.RAPIDAPI_KEY  ?? ''
-const RAPIDAPI_HOST = process.env.RAPIDAPI_SE_HOST ?? 'streeteasy-api.p.rapidapi.com'
+const RAPIDAPI_HOST = process.env.RAPIDAPI_SE_HOST ?? 'nyc-real-estate-api.p.rapidapi.com'
 const BASE_URL      = `https://${RAPIDAPI_HOST}`
 
 // Supply-side categories that have real listings to check
@@ -12,9 +12,35 @@ const CHECKABLE_CATEGORIES = new Set([
   'DEVELOPMENT_INVENTORY', 'COMING_SOON_DEVELOPMENT', 'SPONSOR_UNIT',
 ])
 
-// NYC neighborhood → StreetEasy area slug mapping
+// Lat/lng bounding boxes for NYC neighborhoods — used to filter
+// broad borough search results down to the specific neighborhood
+const NEIGHBORHOOD_BOUNDS: Record<string, [number,number,number,number]> = {
+  // [minLat, maxLat, minLng, maxLng]
+  'williamsburg':       [40.700, 40.730, -73.975, -73.920],
+  'greenpoint':         [40.723, 40.745, -73.960, -73.925],
+  'bushwick':           [40.695, 40.720, -73.940, -73.906],
+  'bed-stuy':           [40.677, 40.700, -73.960, -73.928],
+  'bedford-stuyvesant': [40.677, 40.700, -73.960, -73.928],
+  'crown heights':      [40.660, 40.682, -73.960, -73.932],
+  'park slope':         [40.660, 40.685, -73.992, -73.963],
+  'carroll gardens':    [40.674, 40.690, -74.006, -73.983],
+  'cobble hill':        [40.683, 40.695, -74.002, -73.988],
+  'boerum hill':        [40.681, 40.693, -73.992, -73.975],
+  'brooklyn heights':   [40.691, 40.706, -74.000, -73.983],
+  'dumbo':              [40.701, 40.710, -73.993, -73.979],
+  'fort greene':        [40.685, 40.700, -73.982, -73.965],
+  'clinton hill':       [40.685, 40.700, -73.972, -73.957],
+  'prospect heights':   [40.672, 40.685, -73.972, -73.956],
+  'red hook':           [40.670, 40.683, -74.020, -74.000],
+  'gowanus':            [40.668, 40.682, -73.996, -73.980],
+  'astoria':            [40.762, 40.788, -73.940, -73.910],
+  'long island city':   [40.735, 40.762, -73.960, -73.930],
+}
+
+// NYC neighborhood → StreetEasy area slug mapping for nyc-real-estate-api.p.rapidapi.com
+// This API uses borough-level slugs for Brooklyn/Queens, and all-* for Manhattan areas
 const NEIGHBORHOOD_TO_SE_AREA: Record<string, string> = {
-  // Manhattan Downtown (below 14th St)
+  // Manhattan — confirmed working area slugs on nyc-real-estate-api
   'Financial District': 'all-downtown', 'FiDi': 'all-downtown',
   'Tribeca': 'all-downtown', 'SoHo': 'all-downtown', 'NoHo': 'all-downtown',
   'Nolita': 'all-downtown', 'Little Italy': 'all-downtown', 'Chinatown': 'all-downtown',
@@ -22,7 +48,6 @@ const NEIGHBORHOOD_TO_SE_AREA: Record<string, string> = {
   'Two Bridges': 'all-downtown', 'Battery Park City': 'all-downtown',
   'Greenwich Village': 'all-downtown', 'West Village': 'all-downtown',
   'East Village': 'all-downtown', 'Hudson Square': 'all-downtown',
-  // Manhattan Midtown (14th–59th St)
   'Chelsea': 'all-midtown', 'West Chelsea': 'all-midtown',
   'Flatiron': 'all-midtown', 'NoMad': 'all-midtown',
   "Hell's Kitchen": 'all-midtown', 'Hells Kitchen': 'all-midtown', 'Clinton': 'all-midtown',
@@ -32,37 +57,31 @@ const NEIGHBORHOOD_TO_SE_AREA: Record<string, string> = {
   'Midtown South': 'all-midtown', 'Hudson Yards': 'all-midtown',
   'Turtle Bay': 'all-midtown', 'Sutton Place': 'all-midtown',
   'Stuyvesant Town': 'all-midtown', 'Peter Cooper Village': 'all-midtown',
-  // Manhattan Upper West Side + north (west of Central Park)
   'Upper West Side': 'all-upper-west-side', 'Lincoln Square': 'all-upper-west-side',
-  'Manhattan Valley': 'all-upper-west-side', 'Riverside': 'all-upper-west-side',
-  'Morningside Heights': 'all-upper-west-side', 'Hamilton Heights': 'all-upper-west-side',
-  'Washington Heights': 'washington-heights', 'Inwood': 'inwood',
-  'Manhattanville': 'all-upper-west-side',
-  // Manhattan Upper East Side + north (east of Central Park)
+  'Manhattan Valley': 'all-upper-west-side', 'Morningside Heights': 'all-upper-west-side',
+  'Hamilton Heights': 'all-upper-west-side', 'Washington Heights': 'all-upper-west-side',
+  'Inwood': 'all-upper-west-side', 'Manhattanville': 'all-upper-west-side',
   'Upper East Side': 'all-upper-east-side', 'Lenox Hill': 'all-upper-east-side',
   'Yorkville': 'all-upper-east-side', 'Carnegie Hill': 'all-upper-east-side',
   'Upper Carnegie Hill': 'all-upper-east-side', 'Roosevelt Island': 'all-upper-east-side',
-  // Manhattan Harlem
-  'Harlem': 'harlem', 'East Harlem': 'east-harlem', 'Spanish Harlem': 'east-harlem',
-  // Brooklyn
-  'Williamsburg': 'williamsburg', 'Greenpoint': 'greenpoint', 'Bushwick': 'bushwick',
-  'Bed-Stuy': 'bedford-stuyvesant', 'Bedford-Stuyvesant': 'bedford-stuyvesant',
-  'Crown Heights': 'crown-heights', 'Park Slope': 'park-slope',
-  'Carroll Gardens': 'carroll-gardens', 'Cobble Hill': 'cobble-hill',
-  'Boerum Hill': 'boerum-hill', 'Brooklyn Heights': 'brooklyn-heights',
-  'DUMBO': 'dumbo', 'Fort Greene': 'fort-greene', 'Clinton Hill': 'clinton-hill',
-  'Prospect Heights': 'prospect-heights', 'Red Hook': 'red-hook',
-  'Gowanus': 'gowanus', 'Windsor Terrace': 'windsor-terrace',
-  'Bay Ridge': 'bay-ridge', 'Sunset Park': 'sunset-park',
-  'Greenwood': 'greenwood', 'Flatbush': 'flatbush', 'Ditmas Park': 'ditmas-park',
-  'Kensington': 'kensington', 'Midwood': 'midwood', 'Sheepshead Bay': 'sheepshead-bay',
-  'Brighton Beach': 'brighton-beach', 'Coney Island': 'coney-island',
-  'Bensonhurst': 'bensonhurst', 'Gravesend': 'gravesend', 'Dyker Heights': 'dyker-heights',
-  'Canarsie': 'canarsie', 'Brownsville': 'brownsville', 'East New York': 'east-new-york',
-  // Queens
-  'Astoria': 'astoria', 'Long Island City': 'long-island-city', 'LIC': 'long-island-city',
-  'Sunnyside': 'sunnyside', 'Jackson Heights': 'jackson-heights',
-  'Forest Hills': 'forest-hills', 'Rego Park': 'rego-park', 'Flushing': 'flushing',
+  'Harlem': 'all-upper-west-side', 'East Harlem': 'all-upper-east-side',
+  // Brooklyn — all use 'brooklyn' slug, filtered by lat/lng bounding box
+  'Williamsburg': 'brooklyn', 'Greenpoint': 'brooklyn', 'Bushwick': 'brooklyn',
+  'Bed-Stuy': 'brooklyn', 'Bedford-Stuyvesant': 'brooklyn', 'Crown Heights': 'brooklyn',
+  'Park Slope': 'brooklyn', 'Carroll Gardens': 'brooklyn', 'Cobble Hill': 'brooklyn',
+  'Boerum Hill': 'brooklyn', 'Brooklyn Heights': 'brooklyn', 'DUMBO': 'brooklyn',
+  'Fort Greene': 'brooklyn', 'Clinton Hill': 'brooklyn', 'Prospect Heights': 'brooklyn',
+  'Red Hook': 'brooklyn', 'Gowanus': 'brooklyn', 'Windsor Terrace': 'brooklyn',
+  'Bay Ridge': 'brooklyn', 'Sunset Park': 'brooklyn', 'Greenwood': 'brooklyn',
+  'Flatbush': 'brooklyn', 'Ditmas Park': 'brooklyn', 'Kensington': 'brooklyn',
+  'Midwood': 'brooklyn', 'Sheepshead Bay': 'brooklyn', 'Brighton Beach': 'brooklyn',
+  'Coney Island': 'brooklyn', 'Bensonhurst': 'brooklyn', 'Gravesend': 'brooklyn',
+  'Dyker Heights': 'brooklyn', 'Canarsie': 'brooklyn', 'Brownsville': 'brooklyn',
+  'East New York': 'brooklyn', 'Downtown Brooklyn': 'brooklyn',
+  // Queens — all use 'queens' slug, filtered by lat/lng
+  'Astoria': 'queens', 'Long Island City': 'queens', 'LIC': 'queens',
+  'Sunnyside': 'queens', 'Jackson Heights': 'queens',
+  'Forest Hills': 'queens', 'Rego Park': 'queens', 'Flushing': 'queens',
 }
 
 // ── Core API request ──────────────────────────────────────────────────────────
@@ -130,26 +149,44 @@ export async function searchStreetEasyListings(params: {
   if (minPrice != null) qs.set('minPrice', String(minPrice))
   if (maxPrice != null) qs.set('maxPrice', String(maxPrice))
 
+  // Build bounding box from requested neighborhoods for post-filter
+  const lowerNeighborhoods = neighborhoods.map(n => n.toLowerCase())
+  const bounds = lowerNeighborhoods
+    .map(n => NEIGHBORHOOD_BOUNDS[n])
+    .filter(Boolean) as [number,number,number,number][]
+
   try {
     const data = await seRequest(`${endpoint}?${qs}`) as { listings?: Record<string, unknown>[] }
     const listings = data.listings ?? []
+    console.log('[SE search] raw results:', listings.length)
 
     return listings
-      .filter(l => l.id)
+      .filter(l => {
+        if (!l.id) return false
+        // Apply bounding box filter if we have bounds for the requested neighborhoods
+        if (bounds.length > 0) {
+          const lat = Number(l.latitude)
+          const lng = Number(l.longitude)
+          return bounds.some(([minLat, maxLat, minLng, maxLng]) =>
+            lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng
+          )
+        }
+        return true
+      })
       .map(l => {
         const id = String(l.id)
         return {
           id,
-          url:          l.url ? String(l.url) : `https://www.streeteasy.com/${isRental ? 'rental' : 'sale'}/${id}`,
-          address:      String(l.address ?? l.fullAddress ?? ''),
+          url:          String(l.url ?? `https://www.streeteasy.com/${isRental ? 'rental' : 'sale'}/${id}`),
+          address:      '',   // not returned in basic search — user gets full details on SE
           price:        l.price != null ? Number(l.price) : null,
-          beds:         l.bedrooms ?? l.beds != null ? Number(l.bedrooms ?? l.beds) : null,
-          baths:        l.bathrooms ?? l.baths != null ? Number(l.bathrooms ?? l.baths) : null,
-          sqft:         l.sqft ?? l.squareFeet != null ? Number(l.sqft ?? l.squareFeet) : null,
-          neighborhood: l.area ?? l.neighborhood != null ? String(l.area ?? l.neighborhood) : null,
-          status:       String(l.status ?? 'active'),
-          daysOnMarket: l.daysOnMarket != null ? Number(l.daysOnMarket) : null,
-          description:  l.description != null ? String(l.description).slice(0, 200) : null,
+          beds:         null, // not returned in basic search
+          baths:        null,
+          sqft:         null,
+          neighborhood: null,
+          status:       String(l.status ?? 'open'),
+          daysOnMarket: null,
+          description:  null,
         }
       })
   } catch {
