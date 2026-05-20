@@ -12,12 +12,20 @@ import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────
 
+interface SEListing {
+  id: string
+  url: string
+  price: number | null
+}
+
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
   deals?: (ExtractedOpportunity & { matchScore?: number; streetEasyUrl?: string | null })[]
   suggestions?: string[]
+  seListings?: SEListing[]
+  seFilterUrl?: string | null
   createdAt: string
 }
 
@@ -387,6 +395,29 @@ function MemoryView({
                       }}>
                         {m.content}
                       </div>
+
+                      {/* StreetEasy search button — shown whenever we have a filter URL */}
+                      {m.seFilterUrl && (
+                        <div style={{ marginTop: 10, marginLeft: 4 }}>
+                          <a
+                            href={m.seFilterUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 8,
+                              padding: '10px 16px', borderRadius: 22,
+                              background: 'rgba(255,255,255,0.08)',
+                              border: '1px solid rgba(255,255,255,0.18)',
+                              textDecoration: 'none',
+                            }}
+                          >
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, fontWeight: 500, color: '#fff', letterSpacing: '0.06em' }}>
+                              SEARCH STREETEASY
+                            </span>
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(120,200,220,0.9)' }}>↗</span>
+                          </a>
+                        </div>
+                      )}
 
                       {/* Inline action chip — only on latest AI reply that has deals */}
                       {isLatestAI && (m.deals?.length ?? 0) > 0 && (
@@ -887,7 +918,7 @@ function ChatPageInner() {
       })
       const data = await res.json()
       if (data.sessionId) setCurrentSessionId(data.sessionId)
-      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], createdAt: new Date().toISOString() }])
+      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, createdAt: new Date().toISOString() }])
     } catch {
       setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: 'Something went wrong. Try again.', createdAt: new Date().toISOString() }])
     } finally { setLoading(false) }

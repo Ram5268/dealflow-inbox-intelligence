@@ -634,10 +634,11 @@ export async function POST(req: NextRequest) {
     // For buyer/renter queries with specific neighborhoods, search SE in real-time
     // so GPT has current market listings — not just inbox emails.
     let seContext = ''
+    let liveSeListings: { id: string; url: string; price: number | null }[] = []
+    let seFilterUrl: string | null = null
     const shouldSearchSE = (isMyBuyerQuery || isRentalQuery || isRenterInquiryQuery) && mentionedNeighborhoods.length > 0
     if (shouldSearchSE) {
-      // Build the filtered StreetEasy browse URL regardless of API results
-      const seFilterUrl = buildStreetEasyFilterUrl({
+      seFilterUrl = buildStreetEasyFilterUrl({
         neighborhoods: mentionedNeighborhoods,
         minBeds:  queryMinBeds,
         maxBeds:  queryMaxBeds,
@@ -647,26 +648,23 @@ export async function POST(req: NextRequest) {
       })
 
       try {
-        const { searchStreetEasyListings } = await import('@/lib/streetEasySync')
-        const seListings = await searchStreetEasyListings({
-          neighborhoods: mentionedNeighborhoods,
-          minBeds:  queryMinBeds,
-          maxBeds:  queryMaxBeds,
-          minPrice: queryMinPrice,
-          maxPrice: queryMaxPrice,
-          isRental: isRentalQuery || isRenterInquiryQuery,
-          limit:    200,
-        })
+        // Playwright browser scraper — navigates to the SE filter URL and
+        // intercepts StreetEasy's internal API responses to get all listings.
+        if (seFilterUrl) {
+          const { scrapeStreetEasyWithBrowser } = await import('@/lib/streetEasyBrowser')
+          liveSeListings = await scrapeStreetEasyWithBrowser(seFilterUrl)
+        }
+        console.log('[SE browser] liveSeListings:', liveSeListings.length)
 
-        const listingLines = seListings.map(l =>
+        const listingLines = liveSeListings.map(l =>
           `- $${l.price?.toLocaleString() ?? 'TBD'} | ${l.url}`
         ).join('\n')
 
         seContext = `\n\nLIVE STREETEASY LISTINGS (active on market, filtered to exact criteria):\n` +
-          (seListings.length > 0 ? listingLines : '(no individual listings returned by API this query)') +
+          (liveSeListings.length > 0 ? listingLines : '(no individual listings returned by API this query)') +
           (seFilterUrl ? `\n\nBrowse all matching listings on StreetEasy: ${seFilterUrl}` : '')
-      } catch {
-        // API unavailable — still show the filtered browse URL
+      } catch (err) {
+        console.error('[SE search] error:', err)
         if (seFilterUrl) {
           seContext = `\n\nBrowse matching listings on StreetEasy: ${seFilterUrl}`
         }
@@ -925,7 +923,7 @@ export async function POST(req: NextRequest) {
       await prisma.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
     }
 
-    return NextResponse.json({ sessionId: session.id, response: cleanResponse, deals, suggestions: aiResult.suggestions ?? [] })
+    return NextResponse.json({ sessionId: session.id, response: cleanResponse, deals, suggestions: aiResult.suggestions ?? [], seListings: liveSeListings, seFilterUrl })
   } catch (err) {
     console.error('[DealFlow] Chat API error:', err)
     return NextResponse.json(
