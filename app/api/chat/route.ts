@@ -648,13 +648,19 @@ export async function POST(req: NextRequest) {
       })
 
       try {
-        // Playwright browser scraper — navigates to the SE filter URL and
-        // intercepts StreetEasy's internal API responses to get all listings.
-        if (seFilterUrl) {
-          const { scrapeStreetEasyWithBrowser } = await import('@/lib/streetEasyBrowser')
-          liveSeListings = await scrapeStreetEasyWithBrowser(seFilterUrl)
-        }
-        console.log('[SE browser] liveSeListings:', liveSeListings.length)
+        // RapidAPI fallback — borough-level search, ~1-2 results per query.
+        // Full inventory available via daily hotsheet sync in DB.
+        const { searchStreetEasyListings } = await import('@/lib/streetEasySync')
+        liveSeListings = await searchStreetEasyListings({
+          neighborhoods: mentionedNeighborhoods,
+          minBeds:  queryMinBeds,
+          maxBeds:  queryMaxBeds,
+          minPrice: queryMinPrice,
+          maxPrice: queryMaxPrice,
+          isRental: isRentalQuery || isRenterInquiryQuery,
+          limit:    50,
+        })
+        console.log('[SE search] liveSeListings:', liveSeListings.length)
 
         const listingLines = liveSeListings.map(l =>
           `- $${l.price?.toLocaleString() ?? 'TBD'} | ${l.url}`
