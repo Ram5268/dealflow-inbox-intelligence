@@ -224,26 +224,47 @@ model MojoRaw {
 }
 
 model MojoContact {
-  id           String   @id @default(cuid())
-  mojoId       String   @unique
-  fullName     String
-  phone        String?
-  email        String?
-  address      String?
-  city         String?
-  state        String?
-  zipCode      String?
-  neighborhood String?
-  status       String?
-  tags         String[]
-  notes        String?
-  mojoGroup    String?
-  mojoList     String?
-  lastCalled   DateTime?
-  embedding    Unsupported("vector(1536)")?
-  syncedAt     DateTime @default(now())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id               String   @id @default(cuid())
+  mojoId           String   @unique
+  fullName         String
+  phone            String?
+  email            String?
+  address          String?
+  city             String?
+  state            String?
+  zipCode          String?
+  neighborhood     String?
+  status           String?
+  tags             String[]
+  notes            String?
+  mojoGroup        String?
+  mojoList         String?
+  groups           String[]                      // Mojo groups (NYC Hot, NYC Nurture, etc.)
+  lastCalled       DateTime?
+  lastDialDate     DateTime?
+  estimatedValue   Float?
+  equityBalance    Float?
+  currentLTV       Float?
+  totalLoanBalance Float?
+  loanInterestRate Float?
+  embedding        Unsupported("vector(1536)")?
+  syncedAt         DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  instantlyEvents  InstantlyEvent[]
+}
+
+model InstantlyEvent {
+  id           String      @id @default(cuid())
+  email        String
+  contactId    String?
+  contact      MojoContact? @relation(fields: [contactId], references: [id])
+  campaignId   String?
+  campaignName String?
+  eventType    String      // opened | replied | bounced | clicked | interested | unsubscribed
+  payload      Json?
+  occurredAt   DateTime    @default(now())
+  createdAt    DateTime    @default(now())
 }
 
 model Match {

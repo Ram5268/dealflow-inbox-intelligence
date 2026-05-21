@@ -43,10 +43,38 @@ export async function POST(req: NextRequest) {
     const zipCode  = String(c.property_zip_code ?? c.zip_code ?? c.zipCode ?? '')
     const phone    = String(c.phone ?? c.phone_number ?? '')
     const email    = String(c.email ?? c.email_address ?? '')
-    const status   = String(c.status ?? c.lead_status ?? '')
+    const status   = String(c.status ?? c.lead_status ?? c['Call Result'] ?? c.call_result ?? '')
     const notes    = String(c.notes ?? c.call_notes ?? '')
-    const mojoList = String(c.list_name ?? c.group_name ?? c.mojoList ?? '')
+    const mojoList = String(c.list_name ?? c['List Name'] ?? c.group_name ?? c.mojoList ?? '')
     const tags: string[] = Array.isArray(c.tags) ? c.tags.map(String) : []
+
+    // Groups — may arrive as array or comma-separated string
+    const rawGroups = c.groups ?? c.Groups ?? c['Groups'] ?? null
+    const groups: string[] = Array.isArray(rawGroups)
+      ? rawGroups.map(String).filter(Boolean)
+      : typeof rawGroups === 'string' && rawGroups.trim()
+        ? rawGroups.split(',').map(s => s.trim()).filter(Boolean)
+        : []
+
+    // Date fields
+    const parseDate = (v: unknown): Date | null => {
+      if (!v) return null
+      const d = new Date(String(v))
+      return isNaN(d.getTime()) ? null : d
+    }
+    const lastCalled    = parseDate(c['Last Contact Date'] ?? c.last_contact_date ?? c.lastCalled)
+    const lastDialDate  = parseDate(c['Last Dial Date'] ?? c.last_dial_date ?? c.lastDialDate)
+
+    // Financial fields
+    const toFloat = (v: unknown): number | null => {
+      const n = parseFloat(String(v ?? ''))
+      return isNaN(n) ? null : n
+    }
+    const estimatedValue   = toFloat(c['Estimated Value']        ?? c.estimated_value)
+    const equityBalance    = toFloat(c['Equity Current Balance'] ?? c.equity_current_balance)
+    const currentLTV       = toFloat(c['Current LTV']           ?? c.current_ltv)
+    const totalLoanBalance = toFloat(c['Total Loan Balance']     ?? c.total_loan_balance)
+    const loanInterestRate = toFloat(c['Loan Interest Rate']     ?? c.loan_interest_rate)
 
     // Derive neighborhood from city/address for NYC leads
     const neighborhood = deriveNeighborhood(city, address, zipCode)
@@ -57,31 +85,44 @@ export async function POST(req: NextRequest) {
     await prisma.$executeRaw`
       INSERT INTO "MojoContact" (
         id, "mojoId", "fullName", phone, email, address, city, state, "zipCode",
-        neighborhood, status, tags, notes, "mojoGroup", "mojoList", "syncedAt", "createdAt", "updatedAt",
-        embedding
+        neighborhood, status, tags, notes, "mojoGroup", "mojoList", groups,
+        "lastCalled", "lastDialDate",
+        "estimatedValue", "equityBalance", "currentLTV", "totalLoanBalance", "loanInterestRate",
+        "syncedAt", "createdAt", "updatedAt", embedding
       ) VALUES (
         gen_random_uuid()::text, ${mojoId}, ${fullName}, ${phone || null}, ${email || null},
         ${address || null}, ${city || null}, ${state || null}, ${zipCode || null},
         ${neighborhood || null}, ${status || null}, ${tags}, ${notes || null},
-        ${'NYC Leads'}, ${mojoList || null}, NOW(), NOW(), NOW(),
+        ${'NYC Leads'}, ${mojoList || null}, ${groups},
+        ${lastCalled}, ${lastDialDate},
+        ${estimatedValue}, ${equityBalance}, ${currentLTV}, ${totalLoanBalance}, ${loanInterestRate},
+        NOW(), NOW(), NOW(),
         ${embedding ? `[${embedding.join(',')}]` : null}::vector
       )
       ON CONFLICT ("mojoId") DO UPDATE SET
-        "fullName"     = EXCLUDED."fullName",
-        phone          = EXCLUDED.phone,
-        email          = EXCLUDED.email,
-        address        = EXCLUDED.address,
-        city           = EXCLUDED.city,
-        state          = EXCLUDED.state,
-        "zipCode"      = EXCLUDED."zipCode",
-        neighborhood   = EXCLUDED.neighborhood,
-        status         = EXCLUDED.status,
-        tags           = EXCLUDED.tags,
-        notes          = EXCLUDED.notes,
-        "mojoList"     = EXCLUDED."mojoList",
-        "syncedAt"     = NOW(),
-        "updatedAt"    = NOW(),
-        embedding      = COALESCE(EXCLUDED.embedding, "MojoContact".embedding)
+        "fullName"         = EXCLUDED."fullName",
+        phone              = EXCLUDED.phone,
+        email              = EXCLUDED.email,
+        address            = EXCLUDED.address,
+        city               = EXCLUDED.city,
+        state              = EXCLUDED.state,
+        "zipCode"          = EXCLUDED."zipCode",
+        neighborhood       = EXCLUDED.neighborhood,
+        status             = COALESCE(EXCLUDED.status, "MojoContact".status),
+        tags               = EXCLUDED.tags,
+        notes              = COALESCE(EXCLUDED.notes, "MojoContact".notes),
+        "mojoList"         = COALESCE(EXCLUDED."mojoList", "MojoContact"."mojoList"),
+        groups             = CASE WHEN array_length(EXCLUDED.groups, 1) > 0 THEN EXCLUDED.groups ELSE "MojoContact".groups END,
+        "lastCalled"       = COALESCE(EXCLUDED."lastCalled", "MojoContact"."lastCalled"),
+        "lastDialDate"     = COALESCE(EXCLUDED."lastDialDate", "MojoContact"."lastDialDate"),
+        "estimatedValue"   = COALESCE(EXCLUDED."estimatedValue", "MojoContact"."estimatedValue"),
+        "equityBalance"    = COALESCE(EXCLUDED."equityBalance", "MojoContact"."equityBalance"),
+        "currentLTV"       = COALESCE(EXCLUDED."currentLTV", "MojoContact"."currentLTV"),
+        "totalLoanBalance" = COALESCE(EXCLUDED."totalLoanBalance", "MojoContact"."totalLoanBalance"),
+        "loanInterestRate" = COALESCE(EXCLUDED."loanInterestRate", "MojoContact"."loanInterestRate"),
+        "syncedAt"         = NOW(),
+        "updatedAt"        = NOW(),
+        embedding          = COALESCE(EXCLUDED.embedding, "MojoContact".embedding)
     `
     upserted++
   }

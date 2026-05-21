@@ -571,8 +571,11 @@ export async function POST(req: NextRequest) {
       ? rawDealsToReturn.filter(o => categoryFilter.includes(o.category))
       : rawDealsToReturn
 
-    // Mojo seller leads — queried in parallel when neighborhood or seller lead context detected
-    const mojoContacts = (searchNeighborhoods.length > 0 || isSellerLeadQuery || isMyBuyerQuery)
+    // Detect email campaign queries
+    const isEmailCampaignQuery = /replied|email|campaign|opened|instantly|outreach/i.test(userMessage)
+
+    // Mojo seller leads — queried when neighborhood, seller lead, or email campaign context detected
+    const mojoContacts = (searchNeighborhoods.length > 0 || isSellerLeadQuery || isMyBuyerQuery || isEmailCampaignQuery)
       ? await prisma.mojoContact.findMany({
           where: searchNeighborhoods.length > 0 ? {
             OR: searchNeighborhoods.flatMap(n => [
@@ -583,6 +586,13 @@ export async function POST(req: NextRequest) {
           } : {},
           orderBy: { syncedAt: 'desc' },
           take: 20,
+          include: {
+            instantlyEvents: {
+              orderBy: { occurredAt: 'desc' },
+              take: 1,
+              select: { eventType: true, campaignName: true, occurredAt: true },
+            },
+          },
         })
       : []
 
@@ -597,9 +607,16 @@ export async function POST(req: NextRequest) {
     const mojoContext = mojoContacts.length > 0
       ? '\n\nMOJO SELLER LEADS (' + mojoContacts.length + ' contacts from CRM):\n' +
         mojoContacts.map(c => {
-          const match = mojoMatches.find(m => m.id === c.id)
+          const match     = mojoMatches.find(m => m.id === c.id)
           const matchFlag = match ? ' ⚡ MATCHES BUYER ISO' : ''
-          return `[MOJO:${c.id}] ${c.fullName} | ${c.address ?? ''}${c.city ? ', ' + c.city : ''} | ${c.neighborhood ?? ''} | ${c.status ?? ''} | ${c.mojoList ?? ''} | ph: ${c.phone ?? ''}${c.notes ? ' | notes: ' + c.notes.slice(0, 120) : ''}${matchFlag}`
+          const lastEvent = (c as typeof c & { instantlyEvents: { eventType: string; campaignName: string | null; occurredAt: Date }[] }).instantlyEvents?.[0]
+          const emailFlag = lastEvent
+            ? ` | ✉️ ${lastEvent.eventType.replace(/_/g, ' ')}${lastEvent.campaignName ? ' (' + lastEvent.campaignName + ')' : ''}`
+            : ''
+          const groupFlag = (c as typeof c & { groups: string[] }).groups?.length
+            ? ` | groups: ${(c as typeof c & { groups: string[] }).groups.join(', ')}`
+            : ''
+          return `[MOJO:${c.id}] ${c.fullName} | ${c.address ?? ''}${c.city ? ', ' + c.city : ''} | ${c.neighborhood ?? ''} | ${c.status ?? ''} | ${c.mojoList ?? ''}${groupFlag} | ph: ${c.phone ?? ''}${c.notes ? ' | notes: ' + c.notes.slice(0, 100) : ''}${emailFlag}${matchFlag}`
         }).join('\n')
       : ''
 
