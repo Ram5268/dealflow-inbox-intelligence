@@ -5,7 +5,7 @@ import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
 
-const INSTANTLY_API = 'https://api.instantly.ai/api/v1'
+const INSTANTLY_API = 'https://api.instantly.ai/api/v2'
 
 async function embedContact(c: {
   fullName: string; address?: string | null; city?: string | null;
@@ -21,13 +21,15 @@ async function embedContact(c: {
 // Calls Instantly API to unsubscribe an email from a specific campaign.
 // Fire-and-forget — webhook response never waits on this.
 async function unsubscribeFromInstantly(email: string, campaignId: string) {
-  const apiKey = process.env.INSTANTLY_API_KEY
-  if (!apiKey) return
+  if (!process.env.INSTANTLY_API_KEY) return
   try {
-    await fetch(`${INSTANTLY_API}/lead/delete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_key: apiKey, campaign_id: campaignId, delete_list: [email] }),
+    await fetch(`${INSTANTLY_API}/leads/delete`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.INSTANTLY_API_KEY}`,
+      },
+      body: JSON.stringify({ campaign_id: campaignId, emails: [email] }),
     })
   } catch (e) {
     console.error('[Mojo Webhook] Instantly unsubscribe failed:', (e as Error).message)

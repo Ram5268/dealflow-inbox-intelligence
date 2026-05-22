@@ -3,29 +3,29 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isSuppressed } from '@/lib/suppression'
 
-const INSTANTLY_API = 'https://api.instantly.ai/api/v1'
-const BATCH_SIZE = 100
+const INSTANTLY_API = 'https://api.instantly.ai/api/v2'
+const BATCH_SIZE = 500
 
 interface InstantlyLead {
   email: string
   first_name?: string
   last_name?: string
+  phone?: string
   custom_variables?: Record<string, string>
 }
 
-async function addLeadsToInstantly(campaignId: string, leads: InstantlyLead[]) {
-  const apiKey = process.env.INSTANTLY_API_KEY
-  if (!apiKey) throw new Error('INSTANTLY_API_KEY not set')
+function instantlyHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${process.env.INSTANTLY_API_KEY}`,
+  }
+}
 
-  const res = await fetch(`${INSTANTLY_API}/lead/add`, {
+async function addLeadsToInstantly(campaignId: string, leads: InstantlyLead[]) {
+  const res = await fetch(`${INSTANTLY_API}/leads/add`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: apiKey,
-      campaign_id: campaignId,
-      skip_if_in_workspace: true,
-      leads,
-    }),
+    headers: instantlyHeaders(),
+    body: JSON.stringify({ campaign_id: campaignId, leads }),
   })
   if (!res.ok) {
     const text = await res.text()
@@ -106,8 +106,8 @@ export async function POST(req: NextRequest) {
         email: c.email!,
         first_name: firstName || undefined,
         last_name:  lastName  || undefined,
+        phone:      c.phone   || undefined,
         custom_variables: {
-          ...(c.phone   ? { phone:   c.phone }   : {}),
           ...(c.address ? { address: c.address } : {}),
           ...(c.city    ? { city:    c.city }    : {}),
         },
