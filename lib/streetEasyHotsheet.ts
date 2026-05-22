@@ -1,9 +1,16 @@
-// StreetEasy hotsheet fetcher — full rewrite with proper HTML parsing,
-// pagination support, and complete field extraction including StreetEasy IDs.
+// StreetEasy hotsheet fetcher — uses Playwright (headless Chromium) to bypass
+// PerimeterX bot detection. A single browser instance is reused across all pages
+// in a sync run and closed when done.
 
 import { prisma } from './prisma'
 import { buildOpportunityText, upsertOpportunityEmbedding, semanticSearch } from './embeddings'
 import { Category, TransactionType } from '@prisma/client'
+import { chromium as chromiumExtra } from 'playwright-extra'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const StealthPlugin = require('puppeteer-extra-plugin-stealth')
+import type { Browser, BrowserContext } from 'playwright'
+
+chromiumExtra.use(StealthPlugin())
 
 export interface HotsheetListing {
   streetEasyId:  string | null   // numeric ID or path slug (e.g. "1829216")
@@ -22,28 +29,71 @@ export interface HotsheetListing {
   listingType:   'sale' | 'rental'
 }
 
-// ── Fetch a single page ───────────────────────────────────────────────────────
-async function fetchPage(url: string): Promise<string> {
-  const rememberToken = decodeURIComponent(process.env.SE_REMEMBER_USER_TOKEN ?? '')
-  const authToken     = decodeURIComponent(process.env.SE_USER_AUTH_TOKEN ?? '')
+// ── Browser lifecycle — one instance per sync run ────────────────────────────
+let _browser: Browser | null = null
+let _context: BrowserContext | null = null
 
-  const res = await fetch(url, {
-    headers: {
-      Cookie: `remember_user_token=${rememberToken}; user_auth_token=${authToken}`,
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      Accept: 'text/html',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
+async function getBrowserContext(): Promise<BrowserContext> {
+  if (!_browser || !_browser.isConnected()) {
+    _browser = await chromiumExtra.launch({
+      headless: true,
+      args: [
+        '--disable-blink-features=AutomationControlled',
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+      ],
+    })
+    const rememberToken = decodeURIComponent(process.env.SE_REMEMBER_USER_TOKEN ?? '')
+    const authToken     = decodeURIComponent(process.env.SE_USER_AUTH_TOKEN ?? '')
+    _context = await _browser.newContext({
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      locale: 'en-US',
+      viewport: { width: 1280, height: 800 },
+      extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
+    })
+    await _context.addCookies([
+      { name: 'remember_user_token', value: rememberToken, domain: '.streeteasy.com', path: '/' },
+      { name: 'user_auth_token',     value: authToken,     domain: '.streeteasy.com', path: '/' },
+    ])
+  }
+  return _context!
+}
+
+export async function closeBrowser() {
+  if (_browser) { await _browser.close(); _browser = null; _context = null }
+}
+
+// ── Fetch a single page via headless Chromium ─────────────────────────────────
+// Playwright executes the PerimeterX JS challenge automatically so the page
+// loads as it would in a real browser.
+async function fetchPage(url: string): Promise<string> {
+  const ctx  = await getBrowserContext()
+  const page = await ctx.newPage()
+
+  // Hide webdriver flag so PerimeterX doesn't detect headless Chrome
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false })
   })
 
-  if (!res.ok) throw new Error(`StreetEasy returned ${res.status} for ${url}`)
-  const html = await res.text()
+  try {
+    // Use 'load' not 'networkidle' — PerimeterX keeps XHR alive indefinitely
+    await page.goto(url, { waitUntil: 'load', timeout: 30_000 })
 
-  if (html.includes('Access to this page has been denied') || html.includes('Press & Hold')) {
-    throw new Error('StreetEasy bot detection triggered — refresh session cookies in .env')
+    // Wait for either real listing content OR confirmed block (max 20s)
+    await Promise.race([
+      page.waitForSelector("div.bold", { timeout: 20_000 }).catch(() => {}),
+      page.waitForSelector('.search-results', { timeout: 20_000 }).catch(() => {}),
+      page.waitForTimeout(20_000),
+    ])
+
+    const html = await page.content()
+    if (html.includes('Access to this page has been denied') || html.includes('_pxAppId')) {
+      throw new Error('StreetEasy PerimeterX challenge not solved — try again later')
+    }
+    return html
+  } finally {
+    await page.close()
   }
-
-  return html
 }
 
 // ── Parse all listings from one page of HTML ──────────────────────────────────
@@ -276,6 +326,7 @@ export async function runHotsheetSync(dateOverride?: string): Promise<{
   }
 
   console.log(`[Hotsheet] Done ${date} — ${salesCount} new sales, ${rentalsCount} new rentals, ${matchCount} buyer matches`)
+  await closeBrowser()
   return { sales: salesCount, rentals: rentalsCount, matches: matchCount, date }
 }
 
