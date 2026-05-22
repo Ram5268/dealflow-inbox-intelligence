@@ -239,19 +239,21 @@ model MojoContact {
   notes            String?
   mojoGroup        String?
   mojoList         String?
-  groups           String[]                      // Mojo groups (NYC Hot, NYC Nurture, etc.)
-  lastCalled       DateTime?
-  lastDialDate     DateTime?
-  estimatedValue   Float?
-  equityBalance    Float?
-  currentLTV       Float?
-  totalLoanBalance Float?
-  loanInterestRate Float?
-  embedding        Unsupported("vector(1536)")?
-  syncedAt         DateTime @default(now())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  instantlyEvents  InstantlyEvent[]
+  groups              String[]
+  lastCalled          DateTime?
+  lastDialDate        DateTime?
+  estimatedValue      Float?
+  equityBalance       Float?
+  currentLTV          Float?
+  totalLoanBalance    Float?
+  loanInterestRate    Float?
+  embedding           Unsupported("vector(1536)")?
+  instantlyStatus     String?   // null | "enrolled" | "suppressed" | "unsubscribed"
+  instantlyCampaignId String?
+  syncedAt            DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  instantlyEvents     InstantlyEvent[]
 }
 
 model InstantlyEvent {

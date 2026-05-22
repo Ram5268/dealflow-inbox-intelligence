@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isSuppressed } from '@/lib/suppression'
 import OpenAI from 'openai'
 
 export const dynamic = 'force-dynamic'
+
+const INSTANTLY_API = 'https://api.instantly.ai/api/v1'
 
 async function embedContact(c: {
   fullName: string; address?: string | null; city?: string | null;
@@ -15,8 +18,23 @@ async function embedContact(c: {
   return res.data[0].embedding
 }
 
+// Calls Instantly API to unsubscribe an email from a specific campaign.
+// Fire-and-forget — webhook response never waits on this.
+async function unsubscribeFromInstantly(email: string, campaignId: string) {
+  const apiKey = process.env.INSTANTLY_API_KEY
+  if (!apiKey) return
+  try {
+    await fetch(`${INSTANTLY_API}/lead/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ api_key: apiKey, campaign_id: campaignId, delete_list: [email] }),
+    })
+  } catch (e) {
+    console.error('[Mojo Webhook] Instantly unsubscribe failed:', (e as Error).message)
+  }
+}
+
 export async function POST(req: NextRequest) {
-  // Validate shared secret so only API Nation can call this
   const secret = req.headers.get('x-mojo-secret')
   if (process.env.MOJO_WEBHOOK_SECRET && secret !== process.env.MOJO_WEBHOOK_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -27,7 +45,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  // API Nation may send a single contact or an array
   const contacts = Array.isArray(body) ? body : [body]
   let upserted = 0
 
@@ -48,7 +65,6 @@ export async function POST(req: NextRequest) {
     const mojoList = String(c.list_name ?? c['List Name'] ?? c.group_name ?? c.mojoList ?? '')
     const tags: string[] = Array.isArray(c.tags) ? c.tags.map(String) : []
 
-    // Groups — may arrive as array or comma-separated string
     const rawGroups = c.groups ?? c.Groups ?? c['Groups'] ?? null
     const groups: string[] = Array.isArray(rawGroups)
       ? rawGroups.map(String).filter(Boolean)
@@ -56,16 +72,14 @@ export async function POST(req: NextRequest) {
         ? rawGroups.split(',').map(s => s.trim()).filter(Boolean)
         : []
 
-    // Date fields
     const parseDate = (v: unknown): Date | null => {
       if (!v) return null
       const d = new Date(String(v))
       return isNaN(d.getTime()) ? null : d
     }
-    const lastCalled    = parseDate(c['Last Contact Date'] ?? c.last_contact_date ?? c.lastCalled)
-    const lastDialDate  = parseDate(c['Last Dial Date'] ?? c.last_dial_date ?? c.lastDialDate)
+    const lastCalled   = parseDate(c['Last Contact Date'] ?? c.last_contact_date ?? c.lastCalled)
+    const lastDialDate = parseDate(c['Last Dial Date'] ?? c.last_dial_date ?? c.lastDialDate)
 
-    // Financial fields
     const toFloat = (v: unknown): number | null => {
       const n = parseFloat(String(v ?? ''))
       return isNaN(n) ? null : n
@@ -76,8 +90,20 @@ export async function POST(req: NextRequest) {
     const totalLoanBalance = toFloat(c['Total Loan Balance']     ?? c.total_loan_balance)
     const loanInterestRate = toFloat(c['Loan Interest Rate']     ?? c.loan_interest_rate)
 
-    // Derive neighborhood from city/address for NYC leads
     const neighborhood = deriveNeighborhood(city, address, zipCode)
+
+    // Read existing Instantly state before the upsert
+    const existing = await prisma.mojoContact.findUnique({
+      where: { mojoId },
+      select: { instantlyStatus: true, instantlyCampaignId: true, email: true },
+    })
+
+    // Determine new Instantly status based on incoming groups
+    const nowSuppressed = isSuppressed(groups, status)
+    let newInstantlyStatus: string | null = existing?.instantlyStatus ?? null
+    if (nowSuppressed && (newInstantlyStatus === null || newInstantlyStatus === 'enrolled')) {
+      newInstantlyStatus = newInstantlyStatus === 'enrolled' ? 'unsubscribed' : 'suppressed'
+    }
 
     let embedding: number[] | null = null
     try { embedding = await embedContact({ fullName, address, city, neighborhood, notes, tags }) } catch { /* non-fatal */ }
@@ -88,6 +114,7 @@ export async function POST(req: NextRequest) {
         neighborhood, status, tags, notes, "mojoGroup", "mojoList", groups,
         "lastCalled", "lastDialDate",
         "estimatedValue", "equityBalance", "currentLTV", "totalLoanBalance", "loanInterestRate",
+        "instantlyStatus",
         "syncedAt", "createdAt", "updatedAt", embedding
       ) VALUES (
         gen_random_uuid()::text, ${mojoId}, ${fullName}, ${phone || null}, ${email || null},
@@ -96,6 +123,7 @@ export async function POST(req: NextRequest) {
         ${'NYC Leads'}, ${mojoList || null}, ${groups},
         ${lastCalled}, ${lastDialDate},
         ${estimatedValue}, ${equityBalance}, ${currentLTV}, ${totalLoanBalance}, ${loanInterestRate},
+        ${newInstantlyStatus},
         NOW(), NOW(), NOW(),
         ${embedding ? `[${embedding.join(',')}]` : null}::vector
       )
@@ -120,17 +148,29 @@ export async function POST(req: NextRequest) {
         "currentLTV"       = COALESCE(EXCLUDED."currentLTV", "MojoContact"."currentLTV"),
         "totalLoanBalance" = COALESCE(EXCLUDED."totalLoanBalance", "MojoContact"."totalLoanBalance"),
         "loanInterestRate" = COALESCE(EXCLUDED."loanInterestRate", "MojoContact"."loanInterestRate"),
+        "instantlyStatus"  = CASE
+          WHEN EXCLUDED."instantlyStatus" = 'unsubscribed' OR EXCLUDED."instantlyStatus" = 'suppressed'
+          THEN EXCLUDED."instantlyStatus"
+          ELSE COALESCE("MojoContact"."instantlyStatus", EXCLUDED."instantlyStatus")
+        END,
         "syncedAt"         = NOW(),
         "updatedAt"        = NOW(),
         embedding          = COALESCE(EXCLUDED.embedding, "MojoContact".embedding)
     `
     upserted++
+
+    // If this contact just became suppressed and was previously enrolled, remove from Instantly
+    const wasEnrolled = existing?.instantlyStatus === 'enrolled'
+    const campaignId  = existing?.instantlyCampaignId
+    const contactEmail = email || existing?.email
+    if (wasEnrolled && nowSuppressed && campaignId && contactEmail) {
+      unsubscribeFromInstantly(contactEmail, campaignId)
+    }
   }
 
   return NextResponse.json({ ok: true, upserted })
 }
 
-// Simple neighborhood inference for NYC zip codes / city values
 function deriveNeighborhood(city: string, address: string, zip: string): string | null {
   const combined = `${city} ${address} ${zip}`.toLowerCase()
   const NYC_ZIPS: Record<string, string> = {
@@ -149,7 +189,6 @@ function deriveNeighborhood(city: string, address: string, zip: string): string 
   }
   const matchedZip = Object.entries(NYC_ZIPS).find(([z]) => combined.includes(z))
   if (matchedZip) return matchedZip[1]
-  // Fall back to using city as neighborhood for Brooklyn/Queens sub-areas
   if (combined.includes('brooklyn')) return 'brooklyn'
   if (combined.includes('queens')) return 'queens'
   if (combined.includes('bronx')) return 'bronx'
