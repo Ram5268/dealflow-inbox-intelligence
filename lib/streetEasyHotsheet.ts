@@ -1,16 +1,11 @@
-// StreetEasy hotsheet fetcher — uses Playwright (headless Chromium) to bypass
-// PerimeterX bot detection. A single browser instance is reused across all pages
-// in a sync run and closed when done.
+// StreetEasy hotsheet fetcher — uses ScrapingBee to bypass PerimeterX.
+// ScrapingBee renders JavaScript in a real browser on a residential IP,
+// solving the challenge automatically before returning the HTML.
 
 import { prisma } from './prisma'
 import { buildOpportunityText, upsertOpportunityEmbedding, semanticSearch } from './embeddings'
+import { scoreMatch } from './matchmaking'
 import { Category, TransactionType } from '@prisma/client'
-import { chromium as chromiumExtra } from 'playwright-extra'
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const StealthPlugin = require('puppeteer-extra-plugin-stealth')
-import type { Browser, BrowserContext } from 'playwright'
-
-chromiumExtra.use(StealthPlugin())
 
 export interface HotsheetListing {
   streetEasyId:  string | null   // numeric ID or path slug (e.g. "1829216")
@@ -29,72 +24,38 @@ export interface HotsheetListing {
   listingType:   'sale' | 'rental'
 }
 
-// ── Browser lifecycle — one instance per sync run ────────────────────────────
-let _browser: Browser | null = null
-let _context: BrowserContext | null = null
-
-async function getBrowserContext(): Promise<BrowserContext> {
-  if (!_browser || !_browser.isConnected()) {
-    _browser = await chromiumExtra.launch({
-      headless: true,
-      args: [
-        '--disable-blink-features=AutomationControlled',
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-      ],
-    })
-    const rememberToken = decodeURIComponent(process.env.SE_REMEMBER_USER_TOKEN ?? '')
-    const authToken     = decodeURIComponent(process.env.SE_USER_AUTH_TOKEN ?? '')
-    _context = await _browser.newContext({
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      locale: 'en-US',
-      viewport: { width: 1280, height: 800 },
-      extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
-    })
-    await _context.addCookies([
-      { name: 'remember_user_token', value: rememberToken, domain: '.streeteasy.com', path: '/' },
-      { name: 'user_auth_token',     value: authToken,     domain: '.streeteasy.com', path: '/' },
-    ])
-  }
-  return _context!
-}
-
-export async function closeBrowser() {
-  if (_browser) { await _browser.close(); _browser = null; _context = null }
-}
-
-// ── Fetch a single page via headless Chromium ─────────────────────────────────
-// Playwright executes the PerimeterX JS challenge automatically so the page
-// loads as it would in a real browser.
+// ── Fetch a single page via ScrapingBee ──────────────────────────────────────
+// ScrapingBee renders JavaScript in a real browser on a residential IP,
+// solving PerimeterX automatically before returning the HTML.
 async function fetchPage(url: string): Promise<string> {
-  const ctx  = await getBrowserContext()
-  const page = await ctx.newPage()
+  const apiKey = process.env.SCRAPINGBEE_API_KEY
+  if (!apiKey) throw new Error('SCRAPINGBEE_API_KEY not set')
 
-  // Hide webdriver flag so PerimeterX doesn't detect headless Chrome
-  await page.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => false })
+  const params = new URLSearchParams({
+    api_key:    apiKey,
+    url,
+    render_js:  'true',
+    premium_proxy: 'false',
   })
 
-  try {
-    // Use 'load' not 'networkidle' — PerimeterX keeps XHR alive indefinitely
-    await page.goto(url, { waitUntil: 'load', timeout: 30_000 })
+  const res = await fetch(`https://app.scrapingbee.com/api/v1/?${params}`, {
+    method: 'GET',
+    signal: AbortSignal.timeout(60_000),
+  })
 
-    // Wait for either real listing content OR confirmed block (max 20s)
-    await Promise.race([
-      page.waitForSelector("div.bold", { timeout: 20_000 }).catch(() => {}),
-      page.waitForSelector('.search-results', { timeout: 20_000 }).catch(() => {}),
-      page.waitForTimeout(20_000),
-    ])
-
-    const html = await page.content()
-    if (html.includes('Access to this page has been denied') || html.includes('_pxAppId')) {
-      throw new Error('StreetEasy PerimeterX challenge not solved — try again later')
-    }
-    return html
-  } finally {
-    await page.close()
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`ScrapingBee error ${res.status}: ${text.slice(0, 200)}`)
   }
+
+  const html = await res.text()
+  if (html.includes('Access to this page has been denied') || html.includes('_pxAppId')) {
+    throw new Error('StreetEasy PerimeterX challenge not solved — try again later')
+  }
+  return html
 }
+
+export async function closeBrowser() { /* no-op — ScrapingBee is stateless */ }
 
 // ── Parse all listings from one page of HTML ──────────────────────────────────
 function parsePage(html: string, type: 'sale' | 'rental'): HotsheetListing[] {
@@ -274,7 +235,7 @@ async function storeListings(
         } else {
           opp = await prisma.extractedOpportunity.create({ data })
           upserted++
-          matchCount += await findBuyerMatches(type, listing)
+          matchCount += await findBuyerMatches(type, listing, opp.id)
         }
       } else {
         const existing = await prisma.extractedOpportunity.findFirst({
@@ -285,7 +246,7 @@ async function storeListings(
         } else {
           opp = await prisma.extractedOpportunity.create({ data })
           upserted++
-          matchCount += await findBuyerMatches(type, listing)
+          matchCount += await findBuyerMatches(type, listing, opp.id)
         }
       }
 
@@ -331,7 +292,7 @@ export async function runHotsheetSync(dateOverride?: string): Promise<{
 }
 
 // ── Buyer match detection ─────────────────────────────────────────────────────
-async function findBuyerMatches(type: 'sale' | 'rental', listing: HotsheetListing): Promise<number> {
+async function findBuyerMatches(type: 'sale' | 'rental', listing: HotsheetListing, oppId: string): Promise<number> {
   try {
     const query = [
       type === 'sale' ? 'buyer looking to purchase' : 'renter looking for apartment',
@@ -341,19 +302,43 @@ async function findBuyerMatches(type: 'sale' | 'rental', listing: HotsheetListin
     ].filter(Boolean).join(' ')
 
     const matchIds = await semanticSearch(query, 10)
-    const buyers   = await prisma.extractedOpportunity.findMany({
+    const demandRecords = await prisma.extractedOpportunity.findMany({
       where: {
         id:          { in: matchIds },
         category:    { in: type === 'sale' ? [Category.BUYER_ISO] : [Category.RENTER_INQUIRY] },
         isDuplicate: false,
       },
+      select: { id: true, extractedTitle: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true },
     })
 
-    if (buyers.length > 0) {
-      console.log(`[Hotsheet] Match: "${listing.address}" → ${buyers.map(b => b.extractedTitle).join(', ')}`)
+    let matched = 0
+    for (const demand of demandRecords) {
+      const score = scoreMatch(
+        { neighborhood: listing.neighborhood, price: listing.price, beds: listing.beds },
+        { neighborhood: demand.neighborhood,  minPrice: demand.minPrice, maxPrice: demand.maxPrice, beds: demand.beds },
+      )
+      if (score < 50) continue
+
+      // Skip if this pair already has a Match record
+      const existing = await prisma.match.findFirst({
+        where: { opportunityId: oppId, counterpartId: demand.id },
+        select: { id: true },
+      })
+      if (existing) continue
+
+      const reason = `${listing.address} (hotsheet) may match ${demand.extractedTitle} (score ${score})`
+      await prisma.match.create({
+        data: { opportunityId: oppId, counterpartId: demand.id, counterpartType: 'opportunity', score, reason, seen: false },
+      }).catch(() => {})
+
+      console.log(`[Hotsheet] Match written: "${listing.address}" → "${demand.extractedTitle}" (score ${score})`)
+      matched++
     }
-    return buyers.length
-  } catch { return 0 }
+    return matched
+  } catch (e) {
+    console.error('[Hotsheet] findBuyerMatches failed:', (e as Error).message)
+    return 0
+  }
 }
 
 // ── Synthetic raw email for hotsheet records ──────────────────────────────────

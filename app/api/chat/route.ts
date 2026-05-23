@@ -235,54 +235,82 @@ export async function POST(req: NextRequest) {
       if (queryText) semanticIds = await semanticSearch(queryText, 60)
     } catch { /* fall back to recency */ }
 
-    // ── INTENT DETECTION ──────────────────────────────────────────────────────
-    // Priority order matters — check more specific patterns before general ones.
+    // ── LLM INTENT PARSE ─────────────────────────────────────────────────────
+    // Single gpt-4o-mini call parses the query into structured intent.
+    // Falls back to a safe empty-intent object on any error so chat never crashes.
+    const INTENT_PROMPT = `You are an intent parser for a NYC real estate deal intelligence app used by a Douglas Elliman broker.
+Parse the user query and return ONLY valid JSON with no markdown.
 
-    // Demand-side queries (other agents' clients)
-    const isRenterInquiryQuery  = /\brenter inq|\brenter look|\brenters look|\brenter inquir/.test(queryText)
-    // Any phrasing where Ryan is representing a client → wants listings, NOT ISOs
-    const agentHasClient        = /(got|have|i'?ve?\s+got|representing|working\s+with)\s+a\s+(buyer|client|renter|investor)/i.test(queryText)
-                                  || /\b(buyer|client|renter|investor)\s+of\s+mine\b/i.test(queryText)
-                                  || /\bmy\s+(buyer|client|investor|renter)\b/i.test(queryText)
-                                  || /\b(buyer|client)\s+(needs|wants|is\s+look|is\s+search)\b/i.test(queryText)
-                                  || /\bhave a buyer\b|\bgot a buyer\b|\bfor my buyer\b|\bclient look|\bclient need/i.test(queryText)
-    const isBuyerISOQuery       = !agentHasClient
-                                  && /\bbuyer iso|\bbuyers? look|\bbuyers? search|\bisos?\b|\biso for|\bany iso|\bany buyer/.test(queryText)
+Schema:
+{
+  "neighborhoods": string[],    // exact NYC neighborhood names, expanded from natural language ("near Prospect Park" → ["Park Slope","Prospect Heights","Windsor Terrace"])
+  "boroughs": string[],         // ["Brooklyn","Manhattan","Queens","Bronx","Staten Island"]
+  "minPrice": number|null,
+  "maxPrice": number|null,
+  "minBeds": number|null,
+  "maxBeds": number|null,
+  "categories": string[],       // from: ACTIVE_SALE_LISTING, RENTAL_LISTING, BUYER_ISO, RENTER_INQUIRY, COMING_SOON_SALE, COMING_SOON_RENTAL, PRICE_DROP, OFF_MARKET_SALE, BACK_ON_MARKET, SELLER_LEAD, LANDLORD_LEAD, DEVELOPMENT_INVENTORY, SPONSOR_UNIT, OPEN_HOUSE, SHOWING_CONFIRMATION, MARKET_REPORT, REAL_ESTATE_EVENT, CLIENT_CONVERSATION, NOISE
+  "isSellerLeadQuery": boolean, // asking about cold-call prospects or seller leads
+  "isMyBuyerQuery": boolean,    // Ryan has a buyer/client he's representing (wants listings)
+  "isEmailCampaignQuery": boolean, // asking about email replies, opens, Instantly campaign
+  "isCalendarQuery": boolean,   // scheduling, calendar, showings, appointments
+  "isOwnershipQuery": boolean   // deed lookup, who owns, ACRIS, property records
+}
 
-    // Ryan's own clients (wants listings not ISOs)
-    const isMyBuyerQuery        = agentHasClient
+Category mapping examples:
+- open houses → OPEN_HOUSE
+- showings → SHOWING_CONFIRMATION
+- back on market → BACK_ON_MARKET
+- sponsor units / no board approval → SPONSOR_UNIT
+- coming soon rentals / coming available → COMING_SOON_RENTAL
+- new development / new construction → DEVELOPMENT_INVENTORY
+- price drop / reduced / just reduced → PRICE_DROP
+- off market / pocket listing → OFF_MARKET_SALE
+- buyer ISO / any buyers looking → BUYER_ISO
+- renter inquiry / renter looking → RENTER_INQUIRY
+- my buyer / I have a buyer / for my client → ACTIVE_SALE_LISTING (isMyBuyerQuery:true)
+- seller lead / who can I call / cold call → SELLER_LEAD (isSellerLeadQuery:true)
 
-    // Rental-side
-    const isComingSoonRentalQuery = /\bcoming soon rental|\brental coming soon|\bcoming available|\bavailability coming|\bunits coming/.test(queryText)
-    const isRentalQuery           = !isRenterInquiryQuery && !isComingSoonRentalQuery
-                                    && /\brent|\bleas|\btenant|\brenter|\bapartment|\bapts?\b/.test(queryText)
-                                    && !/\bfor sale|\bbuy|\bpurchas|\bcondo|\bco-op|\bcoming soon sale/.test(queryText)
+If the query is general (no specific category), return categories:[].`
 
-    // Sale-side
-    const isComingSoonSaleQuery   = /\bcoming soon sale|\bpre-?market|\boff.?market coming|\bcoming soon\b/.test(queryText)
-                                    && !isComingSoonRentalQuery
-    const isOffMarketQuery        = /\boff.?market|\bpocket listing|\bquiet sale|\bprivate listing/.test(queryText)
-    const isSponsorUnitQuery      = /\bsponsor unit|\boffering plan|\bsponsor sale|\bno board/.test(queryText)
-    const isNewDevQuery           = /\bnew dev|\bnew development|\bnew construction|\bdevelopment inventory/.test(queryText)
-    const isPriceDropQuery        = /\bprice drop|\bprice reduc|\breduced price|\bjust reduced|\bprice cut/.test(queryText)
-    const isBackOnMarketQuery     = /\bback on market|\bback.?on.?market|\breturned to market/.test(queryText)
-    const isOpenHouseQuery        = /\bopen house|\bbroker open|\bbroker preview/.test(queryText)
-    const isSaleQuery             = (isMyBuyerQuery || /\bfor sale\b|\bbuy\b|\bbuying\b|\bpurchas|\bcondo\b|\bco-op\b|\btownhouse\b|\bsponsor\b|\boff.?market|\bback.?on.?market|\bnew dev|\bcoming soon/.test(queryText))
-                                    && !isRentalQuery && !isRenterInquiryQuery && !isComingSoonRentalQuery
+    interface ParsedIntent {
+      neighborhoods:       string[]
+      boroughs:            string[]
+      minPrice:            number | null
+      maxPrice:            number | null
+      minBeds:             number | null
+      maxBeds:             number | null
+      categories:          string[]
+      isSellerLeadQuery:   boolean
+      isMyBuyerQuery:      boolean
+      isEmailCampaignQuery:boolean
+      isCalendarQuery:     boolean
+      isOwnershipQuery:    boolean
+    }
+    const SAFE_INTENT: ParsedIntent = {
+      neighborhoods: [], boroughs: [], minPrice: null, maxPrice: null,
+      minBeds: null, maxBeds: null, categories: [],
+      isSellerLeadQuery: false, isMyBuyerQuery: false, isEmailCampaignQuery: false,
+      isCalendarQuery: false, isOwnershipQuery: false,
+    }
+    let intent: ParsedIntent = SAFE_INTENT
+    if (queryText) {
+      try {
+        const intentClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+        const intentRaw = await intentClient.chat.completions.create({
+          model: 'gpt-4o-mini', temperature: 0, max_tokens: 200,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: INTENT_PROMPT },
+            { role: 'user',   content: queryText },
+          ],
+        })
+        const parsed = JSON.parse(intentRaw.choices[0].message.content ?? '{}')
+        intent = { ...SAFE_INTENT, ...parsed }
+      } catch { /* safe fallback — chat continues with empty intent */ }
+    }
 
-    // Lead-side
-    const isSellerLeadQuery     = /\bseller lead|\bsellers? lead|\bwho can i call|\bpotential seller|\bcold call|\bprospect/.test(queryText)
-    const isLandlordLeadQuery   = /\blandlord lead|\blandlords? lead|\blandlord prospect|\brental owner/.test(queryText)
-
-    // Informational
-    const isMarketReportQuery   = /\bmarket report|\bmarket stat|\babsorption|\bmarket data|\bwhat.?s the market|\bmarket condition/.test(queryText)
-    const isRealEstateEventQuery = /\bnetworking event|\bgrand opening|\bbroker event|\bcompany event|\bnew dev event/.test(queryText)
-
-    // Calendar
-    const isCalendarReadQuery   = /\bshowing|\bappointment|\bcalendar|\bschedule|\btoday\b|\btomorrow\b|\bthis week\b|\bwhat.*have|\bavailab/.test(queryText)
-    const isCalendarCreateQuery = /\bschedul|\bbook\b|\bset up\b|\bblock.*time|\badd.*(?:event|meeting|showing|call|appointment)|\bcreate.*(?:event|meeting|appointment)|\bput.*calendar|\bcalendar.*invite|\bsend.*invite/.test(queryText)
-
-    // Check for pending confirmation from last AI message
+    // Calendar confirmation check — based on message history, not query intent
     const lastAssistantMsg = history.filter(m => m.role === 'assistant').slice(-1)[0]
     let lastPendingEvent: Record<string, string> | null = null
     if (lastAssistantMsg?.content) {
@@ -294,31 +322,11 @@ export async function POST(req: NextRequest) {
     const isConfirmMessage = lastPendingEvent != null
       && /\bconfirm\b|\byes\b|\bdo it\b|\blooks good\b|\bgo ahead\b|\badd it\b/.test(queryText)
 
-    // ── CATEGORY FILTER ───────────────────────────────────────────────────────
+    // ── CATEGORY FILTER — from intent ([] means no filter, not "filter for nothing") ──
     const categoryFilter: Category[] | null =
-      isRenterInquiryQuery      ? [Category.RENTER_INQUIRY] :
-      isComingSoonRentalQuery   ? [Category.COMING_SOON_RENTAL] :
-      isRentalQuery             ? [Category.RENTAL_LISTING, Category.COMING_SOON_RENTAL] :
-      isBuyerISOQuery           ? [Category.BUYER_ISO] :
-      isOpenHouseQuery          ? [Category.OPEN_HOUSE] :
-      isPriceDropQuery          ? [Category.PRICE_DROP, Category.BACK_ON_MARKET] :
-      isBackOnMarketQuery       ? [Category.BACK_ON_MARKET] :
-      isSellerLeadQuery         ? [Category.SELLER_LEAD] :
-      isLandlordLeadQuery       ? [Category.LANDLORD_LEAD] :
-      isSponsorUnitQuery        ? [Category.SPONSOR_UNIT, Category.DEVELOPMENT_INVENTORY] :
-      isNewDevQuery             ? [Category.DEVELOPMENT_INVENTORY, Category.SPONSOR_UNIT, Category.COMING_SOON_SALE, Category.COMING_SOON_DEVELOPMENT] :
-      isOffMarketQuery          ? [Category.OFF_MARKET_SALE, Category.COMING_SOON_SALE, Category.COMING_SOON_DEVELOPMENT] :
-      // Buyer + coming soon: pre-market sale-side only, no rentals
-      (isMyBuyerQuery && isComingSoonSaleQuery) ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE, Category.COMING_SOON_DEVELOPMENT] :
-      // General coming soon = pre-market (coming soon + off-market are the same concept)
-      isComingSoonSaleQuery     ? [Category.COMING_SOON_SALE, Category.OFF_MARKET_SALE, Category.COMING_SOON_DEVELOPMENT] :
-      isMarketReportQuery       ? [Category.MARKET_REPORT] :
-      isRealEstateEventQuery    ? [Category.REAL_ESTATE_EVENT, Category.OPEN_HOUSE] :
-      // Active buyer search — no coming-soon/off-market (those need explicit request)
-      isSaleQuery               ? [Category.ACTIVE_SALE_LISTING, Category.BACK_ON_MARKET,
-                                   Category.PRICE_DROP, Category.DEVELOPMENT_INVENTORY,
-                                   Category.SPONSOR_UNIT] :
-      null  // general query — no filter, but defaultExclude still applies below
+      intent.categories.length > 0
+        ? intent.categories.filter(c => Object.values(Category).includes(c as Category)) as Category[]
+        : null
 
     // ── NEIGHBORHOOD EXTRACTION (multi-neighborhood, full NYC map) ─────────
     const ADJACENCY: Record<string, string[]> = {
@@ -427,32 +435,11 @@ export async function POST(req: NextRequest) {
       'glendale':           ['glendale', 'ridgewood', 'middle village', 'maspeth'],
     }
 
-    // Extract ALL neighborhoods mentioned in query (not just first)
-    const allFoundNeighborhoods = Object.keys(ADJACENCY).filter(n => queryText.includes(n))
+    // Use LLM-parsed neighborhoods as seeds for ADJACENCY expansion
+    const mentionedNeighborhoods = intent.neighborhoods.map(n => n.toLowerCase())
 
-    // Also check secondary list for neighborhoods not in adjacency map
-    const secondaryNeighborhoods = [
-      'tribeca','soho','noho','nolita','chelsea','flatiron','gramercy','kips bay','murray hill',
-      'lower east side','east village','little italy','chinatown','two bridges','battery park',
-      'inwood','washington heights','yorkville','lenox hill','morningside heights','harlem',
-      'east harlem','sunnyside','woodside','elmhurst','corona','rego park','kew gardens',
-      'flatbush','gowanus','red hook','cobble hill','boerum hill','fort greene','vinegar hill',
-      'prospect heights','bed-stuy','bedford-stuyvesant','carnegie hill','manhattan valley',
-      'greenwood heights','south slope','clinton hill','east flatbush','ditmas park','brownsville',
-      'hunters point','fresh meadows','jamaica estates','hollis','woodhaven',
-    ].filter(n => !allFoundNeighborhoods.includes(n) && queryText.includes(n))
-
-    const mentionedNeighborhoods = [...allFoundNeighborhoods, ...secondaryNeighborhoods]
-
-    // Borough-level fallback
-    const boroughFallback: string[] = []
-    if (mentionedNeighborhoods.length === 0) {
-      if (queryText.includes('brooklyn')) boroughFallback.push('brooklyn')
-      if (queryText.includes('queens')) boroughFallback.push('queens')
-      if (queryText.includes('bronx')) boroughFallback.push('bronx')
-      if (queryText.includes('staten island')) boroughFallback.push('staten island')
-      if (queryText.includes('manhattan') && !queryText.includes('lower manhattan')) boroughFallback.push('manhattan')
-    }
+    // Borough-level fallback from intent
+    const boroughFallback: string[] = intent.boroughs.map(b => b.toLowerCase())
 
     // Expand each mentioned neighborhood with its adjacents, dedup
     const expandedNeighborhoods = new Set<string>()
@@ -464,30 +451,16 @@ export async function POST(req: NextRequest) {
 
     const searchNeighborhoods: string[] = [...expandedNeighborhoods]
 
-    // Bed range extraction — "3-4 bedroom" → minBeds=3 maxBeds=4, "2BR" → min=max=2
-    // Applied at DB level so GPT never sees records outside the requested range.
-    // Prisma: beds >= N automatically excludes null-bed records (e.g. commercial properties).
-    const bedRangeMatch = queryText.match(/\b(\d+)\s*[-–]\s*(\d+)\s*(?:br|bed|bedroom)/i)
-    const bedSingleMatch = !bedRangeMatch ? queryText.match(/\b(\d+)\s*(?:br|bed|bedroom)/i) : null
-    const queryMinBeds = bedRangeMatch ? parseInt(bedRangeMatch[1]) : bedSingleMatch ? parseInt(bedSingleMatch[1]) : null
-    const queryMaxBeds = bedRangeMatch ? parseInt(bedRangeMatch[2]) : bedSingleMatch ? parseInt(bedSingleMatch[1]) : null
+    // Bed and price filters from LLM-parsed intent
+    const queryMinBeds  = intent.minBeds
+    const queryMaxBeds  = intent.maxBeds
+    const queryMinPrice = intent.minPrice
+    const queryMaxPrice = intent.maxPrice
+
     const bedsClause = [
       ...(queryMinBeds != null ? [{ beds: { gte: queryMinBeds } }] : []),
       ...(queryMaxBeds != null ? [{ beds: { lte: queryMaxBeds } }] : []),
     ]
-
-    // Price extraction for SE live search — "budget of 1.2M", "under $800k", "$1M-$2M"
-    function parsePrice(raw: string): number {
-      const m = raw.replace(/,/g, '').match(/([\d.]+)\s*([kKmM]?)/)
-      if (!m) return 0
-      const n = parseFloat(m[1])
-      const mult = /[mM]/.test(m[2]) ? 1_000_000 : /[kK]/.test(m[2]) ? 1_000 : 1
-      return Math.round(n * mult)
-    }
-    const priceRangeM = queryText.match(/\$?([\d.]+\s*[mMkK]?)\s*(?:to|-)\s*\$?([\d.]+\s*[mMkK]?)/i)
-    const priceUnderM = !priceRangeM ? queryText.match(/(?:under|below|max|budget(?:\s+of)?|up\s+to)\s+\$?([\d.]+\s*[mMkK]?)/i) : null
-    const queryMinPrice = priceRangeM ? parsePrice(priceRangeM[1]) : null
-    const queryMaxPrice = priceRangeM ? parsePrice(priceRangeM[2]) : priceUnderM ? parsePrice(priceUnderM[1]) : null
 
     const catClause = categoryFilter ? [{ category: { in: categoryFilter } }] : []
 
@@ -571,11 +544,8 @@ export async function POST(req: NextRequest) {
       ? rawDealsToReturn.filter(o => categoryFilter.includes(o.category))
       : rawDealsToReturn
 
-    // Detect email campaign queries
-    const isEmailCampaignQuery = /replied|email|campaign|opened|instantly|outreach/i.test(userMessage)
-
     // Mojo seller leads — queried when neighborhood, seller lead, or email campaign context detected
-    const mojoContacts = (searchNeighborhoods.length > 0 || isSellerLeadQuery || isMyBuyerQuery || isEmailCampaignQuery)
+    const mojoContacts = (searchNeighborhoods.length > 0 || intent.isSellerLeadQuery || intent.isMyBuyerQuery || intent.isEmailCampaignQuery)
       ? await prisma.mojoContact.findMany({
           where: searchNeighborhoods.length > 0 ? {
             OR: searchNeighborhoods.flatMap(n => [
@@ -653,7 +623,8 @@ export async function POST(req: NextRequest) {
     let seContext = ''
     let liveSeListings: { id: string; url: string; price: number | null }[] = []
     let seFilterUrl: string | null = null
-    const shouldSearchSE = (isMyBuyerQuery || isRentalQuery || isRenterInquiryQuery) && mentionedNeighborhoods.length > 0
+    const isRentalIntent = intent.categories.some(c => ['RENTAL_LISTING','COMING_SOON_RENTAL','RENTER_INQUIRY'].includes(c))
+    const shouldSearchSE = (intent.isMyBuyerQuery || isRentalIntent) && mentionedNeighborhoods.length > 0
     if (shouldSearchSE) {
       seFilterUrl = buildStreetEasyFilterUrl({
         neighborhoods: mentionedNeighborhoods,
@@ -661,7 +632,7 @@ export async function POST(req: NextRequest) {
         maxBeds:  queryMaxBeds,
         minPrice: queryMinPrice,
         maxPrice: queryMaxPrice,
-        isRental: isRentalQuery || isRenterInquiryQuery,
+        isRental: isRentalIntent,
       })
 
       try {
@@ -674,7 +645,7 @@ export async function POST(req: NextRequest) {
           maxBeds:  queryMaxBeds,
           minPrice: queryMinPrice,
           maxPrice: queryMaxPrice,
-          isRental: isRentalQuery || isRenterInquiryQuery,
+          isRental: isRentalIntent,
           limit:    50,
         })
         console.log('[SE search] liveSeListings:', liveSeListings.length)
@@ -694,35 +665,34 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── NEW RETRIEVAL PIPELINE (shadow mode) ─────────────────────────────────
-    // Runs in parallel with old pipeline. When USE_NEW_RETRIEVAL_PIPELINE=true,
-    // its context replaces the old dbContext. When false, results are logged only.
-    let newPipelineActive = false
-    let shadowContext = dbContext  // default: old context
-
-    try {
-      const flagRow = await prisma.featureFlag.findUnique({ where: { id: 'USE_NEW_RETRIEVAL_PIPELINE' } })
-      newPipelineActive = flagRow?.enabled ?? false
-    } catch { /* flag table not available — stay on old pipeline */ }
-
+    // ── RETRIEVAL PIPELINE ────────────────────────────────────────────────────
+    // New hybrid pipeline: query decomposition + reranking + up to 25 graded results.
+    // Falls back to dbContext (old 60-record merge) if the pipeline throws.
+    let retrievalResult: Awaited<ReturnType<typeof import('@/lib/retrieval')['runRetrieval']>> | null = null
     if (queryText) {
-      // Run new pipeline in background — don't await unless it's active
-      const newPipelinePromise = import('@/lib/retrieval').then(({ runRetrieval }) =>
-        runRetrieval(queryText).catch(() => null)
-      )
+      try {
+        const { runRetrieval } = await import('@/lib/retrieval')
+        retrievalResult = await runRetrieval(queryText)
+        console.log('[Retrieval v2] records:', retrievalResult.records.length, '| durationMs:', retrievalResult.durationMs)
+      } catch (e) {
+        console.error('[retrieval] pipeline failed, falling back to legacy context:', e)
+      }
+    }
+    const shadowContext = retrievalResult?.context ?? dbContext
 
-      if (newPipelineActive) {
-        // Phase 8: use new pipeline context
-        const result = await newPipelinePromise
-        if (result?.context) {
-          shadowContext = result.context
-          console.log('[Retrieval v2] active | intent:', result.parsed.intent, '| records:', result.records.length, '| usedLLM:', result.parsed.usedLLM)
-        }
-      } else {
-        // Shadow mode: log but don't change response
-        newPipelinePromise.then(result => {
-          if (result) console.log('[Retrieval v2 SHADOW]', JSON.stringify(result.shadowLog))
-        }).catch(() => {})
+    // When new pipeline has results, fetch full records for those IDs to use as deal cards.
+    // Falls back to the old dealsToReturn when the pipeline failed or returned nothing.
+    const oppIncludeForCards = { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } }
+    let pipelineDeals: typeof dealsToReturn = dealsToReturn
+    if (retrievalResult && retrievalResult.records.length > 0) {
+      try {
+        const pipelineIds = retrievalResult.records.map((r: { id: string }) => r.id)
+        pipelineDeals = await prisma.extractedOpportunity.findMany({
+          where: { id: { in: pipelineIds } },
+          include: oppIncludeForCards,
+        })
+      } catch {
+        // non-fatal — fall back to old dealsToReturn
       }
     }
 
@@ -759,7 +729,7 @@ export async function POST(req: NextRequest) {
       'sold for', 'last sale', 'sale price', 'what did', 'purchase price',
       'deed', 'look up', 'lien', 'mortgage on', 'bought', 'bought for', 'paid for']
     const messageLower = userMessage.toLowerCase()
-    const acrisTrigger = ACRIS_KEYWORDS.some(k => messageLower.includes(k))
+    const acrisTrigger = intent.isOwnershipQuery || ACRIS_KEYWORDS.some(k => messageLower.includes(k))
     let acrisContext = ''
     if (acrisTrigger) {
       const detectedAddress = extractAddressFromText(userMessage)
@@ -799,7 +769,7 @@ export async function POST(req: NextRequest) {
     }
 
     let calendarContext = ''
-    if (isCalendarReadQuery || isCalendarCreateQuery) {
+    if (intent.isCalendarQuery || isConfirmMessage) {
       try {
         const events = await getCalendarEvents(7)
         calendarContext = formatEventsForAI(events)
@@ -864,7 +834,7 @@ export async function POST(req: NextRequest) {
       model: 'gpt-4o',
       messages,
       temperature: 0.3,
-      max_tokens: 1500,
+      max_tokens: 4000,
     })
 
     const raw = (firstCompletion.choices[0].message.content ?? '').trim()
@@ -897,8 +867,8 @@ export async function POST(req: NextRequest) {
     // Cards = the deals GPT actually cited. Falls back to full dealsToReturn if:
     // (a) GPT cited nothing, or (b) cited IDs that aren't in dealsToReturn (pipeline mismatch).
     const referencedIds: string[] = Array.isArray(aiResult.referencedDeals) ? aiResult.referencedDeals : []
-    const cited = referencedIds.length > 0 ? dealsToReturn.filter(d => referencedIds.includes(d.id)) : []
-    const deals = (cited.length > 0 ? cited : dealsToReturn)
+    const cited = referencedIds.length > 0 ? pipelineDeals.filter(d => referencedIds.includes(d.id)) : []
+    const deals = (cited.length > 0 ? cited : pipelineDeals)
       .map(d => ({
         ...d,
         matchScore: d.confidenceScore,

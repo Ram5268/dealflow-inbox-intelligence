@@ -7,8 +7,27 @@ const SUPPLY_SIDE = new Set([
   'SPONSOR_UNIT', 'OPEN_HOUSE', 'SHOWING_CONFIRMATION',
 ])
 
-// Low-risk informational categories — low confidence is a warning, not a block
 const LOW_RISK = new Set(['MARKET_REPORT', 'REAL_ESTATE_EVENT', 'CLIENT_CONVERSATION'])
+
+// Normalize address for duplicate comparison:
+// expand abbreviations, strip unit identifiers, lowercase, cap at 30 chars
+function normalizeAddress(raw: string): string {
+  return raw
+    .replace(/\bSt\.?\b/gi, 'Street')
+    .replace(/\bAve\.?\b/gi, 'Avenue')
+    .replace(/\bBlvd\.?\b/gi, 'Boulevard')
+    .replace(/\bRd\.?\b/gi, 'Road')
+    .replace(/\bDr\.?\b/gi, 'Drive')
+    .replace(/\bPl\.?\b/gi, 'Place')
+    .replace(/\bW\s+/g, 'West ')
+    .replace(/\bE\s+/g, 'East ')
+    .replace(/\bN\s+/g, 'North ')
+    .replace(/\bS\s+/g, 'South ')
+    .replace(/#\s*\w+|Apt\.?\s*\w+|Unit\s+\w+|Floor\s+\d+/gi, '')
+    .toLowerCase()
+    .trim()
+    .slice(0, 30)
+}
 
 export async function validateResult(
   result: ExtractionResult,
@@ -16,20 +35,16 @@ export async function validateResult(
 ): Promise<ValidationFlag[]> {
   const flags: ValidationFlag[] = []
 
-  // Already flagged by extractor (Zod parse failed)
   if (result.flagReasons?.includes('schema_validation_failed')) {
     flags.push({ reason: 'schema_validation_failed', severity: 'block', message: 'Zod schema validation failed — extractor returned malformed data' })
-    return flags  // no point running further checks
+    return flags
   }
 
-  // Ambiguous classifier
   if (classifierConfidence < 0.55) {
     flags.push({ reason: 'ambiguous_category', severity: 'block', message: `Classifier confidence ${Math.round(classifierConfidence * 100)}% is too low to trust the category` })
   }
 
-  // Missing address on supply-side listings
   if (SUPPLY_SIDE.has(result.category) && !result.address) {
-    // Demand-side-adjacent categories don't need an address (PRICE_DROP, BACK_ON_MARKET sometimes OK)
     const alwaysNeedAddress = ['ACTIVE_SALE_LISTING', 'RENTAL_LISTING', 'COMING_SOON_SALE',
       'COMING_SOON_RENTAL', 'OFF_MARKET_SALE', 'SHOWING_CONFIRMATION', 'OPEN_HOUSE',
       'DEVELOPMENT_INVENTORY', 'SPONSOR_UNIT']
@@ -38,17 +53,14 @@ export async function validateResult(
     }
   }
 
-  // Missing date on showing confirmations
   if (result.category === 'SHOWING_CONFIRMATION' && !result.availabilityDate) {
     flags.push({ reason: 'missing_date', severity: 'block', message: 'Showing confirmation is missing the confirmed date/time' })
   }
 
-  // Price sanity
   if (result.price != null && (result.price > 100_000_000 || result.price < 500)) {
     flags.push({ reason: 'price_sanity', severity: 'block', message: `Price $${result.price.toLocaleString()} is outside plausible range` })
   }
 
-  // Low confidence
   if (result.confidenceScore < 0.65) {
     const isSupply = SUPPLY_SIDE.has(result.category)
     const isLowRisk = LOW_RISK.has(result.category)
@@ -56,22 +68,47 @@ export async function validateResult(
     flags.push({ reason: 'low_confidence', severity, message: `Extraction confidence ${Math.round(result.confidenceScore * 100)}% is below threshold` })
   }
 
-  // Possible duplicate: same address + same category within 30 days
+  // Duplicate detection — normalized address, upsert-not-block logic
   if (result.address && result.category !== 'NOISE') {
     try {
+      const normalized = normalizeAddress(result.address)
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
       const existing = await prisma.extractedOpportunity.findFirst({
         where: {
-          address:         { contains: result.address.slice(0, 20), mode: 'insensitive' },
+          address:         { contains: normalized, mode: 'insensitive' },
           category:        result.category as never,
           isDuplicate:     false,
           processingStatus:{ notIn: ['rejected', 'duplicate'] },
           createdAt:       { gte: thirtyDaysAgo },
         },
-        select: { id: true },
+        select: {
+          id: true, address: true, price: true, beds: true, baths: true,
+          neighborhood: true, sourceAgentName: true, sourceBrokerage: true,
+        },
       })
+
       if (existing) {
-        flags.push({ reason: 'possible_duplicate', severity: 'block', message: `Similar ${result.category} at this address already exists within 30 days` })
+        // Count populated fields to decide which record is richer
+        const existingFilled = [existing.address, existing.price, existing.beds, existing.baths,
+          existing.neighborhood, existing.sourceAgentName, existing.sourceBrokerage]
+          .filter(v => v != null).length
+        const incomingFilled = [result.address, result.price, result.beds, result.baths,
+          result.neighborhood, result.sourceAgentName, result.sourceBrokerage]
+          .filter(v => v != null).length
+
+        if (incomingFilled > existingFilled) {
+          // Incoming is richer — promote it, demote existing
+          await prisma.extractedOpportunity.update({
+            where: { id: existing.id },
+            data: { isDuplicate: true, processingStatus: 'duplicate' },
+          }).catch(() => {})
+          // Don't block the incoming record — let it become active
+        } else {
+          // Existing is richer — block incoming, link it to the canonical record
+          result.duplicateOfId = existing.id
+          flags.push({ reason: 'possible_duplicate', severity: 'block',
+            message: `Richer record for this address already exists (id: ${existing.id})` })
+        }
       }
     } catch { /* non-fatal — skip duplicate check on DB error */ }
   }
@@ -79,7 +116,6 @@ export async function validateResult(
   return flags
 }
 
-// Determine processingStatus from flags
 export function deriveStatus(flags: ValidationFlag[]): string {
   if (flags.some(f => f.severity === 'block')) return 'needs_review'
   return 'active'

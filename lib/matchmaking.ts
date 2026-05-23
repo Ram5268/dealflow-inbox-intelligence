@@ -96,7 +96,7 @@ function bedsScore(listingBeds: number | null | undefined, isoBeds: number | nul
   return 0
 }
 
-function scoreMatch(
+export function scoreMatch(
   listing: { neighborhood?: string | null; price?: number | null; beds?: number | null },
   demand: { neighborhood?: string | null; minPrice?: number | null; maxPrice?: number | null; beds?: number | null }
 ): number {

@@ -158,6 +158,7 @@ export interface ExtractionResult {
   propertyId?:          string | null
   processingStatus?:    string
   flagReasons?:         string[]
+  duplicateOfId?:       string | null
 }
 
 // ── Validation flag types ─────────────────────────────────────────────────────

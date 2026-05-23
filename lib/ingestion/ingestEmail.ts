@@ -138,6 +138,7 @@ export async function ingestEmail(input: ClassifierInput & {
         propertyId,
         processingStatus: status,
         flagReasons,
+        duplicateOfId: r.duplicateOfId ?? null,
       })
     }
 

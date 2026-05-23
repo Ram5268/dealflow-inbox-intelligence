@@ -178,7 +178,8 @@ export async function runIncrementalSync(): Promise<{
               extractedSummary: ext.extractedSummary, classificationReason: ext.classificationReason,
               confidenceScore: ext.confidenceScore,
               processingStatus,
-              propertyId: ext.propertyId ?? null,
+              propertyId:    ext.propertyId    ?? null,
+              duplicateOfId: (ext as unknown as { duplicateOfId?: string | null }).duplicateOfId ?? null,
             },
           })
           newOpps++
@@ -269,7 +270,10 @@ export async function runIncrementalSync(): Promise<{
           await sendPushToAll('DealFlow', body, '/').catch(() => {})
         }
       } catch (e) {
-        console.error('[DealFlow sync] Matchmaking error:', (e as Error).message)
+        console.error('[matchmaking] failed:', e)
+        await prisma.auditLog.create({
+          data: { action: 'matchmaking_failed', detailsJson: { error: (e as Error).message, oppCount: newOppIds.length } },
+        }).catch(() => {})
       }
     }
 

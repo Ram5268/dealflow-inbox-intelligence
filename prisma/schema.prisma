@@ -139,6 +139,7 @@ model ExtractedOpportunity {
   confidenceScore      Float
   isDuplicate          Boolean  @default(false)
   duplicateGroupId     String?
+  duplicateOfId        String?
   embedding            Unsupported("vector(1536)")?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
