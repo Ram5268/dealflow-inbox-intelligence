@@ -28,6 +28,7 @@ KEY DISTINCTIONS:
 - SPONSOR_UNIT: A single specific unit in a new development with its own unit number and price (not a full building announcement).
 - SELLER_LEAD vs ACTIVE_SALE_LISTING: SELLER_LEAD = owner/agent reaching out to Ryan to list. ACTIVE_SALE_LISTING = already listed by another broker.
 - CLIENT_CONVERSATION vs BUYER_ISO/RENTER_INQUIRY: CLIENT_CONVERSATION = direct back-and-forth with one person. BUYER_ISO/RENTER_INQUIRY = blast email broadcasting a client's criteria to many agents.
+- BUYER_ISO vs RENTER_INQUIRY: BUYER_ISO = client wants to PURCHASE (budget in $100K–$10M+ range; words: "buy", "purchase", "closing", "mortgage", "down payment", "co-op", "condo", "townhouse"). RENTER_INQUIRY = client wants to RENT/LEASE (budget is monthly — $1,000–$30,000/mo; words: "rental", "lease", "rent", "per month", "/mo", "monthly", "no fee", "flex", "laundry", "doorman" without purchase language). CRITICAL: a monthly budget like "$8,500" or "$5K/mo" is always RENTER_INQUIRY, never BUYER_ISO.
 
 STEP 3 — needsDeepExtract:
 - true for all supply-side, demand-side, lead-side, OPEN_HOUSE, SHOWING_CONFIRMATION, CLIENT_CONVERSATION
