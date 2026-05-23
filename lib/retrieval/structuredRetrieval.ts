@@ -62,35 +62,26 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
       }
     : {}
 
-  const [neighborhoodResults, broadResults] = await Promise.all([
-    // Pass 1: neighborhood-filtered (exact + adjacent)
-    uniqueNeighborhoods.length > 0
-      ? prisma.extractedOpportunity.findMany({
-          where: { ...where, ...neighborhoodWhere },
-          orderBy: { createdAt: 'desc' },
-          take: 30,
-          select: OPPORTUNITY_SELECT,
-        })
-      : Promise.resolve([]),
-
-    // Pass 2: broader results (borough only or no location filter)
-    prisma.extractedOpportunity.findMany({
-      where,
+  // When a neighborhood filter is present, respect it strictly — only return records
+  // from that neighborhood. Never broaden to other areas when the user asked for a specific place.
+  if (uniqueNeighborhoods.length > 0) {
+    const neighborhoodResults = await prisma.extractedOpportunity.findMany({
+      where: { ...where, ...neighborhoodWhere },
       orderBy: { createdAt: 'desc' },
       take: 40,
       select: OPPORTUNITY_SELECT,
-    }),
-  ])
-
-  // Merge, deduplicate, neighborhood results first
-  const seen = new Set<string>()
-  const merged: typeof broadResults = []
-  for (const r of [...neighborhoodResults, ...broadResults]) {
-    if (!seen.has(r.id)) { seen.add(r.id); merged.push(r) }
-    if (merged.length >= 40) break
+    })
+    return neighborhoodResults.map(toScoredRecord)
   }
 
-  return merged.map(toScoredRecord)
+  // No neighborhood filter — use broad results (borough-level or category-only)
+  const broadResults = await prisma.extractedOpportunity.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: 40,
+    select: OPPORTUNITY_SELECT,
+  })
+  return broadResults.map(toScoredRecord)
 }
 
 const OPPORTUNITY_SELECT = {
