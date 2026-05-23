@@ -266,10 +266,12 @@ Category mapping examples:
 - new development / new construction → DEVELOPMENT_INVENTORY
 - price drop / reduced / just reduced → PRICE_DROP
 - off market / pocket listing → OFF_MARKET_SALE
-- buyer ISO / any buyers looking → BUYER_ISO
-- renter inquiry / renter looking → RENTER_INQUIRY
-- my buyer / I have a buyer / for my client → ACTIVE_SALE_LISTING (isMyBuyerQuery:true)
+- buyer ISO / buyers looking / show me buyers / any buyers in X / 2BR buyers in X → BUYER_ISO (these are OTHER agents' buyer clients from inbox emails — demand-side records)
+- renter inquiry / renters looking / show me renters → RENTER_INQUIRY
+- my buyer / I have a buyer / for my client / find listings for my buyer → ACTIVE_SALE_LISTING (isMyBuyerQuery:true) — Ryan is representing a buyer and wants supply
 - seller lead / who can I call / cold call → SELLER_LEAD (isSellerLeadQuery:true)
+
+CRITICAL RULE: "buyers in [neighborhood]" or "show me buyers" means BUYER_ISO (demand from inbox), NOT listings. Only use isMyBuyerQuery:true when the user says "my buyer" or "I have a buyer".
 
 If the query is general (no specific category), return categories:[].`
 
