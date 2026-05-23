@@ -312,6 +312,19 @@ If the query is general (no specific category), return categories:[].`
       } catch { /* safe fallback — chat continues with empty intent */ }
     }
 
+    // ── Domain-specific intent overrides (deterministic, runs after LLM parse) ──
+    // In this app "buyers" = BUYER_ISO (other agents' inbox demand), never supply listings.
+    // Only "my buyer" / "I have a buyer" / "for my client" means Ryan is representing a buyer.
+    const MY_BUYER_PATTERN = /\bmy\s+buyer\b|\bi\s+have\s+a\s+buyer\b|\bfor\s+my\s+(buyer|client)\b/i
+    if (/\bbuyers?\b/i.test(queryText) && !MY_BUYER_PATTERN.test(queryText)) {
+      intent.categories    = ['BUYER_ISO']
+      intent.isMyBuyerQuery = false
+    }
+    // Same logic for renters — "renters in X" = RENTER_INQUIRY demand records
+    if (/\brenters?\b/i.test(queryText) && !/\bmy\s+renter\b|\bi\s+have\s+a\s+renter\b/i.test(queryText)) {
+      intent.categories = ['RENTER_INQUIRY']
+    }
+
     // Calendar confirmation check — based on message history, not query intent
     const lastAssistantMsg = history.filter(m => m.role === 'assistant').slice(-1)[0]
     let lastPendingEvent: Record<string, string> | null = null
