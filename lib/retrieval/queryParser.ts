@@ -123,7 +123,7 @@ function extractBoroughs(text: string): string[] {
 function detectRentalSale(text: string): boolean | null {
   const lower = text.toLowerCase()
   const rentalWords = ['rental','rent','renting','renter','lease','monthly','per month','/mo','for rent','landlord']
-  const saleWords   = ['sale','buy','purchase','buying','buyer','listing','for sale','asking price','co-op','condo','townhouse']
+  const saleWords   = ['sale','buy','purchase','buying','listing','for sale','asking price','co-op','condo','townhouse']
   const r = rentalWords.some(w => lower.includes(w))
   const s = saleWords.some(w => lower.includes(w))
   if (r && !s) return true
@@ -139,8 +139,9 @@ function detectCategorySignals(text: string): string[] {
     /(got|have|i'?ve?\s+got|representing|working\s+with)\s+a\s+(buyer|client|renter|investor)/i.test(lower) ||
     /\b(buyer|client|renter|investor)\s+of\s+mine\b/i.test(lower) ||
     /\bmy\s+(buyer|client|investor|renter)\b/i.test(lower)
-  if (!agentHasBuyer && /\biso\b|buyer.{0,10}iso/.test(lower)) cats.push('BUYER_ISO')
-  if (/renter.{0,10}(?:iso|looking|need|inquiry)|renter inquiry/.test(lower)) cats.push('RENTER_INQUIRY')
+  // "buyers in X" / "show me buyers" = BUYER_ISO (other agents' inbox demand), not supply listings
+  if (!agentHasBuyer && /\bbuyers?\b/.test(lower)) cats.push('BUYER_ISO')
+  if (!agentHasBuyer && /\brenters?\b/.test(lower)) cats.push('RENTER_INQUIRY')
   if (/off.?market|pocket listing/.test(lower)) cats.push('OFF_MARKET_SALE')
   if (/coming soon/.test(lower)) cats.push('COMING_SOON_SALE','COMING_SOON_RENTAL')
   if (/open house|broker preview/.test(lower)) cats.push('OPEN_HOUSE')
