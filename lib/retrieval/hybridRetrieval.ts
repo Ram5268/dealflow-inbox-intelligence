@@ -55,8 +55,13 @@ export async function hybridRetrieval(
     return withBoost.slice(0, 25)
 
   } else {
-    // Full-table fallback: HNSW search across active records in plan categories
+    // Full-table fallback: HNSW search — only runs when no neighborhood was specified.
+    // When the user asked for a specific neighborhood and nothing matched, return empty
+    // so the LLM correctly says "none found" rather than returning wrong-category records.
     if (plan.searchCategories.length === 0) return []
+    if (plan.filters.neighborhoods.length > 0) return []
+
+    const categoriesArr = `{${plan.searchCategories.map(c => `"${c}"`).join(',')}}`
 
     type RawRow = { id: string; similarity: number }
     const rows = await prisma.$queryRaw<RawRow[]>`
@@ -64,6 +69,7 @@ export async function hybridRetrieval(
       FROM "ExtractedOpportunity"
       WHERE "processingStatus" = 'active'
         AND embedding IS NOT NULL
+        AND category = ANY(${categoriesArr}::text[])
       ORDER BY embedding <=> ${pgVector}::vector
       LIMIT 20
     `

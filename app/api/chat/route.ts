@@ -703,7 +703,10 @@ If the query is general (no specific category), return categories:[].`
       try {
         const pipelineIds = retrievalResult.records.map((r: { id: string }) => r.id)
         pipelineDeals = await prisma.extractedOpportunity.findMany({
-          where: { id: { in: pipelineIds } },
+          where: {
+            id: { in: pipelineIds },
+            ...(categoryFilter ? { category: { in: categoryFilter } } : {}),
+          },
           include: oppIncludeForCards,
         })
       } catch {
