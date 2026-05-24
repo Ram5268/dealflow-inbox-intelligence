@@ -477,6 +477,11 @@ If the query is general (no specific category), return categories:[].`
       ...(queryMaxBeds != null ? [{ beds: { lte: queryMaxBeds } }] : []),
     ]
 
+    const priceClause = [
+      ...(queryMaxPrice != null ? [{ price: { lte: queryMaxPrice } }] : []),
+      ...(queryMinPrice != null ? [{ price: { gte: queryMinPrice } }] : []),
+    ]
+
     const catClause = categoryFilter ? [{ category: { in: categoryFilter } }] : []
 
     const oppWhere = {
@@ -486,6 +491,7 @@ If the query is general (no specific category), return categories:[].`
         { processingStatus: { notIn: ['rejected', 'duplicate', 'stale'] } },
         ...catClause,
         ...bedsClause,
+        ...priceClause,
       ],
     }
     const oppInclude = { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } }

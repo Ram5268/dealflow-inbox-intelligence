@@ -83,9 +83,16 @@ function extractPrices(text: string): { minPrice: number | null; maxPrice: numbe
     return { minPrice: parsePrice(parts[0]), maxPrice: parsePrice(parts[1]) }
   }
 
-  // "under $X" or "below $X" or "max $X"
+  // "under $X" or "below $X" or "max $X" or "budget of X" (with or without $)
   const underMatch = text.match(/(?:under|below|max|maximum|up to)\s+\$[\d.,]+[kKmM]?/i)
   if (underMatch) return { minPrice: null, maxPrice: parsePrice(underMatch[0]) }
+
+  // "budget of X" or "budget X" — price may not have $ sign
+  const budgetMatch = text.match(/budget\s+(?:of\s+)?\$?[\d.,]+[kKmM]?/i)
+  if (budgetMatch) {
+    const p = parsePrice(budgetMatch[0])
+    if (p) return { minPrice: null, maxPrice: p }
+  }
 
   // "over $X" or "above $X" or "min $X"
   const overMatch = text.match(/(?:over|above|min|minimum|at least)\s+\$[\d.,]+[kKmM]?/i)

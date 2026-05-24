@@ -77,8 +77,20 @@ export async function hybridRetrieval(
     if (rows.length === 0) return []
 
     const ids = rows.map(r => r.id)
+
+    // Apply price and bed filters so the fallback respects the user's budget/criteria
+    const fallbackWhere: Record<string, unknown> = { id: { in: ids } }
+    if (plan.filters.maxPrice !== null) fallbackWhere.price = { lte: plan.filters.maxPrice }
+    if (plan.filters.minBeds !== null || plan.filters.maxBeds !== null) {
+      const bedFilter: Record<string, number> = {}
+      if (plan.filters.minBeds !== null) bedFilter.gte = plan.filters.minBeds
+      if (plan.filters.maxBeds !== null) bedFilter.lte = plan.filters.maxBeds
+      fallbackWhere.beds = bedFilter
+    }
+
     const opps = await prisma.extractedOpportunity.findMany({
-      where: { id: { in: ids } },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      where: fallbackWhere as any,
       select: {
         id: true, category: true, address: true, neighborhood: true, borough: true,
         price: true, minPrice: true, maxPrice: true, beds: true, baths: true,
