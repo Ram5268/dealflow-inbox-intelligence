@@ -670,7 +670,7 @@ If the query is general (no specific category), return categories:[].`
         ).join('\n')
 
         seContext = `\n\nLIVE STREETEASY LISTINGS (active on market, filtered to exact criteria):\n` +
-          (liveSeListings.length > 0 ? listingLines : '(no individual listings returned by API this query)') +
+          (liveSeListings.length > 0 ? listingLines : '(no matching listings found in your database for this query)') +
           (seFilterUrl ? `\n\nBrowse all matching listings on StreetEasy: ${seFilterUrl}` : '')
       } catch (err) {
         console.error('[SE search] error:', err)
@@ -703,10 +703,7 @@ If the query is general (no specific category), return categories:[].`
       try {
         const pipelineIds = retrievalResult.records.map((r: { id: string }) => r.id)
         pipelineDeals = await prisma.extractedOpportunity.findMany({
-          where: {
-            id: { in: pipelineIds },
-            ...(categoryFilter ? { category: { in: categoryFilter } } : {}),
-          },
+          where: { id: { in: pipelineIds } },
           include: oppIncludeForCards,
         })
       } catch {
