@@ -43,6 +43,7 @@ function makeEmptyParsed(raw: string): ParsedQuery {
     intent: 'general',
     isCalendar: false, isACRIS: false, isDOB: false,
     isMyBuyer: false, isSellerLead: false, isEmailCampaign: false,
+    broaden:   false,
     usedLLM: false,
     confidence: 0,
   }

@@ -12,6 +12,7 @@ import {
   LEAD_SELLER,
   LEAD_LANDLORD,
 } from '../domain/Categories'
+import { reconcileIntent } from './reconcile'
 
 // ── Category sets by intent ───────────────────────────────────────────────────
 // SUPPLY_RENTAL / DEMAND_ALL / LEAD_ALL / SALE_CATS_FOR_FILTER / RENTAL_CATS_FOR_FILTER
@@ -31,27 +32,25 @@ const LEAD_ALL: readonly string[]   = [...LEAD_SELLER, ...LEAD_LANDLORD]
 // Pre-market keywords that expand to the full pre-market set when seen with a buyer intent.
 const PREMARKET_CATS = new Set<string>(['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'COMING_SOON_DEVELOPMENT', 'COMING_SOON_RENTAL'])
 
-// Used by the LLM-vs-deterministic isRental reconciliation. SUPPLY_SALE is the
-// full sale set (incl. premarket) from lib/domain; SUPPLY_RENTAL same.
-const SALE_CATS_FOR_FILTER:   ReadonlySet<string> = new Set<string>(SUPPLY_SALE)
-const RENTAL_CATS_FOR_FILTER: ReadonlySet<string> = new Set<string>(SUPPLY_RENTAL)
-
-function categoriesForIntent(intent: IntentBucket, parsed: ParsedQuery): readonly string[] {
+// `reconciledCategories` is the output of reconcileIntent() — sale/rental
+// conflicts with the deterministic isRental flag have already been resolved
+// upstream. The intent-routing sanitization below only handles intent-level
+// filters (drop demand on supply intents, drop rentals on buyer intent).
+function categoriesForIntent(
+  intent:               IntentBucket,
+  parsed:               ParsedQuery,
+  reconciledCategories: readonly string[],
+): readonly string[] {
   const isSupplyIntent = intent === 'opportunity_search' || intent === 'match_review'
   const isBuyerIntent  = isSupplyIntent && parsed.isRental === false
 
   const sanitized = isSupplyIntent
-    ? parsed.categories.filter(c => {
+    ? reconciledCategories.filter(c => {
         if (DEMAND_ALL.includes(c)) return false
         if (isBuyerIntent && (c === 'COMING_SOON_RENTAL' || c === 'RENTAL_LISTING')) return false
-        // Deterministic isRental wins over LLM-supplied category mismatches.
-        // The LLM occasionally tags "active" → ACTIVE_SALE_LISTING on a rental
-        // query ("active" is colloquial for "currently listed" in both contexts).
-        if (parsed.isRental === true  && SALE_CATS_FOR_FILTER.has(c))   return false
-        if (parsed.isRental === false && RENTAL_CATS_FOR_FILTER.has(c)) return false
         return true
       })
-    : parsed.categories
+    : reconciledCategories
 
   if (sanitized.length > 0) {
     // If any pre-market keyword was detected in a buyer query, return the full pre-market set
@@ -119,7 +118,10 @@ function expandVariants(canonical: string): readonly string[] {
 }
 
 export function buildQueryPlan(parsed: ParsedQuery): QueryPlan {
-  const searchCategories = [...categoriesForIntent(parsed.intent, parsed)]
+  // Single reconciliation step (Phase C): drop any LLM-supplied categories
+  // that contradict the deterministic isRental flag before intent routing.
+  const reconciled = reconcileIntent(parsed)
+  const searchCategories = [...categoriesForIntent(parsed.intent, parsed, reconciled.categories)]
 
   // Resolve each parsed neighborhood (which may be a canonical or a variant)
   // to its canonical name, then expand to all variants for SQL matching.
@@ -132,14 +134,23 @@ export function buildQueryPlan(parsed: ParsedQuery): QueryPlan {
   }
   const filterNeighborhoods = [...new Set(expandedFilterNeighborhoods)]
 
-  // Build adjacent expansion. Keys are the canonical we resolved to; values
-  // are the variant spellings of each adjacent canonical (so SQL contains
-  // catches every DB spelling).
+  // Adjacency expansion is OFF by default (Phase D.5). Users who say "in X"
+  // get only X (and its variant spellings) — never Bushwick when they asked
+  // for Bed-Stuy. To opt into adjacent / nearby / similar results, the user
+  // must explicitly phrase the query with "near X", "around X", "or similar",
+  // "nearby", etc. The parser sets parsed.broaden = true when those phrases
+  // appear; queryParser.BROADEN_PATTERNS is the source of truth for what
+  // counts as an explicit broaden signal.
+  //
+  // When broaden is false, adjacentMap stays empty and structuredRetrieval
+  // builds a SQL OR over parsed.neighborhoods (variant-expanded) only.
   const adjacentMap: Record<string, string[]> = {}
-  for (const canonical of canonicalSet) {
-    const adj = getAdjacent(canonical)
-    const expanded = adj.flatMap(a => expandVariants(a))
-    if (expanded.length > 0) adjacentMap[canonical] = [...new Set(expanded)]
+  if (parsed.broaden) {
+    for (const canonical of canonicalSet) {
+      const adj = getAdjacent(canonical)
+      const expanded = adj.flatMap(a => expandVariants(a))
+      if (expanded.length > 0) adjacentMap[canonical] = [...new Set(expanded)]
+    }
   }
 
   return {

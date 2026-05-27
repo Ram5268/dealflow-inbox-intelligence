@@ -43,6 +43,12 @@ const MY_BUYER_PATTERN       = /\bmy\s+buyer\b|\bi\s+have\s+a\s+buyer\b|\bfor\s+
 const SELLER_LEAD_PATTERN    = /\bseller\s+leads?\b|\bcold\s+call\b|\bwho\s+can\s+i\s+call\b|\bpotential\s+sellers?\b|\bseller\s+prospects?\b/i
 const EMAIL_CAMPAIGN_PATTERN = /\bemail\s+(repl(?:ies|y)|open|campaign)\b|\binstantly\b|\bcampaign\s+(performance|stats?|results?)\b/i
 
+// Phrases that signal the user explicitly wants adjacent/nearby/similar
+// results — broaden mode. When this matches, queryPlanner expands neighborhood
+// adjacency. When it doesn't, results are strict (only the named neighborhood
+// + its variant spellings). See lib/retrieval/queryPlanner.ts.
+const BROADEN_PATTERNS = /\b(near|around|close to|nearby|by\s+\w+|or\s+(similar|adjacent|surrounding|nearby)|in or (around|near)|and\s+(similar|nearby))\b/i
+
 function parsePrice(raw: string): number | null {
   const m = raw.replace(/,/g, '').match(/\$?([\d.]+)\s*([kKmM]?)/)
   if (!m) return null
@@ -240,6 +246,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
   const isMyBuyer       = MY_BUYER_PATTERN.test(lower)
   const isSellerLead    = SELLER_LEAD_PATTERN.test(lower)
   const isEmailCampaign = EMAIL_CAMPAIGN_PATTERN.test(lower)
+  const broaden         = BROADEN_PATTERNS.test(lower)
 
   const partial: Omit<ParsedQuery, 'usedLLM' | 'confidence'> = {
     raw: text,
@@ -256,6 +263,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     isMyBuyer,
     isSellerLead,
     isEmailCampaign,
+    broaden,
   }
 
   const detConf = deterministicConfidence(partial)
@@ -291,6 +299,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     isMyBuyer,
     isSellerLead,
     isEmailCampaign,
+    broaden,
     intent: classifyIntent({
       neighborhoods: [...new Set([...neighborhoods, ...(llmResult.neighborhoods ?? [])])],
       boroughs:      [...new Set([...boroughs,      ...(llmResult.boroughs ?? [])])],

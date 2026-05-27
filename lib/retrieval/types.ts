@@ -28,6 +28,11 @@ export interface ParsedQuery {
   isMyBuyer:       boolean
   isSellerLead:    boolean
   isEmailCampaign: boolean
+  // True only when the user explicitly asked for adjacent / nearby / similar
+  // results ("near X", "around X", "or nearby", etc.). When false (the default
+  // for a plain "in X" query), queryPlanner does NOT expand adjacency —
+  // results are strictly the named neighborhood(s) and their variant spellings.
+  broaden:         boolean
   usedLLM:       boolean
   confidence:    number          // 0–1, how confident the parser is
 }
