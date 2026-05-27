@@ -1,5 +1,5 @@
 import { prisma } from './prisma'
-import { normalizeAddress } from './properties/normalizeAddress'
+import { normalizeAddress } from './domain/Address'
 
 const RAPIDAPI_KEY  = process.env.RAPIDAPI_KEY  ?? ''
 const RAPIDAPI_HOST = process.env.RAPIDAPI_SE_HOST ?? 'nyc-real-estate-api.p.rapidapi.com'
@@ -247,12 +247,12 @@ async function matchInArea(
     // Exact match
     for (const l of listings) {
       if (!l.address) continue
-      if ((normalizeAddress(l.address)?.normalizedFull ?? null) === normTarget) return l
+      if ((normalizeAddress(l.address)?.normalized ?? null) === normTarget) return l
     }
     // Fuzzy: street number + first street word
     for (const l of listings) {
       if (!l.address) continue
-      const parts = (normalizeAddress(l.address)?.normalizedFull ?? '').split(' ')
+      const parts = (normalizeAddress(l.address)?.normalized ?? '').split(' ')
       if (parts[0] === targetNum && parts[1] === targetStreet) return l
     }
   } catch { /* non-fatal */ }
@@ -269,7 +269,7 @@ export async function findListingByAddress(
 
   const endpoint = type === 'rental' ? '/rentals/search' : '/sales/search'
   const baseAddress = stripUnit(address)
-  const normTarget = normalizeAddress(baseAddress)?.normalizedFull ?? null
+  const normTarget = normalizeAddress(baseAddress)?.normalized ?? null
   if (!normTarget) return null
 
   const targetParts = normTarget.split(' ')
@@ -387,12 +387,12 @@ async function markDelistedMatches(
   let count = 0
   for (const delisted of delistedListings) {
     if (!delisted.address) continue
-    const normDelisted = normalizeAddress(delisted.address)?.normalizedFull ?? null
+    const normDelisted = normalizeAddress(delisted.address)?.normalized ?? null
 
     const match = activeOpps.find(o => {
       if (o.streetEasyId === delisted.id) return true
       if (!o.address) return false
-      const normOpp = normalizeAddress(o.address)?.normalizedFull ?? null
+      const normOpp = normalizeAddress(o.address)?.normalized ?? null
       return normOpp && normDelisted && normOpp === normDelisted
     })
 

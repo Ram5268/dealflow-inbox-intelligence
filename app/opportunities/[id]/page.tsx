@@ -42,6 +42,11 @@ export default function OpportunityDetailPage() {
   const categoryLabel = CATEGORY_LABELS[opp.category] ?? opp.category
   const isRentalCat = ['RENTAL_LISTING','COMING_SOON_RENTAL'].includes(opp.category)
   // seUrl: direct listing if streetEasyId is set, else search fallback
+  // FIXME phase-C-or-later: 4th copy of the borough-from-neighborhood lookup, missed by
+  // Phase B because it's in a client component. Importing lib/domain/Neighborhood here
+  // would ship the entire 215-entry NEIGHBORHOODS map to the browser. Phase C should
+  // expose a lightweight client-safe helper (e.g. a server action that returns just the
+  // borough slug) so this inline map can go away without bloating the client bundle.
   const HOOD_TO_BOROUGH_DETAIL: Record<string,string> = { williamsburg:'brooklyn',greenpoint:'brooklyn',bushwick:'brooklyn','bed-stuy':'brooklyn','crown heights':'brooklyn','park slope':'brooklyn','carroll gardens':'brooklyn','cobble hill':'brooklyn','boerum hill':'brooklyn','brooklyn heights':'brooklyn',dumbo:'brooklyn','fort greene':'brooklyn','clinton hill':'brooklyn','prospect heights':'brooklyn','red hook':'brooklyn',gowanus:'brooklyn','sunset park':'brooklyn','bay ridge':'brooklyn',flatbush:'brooklyn','ditmas park':'brooklyn','sheepshead bay':'brooklyn','brighton beach':'brooklyn','coney island':'brooklyn',greenwood:'brooklyn','downtown brooklyn':'brooklyn',astoria:'queens','long island city':'queens',sunnyside:'queens','jackson heights':'queens','forest hills':'queens','rego park':'queens',flushing:'queens',riverdale:'bronx',fordham:'bronx','mott haven':'bronx' }
   const seDirectUrl: string | null = opp.streetEasyId
     ? (opp.streetEasyId.includes('/') ? `https://www.streeteasy.com/${opp.streetEasyId}` : `https://www.streeteasy.com/${isRentalCat ? 'rental' : 'sale'}/${opp.streetEasyId}`)

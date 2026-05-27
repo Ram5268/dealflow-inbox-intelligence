@@ -1,6 +1,12 @@
 import { prisma } from '../prisma'
 import type { ExtractionResult, ValidationFlag } from './types'
+import { normalizeAddress as canonicalNormalizeAddress } from '../domain/Address'
 
+// SUPPLY_SIDE here historically also included SHOWING_CONFIRMATION (which
+// lib/domain/Categories classifies as INFORMATIONAL). Preserved as a local
+// set rather than the lib/domain SUPPLY_SALE ∪ SUPPLY_RENTAL because the
+// validator uses it for address-required checks where SHOWING_CONFIRMATION
+// is also address-required. Phase C can split that out cleanly.
 const SUPPLY_SIDE = new Set([
   'ACTIVE_SALE_LISTING', 'RENTAL_LISTING', 'COMING_SOON_SALE', 'COMING_SOON_RENTAL',
   'OFF_MARKET_SALE', 'BACK_ON_MARKET', 'PRICE_DROP', 'DEVELOPMENT_INVENTORY',
@@ -9,24 +15,13 @@ const SUPPLY_SIDE = new Set([
 
 const LOW_RISK = new Set(['MARKET_REPORT', 'REAL_ESTATE_EVENT', 'CLIENT_CONVERSATION'])
 
-// Normalize address for duplicate comparison:
-// expand abbreviations, strip unit identifiers, lowercase, cap at 30 chars
+// Normalize address for duplicate comparison. Wraps the canonical
+// lib/domain/Address.normalizeAddress — keeps the legacy contract (lowercase
+// string, slice to 30 chars) used by the duplicate-detection contains check.
 function normalizeAddress(raw: string): string {
-  return raw
-    .replace(/\bSt\.?\b/gi, 'Street')
-    .replace(/\bAve\.?\b/gi, 'Avenue')
-    .replace(/\bBlvd\.?\b/gi, 'Boulevard')
-    .replace(/\bRd\.?\b/gi, 'Road')
-    .replace(/\bDr\.?\b/gi, 'Drive')
-    .replace(/\bPl\.?\b/gi, 'Place')
-    .replace(/\bW\s+/g, 'West ')
-    .replace(/\bE\s+/g, 'East ')
-    .replace(/\bN\s+/g, 'North ')
-    .replace(/\bS\s+/g, 'South ')
-    .replace(/#\s*\w+|Apt\.?\s*\w+|Unit\s+\w+|Floor\s+\d+/gi, '')
-    .toLowerCase()
-    .trim()
-    .slice(0, 30)
+  const result = canonicalNormalizeAddress(raw)
+  if (!result) return ''
+  return result.normalized.slice(0, 30)
 }
 
 export async function validateResult(

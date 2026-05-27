@@ -1,61 +1,42 @@
 import type { ParsedQuery, QueryPlan, IntentBucket } from './types'
-
-// ── Adjacent neighborhood map (expand search to nearby neighborhoods) ─────────
-const ADJACENT: Record<string, string[]> = {
-  'Williamsburg':       ['Greenpoint','Bushwick','Bed-Stuy'],
-  'Greenpoint':         ['Williamsburg','Long Island City','Astoria'],
-  'Bushwick':           ['Williamsburg','Ridgewood','Bed-Stuy','Crown Heights'],
-  'Bed-Stuy':           ['Crown Heights','Bushwick','Clinton Hill','Stuyvesant Heights'],
-  'Crown Heights':      ['Bed-Stuy','Prospect Heights','Flatbush','Prospect Lefferts Gardens'],
-  'Park Slope':         ['Carroll Gardens','Gowanus','Windsor Terrace','Prospect Heights'],
-  'Carroll Gardens':    ['Cobble Hill','Boerum Hill','Red Hook','Park Slope','Gowanus'],
-  'Cobble Hill':        ['Carroll Gardens','Boerum Hill','Brooklyn Heights'],
-  'Boerum Hill':        ['Cobble Hill','Carroll Gardens','Park Slope','Fort Greene'],
-  'Brooklyn Heights':   ['Cobble Hill','DUMBO','Downtown Brooklyn'],
-  'DUMBO':              ['Brooklyn Heights','Fort Greene','Vinegar Hill'],
-  'Fort Greene':        ['Clinton Hill','Boerum Hill','DUMBO'],
-  'Clinton Hill':       ['Fort Greene','Bed-Stuy','Prospect Heights'],
-  'Prospect Heights':   ['Crown Heights','Park Slope','Fort Greene','Clinton Hill'],
-  'Tribeca':            ['SoHo','Financial District','Battery Park City','Hudson Square'],
-  'SoHo':               ['Tribeca','NoHo','Nolita','West Village'],
-  'NoHo':               ['SoHo','East Village','Greenwich Village'],
-  'Nolita':             ['SoHo','NoHo','Little Italy','Lower East Side'],
-  'West Village':       ['Greenwich Village','Chelsea','SoHo'],
-  'Greenwich Village':  ['West Village','NoHo','East Village','Chelsea'],
-  'East Village':       ['Lower East Side','NoHo','Greenwich Village'],
-  'Lower East Side':    ['East Village','Nolita','Two Bridges'],
-  'Chelsea':            ["Hell's Kitchen","West Village","Flatiron","Hudson Yards"],
-  'Flatiron':           ['Chelsea','Gramercy','NoMad','Murray Hill'],
-  'NoMad':              ['Flatiron','Murray Hill','Kips Bay','Gramercy'],
-  'Gramercy':           ['Flatiron','NoMad','Murray Hill','Stuyvesant Town'],
-  'Murray Hill':        ['Gramercy','NoMad','Kips Bay','Midtown East'],
-  "Hell's Kitchen":     ['Chelsea','Midtown West','Clinton'],
-  'Midtown West':       ["Hell's Kitchen",'Midtown'],
-  'Midtown East':       ['Murray Hill','Midtown','Upper East Side'],
-  'Upper West Side':    ['Morningside Heights','Harlem','Midtown West'],
-  'Upper East Side':    ['Lenox Hill','Yorkville','Carnegie Hill','Midtown East'],
-  'Long Island City':   ['Astoria','Greenpoint','Sunnyside'],
-  'Astoria':            ['Long Island City','Sunnyside','Woodside','Greenpoint'],
-}
+import {
+  NEIGHBORHOODS,
+  fromRaw,
+  getAdjacent,
+} from '../domain/Neighborhood'
+import {
+  SUPPLY_SALE,
+  SUPPLY_RENTAL,
+  DEMAND_BUYER,
+  DEMAND_RENTER,
+  LEAD_SELLER,
+  LEAD_LANDLORD,
+} from '../domain/Categories'
 
 // ── Category sets by intent ───────────────────────────────────────────────────
-const SUPPLY_ALL = [
-  'ACTIVE_SALE_LISTING','RENTAL_LISTING','COMING_SOON_SALE','COMING_SOON_RENTAL',
-  'OFF_MARKET_SALE','BACK_ON_MARKET','PRICE_DROP','OPEN_HOUSE',
-  'DEVELOPMENT_INVENTORY','COMING_SOON_DEVELOPMENT','SPONSOR_UNIT',
-]
-// Active on-market sale listings only — default for buyer searches with no coming-soon intent
-const SUPPLY_SALE_ACTIVE   = ['ACTIVE_SALE_LISTING','BACK_ON_MARKET','PRICE_DROP','DEVELOPMENT_INVENTORY','SPONSOR_UNIT']
-// Pre-market only — returned when "coming soon" or "off market" is explicitly requested
-const SUPPLY_SALE_PREMARKET = ['COMING_SOON_SALE','OFF_MARKET_SALE','COMING_SOON_DEVELOPMENT']
-const SUPPLY_RENTAL = ['RENTAL_LISTING','COMING_SOON_RENTAL']
-const DEMAND_ALL    = ['BUYER_ISO','RENTER_INQUIRY']
-const LEAD_ALL      = ['SELLER_LEAD','LANDLORD_LEAD']
+// SUPPLY_RENTAL / DEMAND_ALL / LEAD_ALL / SALE_CATS_FOR_FILTER / RENTAL_CATS_FOR_FILTER
+// were local copies until Phase B. Now sourced from lib/domain/Categories so they
+// stay in sync with the Prisma enum exhaustiveness check there.
 
-// Pre-market signal keywords that expand to the full pre-market set
-const PREMARKET_CATS = new Set(['COMING_SOON_SALE','OFF_MARKET_SALE','COMING_SOON_DEVELOPMENT','COMING_SOON_RENTAL'])
+const SUPPLY_ALL: readonly string[] = [...SUPPLY_SALE, ...SUPPLY_RENTAL, 'OPEN_HOUSE']
+// Active on-market sale listings — default for buyer searches with no coming-soon intent.
+// Local to queryPlanner: lib/domain has SUPPLY_SALE (all of them) but not this on-market subset.
+const SUPPLY_SALE_ACTIVE: readonly string[] = ['ACTIVE_SALE_LISTING', 'BACK_ON_MARKET', 'PRICE_DROP', 'DEVELOPMENT_INVENTORY', 'SPONSOR_UNIT']
+// Pre-market only — returned when "coming soon" or "off market" is explicitly requested.
+// Local to queryPlanner for the same reason.
+const SUPPLY_SALE_PREMARKET: readonly string[] = ['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'COMING_SOON_DEVELOPMENT']
+const DEMAND_ALL: readonly string[] = [...DEMAND_BUYER, ...DEMAND_RENTER]
+const LEAD_ALL: readonly string[]   = [...LEAD_SELLER, ...LEAD_LANDLORD]
 
-function categoriesForIntent(intent: IntentBucket, parsed: ParsedQuery): string[] {
+// Pre-market keywords that expand to the full pre-market set when seen with a buyer intent.
+const PREMARKET_CATS = new Set<string>(['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'COMING_SOON_DEVELOPMENT', 'COMING_SOON_RENTAL'])
+
+// Used by the LLM-vs-deterministic isRental reconciliation. SUPPLY_SALE is the
+// full sale set (incl. premarket) from lib/domain; SUPPLY_RENTAL same.
+const SALE_CATS_FOR_FILTER:   ReadonlySet<string> = new Set<string>(SUPPLY_SALE)
+const RENTAL_CATS_FOR_FILTER: ReadonlySet<string> = new Set<string>(SUPPLY_RENTAL)
+
+function categoriesForIntent(intent: IntentBucket, parsed: ParsedQuery): readonly string[] {
   const isSupplyIntent = intent === 'opportunity_search' || intent === 'match_review'
   const isBuyerIntent  = isSupplyIntent && parsed.isRental === false
 
@@ -63,6 +44,11 @@ function categoriesForIntent(intent: IntentBucket, parsed: ParsedQuery): string[
     ? parsed.categories.filter(c => {
         if (DEMAND_ALL.includes(c)) return false
         if (isBuyerIntent && (c === 'COMING_SOON_RENTAL' || c === 'RENTAL_LISTING')) return false
+        // Deterministic isRental wins over LLM-supplied category mismatches.
+        // The LLM occasionally tags "active" → ACTIVE_SALE_LISTING on a rental
+        // query ("active" is colloquial for "currently listed" in both contexts).
+        if (parsed.isRental === true  && SALE_CATS_FOR_FILTER.has(c))   return false
+        if (parsed.isRental === false && RENTAL_CATS_FOR_FILTER.has(c)) return false
         return true
       })
     : parsed.categories
@@ -90,22 +76,24 @@ function categoriesForIntent(intent: IntentBucket, parsed: ParsedQuery): string[
     case 'property_intelligence':
       return []
     case 'market_question':
-      return ['MARKET_REPORT','REAL_ESTATE_EVENT']
+      return ['MARKET_REPORT', 'REAL_ESTATE_EVENT']
     case 'calendar_scheduling':
       return ['SHOWING_CONFIRMATION']
     case 'general':
     default:
-      return [...SUPPLY_ALL, ...DEMAND_ALL]
+      // DEALFLOW_AI rule: BUYER_ISO + RENTER_INQUIRY are NEVER shown for general queries.
+      // They're demand records, not inventory — only surface when explicitly requested.
+      return SUPPLY_ALL
   }
 }
 
 function toolsForIntent(intent: IntentBucket, isACRIS: boolean, isDOB: boolean, isCalendar: boolean): QueryPlan['tools'] {
   const tools: QueryPlan['tools'] = ['structured_retrieval', 'vector_search']
-  if (isACRIS)   tools.push('acris')
-  if (isDOB)     tools.push('dob')
+  if (isACRIS)    tools.push('acris')
+  if (isDOB)      tools.push('dob')
   if (isCalendar) tools.push('calendar')
   if (intent === 'property_intelligence') return tools.filter(t => t === 'acris' || t === 'dob')
-  if (intent === 'calendar_scheduling')   return ['calendar','structured_retrieval']
+  if (intent === 'calendar_scheduling')   return ['calendar', 'structured_retrieval']
   return tools
 }
 
@@ -121,14 +109,37 @@ function freshnessWindow(intent: IntentBucket): number {
   }
 }
 
-export function buildQueryPlan(parsed: ParsedQuery): QueryPlan {
-  const searchCategories = categoriesForIntent(parsed.intent, parsed)
+// Expand a canonical neighborhood to all its known spelling variants so the
+// downstream SQL contains-check matches every DB row for the area. Without
+// this, asking for "Bedford-Stuyvesant" (canonical) misses 78 rows stored
+// under the "Stuyvesant Heights" variant.
+function expandVariants(canonical: string): readonly string[] {
+  const meta = NEIGHBORHOODS[canonical]
+  return meta ? meta.variants : [canonical]
+}
 
-  // Build adjacent neighborhood expansion
+export function buildQueryPlan(parsed: ParsedQuery): QueryPlan {
+  const searchCategories = [...categoriesForIntent(parsed.intent, parsed)]
+
+  // Resolve each parsed neighborhood (which may be a canonical or a variant)
+  // to its canonical name, then expand to all variants for SQL matching.
+  const canonicalSet = new Set<string>()
+  const expandedFilterNeighborhoods: string[] = []
+  for (const raw of parsed.neighborhoods) {
+    const canonical = fromRaw(raw) ?? raw
+    canonicalSet.add(canonical)
+    expandedFilterNeighborhoods.push(...expandVariants(canonical))
+  }
+  const filterNeighborhoods = [...new Set(expandedFilterNeighborhoods)]
+
+  // Build adjacent expansion. Keys are the canonical we resolved to; values
+  // are the variant spellings of each adjacent canonical (so SQL contains
+  // catches every DB spelling).
   const adjacentMap: Record<string, string[]> = {}
-  for (const n of parsed.neighborhoods) {
-    const adj = ADJACENT[n]
-    if (adj) adjacentMap[n] = adj
+  for (const canonical of canonicalSet) {
+    const adj = getAdjacent(canonical)
+    const expanded = adj.flatMap(a => expandVariants(a))
+    if (expanded.length > 0) adjacentMap[canonical] = [...new Set(expanded)]
   }
 
   return {
@@ -137,7 +148,7 @@ export function buildQueryPlan(parsed: ParsedQuery): QueryPlan {
     excludeCategories:  ['NOISE'],
     includeReviewQueue: false,
     filters: {
-      neighborhoods:       parsed.neighborhoods,
+      neighborhoods:       filterNeighborhoods,
       boroughs:            parsed.boroughs,
       minBeds:             parsed.minBeds ?? (parsed.beds !== null ? parsed.beds : null),
       maxBeds:             parsed.maxBeds ?? (parsed.beds !== null ? parsed.beds : null),

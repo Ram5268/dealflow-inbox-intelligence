@@ -1,64 +1,17 @@
 import { prisma } from './prisma'
 import { Category } from '@prisma/client'
+import { fromRaw, getAdjacent, getBorough } from './domain/Neighborhood'
+import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
 
-// Neighborhoods that are considered adjacent for matching purposes
-const ADJACENT: Record<string, string[]> = {
-  tribeca: ['soho', 'financial district', 'two bridges', 'battery park city', 'little italy'],
-  soho: ['tribeca', 'noho', 'nolita', 'little italy', 'west village'],
-  noho: ['soho', 'nolita', 'east village', 'greenwich village'],
-  nolita: ['soho', 'noho', 'little italy', 'lower east side'],
-  'lower east side': ['east village', 'chinatown', 'two bridges', 'nolita'],
-  'east village': ['lower east side', 'greenwich village', 'noho', 'kips bay'],
-  chelsea: ['west village', "hell's kitchen", 'flatiron', 'hudson yards'],
-  'west village': ['chelsea', 'greenwich village', 'soho'],
-  flatiron: ['chelsea', 'gramercy', 'union square'],
-  gramercy: ['flatiron', 'kips bay', 'murray hill', 'union square'],
-  'murray hill': ['kips bay', 'midtown east', 'gramercy'],
-  'kips bay': ['gramercy', 'murray hill', 'east village'],
-  'hell\'s kitchen': ['chelsea', 'midtown west', 'hudson yards'],
-  midtown: ['murray hill', 'kips bay', "hell's kitchen", 'chelsea', 'gramercy', 'midtown east', 'midtown west'],
-  'midtown east': ['midtown', 'murray hill', 'upper east side'],
-  'upper east side': ['yorkville', 'carnegie hill', 'lenox hill', 'east harlem'],
-  'upper west side': ['morningside heights', 'manhattan valley', 'lincoln square'],
-  yorkville: ['upper east side', 'carnegie hill', 'east harlem'],
-  harlem: ['east harlem', 'morningside heights', 'washington heights'],
-  'east harlem': ['harlem', 'yorkville', 'upper east side'],
-  williamsburg: ['greenpoint', 'bushwick', 'bed-stuy'],
-  greenpoint: ['williamsburg', 'long island city'],
-  bushwick: ['williamsburg', 'bed-stuy', 'ridgewood'],
-  'bed-stuy': ['bushwick', 'crown heights', 'fort greene', 'clinton hill'],
-  'crown heights': ['bed-stuy', 'prospect heights', 'flatbush'],
-  'prospect heights': ['crown heights', 'park slope', 'fort greene'],
-  'park slope': ['prospect heights', 'carroll gardens', 'cobble hill', 'gowanus'],
-  'carroll gardens': ['park slope', 'cobble hill', 'red hook', 'boerum hill'],
-  'cobble hill': ['carroll gardens', 'park slope', 'boerum hill', 'brooklyn heights'],
-  'fort greene': ['boerum hill', 'clinton hill', 'bed-stuy', 'downtown brooklyn'],
-  'brooklyn heights': ['cobble hill', 'downtown brooklyn', 'dumbo'],
-  dumbo: ['brooklyn heights', 'vinegar hill', 'downtown brooklyn'],
-  'long island city': ['astoria', 'sunnyside', 'hunters point', 'greenpoint'],
-  lic: ['astoria', 'sunnyside', 'hunters point'],
-  astoria: ['long island city', 'lic', 'sunnyside', 'jackson heights'],
-  sunnyside: ['astoria', 'long island city', 'woodside', 'jackson heights'],
-  'jackson heights': ['elmhurst', 'woodside', 'corona', 'sunnyside'],
-  'forest hills': ['rego park', 'kew gardens', 'jamaica estates'],
-  'rego park': ['forest hills', 'elmhurst', 'corona', 'kew gardens'],
-}
-
-// Borough detection from neighborhood name
+// Borough detection — delegates to lib/domain. Returns lowercase to preserve
+// the legacy contract used by neighborhoodScore. Falls back to 'manhattan'
+// when the neighborhood doesn't resolve, mirroring the prior heuristic's
+// last-resort default.
 function detectBorough(neighborhood: string): string {
-  const n = neighborhood.toLowerCase()
-  const bkNeighborhoods = ['williamsburg', 'greenpoint', 'bushwick', 'bed-stuy', 'bedford', 'crown heights',
-    'prospect', 'park slope', 'carroll gardens', 'cobble hill', 'boerum hill', 'fort greene', 'clinton hill',
-    'brooklyn heights', 'dumbo', 'vinegar hill', 'red hook', 'gowanus', 'flatbush', 'ditmas', 'brownsville',
-    'east new york', 'bay ridge', 'sunset park', 'borough park', 'bensonhurst', 'coney island', 'sheepshead']
-  const queensNeighborhoods = ['astoria', 'long island city', 'lic', 'sunnyside', 'jackson heights',
-    'elmhurst', 'woodside', 'corona', 'flushing', 'bayside', 'forest hills', 'rego park', 'kew gardens',
-    'jamaica', 'richmond hill', 'ozone park', 'howard beach', 'little neck', 'douglaston', 'maspeth',
-    'middle village', 'glendale', 'ridgewood', 'hunters point']
-  if (bkNeighborhoods.some(b => n.includes(b))) return 'brooklyn'
-  if (queensNeighborhoods.some(q => n.includes(q))) return 'queens'
-  if (n.includes('bronx') || n.includes('riverdale') || n.includes('kingsbridge')) return 'bronx'
-  return 'manhattan'
+  const canonical = fromRaw(neighborhood)
+  if (!canonical) return 'manhattan'
+  const borough = getBorough(canonical)
+  return borough ? borough.toLowerCase() : 'manhattan'
 }
 
 function neighborhoodScore(n1: string | null | undefined, n2: string | null | undefined): number {
@@ -66,7 +19,7 @@ function neighborhoodScore(n1: string | null | undefined, n2: string | null | un
   const a = n1.toLowerCase().trim()
   const b = n2.toLowerCase().trim()
   if (a === b || a.includes(b) || b.includes(a)) return 40
-  const adjacents = ADJACENT[a] ?? []
+  const adjacents = getAdjacent(a)
   if (adjacents.some(adj => b.includes(adj) || adj.includes(b))) return 25
   if (detectBorough(a) === detectBorough(b)) return 10
   return 0
@@ -107,19 +60,13 @@ export function scoreMatch(
   )
 }
 
-const SALE_CATEGORIES: Category[] = [
-  Category.ACTIVE_SALE_LISTING,
-  Category.COMING_SOON_SALE,
-  Category.OFF_MARKET_SALE,
-  Category.BACK_ON_MARKET,
-  Category.DEVELOPMENT_INVENTORY,
-  Category.SPONSOR_UNIT,
-]
-
-const RENTAL_CATEGORIES: Category[] = [
-  Category.RENTAL_LISTING,
-  Category.COMING_SOON_RENTAL,
-]
+// Note: matchmaking's prior SALE_CATEGORIES omitted PRICE_DROP and
+// COMING_SOON_DEVELOPMENT vs lib/domain's SUPPLY_SALE. SUPPLY_SALE is the
+// canonical set (8 categories) — additive change here is intentional Phase B
+// consolidation. PRICE_DROP and COMING_SOON_DEVELOPMENT listings will now
+// be considered for buyer-ISO matching, which is the correct behavior.
+const SALE_CATEGORIES: Category[]   = [...SUPPLY_SALE]
+const RENTAL_CATEGORIES: Category[] = [...SUPPLY_RENTAL]
 
 export interface MatchResult {
   highConfidence: number

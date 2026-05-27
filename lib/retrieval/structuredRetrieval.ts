@@ -84,7 +84,7 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
   return broadResults.map(toScoredRecord)
 }
 
-const OPPORTUNITY_SELECT = {
+export const OPPORTUNITY_SELECT = {
   id:               true,
   category:         true,
   address:          true,
@@ -108,7 +108,7 @@ const OPPORTUNITY_SELECT = {
   streetEasyId:     true,
 } as const
 
-function toScoredRecord(o: {
+export function toScoredRecord(o: {
   id: string; category: string; address: string | null; neighborhood: string | null
   borough: string | null; price: number | null; minPrice: number | null; maxPrice: number | null
   beds: number | null; baths: number | null; propertyType: string | null
@@ -122,4 +122,21 @@ function toScoredRecord(o: {
     tier:  'weak',
     grade: 'weak_match',
   }
+}
+
+// Vague-query fallback: latest N active, non-noise, non-duplicate. No filters.
+// Also excludes BUYER_ISO/RENTER_INQUIRY per DEALFLOW_AI rule — they're demand records,
+// not inventory, and shouldn't appear in "what do I have?" responses.
+export async function fetchRecentActive(limit = 25): Promise<ScoredRecord[]> {
+  const rows = await prisma.extractedOpportunity.findMany({
+    where: {
+      processingStatus: 'active',
+      isDuplicate:      false,
+      category:         { notIn: ['NOISE', 'BUYER_ISO', 'RENTER_INQUIRY'] },
+    },
+    orderBy: { createdAt: 'desc' },
+    take:    limit,
+    select:  OPPORTUNITY_SELECT,
+  })
+  return rows.map(toScoredRecord)
 }

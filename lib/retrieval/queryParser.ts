@@ -1,38 +1,30 @@
 import OpenAI from 'openai'
 import { classifyIntent } from './intentClassifier'
 import type { ParsedQuery, IntentBucket } from './types'
+import { NEIGHBORHOODS, BOROUGHS } from '../domain/Neighborhood'
 
-// ── NYC neighborhood list (deterministic matching) ────────────────────────────
-const NYC_NEIGHBORHOODS: string[] = [
-  // Manhattan
-  'Tribeca','SoHo','NoHo','NoMad','Flatiron','Chelsea','West Village','Greenwich Village',
-  'East Village','Lower East Side','Financial District','Battery Park City','Hudson Yards',
-  "Hell's Kitchen","Clinton","Midtown","Midtown West","Midtown East","Murray Hill","Kips Bay",
-  'Gramercy','Stuyvesant Town','Peter Cooper Village','Nolita','Little Italy','Chinatown',
-  'Two Bridges','Upper West Side','Upper East Side','Harlem','East Harlem','Spanish Harlem',
-  'Hamilton Heights','Washington Heights','Inwood','Yorkville','Carnegie Hill','Lenox Hill',
-  'Morningside Heights','Manhattanville','Roosevelt Island',
-  // Brooklyn
-  'Williamsburg','Greenpoint','Bushwick','Bed-Stuy','Bedford-Stuyvesant','Crown Heights',
-  'Park Slope','Carroll Gardens','Cobble Hill','Boerum Hill','Brooklyn Heights','DUMBO',
-  'Fort Greene','Clinton Hill','Prospect Heights','Prospect Park South','Windsor Terrace',
-  'Kensington','Flatbush','East Flatbush','Ditmas Park','Midwood','Marine Park',
-  'Sheepshead Bay','Brighton Beach','Coney Island','Sunset Park','Bay Ridge',
-  'Dyker Heights','Bensonhurst','Gravesend','Canarsie','Flatlands','East New York',
-  'Brownsville','Red Hook','Gowanus','South Slope','Lefferts Gardens',
-  // Queens
-  'Astoria','Long Island City','LIC','Sunnyside','Woodside','Jackson Heights','Flushing',
-  'Forest Hills','Rego Park','Elmhurst','Corona','Jamaica','Bayside','Fresh Meadows',
-  'Howard Beach','Far Rockaway','Rockaway','Richmond Hill','St. Albans','Whitestone',
-  'Douglaston','Little Neck',
-  // Bronx
-  'Riverdale','Fieldston','Woodlawn','Pelham Bay','City Island','Throgs Neck',
-  'Morris Park','Fordham','Mott Haven','Hunts Point','Concourse',
-  // Staten Island
-  'St. George','Stapleton','Tottenville','Great Kills','Eltingville','New Dorp',
-]
-
-const NYC_BOROUGHS = ['Manhattan','Brooklyn','Queens','Bronx','Staten Island']
+// Pre-built variant→canonical index used by extractNeighborhoods. Built once
+// at module load. Each variant is lowercased and stored with its canonical;
+// substring containment scan returns the canonicals that appear in input.
+// Replaces the old hand-maintained NYC_NEIGHBORHOODS array — every spelling
+// in lib/domain/Neighborhood.ts variants is now recognized, including
+// shorthand like "bedstuy", "fidi", "ues", "uws", "lic".
+const VARIANT_INDEX: Array<{ lower: string; canonical: string }> = (() => {
+  const seen = new Set<string>()
+  const out: Array<{ lower: string; canonical: string }> = []
+  for (const [canonical, meta] of Object.entries(NEIGHBORHOODS)) {
+    for (const v of meta.variants) {
+      const key = v.toLowerCase()
+      if (key.length < 3) continue            // guard against pathological short variants
+      if (seen.has(key + '||' + canonical)) continue
+      seen.add(key + '||' + canonical)
+      out.push({ lower: key, canonical })
+    }
+  }
+  // Longest first so "stuyvesant heights" matches before "stuy", "long island city" before "lic", etc.
+  out.sort((a, b) => b.lower.length - a.lower.length)
+  return out
+})()
 
 // Price words → multiplier
 const PRICE_MULTIPLIERS: Record<string, number> = {
@@ -45,6 +37,11 @@ const BED_WORDS: Record<string, number> = {
   'studio': 0, 'studios': 0,
   'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
 }
+
+// Mirror inline route's MY_BUYER_PATTERN + INTENT_PROMPT seller-lead / email-campaign cues
+const MY_BUYER_PATTERN       = /\bmy\s+buyer\b|\bi\s+have\s+a\s+buyer\b|\bfor\s+my\s+(buyer|client)\b|\bmy\s+client\b/i
+const SELLER_LEAD_PATTERN    = /\bseller\s+leads?\b|\bcold\s+call\b|\bwho\s+can\s+i\s+call\b|\bpotential\s+sellers?\b|\bseller\s+prospects?\b/i
+const EMAIL_CAMPAIGN_PATTERN = /\bemail\s+(repl(?:ies|y)|open|campaign)\b|\binstantly\b|\bcampaign\s+(performance|stats?|results?)\b/i
 
 function parsePrice(raw: string): number | null {
   const m = raw.replace(/,/g, '').match(/\$?([\d.]+)\s*([kKmM]?)/)
@@ -119,12 +116,17 @@ function extractPrices(text: string): { minPrice: number | null; maxPrice: numbe
 
 function extractNeighborhoods(text: string): string[] {
   const lower = text.toLowerCase()
-  return NYC_NEIGHBORHOODS.filter(n => lower.includes(n.toLowerCase()))
+  const hits = new Set<string>()
+  for (const { lower: variant, canonical } of VARIANT_INDEX) {
+    if (hits.has(canonical)) continue            // already matched this canonical via a longer variant
+    if (lower.includes(variant)) hits.add(canonical)
+  }
+  return [...hits]
 }
 
 function extractBoroughs(text: string): string[] {
   const lower = text.toLowerCase()
-  return NYC_BOROUGHS.filter(b => lower.includes(b.toLowerCase()))
+  return BOROUGHS.filter(b => lower.includes(b.toLowerCase()))
 }
 
 function detectRentalSale(text: string): boolean | null {
@@ -235,6 +237,9 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
   const isCalendar    = /\b(schedule|book|calendar|appointment|today|tomorrow|this week|next week|monday|tuesday|wednesday|thursday|friday)\b/.test(lower)
   const isACRIS       = /\b(who owns|acris|deed|sold for|ownership|mortgage|lien)\b/.test(lower)
   const isDOB         = /\b(permit|violation|dob|building department|air rights|certificate of occupancy|co |c\.o\.)\b/.test(lower)
+  const isMyBuyer       = MY_BUYER_PATTERN.test(lower)
+  const isSellerLead    = SELLER_LEAD_PATTERN.test(lower)
+  const isEmailCampaign = EMAIL_CAMPAIGN_PATTERN.test(lower)
 
   const partial: Omit<ParsedQuery, 'usedLLM' | 'confidence'> = {
     raw: text,
@@ -248,12 +253,21 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     isCalendar,
     isACRIS,
     isDOB,
+    isMyBuyer,
+    isSellerLead,
+    isEmailCampaign,
   }
 
   const detConf = deterministicConfidence(partial)
 
-  // Skip LLM if deterministic parser is confident enough
-  if (detConf >= 0.65) {
+  // Force LLM fallback when the query syntactically references a place but our
+  // deterministic neighborhood list didn't catch it. Common for shorthand:
+  // bedstuy, fidi, lic, ues, uws, nomad, hk, etc. Cheaper than maintaining a
+  // per-area alias map (GPT-4o-mini handles normalization for ~$0.0001/call).
+  const hasLocationPhrase = /\b(in|near|around)\s+[a-z][a-z\- ]{2,}/i.test(text)
+  if (hasLocationPhrase && neighborhoods.length === 0 && boroughs.length === 0) {
+    // fall through to LLM regardless of detConf
+  } else if (detConf >= 0.65) {
     return { ...partial, usedLLM: false, confidence: detConf }
   }
 
@@ -274,6 +288,9 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     isCalendar:    isCalendar || (llmResult.isCalendar ?? false),
     isACRIS:       isACRIS    || (llmResult.isACRIS    ?? false),
     isDOB:         isDOB      || (llmResult.isDOB      ?? false),
+    isMyBuyer,
+    isSellerLead,
+    isEmailCampaign,
     intent: classifyIntent({
       neighborhoods: [...new Set([...neighborhoods, ...(llmResult.neighborhoods ?? [])])],
       boroughs:      [...new Set([...boroughs,      ...(llmResult.boroughs ?? [])])],

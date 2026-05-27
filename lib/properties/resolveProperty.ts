@@ -1,5 +1,5 @@
 import { prisma } from '../prisma'
-import { normalizeAddress } from './normalizeAddress'
+import { normalizeAddress as canonicalNormalizeAddress } from '../domain/Address'
 
 interface ResolveInput {
   address: string
@@ -18,10 +18,15 @@ export async function resolveProperty(input: ResolveInput): Promise<ResolvedProp
   const { address, borough, zip, neighborhood, bbl } = input
   if (!address || address.trim().length < 5) return null
 
-  const normalized = normalizeAddress(address)
+  const normalized = canonicalNormalizeAddress(address)
   if (!normalized) return null
 
-  const { normalizedFull, unitNumber } = normalized
+  // The Property.normalizedAddress column was written in uppercase by the
+  // legacy lib/properties/normalizeAddress; upper-case here to keep
+  // lookups matching existing rows. Phase E backfill will downcase the
+  // column and this can become a straight `.normalized` reference.
+  const normalizedFull = normalized.normalized.toUpperCase()
+  const unitNumber     = normalized.unit
 
   // 1. Match by BBL if provided — most reliable NYC identifier
   if (bbl) {

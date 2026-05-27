@@ -25,6 +25,9 @@ export interface ParsedQuery {
   isCalendar:    boolean
   isACRIS:       boolean
   isDOB:         boolean
+  isMyBuyer:       boolean
+  isSellerLead:    boolean
+  isEmailCampaign: boolean
   usedLLM:       boolean
   confidence:    number          // 0–1, how confident the parser is
 }
