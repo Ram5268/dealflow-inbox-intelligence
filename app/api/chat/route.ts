@@ -34,7 +34,7 @@ PRICES: Never round. $9,895 stays $9,895. Copy exactly.
 ATTACHMENTS: If 📎 attachment data exists, use it — it's more detailed than the summary.
 SUGGESTIONS: Always return exactly 2 specific follow-up questions.
 NO FILLER: No "feel free to ask", no "I hope that helps", no "I cannot find" without an alternative.
-DEAL CITING: In "referencedDeals", list the exact IDs from [DEAL:id] tags for every deal you mention in your response. This controls which cards the user sees — if you mention it, cite it.
+DEAL CITING: In "referencedDeals", list the exact IDs from [DEAL:id] tags for every deal you mention in your response — this lets us trace which deals you discussed. Cards are shown to the user automatically based on retrieval ranking; this list does NOT gate which cards appear.
 STREETEASY LINKS: When a deal's data line contains "SE: https://..." include that URL in your response so Ryan can tap directly to the listing. Never construct or invent a streeteasy.com URL. Only include a StreetEasy URL if it appears verbatim in a [DEAL:] line's SE: field or in the LIVE STREETEASY LISTINGS block. If neither contains a URL for a listing you want to mention, omit the URL entirely.
 LIVE STREETEASY RESULTS: When LIVE STREETEASY LISTINGS data is present, lead your response with those results. List each one on its own line: address, price, beds, and the full www.streeteasy.com URL. These are live on-market listings — present them as the primary answer to buyer/renter searches.
 
@@ -258,15 +258,21 @@ export async function POST(req: NextRequest) {
       .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
       .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
 
-    // Cards = the deals GPT actually cited. Falls back to full pipelineDeals if GPT cited nothing.
-    // Post-PR4: cards and context come from the same retrieval record set, so cited IDs always resolve.
-    const referencedIds: string[] = Array.isArray(aiResult.referencedDeals) ? aiResult.referencedDeals : []
-    const cited = referencedIds.length > 0 ? pipelineDeals.filter(d => referencedIds.includes(d.id)) : []
-    // matchScore reflects retrieval relevance (ScoredRecord.score 0-100, normalized to 0-1).
-    // Only falls back to confidenceScore when the deal isn't in the pipeline at all — a real
-    // pipeline score of 0 is shown as 0, not silently replaced by classifier confidence.
+    // ── Phase D card-count policy ──────────────────────────────────────────
+    // POLICY: cards = every record the retrieval pipeline surfaced, sorted by
+    // ScoredRecord.score (descending). The LLM's `referencedDeals` array is no
+    // longer a gate — it's only kept for traceability (to log which deals the
+    // LLM actually discussed). This eliminates non-determinism (same query
+    // returning 25 vs 2 cards across sessions) and respects DEALFLOW_AI.md's
+    // "show ALL results" rule: if a record matched the user's criteria, the
+    // user sees it. The LLM response narrates highlights; the cards present.
+    //
+    // matchScore reflects retrieval relevance (ScoredRecord.score, 0-100,
+    // normalized to 0-1). Falls back to extraction confidenceScore only when
+    // the deal isn't in the retrieval pool at all — a real pipeline score of
+    // 0 is shown as 0, not silently replaced by classifier confidence.
     const scoreMap = new Map<string, number>(retrievalResult.records.map(r => [r.id, r.score]))
-    const deals = (cited.length > 0 ? cited : pipelineDeals)
+    const deals = pipelineDeals
       .map(d => ({
         ...d,
         matchScore: scoreMap.has(d.id)
@@ -274,6 +280,7 @@ export async function POST(req: NextRequest) {
           : d.confidenceScore,
         streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
       }))
+      .sort((a, b) => b.matchScore - a.matchScore)
 
     const storedMsg = files.length > 0
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`
