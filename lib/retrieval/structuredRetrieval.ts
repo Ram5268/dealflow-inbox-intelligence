@@ -64,9 +64,15 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
 
   // When a neighborhood filter is present, respect it strictly — only return records
   // from that neighborhood. Never broaden to other areas when the user asked for a specific place.
+  //
+  // Phase C.5: the previous `{ ...where, ...neighborhoodWhere }` spread silently
+  // overwrote `where.OR` (the price filter array) with `neighborhoodWhere.OR`
+  // (the neighborhood matches), so the price filter was dropped whenever a
+  // neighborhood filter was present. Joining via AND keeps both OR clauses
+  // active and AND-ed against the base filters as intended.
   if (uniqueNeighborhoods.length > 0) {
     const neighborhoodResults = await prisma.extractedOpportunity.findMany({
-      where: { ...where, ...neighborhoodWhere },
+      where: { ...where, AND: [neighborhoodWhere] },
       orderBy: { createdAt: 'desc' },
       take: 40,
       select: OPPORTUNITY_SELECT,
