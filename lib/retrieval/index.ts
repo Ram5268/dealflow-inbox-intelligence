@@ -37,6 +37,7 @@ function makeEmptyParsed(raw: string): ParsedQuery {
     raw,
     neighborhoods: [], boroughs: [],
     beds: null, minBeds: null, maxBeds: null,
+    minUnits: null, maxUnits: null,
     minPrice: null, maxPrice: null,
     isRental: null,
     categories: [],
@@ -58,6 +59,7 @@ function makeEmptyPlan(): QueryPlan {
     filters: {
       neighborhoods: [], boroughs: [],
       minBeds: null, maxBeds: null,
+      minUnits: null, maxUnits: null,
       minPrice: null, maxPrice: null,
       freshnessWindowDays: 90,
     },

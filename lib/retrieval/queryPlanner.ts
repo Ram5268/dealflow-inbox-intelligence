@@ -163,6 +163,8 @@ export function buildQueryPlan(parsed: ParsedQuery): QueryPlan {
       boroughs:            parsed.boroughs,
       minBeds:             parsed.minBeds ?? (parsed.beds !== null ? parsed.beds : null),
       maxBeds:             parsed.maxBeds ?? (parsed.beds !== null ? parsed.beds : null),
+      minUnits:            parsed.minUnits,
+      maxUnits:            parsed.maxUnits,
       minPrice:            parsed.minPrice,
       maxPrice:            parsed.maxPrice,
       freshnessWindowDays: freshnessWindow(parsed.intent),

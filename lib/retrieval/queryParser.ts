@@ -76,6 +76,36 @@ function extractBeds(text: string): { beds: number | null; minBeds: number | nul
   return { beds: null, minBeds: null, maxBeds: null }
 }
 
+// "N-family" / "multi-family" / "N-unit" → building residential-unit count.
+// NYC parlance: a "3 family" is a building with 3 units, NOT a 3BR apartment.
+// Returns minUnits/maxUnits filters that downstream SQL applies against the
+// `units` field on ExtractedOpportunity.
+function extractUnits(text: string): { minUnits: number | null; maxUnits: number | null } {
+  const lower = text.toLowerCase()
+
+  // "single family" / "single-family" → exactly 1 unit
+  if (/\bsingle[\s-]family\b/.test(lower)) return { minUnits: 1, maxUnits: 1 }
+
+  // "multi-family" / "multi family" → ≥ 2 units (no upper bound)
+  if (/\bmulti[\s-]family\b/.test(lower)) return { minUnits: 2, maxUnits: null }
+
+  // "N to M family" / "N-M family" / "N-M unit" → range
+  const rangeMatch = lower.match(/(\d+)\s*(?:to|-)\s*(\d+)\s*(?:family|unit|units)\b/)
+  if (rangeMatch) return {
+    minUnits: parseInt(rangeMatch[1]),
+    maxUnits: parseInt(rangeMatch[2]),
+  }
+
+  // "N-family" / "N family" / "N-unit" / "N unit" / "N units" → exact N
+  const exactMatch = lower.match(/(\d+)[\s-](?:family|unit|units)\b/)
+  if (exactMatch) {
+    const n = parseInt(exactMatch[1])
+    return { minUnits: n, maxUnits: n }
+  }
+
+  return { minUnits: null, maxUnits: null }
+}
+
 function extractPrices(text: string): { minPrice: number | null; maxPrice: number | null } {
   const lower = text.toLowerCase()
 
@@ -175,6 +205,7 @@ function deterministicConfidence(q: Omit<ParsedQuery, 'usedLLM' | 'confidence'>)
   let score = 0.5
   if (q.neighborhoods.length > 0)  score += 0.2
   if (q.beds !== null || q.minBeds !== null) score += 0.15
+  if (q.minUnits !== null || q.maxUnits !== null) score += 0.1
   if (q.minPrice !== null || q.maxPrice !== null) score += 0.1
   if (q.categories.length > 0)     score += 0.15
   if (q.intent !== 'general')      score += 0.1
@@ -191,6 +222,8 @@ Return ONLY valid JSON (no markdown):
   "beds": number|null,         // exact bed count (0=studio)
   "minBeds": number|null,
   "maxBeds": number|null,
+  "minUnits": number|null,     // for "N-family" / "multi-family" / "N-unit" queries — N means N residential units in the building, NOT N bedrooms
+  "maxUnits": number|null,
   "minPrice": number|null,     // as a number (e.g. 1500000, not "$1.5M")
   "maxPrice": number|null,
   "isRental": boolean|null,    // true=rental, false=sale, null=unclear
@@ -206,7 +239,9 @@ Examples:
 "who owns 123 West 57th?" → isACRIS:true
 "buyer ISOs for Tribeca" → categories:["BUYER_ISO"], neighborhoods:["Tribeca"]
 "got a buyer looking for 3BR in Clinton Hill, anything coming soon?" → categories:["COMING_SOON_SALE"], neighborhoods:["Clinton Hill"], minBeds:3, isRental:false
-"have a buyer for Brooklyn townhouse" → boroughs:["Brooklyn"], isRental:false, categories:[]`
+"have a buyer for Brooklyn townhouse" → boroughs:["Brooklyn"], isRental:false, categories:[]
+"2-3 family in Bed-Stuy under 2M" → minUnits:2, maxUnits:3, neighborhoods:["Bed-Stuy"], maxPrice:2000000, isRental:false
+"single family in Park Slope" → minUnits:1, maxUnits:1, neighborhoods:["Park Slope"], isRental:false`
 
 async function llmParse(query: string): Promise<Partial<ParsedQuery>> {
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -236,6 +271,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
   const neighborhoods = extractNeighborhoods(text)
   const boroughs      = extractBoroughs(text)
   const bedResult     = extractBeds(text)
+  const unitsResult   = extractUnits(text)
   const priceResult   = extractPrices(text)
   const categories    = detectCategorySignals(text)
   const isRental      = detectRentalSale(text)
@@ -253,6 +289,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     neighborhoods,
     boroughs,
     ...bedResult,
+    ...unitsResult,
     ...priceResult,
     isRental,
     categories,
@@ -289,6 +326,8 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     beds:          bedResult.beds          ?? llmResult.beds          ?? null,
     minBeds:       bedResult.minBeds       ?? llmResult.minBeds       ?? null,
     maxBeds:       bedResult.maxBeds       ?? llmResult.maxBeds       ?? null,
+    minUnits:      unitsResult.minUnits    ?? llmResult.minUnits      ?? null,
+    maxUnits:      unitsResult.maxUnits    ?? llmResult.maxUnits      ?? null,
     minPrice:      priceResult.minPrice    ?? llmResult.minPrice      ?? null,
     maxPrice:      priceResult.maxPrice    ?? llmResult.maxPrice      ?? null,
     isRental:      isRental                ?? llmResult.isRental      ?? null,

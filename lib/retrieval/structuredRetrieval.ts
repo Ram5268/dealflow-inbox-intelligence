@@ -53,6 +53,18 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
     where.beds = bedFilter
   }
 
+  // Units filter — NYC "N-family" / "multi-family" / "N-unit". Building-level
+  // residential unit count, distinct from bedrooms. Records with units IS NULL
+  // are excluded by Prisma's gte/lte semantics when a unit filter is set —
+  // correct behavior: if we don't know how many units a building has, don't
+  // surface it for a buyer who asked specifically for "2-3 family".
+  if (plan.filters.minUnits !== null || plan.filters.maxUnits !== null) {
+    const unitsFilter: Record<string, number> = {}
+    if (plan.filters.minUnits !== null) unitsFilter.gte = plan.filters.minUnits
+    if (plan.filters.maxUnits !== null) unitsFilter.lte = plan.filters.maxUnits
+    where.units = unitsFilter
+  }
+
   // Neighborhood filter — use OR across all neighborhoods (case-insensitive CONTAINS)
   const neighborhoodWhere = uniqueNeighborhoods.length > 0
     ? {

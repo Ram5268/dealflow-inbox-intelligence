@@ -17,6 +17,10 @@ export interface ParsedQuery {
   beds:          number | null   // exact bed count if specified
   minBeds:       number | null
   maxBeds:       number | null
+  // "N-family" / "multi-family" / "N-unit" → building unit count (NYC parlance).
+  // Distinct from bedrooms. "2-3 family" = 2-3 residential units in the building.
+  minUnits:      number | null
+  maxUnits:      number | null
   minPrice:      number | null
   maxPrice:      number | null
   isRental:      boolean | null  // true=rental, false=sale, null=unclear
@@ -48,6 +52,8 @@ export interface QueryPlan {
     boroughs:            string[]
     minBeds:             number | null
     maxBeds:             number | null
+    minUnits:            number | null
+    maxUnits:            number | null
     minPrice:            number | null
     maxPrice:            number | null
     freshnessWindowDays: number
