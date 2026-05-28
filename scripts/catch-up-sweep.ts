@@ -11,7 +11,7 @@
 // exit when the cap is hit mid-batch.
 
 import 'dotenv/config'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '../lib/prisma'
 import { syncOpportunityStatus, QuotaExhaustedError } from '../lib/streetEasySync'
 
 const BATCH    = parseInt(process.argv[2] ?? '200', 10)
@@ -20,7 +20,6 @@ const SLEEP_MS = 250
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 async function main() {
-  const prisma = new PrismaClient()
   const records = await prisma.extractedOpportunity.findMany({
     where: {
       streetEasyId:        { not: null },

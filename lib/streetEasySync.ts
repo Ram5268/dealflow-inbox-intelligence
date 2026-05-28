@@ -275,12 +275,6 @@ type SEListing = {
   url?: string   // full StreetEasy listing URL returned by the API
 }
 
-// FIXME (Phase X.4 readiness): user reported `curl /listing/{id}` returns
-// "Endpoint does not exist". This function calls /sales/{id} or /rentals/{id}
-// instead — those paths need direct curl verification against PRO before
-// runDailyStatusSweep or scripts/catch-up-sweep.ts can run successfully.
-// If those paths also 404, the correct path is likely /sales/details/{id}
-// per the API spec sidebar. Investigate in a follow-up PR before X.4.
 export async function getListingById(id: string, type: 'sale' | 'rental' = 'sale'): Promise<SEListing | null> {
   try {
     const path = type === 'rental' ? `/rentals/${id}` : `/sales/${id}`
@@ -393,20 +387,40 @@ export async function findListingByAddress(
 }
 
 // ── Map SE status to our processingStatus ────────────────────────────────────
+// Observed API status vocabulary (audited 2026-05-28 against /sales/{id} and
+// /rentals/{id}): 'open' (active listings — most common), 'closed' (rental
+// off-market / sale withdrawn or sold), 'sold' (sale completed; also used
+// loosely for rentals where lease was signed).
+// Defensive cases below cover plausible variants we haven't observed yet
+// ('active', 'available', 'new', 'pending', 'in contract', 'withdrawn', etc.)
+// in case the API vocabulary expands. Unrecognized strings warn-log so we
+// catch new states before they pollute streetEasyStatus at scale.
 function mapStatus(seStatus: string): { streetEasyStatus: string; processingStatus?: string } {
   switch (seStatus?.toLowerCase()) {
+    case 'open':
     case 'active':
+    case 'available':
+    case 'new':
       return { streetEasyStatus: 'active' }
-    case 'delisted':
-    case 'off market':
-      return { streetEasyStatus: 'delisted', processingStatus: 'stale' }
+    case 'pending':
     case 'in contract':
     case 'contract signed':
+    case 'in_contract':
       return { streetEasyStatus: 'in_contract' }
     case 'closed':
+    case 'delisted':
+    case 'off market':
+    case 'off_market':
+    case 'withdrawn':
+    case 'cancelled':
+    case 'rented':
+    case 'leased':
+    case 'no_longer_available':
+      return { streetEasyStatus: 'delisted', processingStatus: 'stale' }
     case 'sold':
       return { streetEasyStatus: 'sold', processingStatus: 'stale' }
     default:
+      console.warn(`[mapStatus] unrecognized SE status: "${seStatus}" — defaulting to 'unknown'. Consider adding to the case map.`)
       return { streetEasyStatus: 'unknown' }
   }
 }
@@ -445,11 +459,18 @@ export async function syncOpportunityStatus(opportunityId: string): Promise<{
   }
 
   if (!listing) {
+    // getListingById 404'd AND findListingByAddress fallback also returned null.
+    // The listing genuinely isn't on SE → effectively off-market from our view.
+    // Reserve 'unknown' for real API errors (network, parse) thrown earlier.
     await prisma.extractedOpportunity.update({
       where: { id: opportunityId },
-      data: { streetEasyStatus: 'unknown', streetEasyCheckedAt: new Date() },
+      data: {
+        streetEasyStatus:    'delisted',
+        streetEasyCheckedAt: new Date(),
+        processingStatus:    'stale',
+      },
     })
-    return { updated: false, streetEasyStatus: 'unknown', previous }
+    return { updated: previous !== 'delisted', streetEasyStatus: 'delisted', previous }
   }
 
   const { streetEasyStatus, processingStatus } = mapStatus(listing.status)
