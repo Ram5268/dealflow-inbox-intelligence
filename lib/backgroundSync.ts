@@ -180,6 +180,11 @@ export async function runIncrementalSync(): Promise<{
               processingStatus,
               propertyId:    ext.propertyId    ?? null,
               duplicateOfId: (ext as unknown as { duplicateOfId?: string | null }).duplicateOfId ?? null,
+              // Phase X.1 — SE auto-match results from ingestEmail. NULL when
+              // the lookup didn't match, the API errored, or quota is paused.
+              streetEasyId:        ext.streetEasyId        ?? null,
+              streetEasyStatus:    ext.streetEasyStatus    ?? null,
+              streetEasyCheckedAt: ext.streetEasyCheckedAt ?? null,
             },
           })
           newOpps++

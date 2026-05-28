@@ -43,6 +43,12 @@ export interface ExtractionResult {
   processingStatus?: string
   propertyId?:       string | null
   flagReasons?:      string[]
+  // Phase X.1 — populated when supply-side records get SE-matched at ingestion.
+  // The legacy lib/ai.ts extractor doesn't populate these, but the new
+  // lib/ingestion/ingestEmail.ts pipeline does. backgroundSync persists them.
+  streetEasyId?:        string | null
+  streetEasyStatus?:    string | null
+  streetEasyCheckedAt?: Date | null
 }
 
 const SYSTEM_PROMPT = `You are a real estate deal intelligence classifier for Ryan Martin, a NYC Douglas Elliman agent.

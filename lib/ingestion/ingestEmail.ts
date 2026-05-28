@@ -8,6 +8,14 @@ import { resolvePropertyFromString } from '../properties/resolveProperty'
 import { validateResult, deriveStatus } from './validator'
 import type { ClassifierInput, ExtractorInput, ExtractionResult } from './types'
 import { PROMPT_VERSION } from './types'
+import { findListingByAddress, QuotaExhaustedError } from '../streetEasySync'
+import { SUPPLY_SALE, SUPPLY_RENTAL } from '../domain/Categories'
+
+// Phase X.1 — categories that warrant an SE auto-match call at ingestion.
+// Demand/lead/info records skip the lookup (they don't have a single SE
+// listing to match against).
+const SUPPLY_CATEGORIES = new Set<string>([...SUPPLY_SALE, ...SUPPLY_RENTAL])
+const SUPPLY_RENTAL_SET = new Set<string>(SUPPLY_RENTAL)
 
 // Max 3 concurrent LLM calls to avoid rate-limit spikes during bulk sync
 const queue = new PQueue({ concurrency: 3 })
@@ -133,12 +141,45 @@ export async function ingestEmail(input: ClassifierInput & {
         } catch { /* non-fatal */ }
       }
 
+      // Phase X.1 — SE auto-match for supply-side records with addresses.
+      // Closes the email-ingestion gap: previously these records were saved
+      // with streetEasyId=null and never got a status check unless the daily
+      // cron eventually reached them. Quota gate in seRequest protects against
+      // budget overrun; QuotaExhaustedError is swallowed so ingestion continues.
+      let streetEasyId:        string | null = null
+      let streetEasyStatus:    string | null = null
+      let streetEasyCheckedAt: Date   | null = null
+      if (r.address && SUPPLY_CATEGORIES.has(r.category)) {
+        try {
+          const isRental = SUPPLY_RENTAL_SET.has(r.category)
+          const match    = await findListingByAddress(
+            r.address,
+            r.neighborhood,
+            isRental ? 'rental' : 'sale',
+            r.borough,
+          )
+          if (match) {
+            streetEasyId        = match.id
+            streetEasyStatus    = match.status ?? 'active'
+            streetEasyCheckedAt = new Date()
+          }
+        } catch (e) {
+          if (!(e instanceof QuotaExhaustedError)) {
+            console.error('[ingestion] SE auto-match failed:', (e as Error).message)
+          }
+          // Either way, persist without SE fields — sweep can pick it up later.
+        }
+      }
+
       results.push({
         ...r,
         propertyId,
         processingStatus: status,
         flagReasons,
         duplicateOfId: r.duplicateOfId ?? null,
+        streetEasyId,
+        streetEasyStatus,
+        streetEasyCheckedAt,
       })
     }
 

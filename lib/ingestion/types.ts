@@ -159,6 +159,12 @@ export interface ExtractionResult {
   processingStatus?:    string
   flagReasons?:         string[]
   duplicateOfId?:       string | null
+  // Phase X.1 — populated by SE auto-match before persist when the
+  // record is supply-side and has an address. NULL when no match was
+  // found, the API errored, or quota is paused.
+  streetEasyId?:        string | null
+  streetEasyStatus?:    string | null
+  streetEasyCheckedAt?: Date | null
 }
 
 // ── Validation flag types ─────────────────────────────────────────────────────
