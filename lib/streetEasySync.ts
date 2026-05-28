@@ -612,7 +612,16 @@ export async function runDailyStatusSweep(): Promise<{
   // 3. Date-based expirations (open houses, stale coming-soons, aged listings)
   const expiredFound   = await sweepDateExpirations()
 
-  // 4. Re-verify individual records not checked in 7+ days
+  // 4. Re-verify individual records not checked in 7+ days.
+  // Sized for RapidAPI PRO tier (~5000 calls/month). Each sweep consumes
+  // ~2x this number because sweepForDelistings + sweepForActivations both
+  // call the API. At 75: cron uses ~4500 calls/month, leaving ~500 for
+  // on-demand syncOpportunityStatus calls from /api/sync/run (Check In).
+  //
+  // orderBy uses `nulls: 'first'` so never-checked records (streetEasyCheckedAt
+  // IS NULL) are processed before previously-checked ones — Postgres' default
+  // NULLS LAST for ASC meant new records never got reached when the batch cap
+  // was hit (the 596 Van Buren bug pattern).
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000)
   const staleChecks = await prisma.extractedOpportunity.findMany({
     where: {
@@ -625,8 +634,8 @@ export async function runDailyStatusSweep(): Promise<{
       ],
     },
     select: { id: true },
-    take: 200,
-    orderBy: { streetEasyCheckedAt: 'asc' },
+    take: 75,
+    orderBy: { streetEasyCheckedAt: { sort: 'asc', nulls: 'first' } },
   })
 
   let updated = 0
