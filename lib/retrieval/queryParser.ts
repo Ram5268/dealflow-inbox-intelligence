@@ -109,15 +109,18 @@ function extractUnits(text: string): { minUnits: number | null; maxUnits: number
 function extractPrices(text: string): { minPrice: number | null; maxPrice: number | null } {
   const lower = text.toLowerCase()
 
-  // "$1.5M-$2M" or "$1.5M to $2M"
-  const rangeMatch = text.match(/\$[\d.,]+[kKmM]?\s*(?:to|-)\s*\$[\d.,]+[kKmM]?/i)
+  // "$1.5M-$2M" / "$1.5M to $2M" — also "1.5M to 3M" without $. The trailing
+  // [kKmM] (NOT [kKmM]?) is required on both sides to avoid matching bare
+  // integer ranges like "2-3 family" or "5-10 units" as if they were prices.
+  const rangeMatch = text.match(/\$?[\d.,]+[kKmM]\s*(?:to|-)\s*\$?[\d.,]+[kKmM]/i)
   if (rangeMatch) {
     const parts = rangeMatch[0].split(/to|-/i)
     return { minPrice: parsePrice(parts[0]), maxPrice: parsePrice(parts[1]) }
   }
 
-  // "under $X" or "below $X" or "max $X" or "budget of X" (with or without $)
-  const underMatch = text.match(/(?:under|below|max|maximum|up to)\s+\$[\d.,]+[kKmM]?/i)
+  // "under $X" / "under X" — qualifier word disambiguates the number so $ is
+  // optional. Same pattern for over/around/budgetMatch below.
+  const underMatch = text.match(/(?:under|below|max|maximum|up to)\s+\$?[\d.,]+[kKmM]?/i)
   if (underMatch) return { minPrice: null, maxPrice: parsePrice(underMatch[0]) }
 
   // "budget of X" or "budget X" — price may not have $ sign
@@ -128,11 +131,11 @@ function extractPrices(text: string): { minPrice: number | null; maxPrice: numbe
   }
 
   // "over $X" or "above $X" or "min $X"
-  const overMatch = text.match(/(?:over|above|min|minimum|at least)\s+\$[\d.,]+[kKmM]?/i)
+  const overMatch = text.match(/(?:over|above|min|minimum|at least)\s+\$?[\d.,]+[kKmM]?/i)
   if (overMatch) return { minPrice: parsePrice(overMatch[0]), maxPrice: null }
 
   // "around $X" or "about $X" — treat as ±20% range
-  const aroundMatch = text.match(/(?:around|about|~|approximately)\s+\$[\d.,]+[kKmM]?/i)
+  const aroundMatch = text.match(/(?:around|about|~|approximately)\s+\$?[\d.,]+[kKmM]?/i)
   if (aroundMatch) {
     const p = parsePrice(aroundMatch[0])
     if (p) return { minPrice: Math.round(p * 0.8), maxPrice: Math.round(p * 1.2) }
