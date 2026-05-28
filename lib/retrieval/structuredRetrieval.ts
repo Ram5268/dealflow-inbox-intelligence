@@ -56,37 +56,68 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
   // Units filter — NYC "N-family" / "multi-family" / "N-unit". Building-level
   // residential unit count, distinct from bedrooms. Strict numeric match
   // (units BETWEEN min AND max) is too aggressive on its own: most records
-  // have units IS NULL (hotsheet imports + email extracts that didn't pull
-  // the field) yet describe multifamily inventory in their text. Soft match:
-  // OR of numeric clause AND text clause. Text clause only fires when min >= 2
-  // (i.e., user asked for multi-family) — for single-family queries (min=max=1)
-  // we stay strict to avoid description-text false positives.
+  // have units IS NULL yet describe multifamily inventory in their text.
+  //
+  // Soft fallback fires only when minUnits >= 2 (user asked for multi-family).
+  // EXACT-count queries (e.g. "3-family", minUnits === maxUnits) match only
+  // records whose text mentions THAT specific count — generic 'multi-family'
+  // records are excluded because we can't confirm the count.
+  // RANGE / open-ended queries (e.g. "2-3 family" or "multi-family") accept
+  // both specific-count text AND generic multi-family text, since a record
+  // saying just 'multi-family' could plausibly fall anywhere in the range.
+  //
   // Pushed into additionalAnd so it composes cleanly with each branch's own
   // AND clauses (neighborhood/staleGuard) without the spread-overwrite footgun.
   const additionalAnd: object[] = []
   if (plan.filters.minUnits !== null || plan.filters.maxUnits !== null) {
-    const numericClause: Record<string, number> = {}
-    if (plan.filters.minUnits !== null) numericClause.gte = plan.filters.minUnits
-    if (plan.filters.maxUnits !== null) numericClause.lte = plan.filters.maxUnits
+    const minU = plan.filters.minUnits ?? null
+    const maxU = plan.filters.maxUnits ?? null
 
+    const numericClause: Record<string, number> = {}
+    if (minU !== null) numericClause.gte = minU
+    if (maxU !== null) numericClause.lte = maxU
     const matchByUnits = { units: numericClause }
-    const matchByText = (plan.filters.minUnits ?? 0) >= 2 ? {
-      AND: [
-        { units: null },
-        {
-          OR: [
-            { propertyType:     { contains: 'multi',        mode: 'insensitive' as const } },
-            { propertyType:     { contains: 'family',       mode: 'insensitive' as const } },
-            { extractedTitle:   { contains: '-family',      mode: 'insensitive' as const } },
-            { extractedTitle:   { contains: 'multifamily',  mode: 'insensitive' as const } },
-            { extractedTitle:   { contains: 'multi-family', mode: 'insensitive' as const } },
-            { extractedSummary: { contains: '-family',      mode: 'insensitive' as const } },
-            { extractedSummary: { contains: 'multifamily',  mode: 'insensitive' as const } },
-            { extractedSummary: { contains: 'multi-family', mode: 'insensitive' as const } },
-          ],
-        },
-      ],
-    } : null
+
+    let matchByText: object | null = null
+
+    if ((minU ?? 0) >= 2) {
+      const isExactCount = minU !== null && maxU !== null && minU === maxU
+
+      const NUM_WORDS: Record<number, string[]> = {
+        2: ['2', 'two'], 3: ['3', 'three'], 4: ['4', 'four'],
+        5: ['5', 'five'], 6: ['6', 'six'], 7: ['7', 'seven'], 8: ['8', 'eight'],
+      }
+
+      const lowerN = minU ?? 2
+      const upperN = maxU ?? 8
+      const countTokens: string[] = []
+      for (let n = lowerN; n <= upperN; n++) {
+        countTokens.push(...(NUM_WORDS[n] ?? []))
+      }
+
+      const specificCountOr = countTokens.flatMap(tok => [
+        { extractedTitle:   { contains: `${tok}-family`, mode: 'insensitive' as const } },
+        { extractedTitle:   { contains: `${tok} family`, mode: 'insensitive' as const } },
+        { extractedSummary: { contains: `${tok}-family`, mode: 'insensitive' as const } },
+        { extractedSummary: { contains: `${tok} family`, mode: 'insensitive' as const } },
+        { extractedTitle:   { contains: `${tok}-unit`,   mode: 'insensitive' as const } },
+        { extractedSummary: { contains: `${tok}-unit`,   mode: 'insensitive' as const } },
+      ])
+
+      const textClauses: object[] = [...specificCountOr]
+
+      if (!isExactCount) {
+        textClauses.push(
+          { propertyType:     { contains: 'multi',        mode: 'insensitive' as const } },
+          { extractedTitle:   { contains: 'multi-family', mode: 'insensitive' as const } },
+          { extractedTitle:   { contains: 'multifamily',  mode: 'insensitive' as const } },
+          { extractedSummary: { contains: 'multi-family', mode: 'insensitive' as const } },
+          { extractedSummary: { contains: 'multifamily',  mode: 'insensitive' as const } },
+        )
+      }
+
+      matchByText = { AND: [{ units: null }, { OR: textClauses }] }
+    }
 
     additionalAnd.push(matchByText ? { OR: [matchByUnits, matchByText] } : matchByUnits)
   }
@@ -152,6 +183,7 @@ export const OPPORTUNITY_SELECT = {
   maxPrice:         true,
   beds:             true,
   baths:            true,
+  units:            true,
   propertyType:     true,
   availabilityDate: true,
   sourceAgentName:  true,
@@ -168,7 +200,7 @@ export const OPPORTUNITY_SELECT = {
 export function toScoredRecord(o: {
   id: string; category: string; address: string | null; neighborhood: string | null
   borough: string | null; price: number | null; minPrice: number | null; maxPrice: number | null
-  beds: number | null; baths: number | null; propertyType: string | null
+  beds: number | null; baths: number | null; units: number | null; propertyType: string | null
   availabilityDate: string | null; sourceAgentName: string | null; sourceAgentEmail: string | null
   sourceBrokerage: string | null; clientSide: string | null; extractedTitle: string
   extractedSummary: string; transactionType: string; createdAt: Date; streetEasyId: string | null

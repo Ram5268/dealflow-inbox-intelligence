@@ -77,6 +77,7 @@ export interface ScoredRecord {
   maxPrice:         number | null
   beds:             number | null
   baths:            number | null
+  units:            number | null
   propertyType:     string | null
   availabilityDate: string | null
   sourceAgentName:  string | null

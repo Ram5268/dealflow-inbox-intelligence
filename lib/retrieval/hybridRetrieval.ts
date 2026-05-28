@@ -93,7 +93,7 @@ export async function hybridRetrieval(
       where: fallbackWhere as any,
       select: {
         id: true, category: true, address: true, neighborhood: true, borough: true,
-        price: true, minPrice: true, maxPrice: true, beds: true, baths: true,
+        price: true, minPrice: true, maxPrice: true, beds: true, baths: true, units: true,
         propertyType: true, availabilityDate: true, sourceAgentName: true,
         sourceAgentEmail: true, sourceBrokerage: true, clientSide: true,
         extractedTitle: true, extractedSummary: true,
