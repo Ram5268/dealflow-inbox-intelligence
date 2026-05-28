@@ -41,6 +41,17 @@ export async function POST() {
     console.error('[sync/run] post-sync status check error:', e)
   }
 
+  // Phase X.0 — current monthly RapidAPI usage so the UI can surface a
+  // warning badge as the budget approaches the hard pause.
+  const ym = new Date().toISOString().slice(0, 7)
+  const quota = await prisma.rapidApiUsage.findUnique({ where: { yearMonth: ym } })
+  const quotaStatus = quota ? {
+    used:    quota.callsConsumed,
+    budget:  quota.monthlyBudget,
+    percent: Math.round((quota.callsConsumed / quota.monthlyBudget) * 100),
+    paused:  !!quota.pausedAt,
+  } : null
+
   return NextResponse.json({
     ok: !result.error,
     firstRun: isFirst,
@@ -50,6 +61,7 @@ export async function POST() {
     skipped: result.skipped,
     error: result.error,
     readOnly: true,
+    quotaStatus,
     note: isFirst
       ? 'First sync — pulled last 90 days of inbox.'
       : 'Incremental sync — only fetched emails newer than your most recent stored email.',

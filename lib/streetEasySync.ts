@@ -84,8 +84,59 @@ const NEIGHBORHOOD_TO_SE_AREA: Record<string, string> = {
   'Forest Hills': 'queens', 'Rego Park': 'queens', 'Flushing': 'queens',
 }
 
+// ── Quota safety rail (Phase X.0) ────────────────────────────────────────────
+// Centralized monthly counter + hard pause at 4900/5000 (98% of PRO budget).
+// Every RapidAPI call flows through seRequest, so this is the single chokepoint.
+// Callers should catch QuotaExhaustedError if they want to skip API-dependent
+// work; existing try/catch around sweep/sync functions already swallows it.
+
+export class QuotaExhaustedError extends Error {
+  constructor(used: number, budget: number) {
+    super(`RapidAPI quota at hard cap: ${used}/${budget} — paused until next month`)
+    this.name = 'QuotaExhaustedError'
+  }
+}
+
+async function checkAndIncrementQuota(): Promise<void> {
+  const ym = new Date().toISOString().slice(0, 7)
+  const row = await prisma.rapidApiUsage.upsert({
+    where:  { yearMonth: ym },
+    create: { yearMonth: ym },
+    update: {},
+  })
+
+  if (row.callsConsumed >= 4900) {
+    if (!row.pausedAt) {
+      await prisma.rapidApiUsage.update({
+        where: { yearMonth: ym },
+        data:  { pausedAt: new Date() },
+      })
+      console.error(`[QUOTA] HARD PAUSE: ${row.callsConsumed}/${row.monthlyBudget} — refusing further RapidAPI calls until next month`)
+    }
+    throw new QuotaExhaustedError(row.callsConsumed, row.monthlyBudget)
+  }
+
+  const flags: { warnedAt80?: boolean; warnedAt90?: boolean; warnedAt95?: boolean } = {}
+  if (row.callsConsumed >= 4750 && !row.warnedAt95) {
+    console.warn(`[QUOTA] 95% USED: ${row.callsConsumed}/${row.monthlyBudget} — hard pause at 4900`)
+    flags.warnedAt95 = true
+  } else if (row.callsConsumed >= 4500 && !row.warnedAt90) {
+    console.warn(`[QUOTA] 90% used: ${row.callsConsumed}/${row.monthlyBudget}`)
+    flags.warnedAt90 = true
+  } else if (row.callsConsumed >= 4000 && !row.warnedAt80) {
+    console.warn(`[QUOTA] 80% used: ${row.callsConsumed}/${row.monthlyBudget}`)
+    flags.warnedAt80 = true
+  }
+
+  await prisma.rapidApiUsage.update({
+    where: { yearMonth: ym },
+    data:  { callsConsumed: { increment: 1 }, ...flags },
+  })
+}
+
 // ── Core API request ──────────────────────────────────────────────────────────
 async function seRequest(path: string): Promise<unknown> {
+  await checkAndIncrementQuota()  // throws QuotaExhaustedError at the hard cap
   const url = path.startsWith('http') ? path : `${BASE_URL}${path}`
   const res = await fetch(url, {
     headers: {

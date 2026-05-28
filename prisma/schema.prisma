@@ -434,3 +434,18 @@ model FeatureFlag {
   enabled   Boolean  @default(false)
   updatedAt DateTime @updatedAt
 }
+
+// Phase X.0 — monthly RapidAPI quota counter + hard-pause state.
+// One row per yearMonth ("2026-05"). callsConsumed increments at the
+// chokepoint in lib/streetEasySync.ts:seRequest. Hard pause at 4900/5000.
+model RapidApiUsage {
+  id              String   @id @default(cuid())
+  yearMonth       String   @unique
+  callsConsumed   Int      @default(0)
+  monthlyBudget   Int      @default(5000)
+  warnedAt80      Boolean  @default(false)
+  warnedAt90      Boolean  @default(false)
+  warnedAt95      Boolean  @default(false)
+  pausedAt        DateTime?
+  updatedAt       DateTime @updatedAt
+}
