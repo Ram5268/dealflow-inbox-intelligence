@@ -22,6 +22,21 @@ export function startBackgroundJobs() {
     }
   }, { timezone: 'America/New_York' })
 
+  // StreetEasy status sweep at 5:30am Eastern — between hotsheet (4:54) and daily report (6:00).
+  // Re-checks recently-stored listings against the live StreetEasy API and flips
+  // streetEasyStatus to delisted/sold/in_contract as appropriate. Depends only on
+  // RAPIDAPI_KEY (no Microsoft Graph token), so it runs autonomously regardless of
+  // whether the inbox token is fresh.
+  cron.schedule('30 5 * * *', async () => {
+    try {
+      const { runDailyStatusSweep } = await import('./streetEasySync')
+      const result = await runDailyStatusSweep()
+      console.log(`[DealFlow] Status sweep: ${JSON.stringify(result)}`)
+    } catch (e) {
+      console.error('[DealFlow] Status sweep error:', (e as Error).message)
+    }
+  }, { timezone: 'America/New_York' })
+
   // Daily report at 6:00am Eastern Time
   cron.schedule('0 6 * * *', async () => {
     try {
@@ -32,5 +47,5 @@ export function startBackgroundJobs() {
     }
   }, { timezone: 'America/New_York' })
 
-  console.log('[DealFlow] Background jobs running: hotsheet at 4:54am ET, daily report at 6am ET (inbox sync is manual-only)')
+  console.log('[DealFlow] Background jobs running: hotsheet at 4:54am ET, status sweep at 5:30am ET, daily report at 6am ET (inbox sync is manual-only)')
 }

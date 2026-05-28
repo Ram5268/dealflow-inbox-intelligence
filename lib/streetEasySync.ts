@@ -413,7 +413,11 @@ async function markDelistedMatches(
 }
 
 // ── Sweep for recently delisted SALES and RENTALS ────────────────────────────
-export async function sweepForDelistings(daysBack = 3): Promise<number> {
+// Default window widened to 30 days in Phase E — the prior 3-day default
+// missed listings older than that, including rentals like 596 Van Buren
+// (rented after sitting 6 days). 30 days covers typical short-term rental
+// cycles without scanning the entire DB.
+export async function sweepForDelistings(daysBack = 30): Promise<number> {
   const closedAfter = new Date(Date.now() - daysBack * 86_400_000).toISOString().split('T')[0]
 
   const SALE_CATS   = ['ACTIVE_SALE_LISTING','OFF_MARKET_SALE','BACK_ON_MARKET','PRICE_DROP',

@@ -62,6 +62,19 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
       }
     : {}
 
+  // Stale-listing guard (Phase E): records flagged off-market by the
+  // StreetEasy status sweep ('delisted', 'sold', 'in_contract') must never
+  // reach the user. NULL is treated as "not yet checked, assume active";
+  // once a record has been checked, only 'active' or 'unknown' surfaces.
+  // Combined via AND[] (not spread) for the same reason as Phase C.5's fix:
+  // top-level OR keys silently overwrite each other.
+  const staleGuard = {
+    OR: [
+      { streetEasyStatus: null },
+      { streetEasyStatus: 'active' },
+    ],
+  }
+
   // When a neighborhood filter is present, respect it strictly — only return records
   // from that neighborhood. Never broaden to other areas when the user asked for a specific place.
   //
@@ -72,7 +85,7 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
   // active and AND-ed against the base filters as intended.
   if (uniqueNeighborhoods.length > 0) {
     const neighborhoodResults = await prisma.extractedOpportunity.findMany({
-      where: { ...where, AND: [neighborhoodWhere] },
+      where: { ...where, AND: [neighborhoodWhere, staleGuard] },
       orderBy: { createdAt: 'desc' },
       take: 40,
       select: OPPORTUNITY_SELECT,
@@ -82,7 +95,7 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
 
   // No neighborhood filter — use broad results (borough-level or category-only)
   const broadResults = await prisma.extractedOpportunity.findMany({
-    where,
+    where: { ...where, AND: [staleGuard] },
     orderBy: { createdAt: 'desc' },
     take: 40,
     select: OPPORTUNITY_SELECT,

@@ -9,6 +9,16 @@ export async function POST() {
 
   const result = await runIncrementalSync()
 
+  // After inbox sync, run a StreetEasy status sweep so manual Check In also
+  // refreshes stale listing status alongside fresh emails (Phase E). Non-fatal:
+  // a sweep failure does not block the inbox sync result.
+  try {
+    const { runDailyStatusSweep } = await import('@/lib/streetEasySync')
+    await runDailyStatusSweep()
+  } catch (e) {
+    console.error('[sync/run] Status sweep error:', e)
+  }
+
   return NextResponse.json({
     ok: !result.error,
     firstRun: isFirst,
