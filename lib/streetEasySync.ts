@@ -390,7 +390,9 @@ export async function findListingByAddress(
 // Observed API status vocabulary (audited 2026-05-28 against /sales/{id} and
 // /rentals/{id}): 'open' (active listings — most common), 'closed' (rental
 // off-market / sale withdrawn or sold), 'sold' (sale completed; also used
-// loosely for rentals where lease was signed).
+// loosely for rentals where lease was signed), 'temporary_off_market'
+// (surfaced from the default-fallback warning during the X.4 catch-up
+// sweep — semantically off-market with possible relisting later).
 // Defensive cases below cover plausible variants we haven't observed yet
 // ('active', 'available', 'new', 'pending', 'in contract', 'withdrawn', etc.)
 // in case the API vocabulary expands. Unrecognized strings warn-log so we
@@ -411,6 +413,7 @@ function mapStatus(seStatus: string): { streetEasyStatus: string; processingStat
     case 'delisted':
     case 'off market':
     case 'off_market':
+    case 'temporary_off_market':
     case 'withdrawn':
     case 'cancelled':
     case 'rented':

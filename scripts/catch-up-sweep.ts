@@ -14,10 +14,24 @@ import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { syncOpportunityStatus, QuotaExhaustedError } from '../lib/streetEasySync'
 
-const BATCH    = parseInt(process.argv[2] ?? '200', 10)
-const SLEEP_MS = 250
+const BATCH      = parseInt(process.argv[2] ?? '200', 10)
+const SLEEP_MS   = 250
+const TIMEOUT_MS = 30_000
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
+
+// Cap each syncOpportunityStatus call so a hung Prisma/network call can't
+// silently stall the entire batch (3,000-record run on 2026-05-28 stalled
+// at 868 after a Prisma connection error). Rejection bubbles to the
+// existing per-record try/catch, which counts the error and continues.
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`record timeout after ${ms}ms`)), ms)
+    ),
+  ])
+}
 
 async function main() {
   const records = await prisma.extractedOpportunity.findMany({
@@ -35,7 +49,7 @@ async function main() {
 
   for (const r of records) {
     try {
-      const result = await syncOpportunityStatus(r.id)
+      const result = await withTimeout(syncOpportunityStatus(r.id), TIMEOUT_MS)
       if (result.updated) updated++; else unchanged++
     } catch (e) {
       if (e instanceof QuotaExhaustedError) {
