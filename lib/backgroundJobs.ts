@@ -22,11 +22,10 @@ export function startBackgroundJobs() {
     }
   }, { timezone: 'America/New_York' })
 
-  // StreetEasy status sweep at 5:30am Eastern — between hotsheet (4:54) and daily report (6:00).
-  // Re-checks recently-stored listings against the live StreetEasy API and flips
-  // streetEasyStatus to delisted/sold/in_contract as appropriate. Depends only on
-  // RAPIDAPI_KEY (no Microsoft Graph token), so it runs autonomously regardless of
-  // whether the inbox token is fresh.
+  // PAUSED for catch-up phase (see plan/layer-1-the-sweep-immutable-mitten.md).
+  // While Phase X.3 (SE ID backfill) and X.4 (catch-up sweep) consume budget,
+  // the daily cron would double-spend on the same records. Re-enable in Phase X.5.
+  /*
   cron.schedule('30 5 * * *', async () => {
     try {
       const { runDailyStatusSweep } = await import('./streetEasySync')
@@ -36,6 +35,7 @@ export function startBackgroundJobs() {
       console.error('[DealFlow] Status sweep error:', (e as Error).message)
     }
   }, { timezone: 'America/New_York' })
+  */
 
   // Daily report at 6:00am Eastern Time
   cron.schedule('0 6 * * *', async () => {
@@ -47,5 +47,5 @@ export function startBackgroundJobs() {
     }
   }, { timezone: 'America/New_York' })
 
-  console.log('[DealFlow] Background jobs running: hotsheet at 4:54am ET, status sweep at 5:30am ET, daily report at 6am ET (inbox sync is manual-only)')
+  console.log('[DealFlow] Background jobs running: hotsheet at 4:54am ET, daily report at 6am ET (status sweep paused for catch-up; inbox sync is manual-only)')
 }
