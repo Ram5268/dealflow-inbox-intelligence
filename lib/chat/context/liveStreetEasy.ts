@@ -18,6 +18,8 @@ export const liveStreetEasyFetcher: ContextFetcher = async ({ parsed }) => {
     maxBeds:  parsed.maxBeds,
     minPrice: parsed.minPrice,
     maxPrice: parsed.maxPrice,
+    minUnits: parsed.minUnits,
+    maxUnits: parsed.maxUnits,
     isRental: isRentalIntent,
   })
 

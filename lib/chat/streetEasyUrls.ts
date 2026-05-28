@@ -40,25 +40,30 @@ export function buildStreetEasyBuildingUrl(
 }
 
 // Build a properly filtered StreetEasy search URL using their native filter format:
-// https://streeteasy.com/for-sale/williamsburg/price:-1500000|beds:2?sort_by=se_score
+// https://streeteasy.com/for-sale/williamsburg,bedford-stuyvesant/price:-1500000|beds:2?sort_by=se_score
 export function buildStreetEasyFilterUrl(params: {
   neighborhoods: string[]
   minBeds?:  number | null
   maxBeds?:  number | null
   minPrice?: number | null
   maxPrice?: number | null
+  minUnits?: number | null
+  maxUnits?: number | null
   isRental?: boolean
 }): string | null {
-  const { neighborhoods, minBeds, maxBeds, minPrice, maxPrice, isRental = false } = params
-  // Find the first neighborhood that maps to a StreetEasy area slug.
+  const { neighborhoods, minBeds, maxBeds, minPrice, maxPrice, minUnits, maxUnits, isRental = false } = params
+  // Map ALL mentioned neighborhoods to StreetEasy area slugs and join with commas.
+  // SE accepts comma-separated areas in the URL path. Prior code used .find() which
+  // silently dropped all but the first mapped neighborhood.
   // Slug source is lib/domain/Neighborhood.streetEasySlug (Phase B canonical map).
-  const area = neighborhoods
+  const areas = neighborhoods
     .map(n => {
       const canonical = fromRaw(n)
       return canonical ? getStreetEasySlug(canonical) : null
     })
-    .find((slug): slug is string => !!slug)
-  if (!area) return null
+    .filter((slug): slug is string => !!slug)
+  if (areas.length === 0) return null
+  const areaPath = areas.join(',')
 
   const type = isRental ? 'for-rent' : 'for-sale'
   const filters: string[] = []
@@ -67,12 +72,22 @@ export function buildStreetEasyFilterUrl(params: {
   else if (maxPrice)         filters.push(`price:-${maxPrice}`)
   else if (minPrice)         filters.push(`price:${minPrice}-`)
 
-  if (minBeds != null && maxBeds != null && minBeds !== maxBeds) filters.push(`beds:${minBeds}-${maxBeds}`)
-  else if (minBeds != null)  filters.push(`beds:${minBeds}`)
-  else if (maxBeds != null)  filters.push(`beds:${maxBeds}`)
+  // Units → multifamily building filter. SE's per-unit beds filter doesn't map
+  // to a multifamily building's unit count, so when units are set we DROP the
+  // beds filter even if caller passed one (multifamily takes precedence).
+  const unitsSet = (minUnits ?? 0) >= 1 || (maxUnits ?? 0) >= 1
+  if ((minUnits ?? 0) >= 2 || (maxUnits ?? 0) >= 2) {
+    filters.push('type:multifamily')
+  }
+
+  if (!unitsSet) {
+    if (minBeds != null && maxBeds != null && minBeds !== maxBeds) filters.push(`beds:${minBeds}-${maxBeds}`)
+    else if (minBeds != null)  filters.push(`beds:${minBeds}`)
+    else if (maxBeds != null)  filters.push(`beds:${maxBeds}`)
+  }
 
   const filterPath = filters.length > 0 ? `/${filters.join('|')}` : ''
-  return `https://streeteasy.com/${type}/${area}${filterPath}?sort_by=se_score`
+  return `https://streeteasy.com/${type}/${areaPath}${filterPath}?sort_by=se_score`
 }
 
 // Only returns a URL when we have a real direct listing link (streetEasyId from API sync

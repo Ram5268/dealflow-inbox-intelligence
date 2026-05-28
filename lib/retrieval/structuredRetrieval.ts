@@ -54,15 +54,41 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
   }
 
   // Units filter — NYC "N-family" / "multi-family" / "N-unit". Building-level
-  // residential unit count, distinct from bedrooms. Records with units IS NULL
-  // are excluded by Prisma's gte/lte semantics when a unit filter is set —
-  // correct behavior: if we don't know how many units a building has, don't
-  // surface it for a buyer who asked specifically for "2-3 family".
+  // residential unit count, distinct from bedrooms. Strict numeric match
+  // (units BETWEEN min AND max) is too aggressive on its own: most records
+  // have units IS NULL (hotsheet imports + email extracts that didn't pull
+  // the field) yet describe multifamily inventory in their text. Soft match:
+  // OR of numeric clause AND text clause. Text clause only fires when min >= 2
+  // (i.e., user asked for multi-family) — for single-family queries (min=max=1)
+  // we stay strict to avoid description-text false positives.
+  // Pushed into additionalAnd so it composes cleanly with each branch's own
+  // AND clauses (neighborhood/staleGuard) without the spread-overwrite footgun.
+  const additionalAnd: object[] = []
   if (plan.filters.minUnits !== null || plan.filters.maxUnits !== null) {
-    const unitsFilter: Record<string, number> = {}
-    if (plan.filters.minUnits !== null) unitsFilter.gte = plan.filters.minUnits
-    if (plan.filters.maxUnits !== null) unitsFilter.lte = plan.filters.maxUnits
-    where.units = unitsFilter
+    const numericClause: Record<string, number> = {}
+    if (plan.filters.minUnits !== null) numericClause.gte = plan.filters.minUnits
+    if (plan.filters.maxUnits !== null) numericClause.lte = plan.filters.maxUnits
+
+    const matchByUnits = { units: numericClause }
+    const matchByText = (plan.filters.minUnits ?? 0) >= 2 ? {
+      AND: [
+        { units: null },
+        {
+          OR: [
+            { propertyType:     { contains: 'multi',        mode: 'insensitive' as const } },
+            { propertyType:     { contains: 'family',       mode: 'insensitive' as const } },
+            { extractedTitle:   { contains: '-family',      mode: 'insensitive' as const } },
+            { extractedTitle:   { contains: 'multifamily',  mode: 'insensitive' as const } },
+            { extractedTitle:   { contains: 'multi-family', mode: 'insensitive' as const } },
+            { extractedSummary: { contains: '-family',      mode: 'insensitive' as const } },
+            { extractedSummary: { contains: 'multifamily',  mode: 'insensitive' as const } },
+            { extractedSummary: { contains: 'multi-family', mode: 'insensitive' as const } },
+          ],
+        },
+      ],
+    } : null
+
+    additionalAnd.push(matchByText ? { OR: [matchByUnits, matchByText] } : matchByUnits)
   }
 
   // Neighborhood filter — use OR across all neighborhoods (case-insensitive CONTAINS)
@@ -97,7 +123,7 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
   // active and AND-ed against the base filters as intended.
   if (uniqueNeighborhoods.length > 0) {
     const neighborhoodResults = await prisma.extractedOpportunity.findMany({
-      where: { ...where, AND: [neighborhoodWhere, staleGuard] },
+      where: { ...where, AND: [...additionalAnd, neighborhoodWhere, staleGuard] },
       orderBy: { createdAt: 'desc' },
       take: 40,
       select: OPPORTUNITY_SELECT,
@@ -107,7 +133,7 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
 
   // No neighborhood filter — use broad results (borough-level or category-only)
   const broadResults = await prisma.extractedOpportunity.findMany({
-    where: { ...where, AND: [staleGuard] },
+    where: { ...where, AND: [...additionalAnd, staleGuard] },
     orderBy: { createdAt: 'desc' },
     take: 40,
     select: OPPORTUNITY_SELECT,
