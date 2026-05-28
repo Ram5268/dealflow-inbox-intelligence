@@ -11,7 +11,7 @@
 // that and exits cleanly so the run doesn't blow past the cap.
 
 import 'dotenv/config'
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '../lib/prisma'
 import { findListingByAddress, QuotaExhaustedError } from '../lib/streetEasySync'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from '../lib/domain/Categories'
 
@@ -23,7 +23,6 @@ const SLEEP_MS   = 500
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
 
 async function main() {
-  const prisma = new PrismaClient()
   const records = await prisma.extractedOpportunity.findMany({
     where: {
       streetEasyId: null,
@@ -32,7 +31,9 @@ async function main() {
       category:     { in: SUPPLY as any },
     },
     select: { id: true, address: true, neighborhood: true, borough: true, category: true },
-    orderBy: { createdAt: 'asc' },
+    // Newest-first: maximizes hit rate. Stale extracts burn API calls
+    // for zero matches.
+    orderBy: { createdAt: 'desc' },
     take: BATCH,
   })
 

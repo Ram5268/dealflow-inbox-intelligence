@@ -97,6 +97,17 @@ export class QuotaExhaustedError extends Error {
   }
 }
 
+// Distinct from QuotaExhaustedError — this fires when RapidAPI returns HTTP 429
+// (rate-limit OR plan-quota-exceeded message). Used by findListingByAddress to
+// abandon further area searches for the same record: a 429 on one area means
+// every subsequent borough-fallback area will also 429 and waste calls.
+export class Rate429Error extends Error {
+  constructor(path: string) {
+    super(`RapidAPI 429 rate limit on ${path}`)
+    this.name = 'Rate429Error'
+  }
+}
+
 async function checkAndIncrementQuota(): Promise<void> {
   const ym = new Date().toISOString().slice(0, 7)
   const row = await prisma.rapidApiUsage.upsert({
@@ -105,7 +116,7 @@ async function checkAndIncrementQuota(): Promise<void> {
     update: {},
   })
 
-  if (row.callsConsumed >= 4900) {
+  if (row.callsConsumed >= 9500) {
     if (!row.pausedAt) {
       await prisma.rapidApiUsage.update({
         where: { yearMonth: ym },
@@ -116,15 +127,22 @@ async function checkAndIncrementQuota(): Promise<void> {
     throw new QuotaExhaustedError(row.callsConsumed, row.monthlyBudget)
   }
 
+  // Thresholds rebalanced for PRO 10K/month budget. The boolean fields
+  // (warnedAt80/90/95) keep their names to avoid a schema migration; their
+  // semantic now tracks the SHIFTED warning levels (70/80/90% of 10K).
+  // The log message is the authoritative description of what fired.
+  //   warnedAt95 ← fires at 9000 (90% of 10K)
+  //   warnedAt90 ← fires at 8000 (80% of 10K)
+  //   warnedAt80 ← fires at 7000 (70% of 10K)
   const flags: { warnedAt80?: boolean; warnedAt90?: boolean; warnedAt95?: boolean } = {}
-  if (row.callsConsumed >= 4750 && !row.warnedAt95) {
-    console.warn(`[QUOTA] 95% USED: ${row.callsConsumed}/${row.monthlyBudget} — hard pause at 4900`)
+  if (row.callsConsumed >= 9000 && !row.warnedAt95) {
+    console.warn(`[QUOTA] 90% used: ${row.callsConsumed}/${row.monthlyBudget} — hard pause at 9500`)
     flags.warnedAt95 = true
-  } else if (row.callsConsumed >= 4500 && !row.warnedAt90) {
-    console.warn(`[QUOTA] 90% used: ${row.callsConsumed}/${row.monthlyBudget}`)
-    flags.warnedAt90 = true
-  } else if (row.callsConsumed >= 4000 && !row.warnedAt80) {
+  } else if (row.callsConsumed >= 8000 && !row.warnedAt90) {
     console.warn(`[QUOTA] 80% used: ${row.callsConsumed}/${row.monthlyBudget}`)
+    flags.warnedAt90 = true
+  } else if (row.callsConsumed >= 7000 && !row.warnedAt80) {
+    console.warn(`[QUOTA] 70% used: ${row.callsConsumed}/${row.monthlyBudget}`)
     flags.warnedAt80 = true
   }
 
@@ -144,6 +162,7 @@ async function seRequest(path: string): Promise<unknown> {
       'x-rapidapi-host': RAPIDAPI_HOST,
     },
   })
+  if (res.status === 429) throw new Rate429Error(path)
   if (!res.ok) throw new Error(`StreetEasy API ${res.status}: ${path}`)
   return res.json()
 }
@@ -256,6 +275,12 @@ type SEListing = {
   url?: string   // full StreetEasy listing URL returned by the API
 }
 
+// FIXME (Phase X.4 readiness): user reported `curl /listing/{id}` returns
+// "Endpoint does not exist". This function calls /sales/{id} or /rentals/{id}
+// instead — those paths need direct curl verification against PRO before
+// runDailyStatusSweep or scripts/catch-up-sweep.ts can run successfully.
+// If those paths also 404, the correct path is likely /sales/details/{id}
+// per the API spec sidebar. Investigate in a follow-up PR before X.4.
 export async function getListingById(id: string, type: 'sale' | 'rental' = 'sale'): Promise<SEListing | null> {
   try {
     const path = type === 'rental' ? `/rentals/${id}` : `/sales/${id}`
@@ -306,7 +331,12 @@ async function matchInArea(
       const parts = (normalizeAddress(l.address)?.normalized ?? '').split(' ')
       if (parts[0] === targetNum && parts[1] === targetStreet) return l
     }
-  } catch { /* non-fatal */ }
+  } catch (e) {
+    // Re-throw Rate429Error so findListingByAddress can stop the per-record
+    // area-fallback loop on the first 429 (every subsequent area will also 429).
+    if (e instanceof Rate429Error) throw e
+    // All other errors are non-fatal — caller treats as "no match in this area".
+  }
   return null
 }
 
@@ -330,16 +360,32 @@ export async function findListingByAddress(
   // 1. Try the mapped neighborhood area first
   const primaryArea = neighborhood ? NEIGHBORHOOD_TO_SE_AREA[neighborhood] : null
   if (primaryArea) {
-    const found = await matchInArea(endpoint, primaryArea, normTarget, targetNum, targetStreet)
-    if (found) return found
+    try {
+      const found = await matchInArea(endpoint, primaryArea, normTarget, targetNum, targetStreet)
+      if (found) return found
+    } catch (e) {
+      if (e instanceof Rate429Error) {
+        console.warn(`[findListingByAddress] 429 on ${primaryArea} — abandoning further areas for "${address}"`)
+        return null
+      }
+      throw e
+    }
   }
 
   // 2. Try borough fallback areas
   const fallbackAreas = BOROUGH_AREAS[borough ?? ''] ?? BOROUGH_AREAS[neighborhood ? 'Manhattan' : 'Manhattan']
   for (const area of fallbackAreas) {
     if (area === primaryArea) continue  // already tried
-    const found = await matchInArea(endpoint, area, normTarget, targetNum, targetStreet)
-    if (found) return found
+    try {
+      const found = await matchInArea(endpoint, area, normTarget, targetNum, targetStreet)
+      if (found) return found
+    } catch (e) {
+      if (e instanceof Rate429Error) {
+        console.warn(`[findListingByAddress] 429 on ${area} — abandoning further areas for "${address}"`)
+        return null
+      }
+      throw e
+    }
     await new Promise(r => setTimeout(r, 150))  // rate limit
   }
 

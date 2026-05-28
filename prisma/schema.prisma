@@ -442,7 +442,7 @@ model RapidApiUsage {
   id              String   @id @default(cuid())
   yearMonth       String   @unique
   callsConsumed   Int      @default(0)
-  monthlyBudget   Int      @default(5000)
+  monthlyBudget   Int      @default(10000)
   warnedAt80      Boolean  @default(false)
   warnedAt90      Boolean  @default(false)
   warnedAt95      Boolean  @default(false)
