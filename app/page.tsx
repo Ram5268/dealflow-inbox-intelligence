@@ -145,7 +145,7 @@ export default function GreetPage() {
             )}
             {' — '}
             <span
-              onClick={() => router.push('/chat?match=1')}
+              onClick={() => router.push('/matches')}
               style={{ color: 'var(--sr-cream)', textDecoration: 'underline', cursor: 'pointer' }}
             >
               Review →

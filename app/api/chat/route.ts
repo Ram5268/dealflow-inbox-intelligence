@@ -159,6 +159,10 @@ export async function POST(req: NextRequest) {
     // ── Compose all 7 side-channel context blocks in parallel (PR 5) ─────────
     // Mortgage, ACRIS, DOB, calendar, matches, liveStreetEasy, mojo.
     // Each fetcher has its own try/catch; per-fetcher failures are isolated.
+    // DEPRECATED: body.showMatches was the chat-based path for the home
+    // "Review matches" link before /matches replaced it. No UI surface
+    // sends this flag anymore. Left for API consumers; remove once
+    // confirmed no external caller relies on it.
     const composed = await composeContext({
       parsed,
       userMessage,

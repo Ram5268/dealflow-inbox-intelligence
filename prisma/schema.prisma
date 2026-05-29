@@ -282,6 +282,10 @@ model Match {
 
   opportunity ExtractedOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
 
+  // Idempotency for matchmaker re-runs: same (opportunity, counterpart) pair
+  // can't be inserted twice across runs. Required by /api/matches/run-matchmaker
+  // which is user-triggered from the /matches page.
+  @@unique([opportunityId, counterpartId, counterpartType])
   @@index([seen])
   @@index([createdAt])
 }
