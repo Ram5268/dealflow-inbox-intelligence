@@ -8,7 +8,6 @@ import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import MatchArc from '@/components/MatchArc'
 import ChatShaderBg from '@/components/ChatShaderBg'
 import { BlurFade } from '@/components/BlurFade'
-import MicButton from '@/components/MicButton'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────
@@ -213,10 +212,6 @@ function Composer({
             <path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3L15 7" />
           </svg>
         </label>
-
-        {process.env.NEXT_PUBLIC_VOICE_ENABLED === 'true' && (
-          <MicButton onTranscript={(t) => onChange(t)} disabled={isLoading} />
-        )}
 
         {/* Send */}
         <button
