@@ -59,12 +59,12 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
   // have units IS NULL yet describe multifamily inventory in their text.
   //
   // Soft fallback fires only when minUnits >= 2 (user asked for multi-family).
-  // EXACT-count queries (e.g. "3-family", minUnits === maxUnits) match only
-  // records whose text mentions THAT specific count — generic 'multi-family'
-  // records are excluded because we can't confirm the count.
-  // RANGE / open-ended queries (e.g. "2-3 family" or "multi-family") accept
-  // both specific-count text AND generic multi-family text, since a record
-  // saying just 'multi-family' could plausibly fall anywhere in the range.
+  // For exact-count queries (e.g. "2-family") AND range queries (e.g. "2-3
+  // family"), specific-count tokens AND generic multifamily strings are
+  // always included. Recall > precision: false negatives (missing a real
+  // 2-family because the hotsheet only stored generic 'Multi-family')
+  // hurt the buyer-search workflow more than false positives (a 3-family
+  // surfacing in a 2-family search that the user can quickly skip).
   //
   // Pushed into additionalAnd so it composes cleanly with each branch's own
   // AND clauses (neighborhood/staleGuard) without the spread-overwrite footgun.
@@ -81,8 +81,6 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
     let matchByText: object | null = null
 
     if ((minU ?? 0) >= 2) {
-      const isExactCount = minU !== null && maxU !== null && minU === maxU
-
       const NUM_WORDS: Record<number, string[]> = {
         2: ['2', 'two'], 3: ['3', 'three'], 4: ['4', 'four'],
         5: ['5', 'five'], 6: ['6', 'six'], 7: ['7', 'seven'], 8: ['8', 'eight'],
@@ -104,17 +102,14 @@ export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord
         { extractedSummary: { contains: `${tok}-unit`,   mode: 'insensitive' as const } },
       ])
 
-      const textClauses: object[] = [...specificCountOr]
-
-      if (!isExactCount) {
-        textClauses.push(
-          { propertyType:     { contains: 'multi',        mode: 'insensitive' as const } },
-          { extractedTitle:   { contains: 'multi-family', mode: 'insensitive' as const } },
-          { extractedTitle:   { contains: 'multifamily',  mode: 'insensitive' as const } },
-          { extractedSummary: { contains: 'multi-family', mode: 'insensitive' as const } },
-          { extractedSummary: { contains: 'multifamily',  mode: 'insensitive' as const } },
-        )
-      }
+      const textClauses: object[] = [
+        ...specificCountOr,
+        { propertyType:     { contains: 'multi',        mode: 'insensitive' as const } },
+        { extractedTitle:   { contains: 'multi-family', mode: 'insensitive' as const } },
+        { extractedTitle:   { contains: 'multifamily',  mode: 'insensitive' as const } },
+        { extractedSummary: { contains: 'multi-family', mode: 'insensitive' as const } },
+        { extractedSummary: { contains: 'multifamily',  mode: 'insensitive' as const } },
+      ]
 
       matchByText = { AND: [{ units: null }, { OR: textClauses }] }
     }
