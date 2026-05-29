@@ -6,7 +6,7 @@ export async function GET() {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000)
   const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000)
 
-  const [recent, priceDrop, buyerISO, comingSoon, offMarket, rentalNew] = await Promise.all([
+  const [recent, priceDrop, buyerISO, comingSoonOrOffMarket, rentalNew] = await Promise.all([
     prisma.extractedOpportunity.count({
       where: { isDuplicate: false, createdAt: { gte: since24h } },
     }),
@@ -17,10 +17,11 @@ export async function GET() {
       where: { isDuplicate: false, category: 'BUYER_ISO', createdAt: { gte: since48h } },
     }),
     prisma.extractedOpportunity.count({
-      where: { isDuplicate: false, category: 'COMING_SOON_SALE', createdAt: { gte: since24h } },
-    }),
-    prisma.extractedOpportunity.count({
-      where: { isDuplicate: false, category: 'OFF_MARKET_SALE', createdAt: { gte: since48h } },
+      where: {
+        isDuplicate: false,
+        category:    { in: ['COMING_SOON_SALE', 'OFF_MARKET_SALE'] },
+        createdAt:   { gte: since24h },
+      },
     }),
     prisma.extractedOpportunity.count({
       where: { isDuplicate: false, category: 'RENTAL_LISTING', createdAt: { gte: since48h } },
@@ -37,17 +38,10 @@ export async function GET() {
     })
   }
 
-  if (comingSoon > 0) {
+  if (comingSoonOrOffMarket > 0) {
     chips.push({
-      label: `${comingSoon} coming soon listing${comingSoon > 1 ? 's' : ''}`,
-      query: `Show me the coming soon listings from the last 24 hours.`,
-    })
-  }
-
-  if (offMarket > 0) {
-    chips.push({
-      label: `${offMarket} off-market deal${offMarket > 1 ? 's' : ''}`,
-      query: `Show me the off-market deals from the last 48 hours.`,
+      label: `${comingSoonOrOffMarket} coming soon & off-market`,
+      query: `Show me the coming soon listings and off-market deals from the last 24 hours.`,
     })
   }
 
