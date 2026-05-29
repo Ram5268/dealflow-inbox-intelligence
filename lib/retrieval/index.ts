@@ -45,6 +45,7 @@ function makeEmptyParsed(raw: string): ParsedQuery {
     isCalendar: false, isACRIS: false, isDOB: false,
     isMyBuyer: false, isSellerLead: false, isEmailCampaign: false,
     broaden:   false,
+    freshnessOverrideHours: null,
     usedLLM: false,
     confidence: 0,
   }
@@ -62,6 +63,7 @@ function makeEmptyPlan(): QueryPlan {
       minUnits: null, maxUnits: null,
       minPrice: null, maxPrice: null,
       freshnessWindowDays: 90,
+      freshnessWindowHours: null,
     },
     adjacentNeighborhoods: {},
     tools: [],

@@ -168,6 +168,7 @@ export function buildQueryPlan(parsed: ParsedQuery): QueryPlan {
       minPrice:            parsed.minPrice,
       maxPrice:            parsed.maxPrice,
       freshnessWindowDays: freshnessWindow(parsed.intent),
+      freshnessWindowHours: parsed.freshnessOverrideHours,
     },
     adjacentNeighborhoods: adjacentMap,
     tools: toolsForIntent(parsed.intent, parsed.isACRIS, parsed.isDOB, parsed.isCalendar),

@@ -37,6 +37,10 @@ export interface ParsedQuery {
   // for a plain "in X" query), queryPlanner does NOT expand adjacency —
   // results are strictly the named neighborhood(s) and their variant spellings.
   broaden:         boolean
+  // When the user said "last N hours/days", "today", "yesterday", "this week",
+  // etc. Overrides the intent-derived default in queryPlanner. Null when no
+  // explicit time phrase was detected.
+  freshnessOverrideHours: number | null
   usedLLM:       boolean
   confidence:    number          // 0–1, how confident the parser is
 }
@@ -57,6 +61,9 @@ export interface QueryPlan {
     minPrice:            number | null
     maxPrice:            number | null
     freshnessWindowDays: number
+    // Hours-precise override. When set (parser detected explicit time phrase),
+    // structuredRetrieval uses this instead of freshnessWindowDays.
+    freshnessWindowHours: number | null
   }
   adjacentNeighborhoods: Record<string, string[]>
   tools: Array<'structured_retrieval' | 'vector_search' | 'acris' | 'dob' | 'calendar'>

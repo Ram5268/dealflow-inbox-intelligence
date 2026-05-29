@@ -40,6 +40,7 @@ function makeParsed(overrides: Partial<ParsedQuery>): ParsedQuery {
     isSellerLead:    false,
     isEmailCampaign: false,
     broaden:         false,
+    freshnessOverrideHours: null,
     usedLLM:         false,
     confidence:      0.5,
     ...overrides,

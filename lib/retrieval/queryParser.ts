@@ -106,6 +106,34 @@ function extractUnits(text: string): { minUnits: number | null; maxUnits: number
   return { minUnits: null, maxUnits: null }
 }
 
+// Detect explicit time-window phrases ("last N hours", "today", "this week",
+// etc.) and return the cutoff window in hours. Null when no phrase matched.
+// Downstream: queryPlanner copies this to QueryPlan.filters.freshnessWindowHours
+// and structuredRetrieval applies it as a tighter createdAt cutoff than the
+// intent-derived freshnessWindowDays default.
+function extractFreshnessHours(text: string): number | null {
+  const lower = text.toLowerCase()
+
+  // "last 24 hours", "past 48 hours", "in the last 24 hrs"
+  const hoursMatch = lower.match(/\b(?:last|past|in\s+the\s+last|in\s+the\s+past)\s+(\d+)\s*(?:hours?|hrs?)\b/)
+  if (hoursMatch) return parseInt(hoursMatch[1], 10)
+
+  // "last 3 days", "past 7 days", "in the last 2 days"
+  const daysMatch = lower.match(/\b(?:last|past|in\s+the\s+last|in\s+the\s+past)\s+(\d+)\s*days?\b/)
+  if (daysMatch) return parseInt(daysMatch[1], 10) * 24
+
+  // "today" / "tonight" / "this morning" / "overnight" → 24h window
+  if (/\b(today|tonight|this\s+morning|this\s+evening|overnight)\b/.test(lower)) return 24
+
+  // "yesterday" → 48h window (covers yesterday and today)
+  if (/\byesterday\b/.test(lower)) return 48
+
+  // "this week" → 168h (7 days)
+  if (/\bthis\s+week\b/.test(lower)) return 7 * 24
+
+  return null
+}
+
 function extractPrices(text: string): { minPrice: number | null; maxPrice: number | null } {
   const lower = text.toLowerCase()
 
@@ -210,6 +238,7 @@ function deterministicConfidence(q: Omit<ParsedQuery, 'usedLLM' | 'confidence'>)
   if (q.beds !== null || q.minBeds !== null) score += 0.15
   if (q.minUnits !== null || q.maxUnits !== null) score += 0.1
   if (q.minPrice !== null || q.maxPrice !== null) score += 0.1
+  if (q.freshnessOverrideHours !== null) score += 0.05
   if (q.categories.length > 0)     score += 0.15
   if (q.intent !== 'general')      score += 0.1
   return Math.min(score, 0.95)
@@ -276,6 +305,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
   const bedResult     = extractBeds(text)
   const unitsResult   = extractUnits(text)
   const priceResult   = extractPrices(text)
+  const freshnessOverrideHours = extractFreshnessHours(text)
   const categories    = detectCategorySignals(text)
   const isRental      = detectRentalSale(text)
   const lower         = text.toLowerCase()
@@ -304,6 +334,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     isSellerLead,
     isEmailCampaign,
     broaden,
+    freshnessOverrideHours,
   }
 
   const detConf = deterministicConfidence(partial)
@@ -342,6 +373,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     isSellerLead,
     isEmailCampaign,
     broaden,
+    freshnessOverrideHours,
     intent: classifyIntent({
       neighborhoods: [...new Set([...neighborhoods, ...(llmResult.neighborhoods ?? [])])],
       boroughs:      [...new Set([...boroughs,      ...(llmResult.boroughs ?? [])])],

@@ -6,7 +6,12 @@ import type { QueryPlan, ScoredRecord } from './types'
 export async function structuredRetrieval(plan: QueryPlan): Promise<ScoredRecord[]> {
   if (plan.searchCategories.length === 0) return []
 
-  const cutoff = new Date(Date.now() - plan.filters.freshnessWindowDays * 24 * 60 * 60 * 1000)
+  // Prefer hours-precise window when the parser detected an explicit time
+  // phrase ("last N hours", "today", "this week", etc.). Falls back to the
+  // intent-derived freshnessWindowDays default otherwise.
+  const cutoff = plan.filters.freshnessWindowHours != null
+    ? new Date(Date.now() - plan.filters.freshnessWindowHours * 60 * 60 * 1000)
+    : new Date(Date.now() - plan.filters.freshnessWindowDays * 24 * 60 * 60 * 1000)
 
   // Build all neighborhood strings: exact + adjacent
   const allNeighborhoods = [

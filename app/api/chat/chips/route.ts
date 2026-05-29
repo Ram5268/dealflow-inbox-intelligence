@@ -17,7 +17,7 @@ export async function GET() {
       where: { isDuplicate: false, category: 'BUYER_ISO', createdAt: { gte: since48h } },
     }),
     prisma.extractedOpportunity.count({
-      where: { isDuplicate: false, category: 'COMING_SOON_SALE', createdAt: { gte: since48h } },
+      where: { isDuplicate: false, category: 'COMING_SOON_SALE', createdAt: { gte: since24h } },
     }),
     prisma.extractedOpportunity.count({
       where: { isDuplicate: false, category: 'OFF_MARKET_SALE', createdAt: { gte: since48h } },
@@ -40,7 +40,7 @@ export async function GET() {
   if (comingSoon > 0) {
     chips.push({
       label: `${comingSoon} coming soon listing${comingSoon > 1 ? 's' : ''}`,
-      query: `Show me the coming soon listings from the last 48 hours.`,
+      query: `Show me the coming soon listings from the last 24 hours.`,
     })
   }
 
