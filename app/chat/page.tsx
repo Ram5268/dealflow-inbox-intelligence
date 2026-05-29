@@ -8,6 +8,7 @@ import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import MatchArc from '@/components/MatchArc'
 import ChatShaderBg from '@/components/ChatShaderBg'
 import { BlurFade } from '@/components/BlurFade'
+import MicButton from '@/components/MicButton'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────
@@ -213,19 +214,9 @@ function Composer({
           </svg>
         </label>
 
-        {/* Voice placeholder */}
-        <button style={{
-          width: 32, height: 32, borderRadius: '50%',
-          background: 'rgba(255,255,255,0.08)',
-          border: '1px solid rgba(255,255,255,0.22)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', padding: 0,
-        }} aria-label="Voice input">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round">
-            <rect x="9" y="3" width="6" height="12" rx="3" />
-            <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-          </svg>
-        </button>
+        {process.env.NEXT_PUBLIC_VOICE_ENABLED === 'true' && (
+          <MicButton onTranscript={(t) => onChange(t)} disabled={isLoading} />
+        )}
 
         {/* Send */}
         <button
@@ -853,6 +844,9 @@ function ChatPageInner() {
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  // Guards the ?match=1 auto-fire so it runs at most once per page load
+  // (avoids double-firing on hot reload / strict-mode double-invoke).
+  const matchTriggeredRef = useRef(false)
 
   useEffect(() => {
     setGreeting(pickGreeting())
@@ -862,6 +856,7 @@ function ChatPageInner() {
   useEffect(() => {
     const newParam     = searchParams.get('new')
     const sessionParam = searchParams.get('sessionId')
+    const matchParam   = searchParams.get('match')
     if (newParam === '1') {
       dispatch({ type: 'RESET_NEW' })
       setCurrentSessionId(null)
@@ -884,7 +879,17 @@ function ChatPageInner() {
         .finally(() => setLoadingHistory(false))
       dispatch({ type: 'GO', to: 'memory' })
       window.history.replaceState({}, '', '/chat')
+    } else if (matchParam === '1' && !matchTriggeredRef.current) {
+      // Home-page "Review →" lands here. Auto-fire a chat POST with
+      // showMatches:true — /api/chat reads the flag, injects unseen
+      // Match rows into LLM context, returns deal cards, marks them seen.
+      matchTriggeredRef.current = true
+      window.history.replaceState({}, '', '/chat')
+      dispatch({ type: 'GO', to: 'memory' })
+      void send('Show me my new matches.', undefined, true)
     }
+  // send is intentionally omitted; matchTriggeredRef ensures single-fire.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   useEffect(() => {
@@ -900,7 +905,7 @@ function ChatPageInner() {
     setShowShader(true); setSessionKey(k => k + 1)
   }, [])
 
-  async function send(text?: string, files?: File[]) {
+  async function send(text?: string, files?: File[], showMatches?: boolean) {
     const msg = (text ?? input).trim()
     const hasFiles = (files?.length ?? 0) > 0
     if ((!msg && !hasFiles) || loading) return
@@ -914,7 +919,12 @@ function ChatPageInner() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg || '(see attached file)', files: processed, sessionId: currentSessionId }),
+        body: JSON.stringify({
+          message:   msg || '(see attached file)',
+          files:     processed,
+          sessionId: currentSessionId,
+          ...(showMatches ? { showMatches: true } : {}),
+        }),
       })
       const data = await res.json()
       if (data.sessionId) setCurrentSessionId(data.sessionId)
