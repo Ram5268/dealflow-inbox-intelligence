@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { runIncrementalSync } from '@/lib/backgroundSync'
 import { prisma } from '@/lib/prisma'
+import { runMatchmaking } from '@/lib/matchmaking'
 
 // Internal route — only calls Microsoft Graph GET requests externally.
 export async function POST() {
@@ -51,6 +52,25 @@ export async function POST() {
     percent: Math.round((quota.callsConsumed / quota.monthlyBudget) * 100),
     paused:  !!quota.pausedAt,
   } : null
+
+  // Fire-and-forget matchmaker on freshly-created opportunities.
+  // Pure DB, no RapidAPI calls. Failures must not break the sync response.
+  try {
+    const fresh = await prisma.extractedOpportunity.findMany({
+      where: {
+        isDuplicate: false,
+        createdAt: { gte: new Date(Date.now() - 1000 * 60 * 30) }, // last 30 min
+      },
+      select: { id: true },
+    })
+    if (fresh.length > 0) {
+      void runMatchmaking(fresh.map(o => o.id)).catch(e => {
+        console.error('[sync] matchmaker failed (non-fatal):', (e as Error).message)
+      })
+    }
+  } catch (e) {
+    console.error('[sync] matchmaker dispatch failed (non-fatal):', (e as Error).message)
+  }
 
   return NextResponse.json({
     ok: !result.error,

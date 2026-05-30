@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import GooeyFilter from '@/components/GooeyFilter'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
 
-// ── Types mirror /api/matches GET response shape ─────────────────────────────
 interface PrimaryOpp {
   id: string
   category: string
@@ -67,7 +66,13 @@ interface MatchesResponse {
   counts: { total: number; unseen: number; mojo: number; listings: number; showings: number }
 }
 
-// ── Row format helpers ───────────────────────────────────────────────────────
+type ScoreBand = 'gold' | 'strong' | 'all'
+const TABS: Array<{ id: ScoreBand; label: string; scoreMin: number | null }> = [
+  { id: 'gold',   label: 'GOLD 90+',   scoreMin: 90 },
+  { id: 'strong', label: 'STRONG 70+', scoreMin: 70 },
+  { id: 'all',    label: 'ALL',        scoreMin: null },
+]
+
 function typeBadge(m: Match): { text: string; tone: string } {
   if (m.counterpartType === 'mojo')                 return { text: '🔥 MOJO ↔ BUYER', tone: 'rgba(230,140,80,0.95)' }
   if (m.counterpartType === 'showing_confirmation') return { text: '🗓 SHOWING',       tone: 'rgba(130,200,230,0.9)' }
@@ -107,34 +112,22 @@ function contextLine(m: Match): string {
   return `${pBit} ↔ ${cBit}`
 }
 
-// ── Page ────────────────────────────────────────────────────────────────────
 export default function MatchesPage() {
   const router = useRouter()
   const [data, setData] = useState<MatchesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [running, setRunning] = useState(false)
-  const [runResult, setRunResult] = useState<string | null>(null)
-
-  type ScoreBand  = 'gold' | 'strong' | 'all'
-  type TypeFilter = 'all' | 'opportunity' | 'mojo' | 'showing_confirmation'
-
-  const [scoreBand,  setScoreBand]  = useState<ScoreBand>('strong')
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [scoreBand, setScoreBand] = useState<ScoreBand>('strong')
   const [unseenOnly, setUnseenOnly] = useState<boolean>(true)
 
-  const scoreMin: number | null =
-    scoreBand === 'gold'   ? 90 :
-    scoreBand === 'strong' ? 70 :
-    null
+  const scoreMin = TABS.find(t => t.id === scoreBand)?.scoreMin ?? null
 
   async function fetchMatches() {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (unseenOnly)           params.set('unseen',   '1')
-      if (scoreMin !== null)    params.set('scoreMin', String(scoreMin))
-      if (typeFilter !== 'all') params.set('type',     typeFilter)
+      if (unseenOnly)        params.set('unseen', '1')
+      if (scoreMin !== null) params.set('scoreMin', String(scoreMin))
       const r = await fetch(`/api/matches?${params.toString()}`)
       const j = await r.json() as MatchesResponse
       setData(j)
@@ -143,22 +136,7 @@ export default function MatchesPage() {
     }
   }
 
-  useEffect(() => { void fetchMatches() }, [scoreBand, typeFilter, unseenOnly])
-
-  async function runMatchmaker() {
-    setRunning(true)
-    setRunResult(null)
-    try {
-      const r = await fetch('/api/matches/run-matchmaker', { method: 'POST' })
-      const j = await r.json() as { newMatches: number; highConfidence: number; processed: number }
-      setRunResult(`+${j.newMatches} new (${j.highConfidence} high-confidence) across ${j.processed} opportunities`)
-      await fetchMatches()
-    } catch {
-      setRunResult('Matchmaker failed — try again.')
-    } finally {
-      setRunning(false)
-    }
-  }
+  useEffect(() => { void fetchMatches() }, [scoreBand, unseenOnly])
 
   function toggleExpand(m: Match) {
     if (expandedId === m.id) {
@@ -166,7 +144,6 @@ export default function MatchesPage() {
       return
     }
     setExpandedId(m.id)
-    // Background mark-seen on first expand. Optimistic local update.
     if (!m.seen) {
       void fetch('/api/matches', {
         method:  'PATCH',
@@ -183,77 +160,46 @@ export default function MatchesPage() {
 
   return (
     <ChatSurfaceShell>
-      <GooeyFilter id="goo-filter" strength={8} />
+      <GooeyFilter id="goo-filter" strength={9} />
 
-      <div style={{ padding: '0 16px 10px' }}>
-        <div
-          style={{
-            filter: 'url(#goo-filter)',
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 6,
-            padding: '4px 0',
-          }}
-        >
-          <Chip label="GOLD 90+"   active={scoreBand === 'gold'}   onClick={() => setScoreBand('gold')}   />
-          <Chip label="STRONG 70+" active={scoreBand === 'strong'} onClick={() => setScoreBand('strong')} />
-          <Chip label="ALL 50+"    active={scoreBand === 'all'}    onClick={() => setScoreBand('all')}    />
-          <Spacer />
-          <Chip label="ALL TYPES" active={typeFilter === 'all'}                  onClick={() => setTypeFilter('all')} />
-          <Chip label="LISTINGS"  active={typeFilter === 'opportunity'}          onClick={() => setTypeFilter('opportunity')} />
-          <Chip label="🔥 MOJO"   active={typeFilter === 'mojo'}                 onClick={() => setTypeFilter('mojo')} />
-          <Chip label="SHOWINGS"  active={typeFilter === 'showing_confirmation'} onClick={() => setTypeFilter('showing_confirmation')} />
-          <Spacer />
-          <Chip label={unseenOnly ? 'UNSEEN ONLY' : 'INCL. SEEN'} active={unseenOnly} onClick={() => setUnseenOnly(v => !v)} />
-        </div>
-      </div>
-
-      <div style={{ padding: '0 16px 4px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
-          <div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.45)' }}>
-              MATCHES
-            </div>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>
-              {data
-                ? `${data.counts.unseen} UNSEEN · ${data.counts.mojo} MOJO · ${data.counts.listings} LISTINGS · ${data.counts.showings} SHOWINGS`
-                : 'LOADING…'}
-            </div>
-          </div>
+      <TabBar
+        active={scoreBand}
+        onChange={setScoreBand}
+        rightAction={
           <button
-            onClick={runMatchmaker}
-            disabled={running}
+            onClick={() => setUnseenOnly(v => !v)}
             style={{
-              fontSize: 11,
-              fontFamily: 'var(--font-mono)',
-              letterSpacing: '0.12em',
-              color: running ? 'rgba(255,255,255,0.35)' : 'var(--sr-cream)',
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 999,
-              padding: '6px 14px',
-              cursor: running ? 'wait' : 'pointer',
+              fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
+              color: 'rgba(255,255,255,0.5)', background: 'transparent', border: 'none',
+              padding: '4px 8px', cursor: 'pointer',
             }}
           >
-            {running ? 'RUNNING…' : 'RUN MATCHMAKER ↻'}
+            {unseenOnly ? 'SHOW SEEN' : 'HIDE SEEN'}
           </button>
-        </div>
-        {runResult && (
-          <div style={{ marginTop: 8, fontSize: 12, color: '#7dd3a8', fontFamily: 'var(--font-mono)' }}>
-            {runResult}
+        }
+      />
+
+      <div style={{
+        flex: 1, overflowY: 'auto', scrollbarWidth: 'none',
+        padding: '14px 16px 80px',
+        display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        {data && (
+          <div style={{
+            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+            color: 'rgba(255,255,255,0.35)', marginBottom: 4,
+          }}>
+            {`${data.counts.unseen} UNSEEN · ${data.counts.mojo} MOJO · ${data.counts.listings} LISTINGS · ${data.counts.showings} SHOWINGS`}
           </div>
         )}
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none', padding: '12px 16px 80px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {loading ? (
           <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 40 }}>
             Loading…
           </div>
         ) : !data || data.matches.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>No matches yet.</div>
-            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Tap RUN MATCHMAKER ↻ above to scan recent opportunities.</div>
+            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>No matches in this tier.</div>
+            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Try another tab — or run a Check In to pull fresh matches.</div>
           </div>
         ) : (
           data.matches.map(m => {
@@ -302,7 +248,103 @@ export default function MatchesPage() {
   )
 }
 
-// ── Expanded paired-detail block ────────────────────────────────────────────
+// ── TabBar: 3 quality-tier tabs with a morphing gooey active-tab indicator ──
+function TabBar({
+  active, onChange, rightAction,
+}: {
+  active: ScoreBand
+  onChange: (id: ScoreBand) => void
+  rightAction?: React.ReactNode
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const tabRefs = useRef<Record<ScoreBand, HTMLButtonElement | null>>({ gold: null, strong: null, all: null })
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null)
+
+  useEffect(() => {
+    function measure() {
+      const wrap = wrapRef.current
+      const el = tabRefs.current[active]
+      if (!wrap || !el) return
+      const wrapRect = wrap.getBoundingClientRect()
+      const elRect = el.getBoundingClientRect()
+      setIndicator({ left: elRect.left - wrapRect.left, width: elRect.width })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [active])
+
+  return (
+    <div style={{ padding: '0 16px', position: 'relative' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+        <div ref={wrapRef} style={{ position: 'relative', display: 'flex' }}>
+          {indicator && (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                top: 0, bottom: -2,
+                left: indicator.left, width: indicator.width,
+                filter: 'url(#goo-filter)',
+                transition: 'left 280ms cubic-bezier(.4,1.2,.6,1), width 280ms cubic-bezier(.4,1.2,.6,1)',
+                pointerEvents: 'none',
+              }}
+            >
+              {/* Main pill — sits behind active tab label */}
+              <div style={{
+                position: 'absolute', inset: '4px 0 8px',
+                background: 'var(--sr-cream, #f5e9d4)',
+                borderRadius: 14,
+              }} />
+              {/* Connecting tongue — bleeds into the content panel for the folder effect */}
+              <div style={{
+                position: 'absolute',
+                left: '50%', bottom: 0,
+                transform: 'translateX(-50%)',
+                width: '70%', height: 14,
+                background: 'var(--sr-cream, #f5e9d4)',
+                borderRadius: 8,
+              }} />
+            </div>
+          )}
+
+          {TABS.map(t => {
+            const isActive = active === t.id
+            return (
+              <button
+                key={t.id}
+                ref={el => { tabRefs.current[t.id] = el }}
+                onClick={() => onChange(t.id)}
+                style={{
+                  position: 'relative',
+                  zIndex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '12px 18px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  letterSpacing: '0.12em',
+                  fontWeight: 500,
+                  color: isActive ? '#0a1f2a' : 'rgba(255,255,255,0.5)',
+                  cursor: 'pointer',
+                  transition: 'color 220ms',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {rightAction && (
+          <div style={{ position: 'relative', zIndex: 1 }}>{rightAction}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function ExpandedDetail({ m, router }: { m: Match; router: ReturnType<typeof useRouter> }) {
   const isMojo    = m.counterpartType === 'mojo'
   const isShowing = m.counterpartType === 'showing_confirmation'
@@ -330,7 +372,6 @@ function ExpandedDetail({ m, router }: { m: Match; router: ReturnType<typeof use
         </div>
       )}
 
-      {/* Primary side */}
       {m.primary && (
         <Side
           label="LISTING"
@@ -348,7 +389,6 @@ function ExpandedDetail({ m, router }: { m: Match; router: ReturnType<typeof use
         />
       )}
 
-      {/* Counterpart side */}
       {!isShowing && m.counterpart && (isMojo ? (
         <MojoSide c={m.counterpart as CounterpartMojo} />
       ) : (
@@ -429,35 +469,4 @@ function MojoSide({ c }: { c: CounterpartMojo }) {
       {c.notes && <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>{c.notes}</div>}
     </div>
   )
-}
-
-function Chip({
-  label, active, onClick,
-}: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        background: active ? 'var(--sr-cream, #f5e9d4)' : 'rgba(255,255,255,0.14)',
-        color:      active ? '#0a1f2a' : 'rgba(255,255,255,0.85)',
-        border:     'none',
-        borderRadius: 999,
-        padding: '7px 14px',
-        margin:  '0 -4px',
-        fontFamily:    'var(--font-mono)',
-        fontSize:      10.5,
-        letterSpacing: '0.1em',
-        fontWeight:    500,
-        cursor:        'pointer',
-        whiteSpace:    'nowrap',
-        transition:    'background 200ms, color 200ms',
-      }}
-    >
-      {label}
-    </button>
-  )
-}
-
-function Spacer() {
-  return <span style={{ width: 16, height: 1, background: 'transparent', flexShrink: 0 }} />
 }
