@@ -2,14 +2,24 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-// GET /api/matches[?unseen=1] — list with both sides hydrated.
-// Sort: unseen first, then highest-scoring, then newest. seen rows are
-// returned but visually de-emphasized client-side.
+// GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all]
+// List with both sides hydrated. Sort: unseen first, then highest-scoring,
+// then newest. seen rows are returned but visually de-emphasized client-side.
 export async function GET(req: NextRequest) {
-  const onlyUnseen = req.nextUrl.searchParams.get('unseen') === '1'
+  const sp          = req.nextUrl.searchParams
+  const onlyUnseen  = sp.get('unseen') === '1'
+  const scoreMinRaw = sp.get('scoreMin')
+  const scoreMin    = scoreMinRaw ? parseInt(scoreMinRaw, 10) : null
+  const typeRaw     = sp.get('type')
+  const type        = typeRaw && typeRaw !== 'all' ? typeRaw : null
+
+  const where: Record<string, unknown> = {}
+  if (onlyUnseen)                                    where.seen            = false
+  if (scoreMin !== null && !Number.isNaN(scoreMin))  where.score           = { gte: scoreMin }
+  if (type)                                          where.counterpartType = type
 
   const matches = await prisma.match.findMany({
-    where: onlyUnseen ? { seen: false } : {},
+    where,
     orderBy: [{ seen: 'asc' }, { score: 'desc' }, { createdAt: 'desc' }],
     take: 200,
     include: {
@@ -24,14 +34,13 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  // counterpartType determines the table for the counterpart record.
   const oppCounterpartIds  = matches.filter(m => m.counterpartType === 'opportunity').map(m => m.counterpartId)
   const mojoCounterpartIds = matches.filter(m => m.counterpartType === 'mojo').map(m => m.counterpartId)
 
   const [oppCounterparts, mojoCounterparts] = await Promise.all([
     oppCounterpartIds.length > 0
       ? prisma.extractedOpportunity.findMany({
-          where: { id: { in: oppCounterpartIds } },
+          where:  { id: { in: oppCounterpartIds } },
           select: {
             id: true, category: true, address: true, neighborhood: true,
             price: true, minPrice: true, maxPrice: true, beds: true,
@@ -42,7 +51,7 @@ export async function GET(req: NextRequest) {
       : [],
     mojoCounterpartIds.length > 0
       ? prisma.mojoContact.findMany({
-          where: { id: { in: mojoCounterpartIds } },
+          where:  { id: { in: mojoCounterpartIds } },
           select: {
             id: true, fullName: true, address: true, city: true, neighborhood: true,
             phone: true, email: true, status: true, notes: true,
@@ -51,19 +60,19 @@ export async function GET(req: NextRequest) {
       : [],
   ])
 
-  const oppMap  = Object.fromEntries(oppCounterparts.map(o => [o.id, o]))
+  const oppMap  = Object.fromEntries(oppCounterparts.map(o  => [o.id,  o]))
   const mojoMap = Object.fromEntries(mojoCounterparts.map(m => [m.id, m]))
 
   const enriched = matches.map(m => ({
-    id: m.id,
-    score: m.score,
-    reason: m.reason,
+    id:              m.id,
+    score:           m.score,
+    reason:          m.reason,
     counterpartType: m.counterpartType,
-    seen: m.seen,
-    createdAt: m.createdAt,
-    primary: m.opportunity,
+    seen:            m.seen,
+    createdAt:       m.createdAt,
+    primary:         m.opportunity,
     counterpart:
-      m.counterpartType === 'opportunity' ? (oppMap[m.counterpartId] ?? null) :
+      m.counterpartType === 'opportunity' ? (oppMap[m.counterpartId]  ?? null) :
       m.counterpartType === 'mojo'        ? (mojoMap[m.counterpartId] ?? null) :
       null,
   }))

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
+import GooeyFilter from '@/components/GooeyFilter'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
 
 // ── Types mirror /api/matches GET response shape ─────────────────────────────
@@ -115,10 +116,26 @@ export default function MatchesPage() {
   const [running, setRunning] = useState(false)
   const [runResult, setRunResult] = useState<string | null>(null)
 
+  type ScoreBand  = 'gold' | 'strong' | 'all'
+  type TypeFilter = 'all' | 'opportunity' | 'mojo' | 'showing_confirmation'
+
+  const [scoreBand,  setScoreBand]  = useState<ScoreBand>('strong')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [unseenOnly, setUnseenOnly] = useState<boolean>(true)
+
+  const scoreMin: number | null =
+    scoreBand === 'gold'   ? 90 :
+    scoreBand === 'strong' ? 70 :
+    null
+
   async function fetchMatches() {
     setLoading(true)
     try {
-      const r = await fetch('/api/matches')
+      const params = new URLSearchParams()
+      if (unseenOnly)           params.set('unseen',   '1')
+      if (scoreMin !== null)    params.set('scoreMin', String(scoreMin))
+      if (typeFilter !== 'all') params.set('type',     typeFilter)
+      const r = await fetch(`/api/matches?${params.toString()}`)
       const j = await r.json() as MatchesResponse
       setData(j)
     } finally {
@@ -126,7 +143,7 @@ export default function MatchesPage() {
     }
   }
 
-  useEffect(() => { void fetchMatches() }, [])
+  useEffect(() => { void fetchMatches() }, [scoreBand, typeFilter, unseenOnly])
 
   async function runMatchmaker() {
     setRunning(true)
@@ -166,6 +183,31 @@ export default function MatchesPage() {
 
   return (
     <ChatSurfaceShell>
+      <GooeyFilter id="goo-filter" strength={8} />
+
+      <div style={{ padding: '0 16px 10px' }}>
+        <div
+          style={{
+            filter: 'url(#goo-filter)',
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 6,
+            padding: '4px 0',
+          }}
+        >
+          <Chip label="GOLD 90+"   active={scoreBand === 'gold'}   onClick={() => setScoreBand('gold')}   />
+          <Chip label="STRONG 70+" active={scoreBand === 'strong'} onClick={() => setScoreBand('strong')} />
+          <Chip label="ALL 50+"    active={scoreBand === 'all'}    onClick={() => setScoreBand('all')}    />
+          <Spacer />
+          <Chip label="ALL TYPES" active={typeFilter === 'all'}                  onClick={() => setTypeFilter('all')} />
+          <Chip label="LISTINGS"  active={typeFilter === 'opportunity'}          onClick={() => setTypeFilter('opportunity')} />
+          <Chip label="🔥 MOJO"   active={typeFilter === 'mojo'}                 onClick={() => setTypeFilter('mojo')} />
+          <Chip label="SHOWINGS"  active={typeFilter === 'showing_confirmation'} onClick={() => setTypeFilter('showing_confirmation')} />
+          <Spacer />
+          <Chip label={unseenOnly ? 'UNSEEN ONLY' : 'INCL. SEEN'} active={unseenOnly} onClick={() => setUnseenOnly(v => !v)} />
+        </div>
+      </div>
+
       <div style={{ padding: '0 16px 4px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 4 }}>
           <div>
@@ -387,4 +429,35 @@ function MojoSide({ c }: { c: CounterpartMojo }) {
       {c.notes && <div style={{ marginTop: 6, fontSize: 11, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>{c.notes}</div>}
     </div>
   )
+}
+
+function Chip({
+  label, active, onClick,
+}: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: active ? 'var(--sr-cream, #f5e9d4)' : 'rgba(255,255,255,0.14)',
+        color:      active ? '#0a1f2a' : 'rgba(255,255,255,0.85)',
+        border:     'none',
+        borderRadius: 999,
+        padding: '7px 14px',
+        margin:  '0 -4px',
+        fontFamily:    'var(--font-mono)',
+        fontSize:      10.5,
+        letterSpacing: '0.1em',
+        fontWeight:    500,
+        cursor:        'pointer',
+        whiteSpace:    'nowrap',
+        transition:    'background 200ms, color 200ms',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
+function Spacer() {
+  return <span style={{ width: 16, height: 1, background: 'transparent', flexShrink: 0 }} />
 }
