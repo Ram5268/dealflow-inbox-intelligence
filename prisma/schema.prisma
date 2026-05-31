@@ -1,9 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [vector]
 }
 
 enum Category {
@@ -39,6 +41,42 @@ enum TransactionType {
   UNKNOWN
 }
 
+// ── Tenancy ─────────────────────────────────────────────────────────────────
+model Organization {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  plan        String    @default("trial")
+  dpaSignedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  users            User[]
+  mailboxes        ConnectedMailbox[]
+  emails           RawEmail[]
+  opportunities    ExtractedOpportunity[]
+  searchQueries    SearchQuery[]
+  auditLogs        AuditLog[]
+  chatSessions     ChatSession[]
+  chatMessages     ChatMessage[]
+  mojoRaws         MojoRaw[]
+  mojoContacts     MojoContact[]
+  instantlyEvents  InstantlyEvent[]
+  matches          Match[]
+  pushSubs         PushSubscription[]
+  attachments      Attachment[]
+  properties       Property[]
+  listingHistory   ListingStatusHistory[]
+  propertyIntel    PropertyIntelligence[]
+  criteriaProfiles CriteriaProfile[]
+  reviewItems      ReviewQueueItem[]
+  aiLogs           AIExtractionLog[]
+  outcomes         OutcomeFeedback[]
+  chunks           DocumentChunk[]
+  threads          EmailThread[]
+  linkedResources  LinkedResource[]
+}
+
 model User {
   id              String   @id @default(cuid())
   email           String   @unique
@@ -47,8 +85,13 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
   mailboxes ConnectedMailbox[]
   emails    RawEmail[]
+
+  @@index([organizationId])
 }
 
 model ConnectedMailbox {
@@ -64,8 +107,13 @@ model ConnectedMailbox {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
   user   User?      @relation(fields: [userId], references: [id])
   emails RawEmail[]
+
+  @@index([organizationId])
 }
 
 model RawEmail {
@@ -88,11 +136,10 @@ model RawEmail {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  // ── Processing checkpoints (Phase 1) ──
-  classifierStatus     String?   // 'pending' | 'classified' | 'failed'
+  classifierStatus     String?
   classifierCategory   String?
   classifierConfidence Float?
-  extractionStatus     String?   // 'pending' | 'extracted' | 'failed' | 'skipped'
+  extractionStatus     String?
   extractorType        String?
   extractorVersion     String?
   extractionAttempts   Int       @default(0)
@@ -100,12 +147,21 @@ model RawEmail {
   processingError      String?
   embeddedAt           DateTime?
   matchedAt            DateTime?
-  idempotencyKey       String?   // hash(rawEmailId + extractorType + promptVersion)
+  idempotencyKey       String?
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  threadId String?
+  thread   EmailThread? @relation(fields: [threadId], references: [id])
 
   user          User?             @relation(fields: [userId], references: [id])
   mailbox       ConnectedMailbox? @relation(fields: [mailboxId], references: [id])
   opportunities ExtractedOpportunity[]
   attachments   Attachment[]
+
+  @@index([organizationId])
+  @@index([threadId])
 }
 
 model ExtractedOpportunity {
@@ -144,23 +200,22 @@ model ExtractedOpportunity {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
-  // ── Phase 1 additions ──
   processingStatus     String   @default("active")
-  // Values: "active" | "needs_review" | "draft" | "rejected" | "duplicate" | "stale"
   propertyId           String?
-
-  // ── Test data flag ──
   isTestData           Boolean  @default(false)
 
-  // ── StreetEasy sync ──
   streetEasyId         String?
-  streetEasyStatus     String?   // "active" | "delisted" | "in_contract" | "sold" | "unknown"
+  streetEasyStatus     String?
   streetEasyCheckedAt  DateTime?
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
 
   rawEmail  RawEmail  @relation(fields: [rawEmailId], references: [id])
   matches   Match[]
   property  Property? @relation(fields: [propertyId], references: [id])
 
+  @@index([organizationId])
   @@index([processingStatus])
   @@index([category, processingStatus])
 }
@@ -171,6 +226,11 @@ model SearchQuery {
   parsedCriteriaJson Json?
   resultCount        Int
   createdAt          DateTime @default(now())
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model AuditLog {
@@ -178,6 +238,11 @@ model AuditLog {
   action      String
   detailsJson Json?
   createdAt   DateTime @default(now())
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model ChatSession {
@@ -186,7 +251,13 @@ model ChatSession {
   archived  Boolean       @default(false)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
   messages  ChatMessage[]
+
+  @@index([organizationId])
 }
 
 model ChatMessage {
@@ -198,9 +269,13 @@ model ChatMessage {
   dealsJson   Json?
   suggestions Json?
   createdAt   DateTime    @default(now())
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
-// Staging table — API Nation writes raw Mojo rows here. /api/mojo/process transforms them into MojoContact.
 model MojoRaw {
   id         Int      @id @default(autoincrement())
   mojoId     String?
@@ -221,6 +296,10 @@ model MojoRaw {
   processed  Boolean  @default(false)
   createdAt  DateTime @default(now())
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("mojo_raw")
 }
 
@@ -249,25 +328,35 @@ model MojoContact {
   totalLoanBalance    Float?
   loanInterestRate    Float?
   embedding           Unsupported("vector(1536)")?
-  instantlyStatus     String?   // null | "enrolled" | "suppressed" | "unsubscribed"
+  instantlyStatus     String?
   instantlyCampaignId String?
   syncedAt            DateTime @default(now())
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   instantlyEvents     InstantlyEvent[]
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model InstantlyEvent {
-  id           String      @id @default(cuid())
+  id           String       @id @default(cuid())
   email        String
   contactId    String?
   contact      MojoContact? @relation(fields: [contactId], references: [id])
   campaignId   String?
   campaignName String?
-  eventType    String      // opened | replied | bounced | clicked | interested | unsubscribed
+  eventType    String
   payload      Json?
-  occurredAt   DateTime    @default(now())
-  createdAt    DateTime    @default(now())
+  occurredAt   DateTime     @default(now())
+  createdAt    DateTime     @default(now())
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model Match {
@@ -280,12 +369,13 @@ model Match {
   seen            Boolean  @default(false)
   createdAt       DateTime @default(now())
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
   opportunity ExtractedOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
 
-  // Idempotency for matchmaker re-runs: same (opportunity, counterpart) pair
-  // can't be inserted twice across runs. Required by /api/matches/run-matchmaker
-  // which is user-triggered from the /matches page.
   @@unique([opportunityId, counterpartId, counterpartType])
+  @@index([organizationId])
   @@index([seen])
   @@index([createdAt])
 }
@@ -296,20 +386,37 @@ model PushSubscription {
   p256dh    String
   auth      String
   createdAt DateTime @default(now())
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
-// ── Phase 1 New Models ────────────────────────────────────────────────────────
+// ── Phase 1 New Models (updated for chunking + tenancy) ─────────────────────
 
 model Attachment {
-  id            String   @id @default(cuid())
-  rawEmailId    String
-  name          String
-  mimeType      String
-  sizeBytes     Int?
-  extractedText String?
-  parseError    String?
-  createdAt     DateTime @default(now())
-  rawEmail      RawEmail @relation(fields: [rawEmailId], references: [id])
+  id              String   @id @default(cuid())
+  rawEmailId      String
+  name            String
+  mimeType        String
+  sizeBytes       Int?
+  extractedText   String?
+  parseError      String?
+  parsedPages     Json?
+  tableCount      Int      @default(0)
+  imageCount      Int      @default(0)
+  llamaParseJobId String?
+  parseProvider   String?
+  createdAt       DateTime @default(now())
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  rawEmail RawEmail @relation(fields: [rawEmailId], references: [id])
+  chunks   DocumentChunk[]
+
+  @@index([organizationId])
 }
 
 model Property {
@@ -329,10 +436,15 @@ model Property {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
   opportunities ExtractedOpportunity[]
   statusHistory ListingStatusHistory[]
   intelligence  PropertyIntelligence[]
+  chunks        DocumentChunk[]
 
+  @@index([organizationId])
   @@index([normalizedAddress])
   @@index([bbl])
 }
@@ -346,7 +458,12 @@ model ListingStatusHistory {
   source        String
   detectedAt    DateTime @default(now())
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
   property Property? @relation(fields: [propertyId], references: [id])
+
+  @@index([organizationId])
 }
 
 model PropertyIntelligence {
@@ -358,9 +475,13 @@ model PropertyIntelligence {
   expiresAt  DateTime
   propertyId String?
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
   property Property? @relation(fields: [propertyId], references: [id])
 
   @@unique([address, source])
+  @@index([organizationId])
   @@index([expiresAt])
 }
 
@@ -382,6 +503,11 @@ model CriteriaProfile {
   active        Boolean  @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
 }
 
 model ReviewQueueItem {
@@ -396,6 +522,10 @@ model ReviewQueueItem {
   userCorrectedFields Json?
   createdAt           DateTime  @default(now())
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([status])
   @@index([createdAt])
 }
@@ -418,6 +548,10 @@ model AIExtractionLog {
   error            String?
   createdAt        DateTime @default(now())
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([rawEmailId])
   @@index([createdAt])
 }
@@ -430,6 +564,10 @@ model OutcomeFeedback {
   notes         String?
   createdAt     DateTime @default(now())
 
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([opportunityId])
 }
 
@@ -439,17 +577,94 @@ model FeatureFlag {
   updatedAt DateTime @updatedAt
 }
 
-// Phase X.0 — monthly RapidAPI quota counter + hard-pause state.
-// One row per yearMonth ("2026-05"). callsConsumed increments at the
-// chokepoint in lib/streetEasySync.ts:seRequest. Hard pause at 4900/5000.
 model RapidApiUsage {
-  id              String   @id @default(cuid())
-  yearMonth       String   @unique
-  callsConsumed   Int      @default(0)
-  monthlyBudget   Int      @default(10000)
-  warnedAt80      Boolean  @default(false)
-  warnedAt90      Boolean  @default(false)
-  warnedAt95      Boolean  @default(false)
+  id              String    @id @default(cuid())
+  yearMonth       String    @unique
+  callsConsumed   Int       @default(0)
+  monthlyBudget   Int       @default(10000)
+  warnedAt80      Boolean   @default(false)
+  warnedAt90      Boolean   @default(false)
+  warnedAt95      Boolean   @default(false)
   pausedAt        DateTime?
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime  @updatedAt
+}
+
+// ── New chunking + threading models (empty for now; populated in Phase 2+) ──
+
+model DocumentChunk {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  parentEmailId          String?
+  parentAttachmentId     String?
+  parentLinkedResourceId String?
+  threadId               String?
+
+  chunkType       String
+  content         String
+  pageNumber      Int?
+  sectionHeading  String?
+  hasTable        Boolean @default(false)
+  hasImage        Boolean @default(false)
+  tokenCount      Int?
+
+  embeddingModel   String
+  embeddingVersion String
+  embeddedAt       DateTime?
+  qdrantPointId    String?  @unique
+
+  propertyId String?
+  property   Property? @relation(fields: [propertyId], references: [id])
+
+  attachment       Attachment?      @relation(fields: [parentAttachmentId], references: [id])
+  linkedResource   LinkedResource?  @relation(fields: [parentLinkedResourceId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, chunkType])
+  @@index([organizationId, parentEmailId])
+  @@index([organizationId, threadId])
+  @@index([organizationId, propertyId])
+}
+
+model EmailThread {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  graphConversationId String
+  subjectRoot         String
+  participants        String[]
+  firstMessageAt      DateTime
+  lastMessageAt       DateTime
+  messageCount        Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  emails RawEmail[]
+
+  @@unique([organizationId, graphConversationId])
+  @@index([organizationId, lastMessageAt])
+}
+
+model LinkedResource {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id])
+  parentEmailId      String
+
+  url                String
+  resourceType       String
+  fetchStatus        String
+  fetchedAt          DateTime?
+  fetchError         String?
+  parsedMarkdown     String?
+  parsedAttachmentId String?
+
+  chunks DocumentChunk[]
+
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, parentEmailId])
+  @@index([fetchStatus])
 }
