@@ -53,6 +53,7 @@ export default function SettingsPage() {
   const [mojoLastSync, setMojoLastSync] = useState<string | null>(null)
   const [mojoImporting, setMojoImporting] = useState(false)
   const [mojoImportResult, setMojoImportResult] = useState<{ ok: boolean; upserted?: number; error?: string } | null>(null)
+  const [mojoWebhookUrl, setMojoWebhookUrl] = useState<string>('/api/mojo/webhook')
 
   useEffect(() => {
     fetch('/api/microsoft/token-status').then(r => r.json()).then(setTokenStatus).catch(() => {})
@@ -60,6 +61,12 @@ export default function SettingsPage() {
       setMojoCount(d.count ?? 0)
       setMojoLastSync(d.lastSync)
     }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setMojoWebhookUrl(`${window.location.origin}/api/mojo/webhook`)
+    }
   }, [])
 
   async function testConn() {
@@ -277,7 +284,7 @@ export default function SettingsPage() {
             </p>
           )}
           <p style={{ marginTop: 10, fontSize: 11, color: 'rgba(255,255,255,0.2)', lineHeight: 1.5 }}>
-            For real-time sync: set up API Nation → Mojo → Webhook to {typeof window !== 'undefined' ? window.location.origin : ''}/api/mojo/webhook
+            For real-time sync: set up API Nation → Mojo → Webhook to {mojoWebhookUrl}
           </p>
         </Section>
 
