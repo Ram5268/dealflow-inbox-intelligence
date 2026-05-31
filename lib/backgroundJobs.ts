@@ -1,51 +1,23 @@
-import cron from 'node-cron'
+// All background crons removed. Every Microsoft Graph and StreetEasy
+// operation runs during a user-initiated Check In or Review button click,
+// so the OAuth session token is fresh.
+//
+// Architectural decision (2026-05-31):
+//   - Microsoft Graph tokens expire ~hourly and can't refresh without a
+//     user session. Automated jobs that need Graph access (inbox sync,
+//     daily report) silently fail.
+//   - StreetEasy hotsheet is now ingested via the normal email pipeline
+//     (lib/ingestion/extractors/hotsheetEmailExtractor.ts) — no scraping
+//     needed since StreetEasy emails the hotsheet daily.
+//
+// startBackgroundJobs() is kept as a no-op for compatibility with the
+// existing bootstrap call. If we ever add a cron that doesn't need a user
+// session (e.g. quota-counter reset), reintroduce the schedule here.
 
-// Guard against multiple starts from hot reload in dev
 const g = globalThis as typeof globalThis & { _dealflowJobsStarted?: boolean }
 
 export function startBackgroundJobs() {
   if (g._dealflowJobsStarted) return
   g._dealflowJobsStarted = true
-
-  console.log('[DealFlow] Starting background jobs...')
-
-  // Inbox auto-sync disabled — triggered manually via /api/sync/run (Check In button).
-
-  // StreetEasy hotsheet at 4:54am Eastern — before daily report so matches are included
-  cron.schedule('54 4 * * *', async () => {
-    try {
-      const { runHotsheetSync } = await import('./streetEasyHotsheet')
-      const result = await runHotsheetSync()
-      console.log(`[DealFlow] Hotsheet: +${result.sales} sales, +${result.rentals} rentals, ${result.matches} buyer matches`)
-    } catch (e) {
-      console.error('[DealFlow] Hotsheet sync error:', (e as Error).message)
-    }
-  }, { timezone: 'America/New_York' })
-
-  // PAUSED for catch-up phase (see plan/layer-1-the-sweep-immutable-mitten.md).
-  // While Phase X.3 (SE ID backfill) and X.4 (catch-up sweep) consume budget,
-  // the daily cron would double-spend on the same records. Re-enable in Phase X.5.
-  /*
-  cron.schedule('30 5 * * *', async () => {
-    try {
-      const { runDailyStatusSweep } = await import('./streetEasySync')
-      const result = await runDailyStatusSweep()
-      console.log(`[DealFlow] Status sweep: ${JSON.stringify(result)}`)
-    } catch (e) {
-      console.error('[DealFlow] Status sweep error:', (e as Error).message)
-    }
-  }, { timezone: 'America/New_York' })
-  */
-
-  // Daily report at 6:00am Eastern Time
-  cron.schedule('0 6 * * *', async () => {
-    try {
-      const { generateAndSendDailyReport } = await import('./emailReport')
-      await generateAndSendDailyReport()
-    } catch (e) {
-      console.error('[DealFlow] Daily report error:', (e as Error).message)
-    }
-  }, { timezone: 'America/New_York' })
-
-  console.log('[DealFlow] Background jobs running: hotsheet at 4:54am ET, daily report at 6am ET (status sweep paused for catch-up; inbox sync is manual-only)')
+  console.log('[DealFlow] Background jobs disabled — all sync is manual via Check In / Review.')
 }
