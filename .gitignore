@@ -41,3 +41,6 @@ yarn-error.log*
 next-env.d.ts
 
 /app/generated/prisma
+
+# Local-only test PDF for parsing smoke tests (do not commit)
+public/test.pdf
