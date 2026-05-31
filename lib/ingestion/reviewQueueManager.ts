@@ -1,4 +1,5 @@
 import { prisma } from '../prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import type { ValidationFlag } from './types'
 
 const FLAG_SUGGESTIONS: Record<string, string> = {
@@ -20,9 +21,11 @@ export async function queueItem(
 ): Promise<void> {
   if (flags.length === 0) return
 
+  const organizationId = await getCurrentOrgId()
   for (const flag of flags) {
     await prisma.reviewQueueItem.create({
       data: {
+        organizationId,
         opportunityId,
         rawEmailId,
         flagReason:      flag.reason,
@@ -37,8 +40,10 @@ export async function queueInvalidExtraction(
   rawEmailId: string,
   reason: string,
 ): Promise<void> {
+  const organizationId = await getCurrentOrgId()
   await prisma.reviewQueueItem.create({
     data: {
+      organizationId,
       rawEmailId,
       flagReason:      'schema_validation_failed',
       suggestedAction: `Extraction failed: ${reason.slice(0, 200)}. Reprocess or manually review.`,

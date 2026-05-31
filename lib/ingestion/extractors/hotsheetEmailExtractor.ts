@@ -5,6 +5,7 @@
 // No AI needed — pure regex, zero API cost.
 
 import { prisma } from '../../prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { Category, TransactionType } from '@prisma/client'
 
 export function isHotsheetEmail(subject: string, senderEmail: string): boolean {
@@ -144,6 +145,7 @@ export async function processHotsheetEmail(rawEmailId: string, subject: string, 
 
   if (listings.length === 0) return 0
 
+  const organizationId = await getCurrentOrgId()
   let stored = 0
 
   for (const l of listings) {
@@ -179,6 +181,7 @@ export async function processHotsheetEmail(rawEmailId: string, subject: string, 
 
       await prisma.extractedOpportunity.create({
         data: {
+          organizationId,
           rawEmailId,
           category,
           transactionType:      txType,

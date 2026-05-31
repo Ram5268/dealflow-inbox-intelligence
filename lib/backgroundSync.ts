@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { getRecentMessages, getMessageAttachments } from './microsoftGraph'
 import { classifyAndExtractEmail } from './ai'
 import { ingestEmail } from './ingestion/ingestEmail'
@@ -36,6 +37,8 @@ export async function runIncrementalSync(): Promise<{
   fetched: number; newEmails: number; newOpps: number; skipped: boolean; matches?: number; error?: string
 }> {
   try {
+    const organizationId = await getCurrentOrgId()
+
     // Determine date range: 90 days on first run, incremental after
     const mostRecent = await prisma.rawEmail.findFirst({
       orderBy: { receivedDateTime: 'desc' },
@@ -110,6 +113,7 @@ export async function runIncrementalSync(): Promise<{
 
       const raw = await prisma.rawEmail.create({
         data: {
+          organizationId,
           graphMessageId: msg.id,
           subject: msg.subject ?? '(no subject)',
           senderName: msg.from?.emailAddress?.name ?? null,
@@ -163,6 +167,7 @@ export async function runIncrementalSync(): Promise<{
 
           const opp = await prisma.extractedOpportunity.create({
             data: {
+              organizationId,
               rawEmailId: raw.id, category, transactionType,
               propertyType: ext.propertyType ?? null,
               address: ext.address ?? null, neighborhood: ext.neighborhood ?? null,
@@ -205,6 +210,7 @@ export async function runIncrementalSync(): Promise<{
             if (cp) {
               prisma.criteriaProfile.create({
                 data: {
+                  organizationId,
                   opportunityId: opp.id,
                   type:          (cp.type as string) ?? (category === Category.BUYER_ISO ? 'buyer' : 'renter'),
                   neighborhoods: Array.isArray(cp.neighborhoods) ? cp.neighborhoods as string[] : [],
@@ -242,6 +248,7 @@ export async function runIncrementalSync(): Promise<{
 
     await prisma.auditLog.create({
       data: {
+        organizationId,
         action: 'BACKGROUND_SYNC',
         detailsJson: { fetched: messages.length, newEmails, newOpps, at: new Date().toISOString() },
       },
@@ -258,7 +265,7 @@ export async function runIncrementalSync(): Promise<{
     for (const sc of showingConfirmations) {
       const reason = `Showing confirmation: ${sc.extractedTitle}${sc.address ? ' at ' + sc.address : ''}${sc.availabilityDate ? ' on ' + sc.availabilityDate : ''}. Add to your Outlook calendar?`
       await prisma.match.create({
-        data: { opportunityId: sc.id, counterpartId: sc.id, counterpartType: 'showing_confirmation', score: 90, reason },
+        data: { organizationId, opportunityId: sc.id, counterpartId: sc.id, counterpartType: 'showing_confirmation', score: 90, reason },
       }).catch(() => {})
     }
 
@@ -277,7 +284,7 @@ export async function runIncrementalSync(): Promise<{
       } catch (e) {
         console.error('[matchmaking] failed:', e)
         await prisma.auditLog.create({
-          data: { action: 'matchmaking_failed', detailsJson: { error: (e as Error).message, oppCount: newOppIds.length } },
+          data: { organizationId, action: 'matchmaking_failed', detailsJson: { error: (e as Error).message, oppCount: newOppIds.length } },
         }).catch(() => {})
       }
     }

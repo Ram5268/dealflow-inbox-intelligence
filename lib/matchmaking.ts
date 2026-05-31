@@ -1,4 +1,5 @@
 import { prisma } from './prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { Category } from '@prisma/client'
 import { fromRaw, getAdjacent, getBorough } from './domain/Neighborhood'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
@@ -77,6 +78,8 @@ export interface MatchResult {
 export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> {
   if (newOppIds.length === 0) return { highConfidence: 0, total: 0, topMatches: [] }
 
+  const organizationId = await getCurrentOrgId()
+
   const newOpps = await prisma.extractedOpportunity.findMany({
     where: { id: { in: newOppIds }, isDuplicate: false },
     select: { id: true, category: true, neighborhood: true, borough: true,
@@ -102,7 +105,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
         const score = scoreMatch(listing, iso)
         if (score >= 50) {
           const reason = `${listing.extractedTitle} may match ISO: ${iso.extractedTitle} (score ${score})`
-          await prisma.match.create({ data: { opportunityId: listing.id, counterpartId: iso.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
+          await prisma.match.create({ data: { organizationId, opportunityId: listing.id, counterpartId: iso.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
           created.push({ score, reason, title: listing.extractedTitle })
         }
       }
@@ -120,7 +123,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
         const score = scoreMatch(listing, inq)
         if (score >= 50) {
           const reason = `${listing.extractedTitle} may match renter: ${inq.extractedTitle} (score ${score})`
-          await prisma.match.create({ data: { opportunityId: listing.id, counterpartId: inq.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
+          await prisma.match.create({ data: { organizationId, opportunityId: listing.id, counterpartId: inq.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
           created.push({ score, reason, title: listing.extractedTitle })
         }
       }
@@ -138,7 +141,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
         const score = scoreMatch(listing, { neighborhood: iso.neighborhood, minPrice: iso.minPrice, maxPrice: iso.maxPrice, beds: iso.beds })
         if (score >= 50) {
           const reason = `ISO: ${iso.extractedTitle} may match ${listing.extractedTitle} (score ${score})`
-          await prisma.match.create({ data: { opportunityId: iso.id, counterpartId: listing.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
+          await prisma.match.create({ data: { organizationId, opportunityId: iso.id, counterpartId: listing.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
           created.push({ score, reason, title: iso.extractedTitle })
         }
       }
@@ -157,7 +160,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
         const score = neighborhoodScore(iso.neighborhood, mojo.neighborhood ?? mojo.address)
         if (score >= 25) {
           const reason = `Mojo lead ${mojo.fullName} at ${mojo.address} may match ISO: ${iso.extractedTitle}`
-          await prisma.match.create({ data: { opportunityId: iso.id, counterpartId: mojo.id, counterpartType: 'mojo', score, reason } }).catch(() => {})
+          await prisma.match.create({ data: { organizationId, opportunityId: iso.id, counterpartId: mojo.id, counterpartType: 'mojo', score, reason } }).catch(() => {})
           created.push({ score, reason, title: iso.extractedTitle })
         }
       }
@@ -175,7 +178,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
         const score = scoreMatch(rental, { neighborhood: inq.neighborhood, minPrice: inq.minPrice, maxPrice: inq.maxPrice, beds: inq.beds })
         if (score >= 50) {
           const reason = `Renter inquiry may match ${rental.extractedTitle} (score ${score})`
-          await prisma.match.create({ data: { opportunityId: inq.id, counterpartId: rental.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
+          await prisma.match.create({ data: { organizationId, opportunityId: inq.id, counterpartId: rental.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
           created.push({ score, reason, title: inq.extractedTitle })
         }
       }

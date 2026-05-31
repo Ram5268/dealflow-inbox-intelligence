@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 
 // Receives webhook events from Instantly AI
 // Events: reply_received, lead_marked_as_interested, email_opened, email_bounced, lead_unsubscribed, link_clicked
@@ -28,8 +29,10 @@ export async function POST(req: NextRequest) {
   })
 
   // Store the event
+  const organizationId = await getCurrentOrgId()
   await prisma.instantlyEvent.create({
     data: {
+      organizationId,
       email,
       contactId:   contact?.id ?? null,
       campaignId:  campaignId  || null,

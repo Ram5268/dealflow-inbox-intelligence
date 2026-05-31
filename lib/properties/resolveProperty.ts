@@ -1,4 +1,5 @@
 import { prisma } from '../prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { normalizeAddress as canonicalNormalizeAddress } from '../domain/Address'
 
 interface ResolveInput {
@@ -56,8 +57,10 @@ export async function resolveProperty(input: ResolveInput): Promise<ResolvedProp
   if (fuzzy) return { propertyId: fuzzy.id, isNew: false }
 
   // 4. No match — create a new Property record
+  const organizationId = await getCurrentOrgId()
   const created = await prisma.property.create({
     data: {
+      organizationId,
       normalizedAddress: normalizedFull,
       unitNumber: unitNumber ?? undefined,
       neighborhood: neighborhood ?? undefined,

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { parseSearchQuery, SearchCriteria } from '@/lib/ai'
 import { rankOpportunities, RankedOpportunity } from '@/lib/ranking'
 import { Category, TransactionType } from '@prisma/client'
@@ -48,8 +49,10 @@ export async function POST(req: NextRequest) {
   const top = ranked.slice(0, 20)
 
   // Save search query
+  const organizationId = await getCurrentOrgId()
   await prisma.searchQuery.create({
     data: {
+      organizationId,
       queryText: query,
       parsedCriteriaJson: criteria as object,
       resultCount: top.length,

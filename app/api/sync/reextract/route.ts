@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { classifyAndExtractEmail } from '@/lib/ai'
 import { buildOpportunityText, upsertOpportunityEmbedding } from '@/lib/embeddings'
 import { Category, TransactionType } from '@prisma/client'
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No matching emails found' }, { status: 404 })
     }
 
+    const organizationId = await getCurrentOrgId()
     console.log(`[Reextract] Processing ${emails.length} email(s)`)
 
     let totalDeleted = 0
@@ -83,6 +85,7 @@ export async function POST(req: NextRequest) {
 
           const opp = await prisma.extractedOpportunity.create({
             data: {
+              organizationId,
               rawEmailId: email.id, category, transactionType,
               propertyType: ext.propertyType ?? null,
               address: ext.address ?? null, neighborhood: ext.neighborhood ?? null,

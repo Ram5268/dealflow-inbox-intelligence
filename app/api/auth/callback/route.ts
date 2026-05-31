@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code')
@@ -53,10 +54,13 @@ export async function GET(req: NextRequest) {
 
   const expiresAt = new Date(Date.now() + expires_in * 1000)
 
+  const organizationId = await getCurrentOrgId()
+
   // Store tokens in DB against the runtime-token mailbox record
   await prisma.connectedMailbox.upsert({
     where: { id: 'runtime-token' },
     create: {
+      organizationId,
       id: 'runtime-token',
       email: 'oauth',
       provider: 'microsoft',
@@ -75,6 +79,7 @@ export async function GET(req: NextRequest) {
 
   await prisma.auditLog.create({
     data: {
+      organizationId,
       action: 'OAUTH_CONNECTED',
       detailsJson: { timestamp: new Date().toISOString(), expiresAt: expiresAt.toISOString() },
     },

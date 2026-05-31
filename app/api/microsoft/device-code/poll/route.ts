@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 
 // Polls Microsoft's token endpoint for a device code grant.
 // Returns ok:true when the user has signed in and tokens are stored.
@@ -54,10 +55,13 @@ export async function POST(req: NextRequest) {
       if (payload.exp) expiresAt = new Date(payload.exp * 1000)
     } catch { /* non-fatal */ }
 
+    const organizationId = await getCurrentOrgId()
+
     // Store both tokens
     await prisma.connectedMailbox.upsert({
       where: { id: 'runtime-token' },
       create: {
+        organizationId,
         id: 'runtime-token',
         email: data.id_token
           ? JSON.parse(Buffer.from(data.id_token.split('.')[1], 'base64').toString()).preferred_username ?? 'runtime'
@@ -78,6 +82,7 @@ export async function POST(req: NextRequest) {
 
     await prisma.auditLog.create({
       data: {
+        organizationId,
         action: 'TOKEN_UPDATED',
         detailsJson: { source: 'device_code_flow', expiresAt: expiresAt?.toISOString(), hasRefreshToken: !!data.refresh_token },
       },

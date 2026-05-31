@@ -1,4 +1,5 @@
 import { prisma } from '../prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import type { ClassifierOutput, ExtractionResult } from './types'
 import { PROMPT_VERSION, SCHEMA_VERSION } from './types'
 
@@ -23,6 +24,7 @@ export async function logExtraction(opts: {
                          + (outputTokens / 1_000_000) * COST_PER_1M_OUTPUT
 
   try {
+    const organizationId = await getCurrentOrgId()
     await prisma.aIExtractionLog.upsert({
       where: { idempotencyKey: opts.idempotencyKey },
       update: {
@@ -35,6 +37,7 @@ export async function logExtraction(opts: {
         error:          opts.error,
       },
       create: {
+        organizationId,
         rawEmailId:      opts.rawEmailId,
         opportunityId:   opts.opportunityId,
         idempotencyKey:  opts.idempotencyKey,

@@ -10,11 +10,24 @@ const prisma = new PrismaClient({ adapter })
 async function main() {
   console.log('Seeding demo data...')
 
+  const org = await prisma.organization.findUnique({
+    where:  { slug: 'dealflow-ryan' },
+    select: { id: true },
+  })
+  if (!org) {
+    throw new Error(
+      'Singleton organization "dealflow-ryan" not found. ' +
+      'Run scripts/seed-tenancy.ts first.'
+    )
+  }
+  const organizationId = org.id
+
   // Seed demo raw emails
   const emails = await Promise.all([
     prisma.rawEmail.upsert({
       where: { graphMessageId: 'demo-001' },
       create: {
+        organizationId,
         graphMessageId: 'demo-001',
         subject: 'Coming Soon | 2-Family in Bed-Stuy | $1,995,000',
         senderName: 'Sarah Chen',
@@ -29,6 +42,7 @@ async function main() {
     prisma.rawEmail.upsert({
       where: { graphMessageId: 'demo-002' },
       create: {
+        organizationId,
         graphMessageId: 'demo-002',
         subject: 'ISO: Brooklyn Multifamily | Budget up to $2.5M | Pre-approved buyer',
         senderName: 'Marcus Williams',
@@ -43,6 +57,7 @@ async function main() {
     prisma.rawEmail.upsert({
       where: { graphMessageId: 'demo-003' },
       create: {
+        organizationId,
         graphMessageId: 'demo-003',
         subject: 'Renter inquiry - 1BR in Williamsburg, up to $3,500/mo',
         senderName: 'Apartment.com Lead',
@@ -57,6 +72,7 @@ async function main() {
     prisma.rawEmail.upsert({
       where: { graphMessageId: 'demo-004' },
       create: {
+        organizationId,
         graphMessageId: 'demo-004',
         subject: 'Just Listed | 2BR/2BA Upper West Side | $1,450,000',
         senderName: 'Douglas Elliman Blast',
@@ -71,6 +87,7 @@ async function main() {
     prisma.rawEmail.upsert({
       where: { graphMessageId: 'demo-005' },
       create: {
+        organizationId,
         graphMessageId: 'demo-005',
         subject: 'Open House This Weekend | Clinton Hill Townhouse',
         senderName: 'Corcoran Group',
@@ -85,6 +102,7 @@ async function main() {
     prisma.rawEmail.upsert({
       where: { graphMessageId: 'demo-006' },
       create: {
+        organizationId,
         graphMessageId: 'demo-006',
         subject: 'BACK ON MARKET | Brooklyn Heights Condo | $875,000',
         senderName: 'Compass Listing Alerts',
@@ -99,6 +117,7 @@ async function main() {
     prisma.rawEmail.upsert({
       where: { graphMessageId: 'demo-007' },
       create: {
+        organizationId,
         graphMessageId: 'demo-007',
         subject: 'Price Improvement | Park Slope 3BR | Now $1,299,000 (was $1,399,000)',
         senderName: 'Sotheby\'s International Realty',
@@ -113,6 +132,7 @@ async function main() {
     prisma.rawEmail.upsert({
       where: { graphMessageId: 'demo-008' },
       create: {
+        organizationId,
         graphMessageId: 'demo-008',
         subject: 'RE: Team lunch this Friday',
         senderName: 'Jennifer Marks',
@@ -133,6 +153,7 @@ async function main() {
     prisma.extractedOpportunity.upsert({
       where: { id: 'demo-op-001' },
       create: {
+        organizationId,
         id: 'demo-op-001',
         rawEmailId: emails[0].id,
         category: Category.COMING_SOON_SALE,
@@ -161,6 +182,7 @@ async function main() {
     prisma.extractedOpportunity.upsert({
       where: { id: 'demo-op-002' },
       create: {
+        organizationId,
         id: 'demo-op-002',
         rawEmailId: emails[1].id,
         category: Category.BUYER_ISO,
@@ -186,6 +208,7 @@ async function main() {
     prisma.extractedOpportunity.upsert({
       where: { id: 'demo-op-003' },
       create: {
+        organizationId,
         id: 'demo-op-003',
         rawEmailId: emails[2].id,
         category: Category.RENTER_INQUIRY,
@@ -211,6 +234,7 @@ async function main() {
     prisma.extractedOpportunity.upsert({
       where: { id: 'demo-op-004' },
       create: {
+        organizationId,
         id: 'demo-op-004',
         rawEmailId: emails[3].id,
         category: Category.ACTIVE_SALE_LISTING,
@@ -237,6 +261,7 @@ async function main() {
     prisma.extractedOpportunity.upsert({
       where: { id: 'demo-op-005' },
       create: {
+        organizationId,
         id: 'demo-op-005',
         rawEmailId: emails[4].id,
         category: Category.OPEN_HOUSE,
@@ -262,6 +287,7 @@ async function main() {
     prisma.extractedOpportunity.upsert({
       where: { id: 'demo-op-006' },
       create: {
+        organizationId,
         id: 'demo-op-006',
         rawEmailId: emails[5].id,
         category: Category.BACK_ON_MARKET,
@@ -289,6 +315,7 @@ async function main() {
     prisma.extractedOpportunity.upsert({
       where: { id: 'demo-op-007' },
       create: {
+        organizationId,
         id: 'demo-op-007',
         rawEmailId: emails[6].id,
         category: Category.PRICE_DROP,
@@ -320,6 +347,7 @@ async function main() {
   // Seed an audit log entry
   await prisma.auditLog.create({
     data: {
+      organizationId,
       action: 'SEED',
       detailsJson: {
         message: 'Demo data seeded',

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 
 // Parses a single CSV line respecting double-quoted fields (commas inside quotes OK)
 function parseCSVLine(line: string): string[] {
@@ -50,6 +51,8 @@ export async function POST(req: NextRequest) {
     }
     return ''
   }
+
+  const organizationId = await getCurrentOrgId()
 
   let upserted = 0
   let skipped  = 0
@@ -119,6 +122,7 @@ export async function POST(req: NextRequest) {
           syncedAt:  new Date(),
         },
         create: {
+          organizationId,
           mojoId,
           fullName,
           phone:    phone    || null,

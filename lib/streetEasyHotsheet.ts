@@ -3,6 +3,7 @@
 // solving the challenge automatically before returning the HTML.
 
 import { prisma } from './prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { buildOpportunityText, upsertOpportunityEmbedding, semanticSearch } from './embeddings'
 import { scoreMatch } from './matchmaking'
 import { Category, TransactionType } from '@prisma/client'
@@ -184,6 +185,7 @@ async function storeListings(
   const category  = type === 'sale' ? Category.ACTIVE_SALE_LISTING : Category.RENTAL_LISTING
   const txType    = type === 'sale' ? TransactionType.SALE         : TransactionType.RENTAL
   const rawEmailId = await getOrCreateHotsheetEmailId()
+  const organizationId = await getCurrentOrgId()
 
   let upserted = 0
   let matchCount = 0
@@ -204,6 +206,7 @@ async function storeListings(
       ].filter(Boolean).join(' | ')
 
       const data = {
+        organizationId,
         rawEmailId,
         category,
         transactionType: txType,
@@ -294,6 +297,7 @@ export async function runHotsheetSync(dateOverride?: string): Promise<{
 // ── Buyer match detection ─────────────────────────────────────────────────────
 async function findBuyerMatches(type: 'sale' | 'rental', listing: HotsheetListing, oppId: string): Promise<number> {
   try {
+    const organizationId = await getCurrentOrgId()
     const query = [
       type === 'sale' ? 'buyer looking to purchase' : 'renter looking for apartment',
       listing.neighborhood, listing.propertyType,
@@ -328,7 +332,7 @@ async function findBuyerMatches(type: 'sale' | 'rental', listing: HotsheetListin
 
       const reason = `${listing.address} (hotsheet) may match ${demand.extractedTitle} (score ${score})`
       await prisma.match.create({
-        data: { opportunityId: oppId, counterpartId: demand.id, counterpartType: 'opportunity', score, reason, seen: false },
+        data: { organizationId, opportunityId: oppId, counterpartId: demand.id, counterpartType: 'opportunity', score, reason, seen: false },
       }).catch(() => {})
 
       console.log(`[Hotsheet] Match written: "${listing.address}" → "${demand.extractedTitle}" (score ${score})`)
@@ -350,8 +354,10 @@ async function getOrCreateHotsheetEmailId(): Promise<string> {
     select: { id: true },
   })
   if (existing) { _hotsheetEmailId = existing.id; return existing.id }
+  const organizationId = await getCurrentOrgId()
   const created = await prisma.rawEmail.create({
     data: {
+      organizationId,
       graphMessageId:   'streeteasy-hotsheet-synthetic',
       subject:          'StreetEasy Daily Hotsheet',
       senderEmail:      'noreply@email.streeteasy.com',

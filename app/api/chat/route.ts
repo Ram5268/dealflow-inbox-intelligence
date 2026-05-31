@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { runRetrieval } from '@/lib/retrieval'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { composeContext } from '@/lib/chat/context/composeContext'
@@ -83,13 +84,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Message or file required' }, { status: 400 })
     }
 
+    const organizationId = await getCurrentOrgId()
+
     // Resolve or create session
     const sessionId: string | undefined = body.sessionId
     let session = sessionId
       ? await prisma.chatSession.findUnique({ where: { id: sessionId } })
       : null
     if (!session) {
-      session = await prisma.chatSession.create({ data: {} })
+      session = await prisma.chatSession.create({ data: { organizationId } })
     }
 
     // Load conversation history for this session only
@@ -146,8 +149,8 @@ export async function POST(req: NextRequest) {
         })
         const confirmText = `Done — added to your Outlook: ${lastPendingEvent.subject} on ${new Date(lastPendingEvent.startISO).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${new Date(lastPendingEvent.startISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}.`
         const storedUser = userMessage
-        await prisma.chatMessage.create({ data: { sessionId: session.id, role: 'user', content: storedUser } })
-        await prisma.chatMessage.create({ data: { sessionId: session.id, role: 'assistant', content: confirmText, dealsJson: [], suggestions: [] } })
+        await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'user', content: storedUser } })
+        await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'assistant', content: confirmText, dealsJson: [], suggestions: [] } })
         await prisma.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
         return NextResponse.json({ sessionId: session.id, response: confirmText, deals: [], suggestions: [] })
       } catch (err) {
@@ -301,9 +304,10 @@ export async function POST(req: NextRequest) {
       : cleanResponse
 
     // Save messages to this session
-    await prisma.chatMessage.create({ data: { sessionId: session.id, role: 'user', content: storedMsg } })
+    await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'user', content: storedMsg } })
     await prisma.chatMessage.create({
       data: {
+        organizationId,
         sessionId: session.id,
         role: 'assistant', content: storedAssistantContent,
         dealsJson: deals as unknown as object[],
