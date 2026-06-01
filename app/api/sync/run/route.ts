@@ -72,6 +72,38 @@ export async function POST() {
     console.error('[sync] matchmaker dispatch failed (non-fatal):', (e as Error).message)
   }
 
+  // Phase 3B — Ingestion V2 (body + linked HTML). Behind feature flag so the
+  // V1 pipeline keeps running by default. Non-blocking; failures are logged
+  // but don't break the sync response.
+  if (process.env.INGEST_V2 === 'true') {
+    try {
+      const v2Cutoff = new Date(Date.now() - 1000 * 60 * 30)
+      const freshEmails = await prisma.rawEmail.findMany({
+        where: {
+          receivedDateTime: { gte: v2Cutoff },
+          embeddedAt:       null,
+        },
+        select: { id: true },
+        take: 50,
+      })
+      if (freshEmails.length > 0) {
+        const { ingestEmailV2 } = await import('@/lib/ingestion/ingestEmailV2')
+        void (async () => {
+          for (const e of freshEmails) {
+            try {
+              const r = await ingestEmailV2(e.id)
+              console.log(`[ingestV2] ${e.id}: ${r.chunksCreated} chunks (${JSON.stringify(r.byType)}) links: ${r.linksScraped}/${r.linksFound} scraped, ${r.linksFiltered} filtered, ${r.linksDeferred} deferred`)
+            } catch (err) {
+              console.error(`[ingestV2] ${e.id} failed:`, (err as Error).message)
+            }
+          }
+        })().catch(err => console.error('[ingestV2] dispatch error:', err))
+      }
+    } catch (e) {
+      console.error('[ingestV2] outer dispatch failed:', (e as Error).message)
+    }
+  }
+
   return NextResponse.json({
     ok: !result.error,
     firstRun: isFirst,
