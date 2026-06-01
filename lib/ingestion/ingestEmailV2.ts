@@ -70,15 +70,20 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
   const errors: string[] = []
   const pending: PendingChunk[] = []
 
-  // 3. Body chunks (text chunker needs HTML stripped)
-  const rawBody  = email.bodyContent ?? email.bodyPreview ?? ''
-  const bodyText = stripHtml(rawBody)
+  // 3. Body chunks. bodyContent is already HTML-stripped by backgroundSync
+  // at sync time; stripHtml here is a defensive double-pass (no-op on already-
+  // stripped text).
+  const bodyText = stripHtml(email.bodyContent ?? email.bodyPreview ?? '')
   for (const chunk of chunkEmailBody(bodyText)) {
     pending.push({ chunk, parentType: 'email', parentId: emailId })
   }
 
-  // 4. Link handling — extract from RAW body (HTML strip kills href= URLs)
-  const allLinks = extractLinks(rawBody)
+  // 4. Link extraction. bodyContent has been pre-stripped at sync time so
+  // href= URLs are gone. rawJson preserves the verbatim Graph payload —
+  // extract links from rawJson.body.content with a fallback to bodyText for
+  // any legacy records lacking rawJson.
+  const rawHtmlBody = extractRawHtmlBody(email.rawJson) ?? bodyText
+  const allLinks    = extractLinks(rawHtmlBody)
   const { scrape, deferred, filtered } = filterScrapeWorthyLinks(allLinks)
   let linksScraped = 0
 
@@ -300,4 +305,16 @@ function stripHtml(html: string): string {
     .replace(/&#39;/g, "'")
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+// Returns the original raw HTML body from the verbatim Graph payload, if
+// available. RawEmail.bodyContent is already stripped by backgroundSync at
+// sync time, so href= URLs are lost from it. rawJson preserves the original.
+function extractRawHtmlBody(rawJson: unknown): string | null {
+  if (!rawJson || typeof rawJson !== 'object') return null
+  const obj  = rawJson as Record<string, unknown>
+  const body = obj.body
+  if (!body || typeof body !== 'object') return null
+  const content = (body as Record<string, unknown>).content
+  return typeof content === 'string' && content.length > 0 ? content : null
 }
