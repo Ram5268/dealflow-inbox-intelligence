@@ -47,6 +47,8 @@ async function main() {
   console.log(`  Links deferred: ${result.linksDeferred} (PDF/Dropbox/Drive — Phase 3C)`)
   console.log(`  Images processed:  ${result.imagesProcessed}  (captioned + multimodal embedded)`)
   console.log(`  Images skipped:    ${result.imagesSkipped}    (tracking pixels, non-images, etc.)`)
+  console.log(`  Attachments processed: ${result.attachmentsProcessed}  (PDFs parsed + chunked, images captioned)`)
+  console.log(`  Attachments skipped:   ${result.attachmentsSkipped}    (DOCX/XLSX deferred, no bytes, etc.)`)
   if (result.errors.length > 0) {
     console.log(`  Errors (${result.errors.length}):`)
     result.errors.forEach(e => console.log(`    - ${e}`))

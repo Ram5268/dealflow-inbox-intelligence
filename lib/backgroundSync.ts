@@ -88,6 +88,29 @@ export async function runIncrementalSync(): Promise<{
       let attachmentText: string | null = null
       const attachmentNames: string[] = []
       const attachmentMimeTypes: string[] = []
+      // Phase 3D — cache attachment metadata + bytes for V2 ingestion. Bytes
+      // are persisted into Attachment.contentBytes after the RawEmail row is
+      // created so processAttachments can replay parsing without re-hitting
+      // Microsoft Graph (decouples V2 from token freshness).
+      type CachedAttachment = {
+        name:          string
+        mimeType:      string
+        sizeBytes:     number | null
+        extractedText: string | null
+        contentBytes:  Uint8Array<ArrayBuffer> | null
+      }
+      const cachedAttachments: CachedAttachment[] = []
+
+      // Prisma 7's Bytes column is strictly typed as Uint8Array<ArrayBuffer>.
+      // Buffer is Uint8Array<ArrayBufferLike>, so we copy into a fresh
+      // ArrayBuffer-backed view to satisfy the strict generic.
+      const toPrismaBytes = (b64: string): Uint8Array<ArrayBuffer> => {
+        const buf = Buffer.from(b64, 'base64')
+        const ab  = new ArrayBuffer(buf.byteLength)
+        const u8  = new Uint8Array(ab)
+        u8.set(buf)
+        return u8
+      }
 
       if (msg.hasAttachments) {
         try {
@@ -96,14 +119,29 @@ export async function runIncrementalSync(): Promise<{
           for (const att of attachments) {
             attachmentNames.push(att.name ?? '')
             attachmentMimeTypes.push(att.contentType ?? '')
+
+            const rawBytes: Uint8Array<ArrayBuffer> | null = att.contentBytes
+              ? toPrismaBytes(att.contentBytes)
+              : null
+            let parsedText: string | null = null
+
             if (att.size > MAX_ATTACHMENT_BYTES) {
               parts.push(`[attachment: ${att.name} — too large to parse]`)
-              continue
-            }
-            if (att.contentBytes) {
+            } else if (att.contentBytes) {
               const text = await parseAttachment(att.name, att.contentType, att.contentBytes)
-              if (text) parts.push(`--- ${att.name} ---\n${text}`)
+              if (text) {
+                parts.push(`--- ${att.name} ---\n${text}`)
+                parsedText = text
+              }
             }
+
+            cachedAttachments.push({
+              name:          att.name ?? '',
+              mimeType:      att.contentType ?? '',
+              sizeBytes:     typeof att.size === 'number' ? att.size : null,
+              extractedText: parsedText,
+              contentBytes:  rawBytes,
+            })
           }
           if (parts.length > 0) attachmentText = parts.join('\n\n')
         } catch (e) {
@@ -129,6 +167,27 @@ export async function runIncrementalSync(): Promise<{
         },
       })
       newEmails++
+
+      // Phase 3D — persist Attachment rows so V2 ingestion (processAttachments)
+      // can pick up the bytes without re-fetching from Graph. Failure to persist
+      // one attachment must not block the rest of the email pipeline.
+      for (const a of cachedAttachments) {
+        try {
+          await prisma.attachment.create({
+            data: {
+              organizationId,
+              rawEmailId:    raw.id,
+              name:          a.name,
+              mimeType:      a.mimeType,
+              sizeBytes:     a.sizeBytes,
+              extractedText: a.extractedText,
+              contentBytes:  a.contentBytes,
+            },
+          })
+        } catch (e) {
+          console.error('[DealFlow sync] Attachment row persist error:', (e as Error).message)
+        }
+      }
 
       try {
         // ── Pipeline selection ────────────────────────────────────────────────

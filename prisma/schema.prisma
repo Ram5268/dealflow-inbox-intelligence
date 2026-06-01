@@ -401,6 +401,7 @@ model Attachment {
   name            String
   mimeType        String
   sizeBytes       Int?
+  contentBytes    Bytes?
   extractedText   String?
   parseError      String?
   parsedPages     Json?

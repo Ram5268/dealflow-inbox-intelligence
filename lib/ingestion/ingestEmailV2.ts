@@ -19,6 +19,7 @@ import {
   type ChunkPayload,
 } from '../vectorstore/qdrant'
 import { processInlineImages } from './processImages'
+import { processAttachments } from './processAttachments'
 
 // Phase 3B orchestrator. Converts a RawEmail into DocumentChunk rows +
 // Qdrant vectors. Idempotent — re-running on the same email deletes prior
@@ -36,9 +37,11 @@ export interface IngestV2Result {
   linksScraped:    number
   linksDeferred:   number
   linksFiltered:   number
-  imagesProcessed: number    // NEW
-  imagesSkipped:   number    // NEW
-  errors:          string[]
+  imagesProcessed:      number
+  imagesSkipped:        number
+  attachmentsProcessed: number    // NEW (Phase 3D)
+  attachmentsSkipped:   number    // NEW (Phase 3D)
+  errors:               string[]
 }
 
 interface PendingChunk {
@@ -230,6 +233,28 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
     errors.push(`processInlineImages: ${(e as Error).message}`)
   }
 
+  // 5c. Phase 3D — Process Attachment rows (PDFs via LlamaParse + image
+  // attachments via Claude vision). Bytes were cached at sync time so this
+  // does not re-hit Microsoft Graph.
+  let attachmentsProcessed = 0
+  let attachmentsSkipped   = 0
+  try {
+    const attResult = await processAttachments({
+      rawEmailId:     emailId,
+      threadId:       thread.id,
+      organizationId,
+    })
+    attachmentsProcessed = attResult.attachmentsProcessed
+    attachmentsSkipped   = attResult.attachmentsSkipped
+    chunksCreated       += attResult.chunksCreated
+    for (const [type, count] of Object.entries(attResult.byType)) {
+      byType[type] = (byType[type] ?? 0) + count
+    }
+    errors.push(...attResult.errors)
+  } catch (e) {
+    errors.push(`processAttachments: ${(e as Error).message}`)
+  }
+
   // 6. Mark email as embedded
   await prisma.rawEmail.update({
     where: { id: emailId },
@@ -245,8 +270,10 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
     linksScraped,
     linksDeferred: deferred.length,
     linksFiltered: filtered,
-    imagesProcessed,    // NEW
-    imagesSkipped,      // NEW
+    imagesProcessed,
+    imagesSkipped,
+    attachmentsProcessed,    // NEW (Phase 3D)
+    attachmentsSkipped,      // NEW (Phase 3D)
     errors,
   }
 }
