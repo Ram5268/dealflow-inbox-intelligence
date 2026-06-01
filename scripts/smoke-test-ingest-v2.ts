@@ -45,6 +45,8 @@ async function main() {
   console.log(`  Links scraped:  ${result.linksScraped}  (Firecrawl calls)`)
   console.log(`  Links filtered: ${result.linksFiltered} (junk dropped before scrape)`)
   console.log(`  Links deferred: ${result.linksDeferred} (PDF/Dropbox/Drive — Phase 3C)`)
+  console.log(`  Images processed:  ${result.imagesProcessed}  (captioned + multimodal embedded)`)
+  console.log(`  Images skipped:    ${result.imagesSkipped}    (tracking pixels, non-images, etc.)`)
   if (result.errors.length > 0) {
     console.log(`  Errors (${result.errors.length}):`)
     result.errors.forEach(e => console.log(`    - ${e}`))

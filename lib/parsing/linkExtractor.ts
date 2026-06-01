@@ -18,17 +18,27 @@ const OFFICE_EXT = /\.(docx?|xlsx?|pptx?)(\?|$)/i
 const DROPBOX_HOSTS = new Set(['dropbox.com', 'www.dropbox.com', 'dl.dropboxusercontent.com'])
 const DRIVE_HOSTS   = new Set(['drive.google.com', 'docs.google.com'])
 
+const IMAGE_CDN_HOSTS = new Set([
+  'res.cloudinary.com',
+  'images.compass.com',
+  'photos.streeteasy.com',
+  'photos.zillowstatic.com',
+  'images.unsplash.com',
+  'imagedelivery.net',   // Cloudflare Images
+])
+
 function classify(url: string): LinkType {
   let parsed: URL
   try { parsed = new URL(url) } catch { return 'unknown' }
   const host = parsed.hostname.toLowerCase()
   const path = parsed.pathname
 
-  if (DROPBOX_HOSTS.has(host)) return 'dropbox'
-  if (DRIVE_HOSTS.has(host))   return 'drive'
-  if (PDF_EXT.test(path))      return 'pdf'
-  if (IMAGE_EXT.test(path))    return 'image'
-  if (OFFICE_EXT.test(path))   return 'office'
+  if (DROPBOX_HOSTS.has(host))   return 'dropbox'
+  if (DRIVE_HOSTS.has(host))     return 'drive'
+  if (IMAGE_CDN_HOSTS.has(host)) return 'image'
+  if (PDF_EXT.test(path))        return 'pdf'
+  if (IMAGE_EXT.test(path))      return 'image'
+  if (OFFICE_EXT.test(path))     return 'office'
   return 'html'
 }
 

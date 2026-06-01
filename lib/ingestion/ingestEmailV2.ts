@@ -18,6 +18,7 @@ import {
   COLLECTIONS,
   type ChunkPayload,
 } from '../vectorstore/qdrant'
+import { processInlineImages } from './processImages'
 
 // Phase 3B orchestrator. Converts a RawEmail into DocumentChunk rows +
 // Qdrant vectors. Idempotent — re-running on the same email deletes prior
@@ -27,15 +28,17 @@ import {
 // Firecrawl usage bounded.
 
 export interface IngestV2Result {
-  emailId:        string
-  threadId:       string
-  chunksCreated:  number
-  byType:         Record<string, number>
-  linksFound:     number    // total URLs in body
-  linksScraped:   number    // URLs that passed the filter and were fetched
-  linksDeferred:  number    // non-HTML URLs recorded but not fetched
-  linksFiltered:  number    // HTML URLs dropped by the scrape filter
-  errors:         string[]
+  emailId:         string
+  threadId:        string
+  chunksCreated:   number
+  byType:          Record<string, number>
+  linksFound:      number
+  linksScraped:    number
+  linksDeferred:   number
+  linksFiltered:   number
+  imagesProcessed: number    // NEW
+  imagesSkipped:   number    // NEW
+  errors:          string[]
 }
 
 interface PendingChunk {
@@ -207,6 +210,26 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
     }
   }
 
+  // 5b. Phase 3C — Process deferred inline images (image-type LinkedResources)
+  let imagesProcessed = 0
+  let imagesSkipped   = 0
+  try {
+    const imgResult = await processInlineImages({
+      emailId,
+      threadId: thread.id,
+      organizationId,
+    })
+    imagesProcessed = imgResult.imagesProcessed
+    imagesSkipped   = imgResult.imagesSkipped
+    if (imgResult.imagesProcessed > 0) {
+      chunksCreated += imgResult.imagesProcessed
+      byType['inline_image'] = (byType['inline_image'] ?? 0) + imgResult.imagesProcessed
+    }
+    errors.push(...imgResult.errors)
+  } catch (e) {
+    errors.push(`processInlineImages: ${(e as Error).message}`)
+  }
+
   // 6. Mark email as embedded
   await prisma.rawEmail.update({
     where: { id: emailId },
@@ -222,6 +245,8 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
     linksScraped,
     linksDeferred: deferred.length,
     linksFiltered: filtered,
+    imagesProcessed,    // NEW
+    imagesSkipped,      // NEW
     errors,
   }
 }
