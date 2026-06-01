@@ -70,14 +70,15 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
   const errors: string[] = []
   const pending: PendingChunk[] = []
 
-  // 3. Body chunks
-  const bodyText = stripHtml(email.bodyContent ?? email.bodyPreview ?? '')
+  // 3. Body chunks (text chunker needs HTML stripped)
+  const rawBody  = email.bodyContent ?? email.bodyPreview ?? ''
+  const bodyText = stripHtml(rawBody)
   for (const chunk of chunkEmailBody(bodyText)) {
     pending.push({ chunk, parentType: 'email', parentId: emailId })
   }
 
-  // 4. Link handling — filter first, then process
-  const allLinks = extractLinks(bodyText)
+  // 4. Link handling — extract from RAW body (HTML strip kills href= URLs)
+  const allLinks = extractLinks(rawBody)
   const { scrape, deferred, filtered } = filterScrapeWorthyLinks(allLinks)
   let linksScraped = 0
 
