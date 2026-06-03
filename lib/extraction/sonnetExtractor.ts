@@ -115,6 +115,10 @@ export async function extractWithSonnet<T>(
     // the SDK's non-streaming 10-min guard. Cost is unchanged for normal emails —
     // you only pay for tokens actually generated.
     max_tokens: opts.maxTokens ?? 16384,
+    // temperature=0 for deterministic structured tool_use output (V1 used the
+    // same for its extractors). Removes run-to-run nondeterminism and trims
+    // noise from confidence scores.
+    temperature: 0,
     system,
     messages: [{ role: 'user', content }],
     tools: [{
