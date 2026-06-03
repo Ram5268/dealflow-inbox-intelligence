@@ -57,6 +57,24 @@ export interface MapCtx {
   senderEmail: string | null
 }
 
+// CriteriaProfile payload for demand-side records (BUYER_ISO / RENTER_INQUIRY).
+// Mirrors the `_criteriaProfile` blob V1 built in the ISO/renter extractors and
+// persisted in backgroundSync. Phase 4.0.5 writes this from the V2 path.
+export interface CriteriaInput {
+  type:          string
+  neighborhoods: string[]
+  borough:       string | null
+  minPrice:      number | null
+  maxPrice:      number | null
+  minBeds:       number | null
+  maxBeds:       number | null
+  propertyTypes: string[]
+  notes:         string | null
+  agentName:     string | null
+  agentEmail:    string | null
+  brokerage:     string | null
+}
+
 export interface ExtractionSpec {
   kind:            string
   toolName:        string
@@ -69,6 +87,8 @@ export interface ExtractionSpec {
   responseSchema:  z.ZodType
   /** Reproduces the V1 extractor's per-item field mapping. */
   mapItem:         (item: unknown, ctx: MapCtx) => OppRowData
+  /** Demand-side only: builds the CriteriaProfile payload for the item. */
+  buildCriteria?:  (item: unknown) => CriteriaInput
 }
 
 // ── JSON-Schema field helpers ────────────────────────────────────────────────
@@ -522,12 +542,30 @@ function mapISO(raw: unknown): OppRowData {
   }
 }
 
+function isoCriteria(raw: unknown): CriteriaInput {
+  const iso = raw as ISOT
+  return {
+    type:          'buyer',
+    neighborhoods: iso.neighborhoods,
+    borough:       iso.borough,
+    minPrice:      iso.minPrice,
+    maxPrice:      iso.maxPrice,
+    minBeds:       iso.minBeds,
+    maxBeds:       iso.maxBeds,
+    propertyTypes: iso.propertyTypes,
+    notes:         [iso.mustHaves, iso.dealbreakers, iso.timeline].filter(Boolean).join('\n') || null,
+    agentName:     iso.sourceAgentName,
+    agentEmail:    iso.sourceAgentEmail,
+    brokerage:     iso.sourceBrokerage,
+  }
+}
+
 const ISO_SPEC: ExtractionSpec = {
   kind: 'buyerISO', toolName: 'extract_buyer_iso',
   toolDescription: 'Extract one or more buyer ISO (in-search-of) search-criteria records from a NYC broker broadcast email.',
   systemPrompt: ISO_SYSTEM, arrayKey: 'isos',
   inputSchema: arrayInput('isos', ISO_ITEM_PROPS, ISO_ITEM_REQUIRED),
-  responseSchema: ISOResponse, mapItem: mapISO,
+  responseSchema: ISOResponse, mapItem: mapISO, buildCriteria: isoCriteria,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -614,12 +652,30 @@ function mapRenter(raw: unknown): OppRowData {
   }
 }
 
+function renterCriteria(raw: unknown): CriteriaInput {
+  const r = raw as RenterT
+  return {
+    type:          'renter',
+    neighborhoods: r.neighborhoods,
+    borough:       r.borough,
+    minPrice:      r.minPrice,
+    maxPrice:      r.maxPrice,
+    minBeds:       r.minBeds,
+    maxBeds:       r.maxBeds,
+    propertyTypes: r.propertyTypes,
+    notes:         [r.mustHaves, r.dealbreakers].filter(Boolean).join('\n') || null,
+    agentName:     r.sourceAgentName,
+    agentEmail:    r.sourceAgentEmail,
+    brokerage:     r.sourceBrokerage,
+  }
+}
+
 const RENTER_SPEC: ExtractionSpec = {
   kind: 'renterInquiry', toolName: 'extract_renter_inquiry',
   toolDescription: 'Extract one or more renter inquiry (search-criteria) records from a NYC broker broadcast email.',
   systemPrompt: RENTER_SYSTEM, arrayKey: 'renters',
   inputSchema: arrayInput('renters', RENTER_ITEM_PROPS, RENTER_ITEM_REQUIRED),
-  responseSchema: RenterResponse, mapItem: mapRenter,
+  responseSchema: RenterResponse, mapItem: mapRenter, buildCriteria: renterCriteria,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
