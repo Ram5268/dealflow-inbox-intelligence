@@ -108,7 +108,13 @@ export async function extractWithSonnet<T>(
 
   const params: Anthropic.Messages.MessageCreateParamsNonStreaming = {
     model,
-    max_tokens: opts.maxTokens ?? 4096,
+    // 16384 so high-cardinality multi-listing broker blasts don't truncate the
+    // tool_use JSON mid-array (the Phase 4.5 pilot saw 4096 cut off ~10-listing
+    // outputs -> Zod "listings: expected array, received undefined"). Sonnet 4.6
+    // allows 16384 natively (no extended-output beta header); >=32000 would trip
+    // the SDK's non-streaming 10-min guard. Cost is unchanged for normal emails —
+    // you only pay for tokens actually generated.
+    max_tokens: opts.maxTokens ?? 16384,
     system,
     messages: [{ role: 'user', content }],
     tools: [{
