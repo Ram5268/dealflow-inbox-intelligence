@@ -187,17 +187,23 @@ async function main() {
       console.error(`  ✗ ${c.rawEmailId} [${cat}] threw: ${(e as Error).message}`)
     }
 
-    // Decision-tree cost guard.
+    // Decision-tree cost guard. Wrapped so a transient DB blip (e.g. the
+    // connection dropping when a laptop sleeps mid-run) skips one check instead
+    // of crashing the whole drain — the run is idempotent and re-runnable.
     if (MAX_COST != null) {
-      const agg = await prisma.aIExtractionLog.aggregate({
-        where: { organizationId, model: 'claude-sonnet-4-6', createdAt: { gte: runStart } },
-        _sum:  { estimatedCostUsd: true },
-      })
-      const spent = agg._sum.estimatedCostUsd ?? 0
-      if (spent > MAX_COST) {
-        aborted = true
-        queue.clear()
-        console.error(`\n  ⛔ Cost guard tripped: $${spent.toFixed(4)} > --max-cost $${MAX_COST}. Stopping.`)
+      try {
+        const agg = await prisma.aIExtractionLog.aggregate({
+          where: { organizationId, model: 'claude-sonnet-4-6', createdAt: { gte: runStart } },
+          _sum:  { estimatedCostUsd: true },
+        })
+        const spent = agg._sum.estimatedCostUsd ?? 0
+        if (spent > MAX_COST) {
+          aborted = true
+          queue.clear()
+          console.error(`\n  ⛔ Cost guard tripped: $${spent.toFixed(4)} > --max-cost $${MAX_COST}. Stopping.`)
+        }
+      } catch (e) {
+        console.error(`  [cost-guard] skipped check (transient DB error): ${(e as Error).message}`)
       }
     }
   }))
