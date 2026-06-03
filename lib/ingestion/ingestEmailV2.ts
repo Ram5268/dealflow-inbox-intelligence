@@ -20,6 +20,7 @@ import {
 } from '../vectorstore/qdrant'
 import { processInlineImages } from './processImages'
 import { processAttachments } from './processAttachments'
+import { extractEmailV2 } from '../extraction/extractEmailV2'
 
 // Phase 3B orchestrator. Converts a RawEmail into DocumentChunk rows +
 // Qdrant vectors. Idempotent — re-running on the same email deletes prior
@@ -260,6 +261,16 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
     where: { id: emailId },
     data:  { embeddedAt: new Date() },
   })
+
+  // 7. Phase 4.0 — V2 extraction. Reads the chunks just persisted and writes
+  // clean ExtractedOpportunity rows (Sonnet tool_use). Idempotent + non-fatal:
+  // a failure here must not undo the chunking/embedding work above.
+  try {
+    const opps = await extractEmailV2(emailId, organizationId)
+    console.log(`[ingestV2] ${emailId}: extracted ${opps.length} opportunities`)
+  } catch (e) {
+    errors.push(`extractEmailV2: ${(e as Error).message}`)
+  }
 
   return {
     emailId,
