@@ -8,8 +8,8 @@
 // (those are exactly what produced the 681-row backlog).
 //
 // Idempotency: prior ExtractedOpportunity rows (and their cascade-linked Match
-// rows, plus the schema_validation_failed ReviewQueueItem / CriteriaProfile
-// rows) are wiped and replaced INSIDE the same transaction as the insert, and
+// rows, plus the schema_validation_failed ReviewQueueItem rows) are wiped and
+// replaced INSIDE the same transaction as the insert, and
 // ONLY on a successful extraction. A failed/empty extraction is non-destructive
 // — it leaves any existing review-queue entry intact (per the Phase 4 decision
 // tree's "on failure: leave it").
@@ -213,15 +213,9 @@ export async function extractEmailV2(
   }
 
   const ctx: MapCtx = { subject: email.subject, senderName: email.senderName, senderEmail: email.senderEmail }
-  // Pair each insert payload with its CriteriaProfile blob (demand-side only),
-  // preserving 1:1 ordering through the category filter so created[i] <-> prepared[i].
-  const prepared = items
-    .map(item => {
-      const row: OppRowData = spec.mapItem(item, ctx)
-      const criteria = spec.buildCriteria ? spec.buildCriteria(item) : null
-      return { row, criteria }
-    })
-    .filter(({ row }) => {
+  const insertData = items
+    .map((item): OppRowData => spec.mapItem(item, ctx))
+    .filter(row => {
       if (!VALID_CATEGORY.has(row.category)) {
         console.error(`[extractV2] ${rawEmailId}: dropping item with invalid category "${row.category}"`)
         return false
@@ -229,42 +223,49 @@ export async function extractEmailV2(
       if (row.category === 'NOISE') return false
       return true
     })
-    .map(({ row, criteria }) => ({
-      criteria,
-      data: {
-        organizationId,
-        rawEmailId,
-        category:             row.category as Category,
-        transactionType:      (VALID_TX.has(row.transactionType) ? row.transactionType : 'UNKNOWN') as TransactionType,
-        propertyType:         row.propertyType,
-        address:              row.address,
-        neighborhood:         row.neighborhood,
-        borough:              row.borough,
-        city:                 row.city,
-        state:                row.state,
-        zip:                  row.zip,
-        price:                row.price,
-        minPrice:             row.minPrice,
-        maxPrice:             row.maxPrice,
-        beds:                 row.beds,
-        baths:                row.baths,
-        units:                row.units,
-        squareFeet:           row.squareFeet,
-        availabilityDate:     row.availabilityDate,
-        sourceAgentName:      row.sourceAgentName,
-        sourceAgentEmail:     row.sourceAgentEmail,
-        sourceBrokerage:      row.sourceBrokerage,
-        clientSide:           row.clientSide,
-        status:               row.status,
-        extractedTitle:       row.extractedTitle,
-        extractedSummary:     row.extractedSummary,
-        classificationReason: row.classificationReason,
-        confidenceScore:      row.confidenceScore,
-        processingStatus:     'active',
-      },
+    .map(row => ({
+      organizationId,
+      rawEmailId,
+      category:             row.category as Category,
+      transactionType:      (VALID_TX.has(row.transactionType) ? row.transactionType : 'UNKNOWN') as TransactionType,
+      propertyType:         row.propertyType,
+      address:              row.address,
+      neighborhood:         row.neighborhood,
+      borough:              row.borough,
+      city:                 row.city,
+      state:                row.state,
+      zip:                  row.zip,
+      price:                row.price,
+      minPrice:             row.minPrice,
+      maxPrice:             row.maxPrice,
+      beds:                 row.beds,
+      baths:                row.baths,
+      units:                row.units,
+      squareFeet:           row.squareFeet,
+      availabilityDate:     row.availabilityDate,
+      sourceAgentName:      row.sourceAgentName,
+      sourceAgentEmail:     row.sourceAgentEmail,
+      sourceBrokerage:      row.sourceBrokerage,
+      clientSide:           row.clientSide,
+      status:               row.status,
+      extractedTitle:       row.extractedTitle,
+      extractedSummary:     row.extractedSummary,
+      classificationReason: row.classificationReason,
+      confidenceScore:      row.confidenceScore,
+      processingStatus:     'active',
+      // Phase 4.0.7 — demand-side criteria folded onto the opportunity row
+      // (deprecated CriteriaProfile). Listing categories use the column defaults.
+      neighborhoods:        row.neighborhoods ?? [],
+      propertyTypes:        row.propertyTypes ?? [],
+      minBeds:              row.minBeds ?? null,
+      maxBeds:              row.maxBeds ?? null,
+      mustHaves:            row.mustHaves ?? null,
+      dealbreakers:         row.dealbreakers ?? null,
+      timeline:             row.timeline ?? null,
+      criteriaActive:       row.criteriaActive ?? true,
     }))
 
-  if (prepared.length === 0) {
+  if (insertData.length === 0) {
     console.log(`[extractV2] ${rawEmailId}: all extracted records dropped as invalid — skipping`)
     return []
   }
@@ -286,66 +287,34 @@ export async function extractEmailV2(
         ],
       },
     })
-    if (priorIds.length) {
-      await tx.criteriaProfile.deleteMany({ where: { opportunityId: { in: priorIds } } })
-    }
     // Match rows cascade-delete with the opportunity (onDelete: Cascade).
     await tx.extractedOpportunity.deleteMany({ where: { organizationId, rawEmailId } })
 
     const rows: ExtractedOpportunity[] = []
-    for (const p of prepared) {
-      rows.push(await tx.extractedOpportunity.create({ data: p.data }))
+    for (const data of insertData) {
+      rows.push(await tx.extractedOpportunity.create({ data }))
     }
     return rows
   })
 
-  // Phase 4.0.5 — post-commit: embed every opportunity (so it joins the match
-  // pool) and write a CriteriaProfile for demand-side records (so ISO/renter
-  // matching works). Both reuse V1 helpers and are non-fatal — a failure here
-  // leaves the committed opportunity row intact.
-  let embedded = 0, criteriaWritten = 0
-  for (let i = 0; i < created.length; i++) {
-    const opp = created[i]
+  // Phase 4.0.5 — post-commit: embed every opportunity so it joins the match
+  // pool. Reuses V1's helper; non-fatal — a failure leaves the committed row
+  // intact. (CriteriaProfile writes were removed in Phase 4.0.7; the criteria
+  // now live on the opportunity row's own columns.)
+  let embedded = 0
+  for (const opp of created) {
     try {
       await upsertOpportunityEmbedding(opp.id, buildOpportunityText(opp))
       embedded++
     } catch (e) {
       console.error(`[extractV2] ${rawEmailId}: embedding ${opp.id} failed: ${(e as Error).message}`)
     }
-
-    const criteria = prepared[i].criteria
-    if (criteria && (opp.category === Category.BUYER_ISO || opp.category === Category.RENTER_INQUIRY)) {
-      try {
-        await prisma.criteriaProfile.create({
-          data: {
-            organizationId,
-            opportunityId: opp.id,
-            type:          criteria.type,
-            neighborhoods: criteria.neighborhoods,
-            borough:       criteria.borough,
-            minPrice:      criteria.minPrice,
-            maxPrice:      criteria.maxPrice,
-            minBeds:       criteria.minBeds,
-            maxBeds:       criteria.maxBeds,
-            propertyTypes: criteria.propertyTypes,
-            notes:         criteria.notes,
-            agentName:     criteria.agentName,
-            agentEmail:    criteria.agentEmail,
-            brokerage:     criteria.brokerage,
-          },
-        })
-        criteriaWritten++
-      } catch (e) {
-        console.error(`[extractV2] ${rawEmailId}: criteriaProfile ${opp.id} failed: ${(e as Error).message}`)
-      }
-    }
   }
 
   const costStr = estimatedCostUsd != null ? `$${estimatedCostUsd.toFixed(4)}` : 'n/a'
   console.log(
     `[extractV2] ${rawEmailId}: ${created.length} opportunit${created.length === 1 ? 'y' : 'ies'} ` +
-    `(${spec.kind}) in ${durationMs}ms, cost ${costStr}; embedded ${embedded}/${created.length}` +
-    `${criteriaWritten ? `, ${criteriaWritten} criteriaProfile` : ''}`,
+    `(${spec.kind}) in ${durationMs}ms, cost ${costStr}; embedded ${embedded}/${created.length}`,
   )
   return created
 }

@@ -263,26 +263,22 @@ export async function runIncrementalSync(): Promise<{
             )
           }
 
-          // Create CriteriaProfile for buyer ISOs and renter inquiries
+          // Phase 4.0.7 — fold buyer-ISO / renter-inquiry criteria onto the
+          // opportunity row's own columns (the CriteriaProfile table is
+          // deprecated). borough/minPrice/maxPrice were already set on create.
           if (category === Category.BUYER_ISO || category === Category.RENTER_INQUIRY) {
             const cp = (ext as unknown as Record<string, unknown>)._criteriaProfile as Record<string, unknown> | undefined
             if (cp) {
-              prisma.criteriaProfile.create({
+              prisma.extractedOpportunity.update({
+                where: { id: opp.id },
                 data: {
-                  organizationId,
-                  opportunityId: opp.id,
-                  type:          (cp.type as string) ?? (category === Category.BUYER_ISO ? 'buyer' : 'renter'),
-                  neighborhoods: Array.isArray(cp.neighborhoods) ? cp.neighborhoods as string[] : [],
-                  borough:       (cp.borough as string | null) ?? null,
-                  minPrice:      (cp.minPrice as number | null) ?? null,
-                  maxPrice:      (cp.maxPrice as number | null) ?? null,
-                  minBeds:       (cp.minBeds as number | null) ?? null,
-                  maxBeds:       (cp.maxBeds as number | null) ?? null,
-                  propertyTypes: Array.isArray(cp.propertyTypes) ? cp.propertyTypes as string[] : [],
-                  notes:         (cp.notes as string | null) ?? null,
-                  agentName:     (cp.agentName as string | null) ?? null,
-                  agentEmail:    (cp.agentEmail as string | null) ?? null,
-                  brokerage:     (cp.brokerage as string | null) ?? null,
+                  neighborhoods:  Array.isArray(cp.neighborhoods) ? cp.neighborhoods as string[] : [],
+                  propertyTypes:  Array.isArray(cp.propertyTypes) ? cp.propertyTypes as string[] : [],
+                  minBeds:        (cp.minBeds as number | null) ?? null,
+                  maxBeds:        (cp.maxBeds as number | null) ?? null,
+                  // V1 combined mustHaves/dealbreakers/timeline into `notes`.
+                  mustHaves:      (cp.notes as string | null) ?? null,
+                  criteriaActive: true,
                 },
               }).catch(() => {})
             }

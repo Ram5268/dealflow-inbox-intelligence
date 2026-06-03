@@ -189,6 +189,18 @@ model ExtractedOpportunity {
   sourceBrokerage      String?
   clientSide           String?
   status               String?
+
+  // Phase 4.0.7 — demand-side criteria, folded in from the deprecated
+  // CriteriaProfile table. Populated for BUYER_ISO / RENTER_INQUIRY.
+  neighborhoods   String[]  @default([])
+  propertyTypes   String[]  @default([])
+  minBeds         Int?
+  maxBeds         Int?
+  mustHaves       String?
+  dealbreakers    String?
+  timeline        String?
+  criteriaActive  Boolean   @default(true)
+
   extractedTitle       String
   extractedSummary     String
   classificationReason String
@@ -218,6 +230,9 @@ model ExtractedOpportunity {
   @@index([organizationId])
   @@index([processingStatus])
   @@index([category, processingStatus])
+  // Phase 4.0.7 — GIN indexes for array-containment on folded-in criteria arrays
+  @@index([neighborhoods(ops: ArrayOps)], type: Gin)
+  @@index([propertyTypes(ops: ArrayOps)], type: Gin)
 }
 
 model SearchQuery {

@@ -12,10 +12,10 @@
 // the (partially stale) shared ones in lib/ingestion/types.ts. We mirror the
 // inline schemas here. Nothing in V1 is imported or modified.
 //
-// Scope note (Phase 4.0): BUYER_ISO / RENTER_INQUIRY items here populate the
-// ExtractedOpportunity only. V1 additionally wrote a CriteriaProfile from a
-// hidden `_criteriaProfile` blob; that is intentionally out of scope for 4.0
-// and flagged for the planner.
+// Phase 4.0.7: BUYER_ISO / RENTER_INQUIRY items fold their search criteria
+// (neighborhoods, propertyTypes, min/maxBeds, mustHaves, dealbreakers, timeline,
+// criteriaActive) directly onto ExtractedOpportunity columns. The separate
+// CriteriaProfile table is deprecated (empirically dead — zero readers).
 import { z } from 'zod'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Category } from '@prisma/client'
@@ -49,30 +49,22 @@ export interface OppRowData {
   extractedSummary:     string
   classificationReason: string
   confidenceScore:      number
+  // Phase 4.0.7 — demand-side criteria columns. Populated only by the ISO /
+  // renter mappers; listing mappers leave them undefined (DB defaults apply).
+  neighborhoods?:       string[]
+  propertyTypes?:       string[]
+  minBeds?:             number | null
+  maxBeds?:             number | null
+  mustHaves?:           string | null
+  dealbreakers?:        string | null
+  timeline?:            string | null
+  criteriaActive?:      boolean
 }
 
 export interface MapCtx {
   subject:     string
   senderName:  string | null
   senderEmail: string | null
-}
-
-// CriteriaProfile payload for demand-side records (BUYER_ISO / RENTER_INQUIRY).
-// Mirrors the `_criteriaProfile` blob V1 built in the ISO/renter extractors and
-// persisted in backgroundSync. Phase 4.0.5 writes this from the V2 path.
-export interface CriteriaInput {
-  type:          string
-  neighborhoods: string[]
-  borough:       string | null
-  minPrice:      number | null
-  maxPrice:      number | null
-  minBeds:       number | null
-  maxBeds:       number | null
-  propertyTypes: string[]
-  notes:         string | null
-  agentName:     string | null
-  agentEmail:    string | null
-  brokerage:     string | null
 }
 
 export interface ExtractionSpec {
@@ -87,8 +79,6 @@ export interface ExtractionSpec {
   responseSchema:  z.ZodType
   /** Reproduces the V1 extractor's per-item field mapping. */
   mapItem:         (item: unknown, ctx: MapCtx) => OppRowData
-  /** Demand-side only: builds the CriteriaProfile payload for the item. */
-  buildCriteria?:  (item: unknown) => CriteriaInput
 }
 
 // ── JSON-Schema field helpers ────────────────────────────────────────────────
@@ -539,24 +529,11 @@ function mapISO(raw: unknown): OppRowData {
     sourceBrokerage: iso.sourceBrokerage ?? null, clientSide: 'buyer', status: null,
     extractedTitle: iso.extractedTitle, extractedSummary: summary || iso.extractedSummary,
     classificationReason: iso.classificationReason, confidenceScore: iso.confidenceScore,
-  }
-}
-
-function isoCriteria(raw: unknown): CriteriaInput {
-  const iso = raw as ISOT
-  return {
-    type:          'buyer',
-    neighborhoods: iso.neighborhoods,
-    borough:       iso.borough,
-    minPrice:      iso.minPrice,
-    maxPrice:      iso.maxPrice,
-    minBeds:       iso.minBeds,
-    maxBeds:       iso.maxBeds,
-    propertyTypes: iso.propertyTypes,
-    notes:         [iso.mustHaves, iso.dealbreakers, iso.timeline].filter(Boolean).join('\n') || null,
-    agentName:     iso.sourceAgentName,
-    agentEmail:    iso.sourceAgentEmail,
-    brokerage:     iso.sourceBrokerage,
+    // Phase 4.0.7 — criteria folded onto the opportunity row (was CriteriaProfile).
+    neighborhoods: iso.neighborhoods, propertyTypes: iso.propertyTypes,
+    minBeds: iso.minBeds, maxBeds: iso.maxBeds,
+    mustHaves: iso.mustHaves, dealbreakers: iso.dealbreakers, timeline: iso.timeline,
+    criteriaActive: true,
   }
 }
 
@@ -565,7 +542,7 @@ const ISO_SPEC: ExtractionSpec = {
   toolDescription: 'Extract one or more buyer ISO (in-search-of) search-criteria records from a NYC broker broadcast email.',
   systemPrompt: ISO_SYSTEM, arrayKey: 'isos',
   inputSchema: arrayInput('isos', ISO_ITEM_PROPS, ISO_ITEM_REQUIRED),
-  responseSchema: ISOResponse, mapItem: mapISO, buildCriteria: isoCriteria,
+  responseSchema: ISOResponse, mapItem: mapISO,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -649,24 +626,12 @@ function mapRenter(raw: unknown): OppRowData {
     sourceBrokerage: r.sourceBrokerage ?? null, clientSide: 'renter', status: null,
     extractedTitle: r.extractedTitle, extractedSummary: summary || r.extractedSummary,
     classificationReason: r.classificationReason, confidenceScore: r.confidenceScore,
-  }
-}
-
-function renterCriteria(raw: unknown): CriteriaInput {
-  const r = raw as RenterT
-  return {
-    type:          'renter',
-    neighborhoods: r.neighborhoods,
-    borough:       r.borough,
-    minPrice:      r.minPrice,
-    maxPrice:      r.maxPrice,
-    minBeds:       r.minBeds,
-    maxBeds:       r.maxBeds,
-    propertyTypes: r.propertyTypes,
-    notes:         [r.mustHaves, r.dealbreakers].filter(Boolean).join('\n') || null,
-    agentName:     r.sourceAgentName,
-    agentEmail:    r.sourceAgentEmail,
-    brokerage:     r.sourceBrokerage,
+    // Phase 4.0.7 — criteria folded onto the opportunity row (was CriteriaProfile).
+    // Renter schema has no `timeline` field; moveInDate already maps to availabilityDate.
+    neighborhoods: r.neighborhoods, propertyTypes: r.propertyTypes,
+    minBeds: r.minBeds, maxBeds: r.maxBeds,
+    mustHaves: r.mustHaves, dealbreakers: r.dealbreakers, timeline: null,
+    criteriaActive: true,
   }
 }
 
@@ -675,7 +640,7 @@ const RENTER_SPEC: ExtractionSpec = {
   toolDescription: 'Extract one or more renter inquiry (search-criteria) records from a NYC broker broadcast email.',
   systemPrompt: RENTER_SYSTEM, arrayKey: 'renters',
   inputSchema: arrayInput('renters', RENTER_ITEM_PROPS, RENTER_ITEM_REQUIRED),
-  responseSchema: RenterResponse, mapItem: mapRenter, buildCriteria: renterCriteria,
+  responseSchema: RenterResponse, mapItem: mapRenter,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
