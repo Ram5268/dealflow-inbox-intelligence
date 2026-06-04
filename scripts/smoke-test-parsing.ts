@@ -16,14 +16,14 @@ Also: https://docs.google.com/document/d/foo/edit`
 }
 
 async function testFirecrawl() {
-  console.log('\n2. Firecrawl scrape (https://example.com)…')
-  const { scrapeUrl } = await import('../lib/parsing/firecrawl')
+  console.log('\n2. Scrape waterfall (https://example.com)…')
+  const { scrapeUrl } = await import('../lib/scraping/scrapeUrl')
   const result = await scrapeUrl('https://example.com')
-  console.log(`   Title:     ${result.title}`)
-  console.log(`   Markdown:  ${result.markdown.length} chars`)
-  console.log(`   File URLs: ${result.detectedFileUrls.length}`)
-  if (result.markdown.length < 50) throw new Error(`Firecrawl returned suspiciously little content (${result.markdown.length} chars)`)
-  console.log('   ✅ Firecrawl works')
+  console.log(`   Tier:      ${result?.tier ?? 'null'}`)
+  console.log(`   Markdown:  ${result?.markdown.length ?? 0} chars`)
+  console.log(`   File URLs: ${result?.detectedFileUrls.length ?? 0}`)
+  if (!result || result.markdown.length < 50) throw new Error('Scraper returned suspiciously little content')
+  console.log('   ✅ Scrape waterfall works')
 }
 
 async function testImageCaption() {

@@ -1,6 +1,5 @@
 import type { ChunkType } from '../embeddings/dispatcher'
 import type { ParsedPdfPage } from '../parsing/llamaParse'
-import type { ScrapedUrl } from '../parsing/firecrawl'
 
 // Chunk shape consumed by Phase 3B's ingestion orchestrator. The orchestrator
 // embeds via the dispatcher (which routes text vs multimodal), upserts to
@@ -42,11 +41,11 @@ export function chunkEmailBody(body: string): Chunk[] {
   return chunkPlainText(body, 'email_body')
 }
 
-// ── Linked-HTML chunker (consumes Firecrawl output) ─────────────────────────
+// ── Linked-HTML chunker (consumes scrape-waterfall markdown) ────────────────
 // Section-aware: split on top-level Markdown headings first, then paragraph-
 // chunk within each section. Each chunk records the section heading so
 // retrieval can scope queries like "what does the Financials section say."
-export function chunkLinkedHtml(scraped: ScrapedUrl): Chunk[] {
+export function chunkLinkedHtml(scraped: { markdown: string }): Chunk[] {
   const md = scraped.markdown.trim()
   if (!md) return []
 

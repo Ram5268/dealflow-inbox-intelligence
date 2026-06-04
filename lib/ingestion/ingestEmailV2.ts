@@ -10,7 +10,7 @@ import {
   extractLinks,
   filterScrapeWorthyLinks,
 } from '../parsing/linkExtractor'
-import { scrapeUrl } from '../parsing/firecrawl'
+import { scrapeUrl } from '../scraping/scrapeUrl'
 import { embedChunk } from '../embeddings/dispatcher'
 import {
   upsertChunk,
@@ -27,7 +27,7 @@ import { extractEmailV2 } from '../extraction/extractEmailV2'
 // chunks before re-creating. Attachments and inline images are deferred to
 // Phase 3C. Non-HTML links (PDF, Dropbox, Drive) are recorded as
 // LinkedResource with fetchStatus 'deferred'. The scrape filter keeps
-// Firecrawl usage bounded.
+// per-email scrape usage bounded.
 
 export interface IngestV2Result {
   emailId:         string
@@ -112,7 +112,7 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
     }
   }
 
-  // Scrape filtered HTML links via Firecrawl
+  // Scrape filtered HTML links via the tiered waterfall (Phase 4.1).
   for (const link of scrape) {
     try {
       const resource = await prisma.linkedResource.create({
@@ -126,18 +126,27 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
       })
       try {
         const scraped = await scrapeUrl(link.url)
-        await prisma.linkedResource.update({
-          where: { id: resource.id },
-          data: {
-            fetchStatus:    'fetched',
-            fetchedAt:      new Date(),
-            parsedMarkdown: scraped.markdown,
-          },
-        })
-        for (const chunk of chunkLinkedHtml(scraped)) {
-          pending.push({ chunk, parentType: 'linked', parentId: resource.id })
+        if (!scraped) {
+          // Every applicable tier returned nothing — record + skip (non-fatal).
+          await prisma.linkedResource.update({
+            where: { id: resource.id },
+            data:  { fetchStatus: 'failed', fetchError: 'all scrape tiers failed' },
+          })
+          errors.push(`scrape ${link.url}: all tiers failed`)
+        } else {
+          await prisma.linkedResource.update({
+            where: { id: resource.id },
+            data: {
+              fetchStatus:    'fetched',
+              fetchedAt:      new Date(),
+              parsedMarkdown: scraped.markdown,
+            },
+          })
+          for (const chunk of chunkLinkedHtml(scraped)) {
+            pending.push({ chunk, parentType: 'linked', parentId: resource.id })
+          }
+          linksScraped++
         }
-        linksScraped++
       } catch (e) {
         await prisma.linkedResource.update({
           where: { id: resource.id },
