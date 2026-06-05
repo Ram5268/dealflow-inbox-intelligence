@@ -71,7 +71,14 @@ export default function OpportunityDetailPage() {
       {/* Back button */}
       <div style={{ padding: '8px 16px 0' }}>
         <button
-          onClick={() => router.push('/chat')}
+          onClick={() => {
+            // If we arrived from a chat results view, go back to that exact
+            // session + re-raise the results cards (via ?deal=<id>). Otherwise
+            // fall back to normal history-back (e.g. from the opportunities list).
+            const from = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('from') : null
+            if (from) router.push(`/chat?sessionId=${from}&deal=${id}`)
+            else router.back()
+          }}
           style={{ background: 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 32, borderRadius: '50%' } as React.CSSProperties}
           aria-label="Back"
         >

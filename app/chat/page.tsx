@@ -606,13 +606,14 @@ function ThreadView({
 
 
 function RaisedView({
-  msg, userQuestion, activeDealIdx, onSetActive, onBack,
+  msg, userQuestion, activeDealIdx, onSetActive, onBack, sessionId,
 }: {
   msg: Message
   userQuestion: string
   activeDealIdx: number
   onSetActive: (idx: number) => void
   onBack: () => void
+  sessionId: string | null
 }) {
   const router = useRouter()
   const deals  = msg.deals ?? []
@@ -718,7 +719,7 @@ function RaisedView({
                 Save
               </button>
               <button
-                onClick={() => router.push(`/opportunities/${active.id}`)}
+                onClick={() => router.push(`/opportunities/${active.id}${sessionId ? `?from=${sessionId}` : ''}`)}
                 style={{
                   flex: 1.5, background: '#fff', color: '#0a1f2a', border: 'none',
                   borderRadius: 999, padding: '10px 0',
@@ -855,20 +856,34 @@ function ChatPageInner() {
       setShowShader(true); setSessionKey(k => k + 1)
       window.history.replaceState({}, '', '/chat')
     } else if (sessionParam) {
+      const dealParam = searchParams.get('deal')
       setCurrentSessionId(sessionParam)
       setShowShader(true); setSessionKey(k => k + 1)
       setLoadingHistory(true)
       fetch(`/api/chat?sessionId=${sessionParam}`)
         .then(r => r.json())
-        .then(d => setMessages(
-          (d.messages ?? []).map((m: Record<string, unknown>) => ({
+        .then(d => {
+          const msgs: Message[] = (d.messages ?? []).map((m: Record<string, unknown>) => ({
             ...m,
             deals: (m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined) ?? [],
             suggestions: Array.isArray(m.suggestions) ? m.suggestions : [],
           }))
-        ))
+          setMessages(msgs)
+          // Returning from an opportunity detail (?deal=<id>): re-raise the
+          // message holding that deal so "back" lands on the exact results
+          // cards instead of a blank chat.
+          if (dealParam) {
+            const target = msgs.find(m => (m.deals ?? []).some(dl => (dl as { id?: string }).id === dealParam))
+            if (target) {
+              const idx = (target.deals ?? []).findIndex(dl => (dl as { id?: string }).id === dealParam)
+              dispatch({ type: 'OPEN_THREAD', msg: target })
+              if (idx > 0) dispatch({ type: 'SET_ACTIVE', idx })
+              return
+            }
+          }
+          dispatch({ type: 'GO', to: 'memory' })
+        })
         .finally(() => setLoadingHistory(false))
-      dispatch({ type: 'GO', to: 'memory' })
       window.history.replaceState({}, '', '/chat')
     }
   }, [searchParams])
@@ -944,6 +959,7 @@ function ChatPageInner() {
           activeDealIdx={cs.activeDealIdx}
           onSetActive={idx => dispatch({ type: 'SET_ACTIVE', idx })}
           onBack={() => dispatch({ type: 'BACK' })}
+          sessionId={currentSessionId}
         />
       )}
       <style>{`
