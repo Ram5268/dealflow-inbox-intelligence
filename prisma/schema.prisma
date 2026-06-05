@@ -74,6 +74,7 @@ model Organization {
   chunks           DocumentChunk[]
   threads          EmailThread[]
   linkedResources  LinkedResource[]
+  nycParcelCache   NycParcelCache[]
 }
 
 model User {
@@ -169,6 +170,7 @@ model ExtractedOpportunity {
   category             Category
   transactionType      TransactionType
   propertyType         String?
+  propertyTypeReason   String?   // Phase 4.6 — NYC enrichment trace
   address              String?
   neighborhood         String?
   borough              String?
@@ -659,41 +661,31 @@ model LinkedResource {
   @@index([fetchStatus])
 }
 
-// Sublet venture — leads captured from the college-sublet Instagram pages via the
-// /api/sublet-intake webhook. Standalone (not tied to the email Organization) since
-// it's a separate funnel; `page` scopes future multi-campus pages. Structured
-// columns are for querying/CRM; `intakeJson` keeps the full SubletIntake for fidelity.
-model SubletLead {
-  id           String   @id @default(cuid())
-  receivedAt   DateTime @default(now())
-  page         String?  // which IG page / market (e.g. "boston")
-  handle       String?  // sender @handle
-
-  rawText      String
-  intent       String   // RENTER_LEAD | SUBLET_LISTING | OTHER
-  qualified    Boolean  @default(false)
-  qualityScore Float    @default(0)
-  missingInfo  String[] @default([])
-
-  // Renter-lead columns (null for listings/other) — surfaced for CRM filtering.
-  budgetMin       Float?
-  budgetMax       Float?
-  beds            Float?
-  neighborhoods   String[] @default([])
-  school          String?
-  moveInDate      String?
-  leaseTermMonths Int?
-  contactEmail    String?
-  contactPhone    String?
-
-  status      String  @default("new") // new | delivered | invoiced | closed
-  intakeJson  Json                     // full SubletIntake object
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@index([intent])
-  @@index([qualified])
-  @@index([status])
-  @@index([page])
+// Phase 4.6 — Cache of NYC public-data lookups keyed on normalized address
+model NycParcelCache {
+  id                   String    @id @default(cuid())
+  normalizedAddress    String    @unique
+  bbl                  String?
+  bin                  String?
+  borough              String?
+  geosearchConfidence  Float?
+  geosearchLabel       String?
+  latitude             Float?
+  longitude            Float?
+  bldgclass            String?
+  ownername            String?
+  unitsRes             Int?
+  unitsTotal           Int?
+  yearBuilt            Int?
+  plutoVersion         String?
+  hasCondoDecl         Boolean?
+  propertyType         String?
+  propertyTypeReason   String
+  confidence           String
+  fetchedAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id])
+  @@index([organizationId])
+  @@index([bbl])
 }

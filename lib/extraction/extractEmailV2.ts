@@ -297,6 +297,31 @@ export async function extractEmailV2(
     return rows
   })
 
+  // Phase 4.6 — post-commit: enrich propertyType with NYC public data
+  // (GeoSearch → PLUTO → optional ACRIS). Runs BEFORE the embedding loop so the
+  // vector text reflects the corrected type. Non-fatal and per-row: a thrown
+  // error leaves the committed row with the LLM's original propertyType. The
+  // in-memory `opp` is mutated so buildOpportunityText() below sees the new type.
+  const { resolvePropertyType } = await import('../enrichment/nyc')
+  let enriched = 0
+  for (const opp of created) {
+    try {
+      const result = await resolvePropertyType(opp)
+      await prisma.extractedOpportunity.update({
+        where: { id: opp.id },
+        data: {
+          propertyType:       result.propertyType,
+          propertyTypeReason: result.propertyTypeReason,
+        },
+      })
+      ;(opp as { propertyType: string | null }).propertyType = result.propertyType
+      ;(opp as { propertyTypeReason: string | null }).propertyTypeReason = result.propertyTypeReason
+      enriched++
+    } catch (e) {
+      console.error(`[extractV2] ${rawEmailId}: enrichment ${opp.id} failed: ${(e as Error).message}`)
+    }
+  }
+
   // Phase 4.0.5 — post-commit: embed every opportunity so it joins the match
   // pool. Reuses V1's helper; non-fatal — a failure leaves the committed row
   // intact. (CriteriaProfile writes were removed in Phase 4.0.7; the criteria
@@ -314,7 +339,7 @@ export async function extractEmailV2(
   const costStr = estimatedCostUsd != null ? `$${estimatedCostUsd.toFixed(4)}` : 'n/a'
   console.log(
     `[extractV2] ${rawEmailId}: ${created.length} opportunit${created.length === 1 ? 'y' : 'ies'} ` +
-    `(${spec.kind}) in ${durationMs}ms, cost ${costStr}; embedded ${embedded}/${created.length}`,
+    `(${spec.kind}) in ${durationMs}ms, cost ${costStr}; enriched ${enriched}/${created.length}; embedded ${embedded}/${created.length}`,
   )
   return created
 }
