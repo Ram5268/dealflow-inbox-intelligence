@@ -191,7 +191,15 @@ export async function runIncrementalSync(): Promise<{
 
       try {
         // ── Pipeline selection ────────────────────────────────────────────────
-        const results = useNewPipeline
+        // V1 ingestion is rollback-only. With INGEST_V2=true (the production
+        // default in .env) only the V2 path runs (fired from the sync route),
+        // so V1 no longer writes schema_validation_failed stubs daily. To roll
+        // back: set INGEST_V2=false in .env and restart the server — V1 then
+        // resumes here unconditionally. V1 code (ingestEmail, extractors,
+        // validator, reviewQueueManager) is left fully intact.
+        const results = process.env.INGEST_V2 === 'true'
+          ? []
+          : useNewPipeline
           ? await ingestEmail({
               rawEmailId:          raw.id,
               subject:             raw.subject,

@@ -35,7 +35,6 @@ async function main() {
     ['Property',              prisma.property.updateMany({             where: { organizationId: null }, data: { organizationId: org.id } })],
     ['ListingStatusHistory',  prisma.listingStatusHistory.updateMany({ where: { organizationId: null }, data: { organizationId: org.id } })],
     ['PropertyIntelligence',  prisma.propertyIntelligence.updateMany({ where: { organizationId: null }, data: { organizationId: org.id } })],
-    ['CriteriaProfile',       prisma.criteriaProfile.updateMany({      where: { organizationId: null }, data: { organizationId: org.id } })],
     ['ReviewQueueItem',       prisma.reviewQueueItem.updateMany({      where: { organizationId: null }, data: { organizationId: org.id } })],
     ['AIExtractionLog',       prisma.aIExtractionLog.updateMany({      where: { organizationId: null }, data: { organizationId: org.id } })],
     ['OutcomeFeedback',       prisma.outcomeFeedback.updateMany({      where: { organizationId: null }, data: { organizationId: org.id } })],
