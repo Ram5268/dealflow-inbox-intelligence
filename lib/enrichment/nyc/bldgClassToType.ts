@@ -102,6 +102,115 @@ export const BLDG_CLASS_TO_PROPERTY_TYPE: Record<string, ClassMapping> = {
   F5: { type: 'commercial', description: 'Factory: Light Manufacturing' },
   F8: { type: 'commercial', description: 'Factory: Tank Farms' },
   F9: { type: 'commercial', description: 'Factory: Miscellaneous' },
+
+  // Phase 4.6.1 — non-residential families surfaced by the full backfill as
+  // unknown_class. K/G/E/W/M → commercial (closest transactable bucket; the
+  // canonical taxonomy has no institutional type). Q/P/V/Y/Z → null (parks,
+  // public buildings, vacant land, government — not transactable property types),
+  // but now with a traceable class description instead of "unknown_class".
+
+  // K — Store buildings (taxpayer + retail)
+  K1: { type: 'commercial', description: 'Store: One Story Retail' },
+  K2: { type: 'commercial', description: 'Store: Multi-Story Retail' },
+  K3: { type: 'commercial', description: 'Store: Department Store' },
+  K4: { type: 'commercial', description: 'Store: Predominant Retail With Offices' },
+  K5: { type: 'commercial', description: 'Store: Stand-Alone Food' },
+  K6: { type: 'commercial', description: 'Store: Shopping Centers' },
+  K7: { type: 'commercial', description: 'Store: Banking Facilities With Drive-Thru' },
+  K8: { type: 'commercial', description: 'Store: Big Box Retail' },
+  K9: { type: 'commercial', description: 'Store: Miscellaneous' },
+
+  // G — Garage / Gasoline station / Parking
+  G0: { type: 'commercial', description: 'Garage: Open Parking Lot' },
+  G1: { type: 'commercial', description: 'Garage: All Others' },
+  G2: { type: 'commercial', description: 'Garage: Auto Body / Collision / Repair' },
+  G3: { type: 'commercial', description: 'Garage: Gas Station + Service' },
+  G4: { type: 'commercial', description: 'Garage: Gas Station + Retail' },
+  G5: { type: 'commercial', description: 'Garage: Gas Station - Service Only' },
+  G6: { type: 'commercial', description: 'Garage: Licensed Parking Lot' },
+  G7: { type: 'commercial', description: 'Garage: Parking - Multi-Story' },
+  G8: { type: 'commercial', description: 'Garage: With Showroom' },
+  G9: { type: 'commercial', description: 'Garage: Miscellaneous' },
+
+  // E — Warehouses
+  E1: { type: 'commercial', description: 'Warehouse: Fireproof' },
+  E2: { type: 'commercial', description: 'Warehouse: Frame / Metal' },
+  E3: { type: 'commercial', description: 'Warehouse: Semi-Fireproof' },
+  E4: { type: 'commercial', description: 'Warehouse: Open Storage' },
+  E7: { type: 'commercial', description: 'Warehouse: Self-Storage' },
+  E9: { type: 'commercial', description: 'Warehouse: Miscellaneous' },
+
+  // W — Educational
+  W1: { type: 'commercial', description: 'Educational: School (K-12)' },
+  W2: { type: 'commercial', description: 'Educational: School Annex' },
+  W3: { type: 'commercial', description: 'Educational: College or University' },
+  W4: { type: 'commercial', description: 'Educational: Religious School' },
+  W5: { type: 'commercial', description: 'Educational: City Owned' },
+  W6: { type: 'commercial', description: 'Educational: Other' },
+  W8: { type: 'commercial', description: 'Educational: Day Care / Nursery' },
+  W9: { type: 'commercial', description: 'Educational: Miscellaneous' },
+
+  // M — Religious
+  M1: { type: 'commercial', description: 'Religious: Church / Synagogue / Chapel' },
+  M2: { type: 'commercial', description: 'Religious: Convent' },
+  M3: { type: 'commercial', description: 'Religious: Parsonage / Rectory' },
+  M4: { type: 'commercial', description: 'Religious: Cemetery' },
+  M9: { type: 'commercial', description: 'Religious: Miscellaneous' },
+
+  // Q — Outdoor recreation / parks (skip — not transactable real estate)
+  Q0: { type: null, description: 'Outdoor Recreation: Open Space' },
+  Q1: { type: null, description: 'Outdoor Recreation: Parks' },
+  Q2: { type: null, description: 'Outdoor Recreation: Playground' },
+  Q3: { type: null, description: 'Outdoor Recreation: Outdoor Pool' },
+  Q4: { type: null, description: 'Outdoor Recreation: Beach' },
+  Q5: { type: null, description: 'Outdoor Recreation: Golf Course' },
+  Q6: { type: null, description: 'Outdoor Recreation: Stadium / Racetrack' },
+  Q7: { type: null, description: 'Outdoor Recreation: Tennis Court' },
+  Q8: { type: null, description: 'Outdoor Recreation: Marina / Yacht Club' },
+  Q9: { type: null, description: 'Outdoor Recreation: Miscellaneous' },
+
+  // P — Public buildings (skip — not transactable)
+  P1: { type: null, description: 'Public: Concert Hall' },
+  P2: { type: null, description: 'Public: Lodge Rooms' },
+  P3: { type: null, description: 'Public: YMCA / YWCA' },
+  P4: { type: null, description: 'Public: Beach Club' },
+  P5: { type: null, description: 'Public: Community Center' },
+  P6: { type: null, description: 'Public: Library' },
+  P7: { type: null, description: 'Public: Museum' },
+  P8: { type: null, description: 'Public: Zoo' },
+  P9: { type: null, description: 'Public: Miscellaneous' },
+
+  // V — Vacant land (no canonical "land" type; null with traceable reason)
+  V0: { type: null, description: 'Vacant Land: Zoned Residential, Manhattan' },
+  V1: { type: null, description: 'Vacant Land: Zoned Commercial / Manhattan' },
+  V2: { type: null, description: 'Vacant Land: Zoned Commercial, Outside Manhattan' },
+  V3: { type: null, description: 'Vacant Land: Zoned Primarily Residential, Outside Manhattan' },
+  V4: { type: null, description: 'Vacant Land: Vacant Pole Position (not buildable)' },
+  V5: { type: null, description: 'Vacant Land: School Site' },
+  V6: { type: null, description: 'Vacant Land: Library, Hospital, etc.' },
+  V7: { type: null, description: 'Vacant Land: Port Authority / Government Use' },
+  V8: { type: null, description: 'Vacant Land: New York City Owned' },
+  V9: { type: null, description: 'Vacant Land: Miscellaneous' },
+
+  // Y / Z — Misc utility / government (skip)
+  Y1: { type: null, description: 'Utility: Fire Department' },
+  Y2: { type: null, description: 'Utility: Police Department' },
+  Y3: { type: null, description: 'Utility: Government Office' },
+  Y4: { type: null, description: 'Utility: Military' },
+  Y5: { type: null, description: 'Utility: Government School' },
+  Y6: { type: null, description: 'Utility: Sanitation' },
+  Y7: { type: null, description: 'Utility: City-Owned Asylum / Home' },
+  Y8: { type: null, description: 'Utility: Post Office' },
+  Y9: { type: null, description: 'Utility: Misc Government' },
+  Z0: { type: null, description: 'Misc: Tennis Court' },
+  Z1: { type: null, description: 'Misc: Court House' },
+  Z2: { type: null, description: 'Misc: Public Parking' },
+  Z3: { type: null, description: 'Misc: Transportation Facility' },
+  Z4: { type: null, description: 'Misc: Police / Fire' },
+  Z5: { type: null, description: 'Misc: Easement' },
+  Z7: { type: null, description: 'Misc: Plaza' },
+  Z8: { type: null, description: 'Misc: Cemetery Plot' },
+  Z9: { type: null, description: 'Misc: Other' },
 }
 
 export function classifyBuildingClass(code: string | null | undefined): ClassMapping {

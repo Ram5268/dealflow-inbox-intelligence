@@ -35,6 +35,10 @@ const CATEGORY = flagValue('--category')
 const DRY_RUN  = argv.includes('--dry-run')
 const ALL      = argv.includes('--all')
 const IDS      = flagValue('--ids')?.split(',').map(s => s.trim()).filter(Boolean)
+// Phase 4.6.1 — re-evaluate NYC-bearing nulls (unknown_class / ancillary /
+// transient) against an updated class map. Stale "null + has bldgclass" cache
+// rows are dropped first so the classifier re-runs with the new mapping.
+const RECLASSIFY = argv.includes('--reclassify-unknown')
 const CONCURRENCY = 4
 
 interface OppRow {
@@ -51,8 +55,21 @@ interface OppRow {
 
 async function buildCohort(): Promise<OppRow[]> {
   const where: Record<string, unknown> = {}
-  if (IDS && IDS.length) where.id = { in: IDS }
-  else if (!ALL) where.propertyTypeReason = null // default: only un-enriched rows
+  if (IDS && IDS.length) {
+    where.id = { in: IDS }
+  } else if (RECLASSIFY) {
+    // NYC-bearing nulls only: exclude honest skips + definitive geocode/PLUTO
+    // failures (those can't be fixed by a class-map change). Leaves the
+    // unknown_class / ancillary / transient rows for re-classification.
+    where.AND = [
+      { propertyType: null },
+      { propertyTypeReason: { not: { startsWith: 'skipped:' } } },
+      { propertyTypeReason: { not: { startsWith: 'geosearch_failed' } } },
+      { propertyTypeReason: { not: { startsWith: 'pluto_no_record' } } },
+    ]
+  } else if (!ALL) {
+    where.propertyTypeReason = null // default: only un-enriched rows
+  }
   if (CATEGORY) where.category = CATEGORY
 
   return prisma.extractedOpportunity.findMany({
@@ -107,11 +124,12 @@ function isNycFailure(reason: string): boolean {
 async function main() {
   console.log('═══════════════════════════════════════════════════════════════════')
   console.log('Phase 4.6 — propertyType backfill (NYC public-data enrichment)')
-  console.log(`  flags: limit=${LIMIT ?? 'all'} category=${CATEGORY ?? 'any'} all=${ALL} dryRun=${DRY_RUN} ids=${IDS?.length ?? 0}`)
+  console.log(`  flags: limit=${LIMIT ?? 'all'} category=${CATEGORY ?? 'any'} all=${ALL} reclassify=${RECLASSIFY} dryRun=${DRY_RUN} ids=${IDS?.length ?? 0}`)
   console.log('═══════════════════════════════════════════════════════════════════')
 
   const cohort = await buildCohort()
-  console.log(`\nCohort: ${cohort.length} opportunity row(s) ${ALL || IDS ? '' : '(propertyTypeReason IS NULL)'}.\n`)
+  const cohortLabel = IDS ? '' : RECLASSIFY ? '(NYC-bearing nulls — reclassify)' : ALL ? '' : '(propertyTypeReason IS NULL)'
+  console.log(`\nCohort: ${cohort.length} opportunity row(s) ${cohortLabel}.\n`)
   if (cohort.length === 0) { await prisma.$disconnect(); return }
 
   if (DRY_RUN) {
@@ -125,6 +143,15 @@ async function main() {
     console.log('\n  DRY RUN — no enrichment performed.')
     await prisma.$disconnect()
     return
+  }
+
+  // Phase 4.6.1 — drop stale "resolved to null but PLUTO gave us a bldgclass"
+  // cache rows so the re-run re-classifies them with the updated map. Rows with
+  // a real type, or null-with-no-bldgclass (geocode/PLUTO failures), are kept —
+  // the dedup layer stays intact for everything the map change can't affect.
+  if (RECLASSIFY) {
+    const del = await prisma.nycParcelCache.deleteMany({ where: { propertyType: null, bldgclass: { not: null } } })
+    console.log(`[reclassify] cleared ${del.count} stale null-classification cache rows (bldgclass present, type null)\n`)
   }
 
   const queue = new PQueue({ concurrency: CONCURRENCY })
