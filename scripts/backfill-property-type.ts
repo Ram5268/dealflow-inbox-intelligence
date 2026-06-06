@@ -241,11 +241,16 @@ async function main() {
       console.log(`[backfill-pt] progress ${processed}/${cohort.length} | NYC tries ${tries} (resolved ${nycResolved}, failed ${nycFailed}) | NYC failure rate ${rate}%`)
     }
 
-    const stop = checkHardStops()
-    if (stop && !aborted) {
-      aborted = true; abortReason = stop
-      queue.clear()
-      console.error(`\n⛔ HARD STOP at processed=${processed}: ${stop}`)
+    // Hard stops guard the BROAD backfill (failures should be rare). A targeted
+    // --ids re-run of known-misgeocoded rows expects a high number_mismatch reject
+    // rate BY DESIGN (we're rejecting wrong-building matches), so skip them there.
+    if (!IDS) {
+      const stop = checkHardStops()
+      if (stop && !aborted) {
+        aborted = true; abortReason = stop
+        queue.clear()
+        console.error(`\n⛔ HARD STOP at processed=${processed}: ${stop}`)
+      }
     }
   }))
 
