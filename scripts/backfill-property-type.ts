@@ -96,8 +96,15 @@ function reasonPrefix(reason: string): string {
   return reason.split(/[:=+]/)[0] || '(empty)'
 }
 
-// Honest skips — rows the system correctly declined to look up. EXCLUDED from the
-// NYC-bearing cohort (they are expected nulls, not enrichment failures).
+// Honest rejects — rows the system correctly declined. EXCLUDED from the
+// NYC-bearing cohort (expected nulls, not enrichment failures).
+//
+// Phase 4.6.3: 'geosearch_failed:number_mismatch' is reclassified from "failure"
+// to "honest reject". It represents the system correctly DECLINING a wrong-building
+// match (the same epistemic category as outside_nyc — we know the only candidates
+// are wrong, so we return null rather than a confident lie). The pre-Phase-4.6.2
+// success rate was inflated by counting those wrong-building matches as "resolved";
+// this is the corrected metric. (Matches the cached: form too.)
 const HONEST_SKIP_PREFIXES = [
   'skipped:demand_or_non_property_category',
   'skipped:outside_nyc',
@@ -106,6 +113,7 @@ const HONEST_SKIP_PREFIXES = [
   'skipped:no_street_number',
 ]
 function isHonestSkip(reason: string): boolean {
+  if (reason.includes('number_mismatch')) return true // honest reject of a wrong-building match
   return HONEST_SKIP_PREFIXES.some(p => reason === p || reason.startsWith(p + ':'))
 }
 

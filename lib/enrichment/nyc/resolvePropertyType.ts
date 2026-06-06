@@ -36,6 +36,18 @@ const SKIP_CATEGORIES = new Set([
 const PLACEHOLDER_ADDRESS =
   /^\s*(tbd|tba|n\/?a|none|null|unknown|various|multiple|several|private|undisclosed|confidential|(address )?withheld|address (tbd|upon request|withheld)|(contact|call|ask)( (me|us|the )?(agent|broker|listing agent|for (address|details|more)))?|to be (determined|announced)|off[- ]?market|[—–\-.?·•]+)\s*$/i
 
+// Phase 4.6.3 — SUBSTRING placeholder patterns. The whole-string regex above
+// misses "TBD - Hudson Yards" / "Various, Brooklyn" etc., which the LLM emits with
+// extra text and which then fuzzy-geocode to a real (wrong) landmark. Any address
+// CONTAINING one of these tokens is a placeholder, not a resolvable parcel.
+const PLACEHOLDER_SUBSTRINGS = [
+  /\btbd\b/i, /\btba\b/i, /\bvarious\b/i, /\bcoming soon\b/i,
+  /\bcall for (?:address|details)\b/i, /\baddress upon request\b/i, /\bmultiple addresses?\b/i,
+]
+function isPlaceholderAddress(addr: string): boolean {
+  return PLACEHOLDER_SUBSTRINGS.some(re => re.test(addr))
+}
+
 // Canonical borough names; aliases included. Generic "New York"/"NYC" are valid
 // (in-NYC) but too ambiguous to use for the borough cross-check.
 const BOROUGH_CANONICAL: Record<string, string> = {
@@ -89,12 +101,26 @@ export function stripBareUnitSuffix(addr: string): string {
     .replace(/,?\s+(?:floor|flr|fl)\.?\s*\d+[a-z]?\s*$/i, '')
     // Bare studio / penthouse / loft (optionally + number)
     .replace(/,?\s+(?:studio|penthouse|loft)(?:\s+\d+[a-z]?)?\s*$/i, '')
+    // Ordinal-then-floor ("14th Floor", "3 Fl", "2nd Flr")
+    .replace(/,?\s+\d+(?:st|nd|rd|th)?\s+(?:floor|flr|fl)\.?\s*$/i, '')
     // Slash duplex units ("11E/12F", "5/6F")
     .replace(/[,\s]+\d{1,3}[a-z]?\/\d{1,3}[a-z]?\s*$/i, '')
     // Street suffix + bare alphanumeric unit ("street 11d", "avenue 21b")
     .replace(/\b(street|avenue|ave|st|road|rd|boulevard|blvd|place|pl|drive|dr|way|lane|ln|terrace|court|ct|parkway|pkwy)\.?\s+(\d{1,3}[a-z]|ph[0-9a-z]?|[a-z]\d{1,2})\s*$/i, '$1')
     // Trailing ", 21B" or ", 2F"
     .replace(/,\s*(\d{1,3}[a-z]|ph[0-9a-z]?|[a-z]\d{1,2})\s*$/i, '')
+    // ── Phase 4.6.3 — additional coverage from the Step-4 audit ──
+    // #APT / APT / UNIT marker mid/end ("740 Park Avenue #APT 18C")
+    .replace(/\s*#?\s*(?:apt|apartment|unit)\s+[a-z0-9-]+\s*$/i, '')
+    // Unit-prefix words: DUPLEX-N / TRIPLEX / GARDEN ("99 John Street DUPLEX-N")
+    .replace(/\s+(?:duplex|triplex|loft|penthouse|garden)-?[a-z0-9]*\s*$/i, '')
+    // Bare 3-4 digit trailing unit, only after a full street ("200 East 21st Street 808")
+    .replace(/^(\d+\s+\w+(?:\s+\w+)*(?:\s+(?:street|avenue|ave|st|road|rd|blvd|place|pl|dr|way|lane|ln))?)\s+(\d{3,4})\s*$/i, '$1')
+    // LAST-DITCH: a trailing unit-shaped alphanumeric token on a named street
+    // without a standard suffix word ("41 Central Park West 12A"). Runs last so it
+    // can't pre-empt the more specific patterns above. Gated by the smoke guards
+    // ("100 14th Street", "500 5th Avenue", "Avenue C" must NOT strip).
+    .replace(/\s+(\d{1,3}[a-z]|ph[0-9a-z]?|[a-z]\d{1,2})\s*$/i, ' ')
     .trim()
 }
 
@@ -166,7 +192,7 @@ export async function resolvePropertyType(opp: EnrichableOpportunity): Promise<E
   // 3. No / placeholder address.
   const address = (opp.address ?? '').trim()
   if (!address) return skip('skipped:no_address')
-  if (PLACEHOLDER_ADDRESS.test(address)) return skip('skipped:placeholder_address')
+  if (PLACEHOLDER_ADDRESS.test(address) || isPlaceholderAddress(address)) return skip('skipped:placeholder_address')
 
   // 4. Strip any unit suffix (so it can't leak into the geocode query), then
   //    normalize. Requires a street number (a bare neighborhood/building name

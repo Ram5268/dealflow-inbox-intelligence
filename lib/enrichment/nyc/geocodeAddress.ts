@@ -47,19 +47,20 @@ function bblOf(f: GeoFeature): string | null {
 // First building-number token of an address/label — at the start OR after
 // whitespace/comma. Tolerates a building-name or apt prefix ("The Plaza, 768 …",
 // "Apt 5A, 740 …") so the number-mismatch net isn't silently skipped when the
-// number isn't front-anchored. Keeps a trailing letter (49A) and a Queens-style
-// hyphen range (3-18).
+// number isn't front-anchored. Keeps a trailing letter (49A), a Queens-style
+// hyphen range (3-18), and a fractional part (449 1/2) — the fraction is dropped
+// in streetNumbersCompatible so "449 1/2" ≈ "449".
 export function firstStreetNumber(s: string): string | null {
-  const m = s.trim().match(/(?:^|[\s,])(\d+[A-Za-z]?(?:-\d+[A-Za-z]?)?)\b/)
+  const m = s.trim().match(/(?:^|[\s,])(\d+(?:\s+\d+\/\d+)?[A-Za-z]?(?:-\d+[A-Za-z]?)?)\b/)
   return m ? m[1] : null
 }
 
 // True when an input building number and GeoSearch's matched number refer to the
-// same parcel: exact (trailing letters ignored, 49A≈49), or a single number
-// contained in the other's hyphen range (44-50 ⊇ 44) — GeoSearch frequently
-// returns the low end for a range-addressed building.
+// same parcel: exact (trailing letters + fractional " 1/2" ignored, "449 1/2"≈449),
+// or a single number contained in the other's hyphen range (44-50 ⊇ 44) — GeoSearch
+// frequently returns the low end for a range-addressed building.
 export function streetNumbersCompatible(inputNum: string, matchedNum: string): boolean {
-  const strip = (s: string) => s.replace(/[A-Za-z]+$/, '')
+  const strip = (s: string) => s.replace(/\s+\d+\/\d+/, '').replace(/[A-Za-z]+$/, '').trim()
   const a = strip(inputNum), b = strip(matchedNum)
   if (a === b) return true
   const asRange = (s: string): [number, number] | null => {
@@ -103,38 +104,52 @@ export async function geocodeAddress(query: string, expectedBorough?: string | n
     candidates = matching
   }
 
+  // Preserve the original gates on the TOP candidate.
   const top = candidates[0]
-  const confidence = top.properties?.confidence ?? 0
-  const label = top.properties?.label ?? null
-  const coords = top.geometry?.coordinates ?? null
-  const lng = coords ? coords[0] : null
-  const lat = coords ? coords[1] : null
+  const topConf = top.properties?.confidence ?? 0
+  const topLabel = top.properties?.label ?? null
+  const topCoords = top.geometry?.coordinates ?? null
+  const topLng = topCoords ? topCoords[0] : null
+  const topLat = topCoords ? topCoords[1] : null
+  if (topConf < CONFIDENCE_FLOOR) {
+    return { ...empty, confidence: topConf, label: topLabel, lat: topLat, lng: topLng, rejectReason: 'low_confidence' }
+  }
+  if (!bblOf(top)) {
+    return { ...empty, confidence: topConf, label: topLabel, lat: topLat, lng: topLng, rejectReason: 'no_bbl' }
+  }
 
-  if (confidence < CONFIDENCE_FLOOR) {
-    return { ...empty, confidence, label, lat, lng, rejectReason: 'low_confidence' }
-  }
-  const bbl = bblOf(top)
-  if (!bbl) {
-    return { ...empty, confidence, label, lat, lng, rejectReason: 'no_bbl' }
-  }
-  // Building-number cross-check: reject when GeoSearch's matched street number
-  // is incompatible with the input's — a unit number that leaked into the query,
-  // or a fuzzy street-name fallback, lands on the wrong building. Tolerates
-  // building-name/apt prefixes (firstStreetNumber) and hyphen ranges
-  // (streetNumbersCompatible: 44-50 ⊇ 44).
+  // Building-number cross-check, scanning up to the top 5 candidates. GeoSearch
+  // sometimes ranks the wrong same-street building first (e.g. "449 1/2 Hudson"
+  // returns "548 1/2 Hudson" at index 0 and the correct building at index 2), so
+  // we accept the FIRST confident, bbl-bearing candidate whose street number is
+  // compatible with the input. A unit number that leaked into the query, or a
+  // fuzzy street-name fallback, has no compatible candidate → number_mismatch.
   const inputNum = firstStreetNumber(query)
-  const matchedNum = firstStreetNumber(label ?? '')
-  if (inputNum && matchedNum && !streetNumbersCompatible(inputNum, matchedNum)) {
-    return { ...empty, confidence, label, lat, lng, rejectReason: 'number_mismatch' }
+  let chosen = top
+  if (inputNum) {
+    let match: GeoFeature | null = null
+    for (const cand of candidates.slice(0, 5)) {
+      if ((cand.properties?.confidence ?? 0) < CONFIDENCE_FLOOR) continue
+      if (!bblOf(cand)) continue
+      const cNum = firstStreetNumber(cand.properties?.label ?? '')
+      if (cNum && streetNumbersCompatible(inputNum, cNum)) { match = cand; break }
+    }
+    if (!match) {
+      return { ...empty, confidence: topConf, label: topLabel, lat: topLat, lng: topLng, rejectReason: 'number_mismatch' }
+    }
+    chosen = match
   }
+
+  const bbl = bblOf(chosen)!
+  const coords = chosen.geometry?.coordinates ?? null
   return {
     bbl,
-    bin: top.properties?.addendum?.pad?.bin ?? null,
+    bin: chosen.properties?.addendum?.pad?.bin ?? null,
     borough: boroughFromBbl(bbl),
-    confidence,
-    label,
-    lat,
-    lng,
+    confidence: chosen.properties?.confidence ?? 0,
+    label: chosen.properties?.label ?? null,
+    lat: coords ? coords[1] : null,
+    lng: coords ? coords[0] : null,
     rejectReason: null,
   }
 }

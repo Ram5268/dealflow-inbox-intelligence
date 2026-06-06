@@ -41,6 +41,17 @@ async function runStep1Tests() {
     // Fix 3 — slash duplex units
     { in: '25 West 54 Street 11E/12F', out: '25 West 54 Street' },
     { in: '25 West 54 Street, 5/6F',   out: '25 West 54 Street' },
+    // Phase 4.6.3 — named-street + unit, #APT, DUPLEX, bare-numeric, ordinal-floor
+    { in: '41 Central Park West 12A',  out: '41 Central Park West' },
+    { in: '15 Central Park West, 8B',  out: '15 Central Park West' },
+    { in: '740 Park Avenue #APT 18C',  out: '740 Park Avenue' },
+    { in: '99 John Street DUPLEX-N',   out: '99 John Street' },
+    { in: '200 East 21st Street 808',  out: '200 East 21st Street' }, // bare numeric unit
+    { in: '100 Main Street 14th Floor', out: '100 Main Street' },     // ordinal floor
+    // Phase 4.6.3 GUARDS — must NOT strip (street-name tokens, not units)
+    { in: '100 14th Street',           out: '100 14th Street' },      // 14th is the street
+    { in: '500 5th Avenue',            out: '500 5th Avenue' },       // 5th is the street
+    { in: 'Avenue C',                  out: 'Avenue C' },             // letter-only street
   ]
   for (const t of stripTests) {
     const got = stripBareUnitSuffix(t.in)
@@ -55,6 +66,7 @@ async function runStep1Tests() {
     { in: 'The Plaza, 768 5th Avenue',     out: '768' },   // building-name prefix
     { in: 'One57, 157 W 57 St',            out: '157' },   // "57" inside "One57" skipped
     { in: '3-18 Beach 87 Street',          out: '3-18' },  // Queens hyphen
+    { in: '449 1/2 Hudson Street',         out: '449 1/2' }, // fractional captured (Phase 4.6.3)
     // apt-prefixed: stripBareUnitSuffix removes the front apt FIRST, then firstStreetNumber
     { in: 'Apt 5A, 740 Park Avenue',       out: '740', viaStrip: true },
   ]
@@ -73,6 +85,8 @@ async function runStep1Tests() {
     { a: '3-18',  b: '3-18', exp: true },  // Queens, exact
     { a: '49',    b: '11',  exp: false },  // unit-leak still rejected
     { a: '3-18',  b: '3-05', exp: false }, // different Queens building rejected
+    { a: '449 1/2', b: '449',     exp: true },  // fraction dropped → base 449 (Phase 4.6.3)
+    { a: '449 1/2', b: '548 1/2', exp: false }, // different base building rejected
   ]
   for (const t of compatTests) {
     const got = streetNumbersCompatible(t.a, t.b)

@@ -1,0 +1,224 @@
+[
+  {
+    "id": "cmp1em45q001xx7ozggraqlxz",
+    "address": "530 Park Avenue #APT 18C",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp96naii003z0pp1f8a45alb",
+    "address": "10 Park Ave Residence 16A",
+    "propertyType": null,
+    "propertyTypeReason": "pluto_class=QG:unknown_class:QG"
+  },
+  {
+    "id": "cmpyog3n90142c6o8fsc4urcp",
+    "address": "3 East 84th Street, 8th Floor",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmpyo2ba900s1c6o8umrnpiut",
+    "address": "820 Ocean Parkway 209",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp722v8f00b1ewoz1ovbl1k6",
+    "address": "39 E 12TH ST 410",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp723d40001i0psvf84mu0bf",
+    "address": "530 Park Avenue #APT 18C",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp48r02v00gb30ozh9g37v4e",
+    "address": "530 Park Avenue #APT 18C",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmoyq51yv000p9dozzn44hliw",
+    "address": "41 Central Park West 12A",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmox8tn5m0020acozeia9hrdy",
+    "address": "41 Central Park West 12A",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmpztmeem013lc0o8qnhslst9",
+    "address": "Santorini, Residence 2J",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:no_street_number"
+  },
+  {
+    "id": "cmpzv4frt02k3c0o8335zuody",
+    "address": "Santorini, Residence 2J",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:no_street_number"
+  },
+  {
+    "id": "cmpzvg7wt02zdc0o818tvr264",
+    "address": "101 Warren Street 510",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmpzvg88s02zjc0o8mm8axs4l",
+    "address": "181 East 101st Street 808",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp1soiub004930ozd93ws7dz",
+    "address": "Carr 793 KM 1.2, Qtas de Jagueyes 31A",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:outside_nyc:state=PR"
+  },
+  {
+    "id": "cmp48vesh00ip30oz1bqtyqq9",
+    "address": "41 Central Park West 12A",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp5qdd0y0032gkozu3bupy9r",
+    "address": "The Bowen Brooklyn, Residence 6G",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:no_street_number"
+  },
+  {
+    "id": "cmp6bsb1s000cfoozh3konqdk",
+    "address": "237 E 88TH ST 302",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp96lv5c00350pp1huncng85",
+    "address": "320 CENTRAL PARK W 11E",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp96lv5j00360pp1r2rk1o8a",
+    "address": "320 CENTRAL PARK W 11E",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp722axg000w0psv9wuh4al3",
+    "address": "237 E 88TH ST 302",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp722vu700b2ewoz248il3vm",
+    "address": "60 E 9TH ST 435",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp722vwu00b3ewoz832hse3h",
+    "address": "60 E 9TH ST 642",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp723a44001g0psvz27w9oi2",
+    "address": "41 Central Park West 12A",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp7268fr002z0psvu2cx4yx6",
+    "address": "BellTel Lofts, residence 17A",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:no_street_number"
+  },
+  {
+    "id": "cmp7268fj002y0psvudizbkr7",
+    "address": "BellTel Lofts, residence 2I",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:no_street_number"
+  },
+  {
+    "id": "cmp7268fc002x0psvnfhyo568",
+    "address": "BellTel Lofts, residence 14D",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:no_street_number"
+  },
+  {
+    "id": "cmp7268f4002w0psvejil13xk",
+    "address": "BellTel Lofts, residence 12N",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:no_street_number"
+  },
+  {
+    "id": "cmp7268df002v0psvwq0s3tg5",
+    "address": "BellTel Lofts, residence 20A",
+    "propertyType": null,
+    "propertyTypeReason": "skipped:no_street_number"
+  },
+  {
+    "id": "cmpaj5dq8000r0ppjz9dj6m3l",
+    "address": "41 Central Park West 12A",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp96it3u001i0pp14tbbscsh",
+    "address": "41 Central Park West 12A",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmp96k2bm00240pp1cm4j0aw4",
+    "address": "237 E 88TH ST 302",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmpfl7u0w010w3dozm1x7atok",
+    "address": "655 Sixth Avenue PENTHOUSE-B",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:no_results"
+  },
+  {
+    "id": "cmpfl9nn401b73dozk4xgfqcv",
+    "address": "949 Park Avenue DUPLEX-1",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmoyq57mp000s9dozpdf0nnli",
+    "address": "530 Park Avenue #APT 18C",
+    "propertyType": null,
+    "propertyTypeReason": "cached:geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmpfkyhvg00393dozk65s780b",
+    "address": "138-35 Elder Avenue PENTHOUSE-F",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:no_results"
+  },
+  {
+    "id": "cmpflojo603ge3dozhki52m95",
+    "address": "270 1/2 Summit Avenue",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  },
+  {
+    "id": "cmpfm8mdf06053doztvd52d5x",
+    "address": "449 1/2 Hudson Street",
+    "propertyType": null,
+    "propertyTypeReason": "geosearch_failed:number_mismatch"
+  }
+]
