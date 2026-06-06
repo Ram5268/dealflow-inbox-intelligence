@@ -67,16 +67,30 @@ function toInt(v: string | null | undefined): number | null {
   return Number.isNaN(n) ? null : n
 }
 
-// Strip a trailing unit so it can't leak into the GeoSearch query and match the
-// wrong building (e.g. "49 East 21 Street 11D" → "11 East 21 Street"). Handles
-// explicit markers (apt/unit/#), a street-suffix followed by a bare alphanumeric
-// unit ("Avenue 21B"), and a comma-prefixed unit (", 2F"). Deliberately NO
-// last-ditch fallback — it must not eat a legitimate street number.
+// Strip a unit so it can't leak into the GeoSearch query and match the wrong
+// building (e.g. "49 East 21 Street 11D" → "11 East 21 Street"). Covers, in
+// rough parity with lib/domain/Address.ts UNIT_PATTERNS:
+//   - a FRONT-anchored marker ("Apt 5A, 740 Park Avenue" → "740 Park Avenue")
+//   - explicit trailing markers (apt / apartment / unit / #)
+//   - floor markers ("Fl 5", "Floor 12")
+//   - bare studio / penthouse / loft (optionally + number)
+//   - slash duplex units ("11E/12F", "5/6F")
+//   - a street-suffix followed by a bare alphanumeric unit ("Avenue 21B")
+//   - a comma-prefixed unit (", 2F")
+// Deliberately NO last-ditch fallback — it must not eat a legitimate street number.
 export function stripBareUnitSuffix(addr: string): string {
   if (!addr) return addr
   return addr
-    // Explicit unit markers (apt / unit / #)
-    .replace(/,?\s+(?:apt|unit|#)\s*[\w-]+\s*$/i, '')
+    // FRONT-anchored apt/unit marker before the real address ("Apt 5A, 740 …")
+    .replace(/^\s*(?:apt|apartment|unit|#)\s*[\w-]+\s*,\s*/i, '')
+    // Explicit trailing unit markers (apt / apartment / unit / #)
+    .replace(/,?\s+(?:apt|apartment|unit|#)\s*[\w-]+\s*$/i, '')
+    // Floor markers ("Fl 5", "Floor 12", "Flr 3")
+    .replace(/,?\s+(?:floor|flr|fl)\.?\s*\d+[a-z]?\s*$/i, '')
+    // Bare studio / penthouse / loft (optionally + number)
+    .replace(/,?\s+(?:studio|penthouse|loft)(?:\s+\d+[a-z]?)?\s*$/i, '')
+    // Slash duplex units ("11E/12F", "5/6F")
+    .replace(/[,\s]+\d{1,3}[a-z]?\/\d{1,3}[a-z]?\s*$/i, '')
     // Street suffix + bare alphanumeric unit ("street 11d", "avenue 21b")
     .replace(/\b(street|avenue|ave|st|road|rd|boulevard|blvd|place|pl|drive|dr|way|lane|ln|terrace|court|ct|parkway|pkwy)\.?\s+(\d{1,3}[a-z]|ph[0-9a-z]?|[a-z]\d{1,2})\s*$/i, '$1')
     // Trailing ", 21B" or ", 2F"

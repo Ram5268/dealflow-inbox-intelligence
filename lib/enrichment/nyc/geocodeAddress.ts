@@ -44,11 +44,36 @@ function bblOf(f: GeoFeature): string | null {
   return f.properties?.addendum?.pad?.bbl ?? null
 }
 
-// Leading building number of an address/label. Keeps a trailing letter (49A) and
-// a Queens-style hyphen range (3-18) so they compare faithfully.
-function leadingStreetNumber(s: string): string | null {
-  const m = s.trim().match(/^(\d+[A-Za-z]?(?:-\d+)?)\b/)
+// First building-number token of an address/label — at the start OR after
+// whitespace/comma. Tolerates a building-name or apt prefix ("The Plaza, 768 …",
+// "Apt 5A, 740 …") so the number-mismatch net isn't silently skipped when the
+// number isn't front-anchored. Keeps a trailing letter (49A) and a Queens-style
+// hyphen range (3-18).
+export function firstStreetNumber(s: string): string | null {
+  const m = s.trim().match(/(?:^|[\s,])(\d+[A-Za-z]?(?:-\d+[A-Za-z]?)?)\b/)
   return m ? m[1] : null
+}
+
+// True when an input building number and GeoSearch's matched number refer to the
+// same parcel: exact (trailing letters ignored, 49A≈49), or a single number
+// contained in the other's hyphen range (44-50 ⊇ 44) — GeoSearch frequently
+// returns the low end for a range-addressed building.
+export function streetNumbersCompatible(inputNum: string, matchedNum: string): boolean {
+  const strip = (s: string) => s.replace(/[A-Za-z]+$/, '')
+  const a = strip(inputNum), b = strip(matchedNum)
+  if (a === b) return true
+  const asRange = (s: string): [number, number] | null => {
+    const m = s.match(/^(\d+)-(\d+)$/)
+    if (!m) return null
+    const lo = parseInt(m[1], 10), hi = parseInt(m[2], 10)
+    return [Math.min(lo, hi), Math.max(lo, hi)]
+  }
+  const asSingle = (s: string): number | null => (/^\d+$/.test(s) ? parseInt(s, 10) : null)
+  const ra = asRange(a), sb = asSingle(b)
+  if (ra && sb != null && sb >= ra[0] && sb <= ra[1]) return true
+  const rb = asRange(b), sa = asSingle(a)
+  if (rb && sa != null && sa >= rb[0] && sa <= rb[1]) return true
+  return false
 }
 
 /**
@@ -93,17 +118,14 @@ export async function geocodeAddress(query: string, expectedBorough?: string | n
     return { ...empty, confidence, label, lat, lng, rejectReason: 'no_bbl' }
   }
   // Building-number cross-check: reject when GeoSearch's matched street number
-  // differs from the input's — a unit number that leaked into the query, or a
-  // fuzzy street-name fallback, lands on the wrong building. Trailing letters are
-  // ignored (49A≈49); Queens hyphen ranges compare whole (3-18 vs 3-18).
-  const inputNum = leadingStreetNumber(query)
-  const matchedNum = leadingStreetNumber(label ?? '')
-  if (inputNum && matchedNum) {
-    const inputBase = inputNum.replace(/[A-Za-z]+$/, '')
-    const matchedBase = matchedNum.replace(/[A-Za-z]+$/, '')
-    if (inputBase !== matchedBase) {
-      return { ...empty, confidence, label, lat, lng, rejectReason: 'number_mismatch' }
-    }
+  // is incompatible with the input's — a unit number that leaked into the query,
+  // or a fuzzy street-name fallback, lands on the wrong building. Tolerates
+  // building-name/apt prefixes (firstStreetNumber) and hyphen ranges
+  // (streetNumbersCompatible: 44-50 ⊇ 44).
+  const inputNum = firstStreetNumber(query)
+  const matchedNum = firstStreetNumber(label ?? '')
+  if (inputNum && matchedNum && !streetNumbersCompatible(inputNum, matchedNum)) {
+    return { ...empty, confidence, label, lat, lng, rejectReason: 'number_mismatch' }
   }
   return {
     bbl,
