@@ -1,0 +1,702 @@
+[
+  {
+    "oppId": "cmpfm478d05fu3doz2k0i63pn",
+    "originalAddress": "201 Luis M Marin Boulevard #1024",
+    "currentBbl": "1016660001",
+    "currentLabel": "201 LUIS M MARIN BOULEVARD, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpxla73d0025b2o8s7jlxzg6",
+    "originalAddress": "301 East 52nd Street PHC",
+    "currentBbl": "1013450005",
+    "currentLabel": "301 EAST 52 STREET, New York, NY, USA",
+    "borough": "Manhattan"
+  },
+  {
+    "oppId": "cmpflbrmf01nu3dozz0l4psoe",
+    "originalAddress": "39-47 49th Street",
+    "currentBbl": "4001320015",
+    "currentLabel": "39-47 49 STREET, Sunnyside, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpyoomvl01cdc6o8n8l2bgco",
+    "originalAddress": "215 West 91st Street, Apt 94",
+    "currentBbl": "1012390023",
+    "currentLabel": "215 WEST 91 STREET, New York, NY, USA",
+    "borough": "Manhattan"
+  },
+  {
+    "oppId": "cmpyqrmtf00y2fno8ve5uch41",
+    "originalAddress": "138 East 50th Street",
+    "currentBbl": "1013047502",
+    "currentLabel": "138 EAST 50 STREET, New York, NY, USA",
+    "borough": "Manhattan"
+  },
+  {
+    "oppId": "cmpzu4fwa01mpc0o8knuqdwa6",
+    "originalAddress": "420 East 64th Street W-9E",
+    "currentBbl": "1014587503",
+    "currentLabel": "420 EAST 64 STREET, New York, NY, USA",
+    "borough": "Manhattan"
+  },
+  {
+    "oppId": "cmpzvx3rq03l7c0o8yzag5m0n",
+    "originalAddress": "159 West 53rd Street, Unit 25B",
+    "currentBbl": "1010067501",
+    "currentLabel": "159 WEST 53 STREET, New York, NY, USA",
+    "borough": "Manhattan"
+  },
+  {
+    "oppId": "cmpfm4v8805id3dozbr1hmxsl",
+    "originalAddress": "303 Broome Street",
+    "currentBbl": "1004180037",
+    "currentLabel": "303 BROOME STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmp96h5kj000g0pp1x3201rqz",
+    "originalAddress": "1050 5th Ave, 17A",
+    "currentBbl": "1014980001",
+    "currentLabel": "1050 5 AVENUE, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpejnkwi00c5q4ozf1jcq4el",
+    "originalAddress": "30-27 41st Street #BLDNG",
+    "currentBbl": "4006830017",
+    "currentLabel": "30-27 41 STREET, Astoria, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpf99djy006dtwozmcb9zwzs",
+    "originalAddress": "182-16 141st Avenue #1",
+    "currentBbl": "4130520041",
+    "currentLabel": "182-16 141 AVENUE, Springfield Gardens, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl943h018j3doz6da2dp67",
+    "originalAddress": "55 Wall Street #828",
+    "currentBbl": "1000277501",
+    "currentLabel": "55 WALL STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl2f9o00jj3doz0d5ziw37",
+    "originalAddress": "60-31 56 Road",
+    "currentBbl": "4027030118",
+    "currentLabel": "60-31 56 ROAD, Maspeth, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl8q1z015q3doz37n0g16r",
+    "originalAddress": "50 East 77th Street #6A",
+    "currentBbl": "1013910054",
+    "currentLabel": "50 EAST 77 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfldpoh01xx3dozgksti4al",
+    "originalAddress": "895 Park Avenue #1B",
+    "currentBbl": "1014130071",
+    "currentLabel": "895 PARK AVENUE, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflhlax02hb3doz6kj2l4mv",
+    "originalAddress": "120 East 29th Street #TH1",
+    "currentBbl": "1008847501",
+    "currentLabel": "120 EAST 29 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflliny03073dozk5auhcv6",
+    "originalAddress": "341 West 29th Street #1",
+    "currentBbl": "1007537501",
+    "currentLabel": "341 WEST 29 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflpq9f03lf3dozoimvqu6h",
+    "originalAddress": "36-13 Clearview Expressway #X",
+    "currentBbl": "4061590052",
+    "currentLabel": "36-13 CLEARVIEW EXPRESSWAY, Bayside, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfls34j03x63doz8wlc2pdl",
+    "originalAddress": "250 West 100th Street #1007",
+    "currentBbl": "1018710052",
+    "currentLabel": "250 WEST 100 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflv86w04bv3dozfor7jd9h",
+    "originalAddress": "318 East 78th Street",
+    "currentBbl": "1014520041",
+    "currentLabel": "318 EAST 78 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfly9rz04o33dozhqwv89mq",
+    "originalAddress": "531 Main Street #1213",
+    "currentBbl": "1013730040",
+    "currentLabel": "531 MAIN STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm0kmd04z33dozovxucj6r",
+    "originalAddress": "200 East 23rd Street",
+    "currentBbl": "1009030057",
+    "currentLabel": "200 EAST 23 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm2vqh05b73doz2eokex07",
+    "originalAddress": "336 East 77th Street",
+    "currentBbl": "1014510037",
+    "currentLabel": "336 EAST 77 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm75nb05tl3doz5edil6m5",
+    "originalAddress": "45 West 87th Street #1A",
+    "currentBbl": "1012010011",
+    "currentLabel": "45 WEST 87 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpejrcq000qhq4oz6jgttfai",
+    "originalAddress": "21 East 87th Street #7B",
+    "currentBbl": "1014990014",
+    "currentLabel": "21 EAST 87 STREET, New York, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm3wv305ef3dozgml0z471",
+    "originalAddress": "425 Barbey Street #1",
+    "currentBbl": "3040130002",
+    "currentLabel": "425 BARBEY STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflj29n02p33dozppmt3vfh",
+    "originalAddress": "276 Hoyt Street",
+    "currentBbl": "3004220042",
+    "currentLabel": "276 HOYT STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpynpfcz00gtc6o8tnq4zqmt",
+    "originalAddress": "1822 Fulton Street",
+    "currentBbl": "3017030007",
+    "currentLabel": "1822 FULTON STREET, Brooklyn, NY, USA",
+    "borough": "Brooklyn"
+  },
+  {
+    "oppId": "cmpf9dqwx00dntwoz7qhvxmk9",
+    "originalAddress": "636 Sterling Place",
+    "currentBbl": "3011750048",
+    "currentLabel": "636 STERLING PLACE, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmp1gf823000630ozcem35puz",
+    "originalAddress": "1929 East 33rd Street",
+    "currentBbl": "3085000032",
+    "currentLabel": "1929 EAST 33 STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpzvly5b0372c0o8mmml9y8s",
+    "originalAddress": "532 Neptune Avenue, Unit PH2 1M",
+    "currentBbl": "3072737501",
+    "currentLabel": "532 NEPTUNE AVENUE, Brooklyn, NY, USA",
+    "borough": "Brooklyn"
+  },
+  {
+    "oppId": "cmp4i0xy4003bc9ozfgj0i4a4",
+    "originalAddress": "417A 17th Street",
+    "currentBbl": "3008690054",
+    "currentLabel": "417A 17 STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpejlqn30039q4ozzufnvt3k",
+    "originalAddress": "558 Communipaw Avenue",
+    "currentBbl": "3045040012",
+    "currentLabel": "558 FOUNTAIN AVENUE, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpejq2x400kwq4ozo82nlwr8",
+    "originalAddress": "2580 Ocean Parkway #6P",
+    "currentBbl": "3072180059",
+    "currentLabel": "2580 OCEAN PARKWAY, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpf9bw8w00a7twozwvodq350",
+    "originalAddress": "446 Kent Avenue",
+    "currentBbl": "3021347501",
+    "currentLabel": "446 KENT AVENUE, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpf9kq8b00rltwozn3o03pav",
+    "originalAddress": "523 Decatur Street",
+    "currentBbl": "3015000074",
+    "currentLabel": "523 DECATUR STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl096b00bh3dozvwz0i0sw",
+    "originalAddress": "7609 Fourth Avenue #E14",
+    "currentBbl": "3059510001",
+    "currentLabel": "7609 FOURTH AVENUE, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl6nrw00uu3dozv9inf8ga",
+    "originalAddress": "303 Avenue N",
+    "currentBbl": "3065660051",
+    "currentLabel": "303 AVENUE N, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflap5e01hm3dozl8k8dh73",
+    "originalAddress": "944 Fulton Street #1",
+    "currentBbl": "3020140016",
+    "currentLabel": "944 FULTON STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfldhjd01wg3dozhd362gia",
+    "originalAddress": "651 Barbey Street #1-6",
+    "currentBbl": "3040770008",
+    "currentLabel": "651 BARBEY STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflfvmw02943dozvexdtu6t",
+    "originalAddress": "614 Kennedy Boulevard",
+    "currentBbl": "3042530038",
+    "currentLabel": "614 JACKSON JR BOULEVARD, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflj1dw02ox3doz7da68ee8",
+    "originalAddress": "177 Java Street",
+    "currentBbl": "3025410052",
+    "currentLabel": "177 JAVA STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm5n4105mj3dozmq7fo8o9",
+    "originalAddress": "26 Van Reipen Avenue",
+    "currentBbl": "3015750018",
+    "currentLabel": "26 VAN SINDEREN AVENUE, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflpvhp03mc3doz6tfxrdbz",
+    "originalAddress": "2087 Union Street",
+    "currentBbl": "3035320021",
+    "currentLabel": "2087 UNION STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflt2zv040z3dozbeitprzk",
+    "originalAddress": "423 95th Street #1A",
+    "currentBbl": "3061187501",
+    "currentLabel": "423 95 STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflv3lp04ay3dozzsvho4lx",
+    "originalAddress": "2605 Avenue D",
+    "currentBbl": "3051920047",
+    "currentLabel": "2605 AVENUE D, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfly1fq04mn3doz26z501a5",
+    "originalAddress": "1335 71st Street",
+    "currentBbl": "3061670063",
+    "currentLabel": "1335 71 STREET, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm2901057t3doz02ra8d7i",
+    "originalAddress": "385 Argyle Road #6E",
+    "currentBbl": "3051560058",
+    "currentLabel": "385 ARGYLE ROAD, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm6euw05px3dozyn3wmeh0",
+    "originalAddress": "35 Melba Court #1",
+    "currentBbl": "3088661342",
+    "currentLabel": "35 MELBA COURT, Brooklyn, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpaj59g0000n0ppj1n04y1bf",
+    "originalAddress": "793 A Willoughby Ave",
+    "currentBbl": "3015890076",
+    "currentLabel": "793 WILLOUGHBY AVENUE, Brooklyn, NY, USA",
+    "borough": "Brooklyn"
+  },
+  {
+    "oppId": "cmpflk6xg02u73dozndenjfr4",
+    "originalAddress": "764 East 213rd Street #2",
+    "currentBbl": "2046600054",
+    "currentLabel": "764 EAST 213 STREET, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflyeg404oy3doz5xur1xbb",
+    "originalAddress": "2069 Seward Avenue",
+    "currentBbl": "2036070066",
+    "currentLabel": "2069 SEWARD AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfllzge032y3dozp4lcclsa",
+    "originalAddress": "2268 Homer Avenue",
+    "currentBbl": "2036130059",
+    "currentLabel": "2268 HOMER AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl03o100ay3dozgoq6s35k",
+    "originalAddress": "126 West 175th Street #126",
+    "currentBbl": "2028780013",
+    "currentLabel": "126 WEST 175 STREET, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpejr5it00q2q4oztaetitc9",
+    "originalAddress": "445 Gerard Avenue",
+    "currentBbl": "2023510012",
+    "currentLabel": "445 GERARD AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpzvb5cy02sic0o8nf9nnp3a",
+    "originalAddress": "811 Walton Avenue Unit B15",
+    "currentBbl": "2024740001",
+    "currentLabel": "811 WALTON AVENUE, Bronx, NY, USA",
+    "borough": "Bronx"
+  },
+  {
+    "oppId": "cmp6olth2007iewozhoh4aluz",
+    "originalAddress": "5040 Independence Avenue",
+    "currentBbl": "2059400539",
+    "currentLabel": "5040 INDEPENDENCE AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpejqcsc00m4q4ozn9o701fb",
+    "originalAddress": "5 Lincoln Avenue",
+    "currentBbl": "2023160001",
+    "currentLabel": "5 LINCOLN AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfkyltf00413dozt118mcy7",
+    "originalAddress": "290 West 232nd Street #4E",
+    "currentBbl": "2057130107",
+    "currentLabel": "290 WEST 232 STREET, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl37bk00my3doz1je141pu",
+    "originalAddress": "3555 Kings College Place #4A",
+    "currentBbl": "2033440102",
+    "currentLabel": "3555 KINGS COLLEGE PLACE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl9xpg01d53dozvawt9nmu",
+    "originalAddress": "3219 Lurting Avenue",
+    "currentBbl": "2046120061",
+    "currentLabel": "3219 LURTING AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflb79201kz3dozexolwxwi",
+    "originalAddress": "2835 Webb Avenue #5B",
+    "currentBbl": "2032500040",
+    "currentLabel": "2835 WEBB AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflc5g001qb3doz5jglh9ws",
+    "originalAddress": "3901 Independence Avenue #2L",
+    "currentBbl": "2059200500",
+    "currentLabel": "3901 INDEPENDENCE AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfldu7e01yn3doz05xssovm",
+    "originalAddress": "3208 Johnson Avenue",
+    "currentBbl": "2057860192",
+    "currentLabel": "3208 JOHNSON AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm5dv905lg3dozjpab3bvk",
+    "originalAddress": "261 Grand Concourse",
+    "currentBbl": "2023440001",
+    "currentLabel": "261 GRAND CONCOURSE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflir5502ns3dozgwkhb847",
+    "originalAddress": "525 West 236th Street #6H",
+    "currentBbl": "2057960107",
+    "currentLabel": "525 WEST 236 STREET, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfllt5o031r3doz7brf5mdd",
+    "originalAddress": "2768 Netherland Avenue",
+    "currentBbl": "2057290594",
+    "currentLabel": "2768 NETHERLAND AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflnp5303c23doz5cb2uzya",
+    "originalAddress": "185 East 206th Street",
+    "currentBbl": "2033130001",
+    "currentLabel": "185 EAST 206 STREET, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflrf5h03t53dozgalki5is",
+    "originalAddress": "2896 Heath Avenue #1",
+    "currentBbl": "2032560134",
+    "currentLabel": "2896 HEATH AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfltffk042i3dozuox79qg7",
+    "originalAddress": "4410 Cayuga Avenue #6G",
+    "currentBbl": "2058030960",
+    "currentLabel": "4410 CAYUGA AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflv8vj04c03doztuqk9val",
+    "originalAddress": "2600 Netherland Avenue",
+    "currentBbl": "2057220475",
+    "currentLabel": "2600 NETHERLAND AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflxmlg04li3dozqg379i2f",
+    "originalAddress": "45 East Mosholu Parkway North #5N",
+    "currentBbl": "2033260105",
+    "currentLabel": "45 EAST MOSHOLU PARKWAY NORTH, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflrqqj03v33doz07nhmesz",
+    "originalAddress": "1715 Nelson Avenue #5G",
+    "currentBbl": "2028760131",
+    "currentLabel": "1715 NELSON AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm6mlc05qs3dozfj2fdjrp",
+    "originalAddress": "5800 Arlington Avenue #20L",
+    "currentBbl": "2059530230",
+    "currentLabel": "5800 ARLINGTON AVENUE, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpf99r5v0078twozs6qtyf83",
+    "originalAddress": "750 Kappock Street #305",
+    "currentBbl": "2057440048",
+    "currentLabel": "750 KAPPOCK STREET, Bronx, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm26e6057d3dozjf5luawm",
+    "originalAddress": "124-28 Queens Boulevard #10A",
+    "currentBbl": "4033597502",
+    "currentLabel": "124-28 QUEENS BOULEVARD, Kew Gardens, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpflmj9q035y3doznti3ea6d",
+    "originalAddress": "112-01 Queens Boulevard",
+    "currentBbl": "4022647501",
+    "currentLabel": "112-01 QUEENS BOULEVARD, Forest Hills, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfli06g02jo3dozi5pqgbd1",
+    "originalAddress": "58-01 Queens Boulevard #6H",
+    "currentBbl": "4013340001",
+    "currentLabel": "58-01 QUEENS BOULEVARD, Woodside, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl9cvo01a73dozx4h9a556",
+    "originalAddress": "97-45 Queens Boulevard",
+    "currentBbl": "4020910001",
+    "currentLabel": "97-45 QUEENS BOULEVARD, Rego Park, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpf9ihi900mvtwoz4qnd4u9m",
+    "originalAddress": "83-07 Queens Boulevard",
+    "currentBbl": "4015420016",
+    "currentLabel": "83-07 QUEENS BOULEVARD, Elmhurst, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpyqunym011wfno8ehbrehoy",
+    "originalAddress": "30-55 Vernon Blvd",
+    "currentBbl": "4005050014",
+    "currentLabel": "30-55 VERNON BOULEVARD, Astoria, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpyr0xhn0194fno8erdck65t",
+    "originalAddress": "2-21 Malt Drive, Apt 2412",
+    "currentBbl": "4000110001",
+    "currentLabel": "2-21 MALT DRIVE, Long Island City, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpyr4r6m01dlfno8lj2sg7vs",
+    "originalAddress": "34-57 9th Street, Queens, NY 11106",
+    "currentBbl": "4003240004",
+    "currentLabel": "34-57 9 STREET, Long Island City, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpyr9ovp01i7fno8r6axw3np",
+    "originalAddress": "224-20 Manor Road, Unit 91",
+    "currentBbl": "4079290002",
+    "currentLabel": "224-20 MANOR ROAD, Bellerose, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmp2yarfd00dl30oz56zn4tze",
+    "originalAddress": "186-01 Nashville Boulevard",
+    "currentBbl": "4127020093",
+    "currentLabel": "186-01 NASHVILLE BOULEVARD, Springfield Gardens, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpzsy6t0006pc0o8j5fx5vl2",
+    "originalAddress": "5-12 51st Avenue, Residence 2B",
+    "currentBbl": "4000340029",
+    "currentLabel": "5-12 51 AVENUE, Long Island City, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpzt4tyi00ezc0o8sjpoec2p",
+    "originalAddress": "234-11 38th Drive",
+    "currentBbl": "4080590015",
+    "currentLabel": "234-11 38 DRIVE, Douglaston, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpzt5uc100hlc0o8zas4kyua",
+    "originalAddress": "149-06 Northern Boulevard #501",
+    "currentBbl": "4050177503",
+    "currentLabel": "149-06 NORTHERN BOULEVARD, Flushing, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpztb4kp00ouc0o8moilhlxc",
+    "originalAddress": "118-18 Union Turnpike Unit 18CD",
+    "currentBbl": "4033350023",
+    "currentLabel": "118-18 UNION TURNPIKE, Kew Gardens, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpztdcn800s3c0o8047j6zcv",
+    "originalAddress": "67-12 Yellowstone Boulevard Unit E9",
+    "currentBbl": "4021340032",
+    "currentLabel": "67-12 YELLOWSTONE BOULEVARD, Forest Hills, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpzw2vmp03sic0o8qbttz5k1",
+    "originalAddress": "30-55 Vernon Boulevard",
+    "currentBbl": "4005050014",
+    "currentLabel": "30-55 VERNON BOULEVARD, Astoria, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpzw5yh403xxc0o8nf0789ds",
+    "originalAddress": "107-06 Queens Boulevard #10E",
+    "currentBbl": "4032387505",
+    "currentLabel": "107-06 QUEENS BOULEVARD, Forest Hills, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpfm812u05y43doz8eapukth",
+    "originalAddress": "97-36 220th Street",
+    "currentBbl": "4107840048",
+    "currentLabel": "97-36 220 STREET, Queens Village, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfm4h0u05h93dozqia90u1u",
+    "originalAddress": "107-40 Queens Boulevard #10D",
+    "currentBbl": "4032397501",
+    "currentLabel": "107-40 QUEENS BOULEVARD, Forest Hills, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmp48wkwm00j630ozlbbj9z3p",
+    "originalAddress": "60-34 59th Drive Unit 1",
+    "currentBbl": "4027300032",
+    "currentLabel": "60-34 59 DRIVE, Maspeth, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmp5qvk3x007xgkozyhv3vc7q",
+    "originalAddress": "39-39 Queens Boulevard",
+    "currentBbl": "4001900044",
+    "currentLabel": "39-39 QUEENS BOULEVARD, Sunnyside, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmp5wiyfa002b4pozwf3tzwsd",
+    "originalAddress": "64-51 Central Avenue, Apt 3, Queens, NY 11385",
+    "currentBbl": "4036420022",
+    "currentLabel": "64-51 CENTRAL AVENUE, Fresh Pond, NY, USA",
+    "borough": "Queens"
+  },
+  {
+    "oppId": "cmpejpmkh00iwq4oz6bu2i0yc",
+    "originalAddress": "109-28 212nd Street",
+    "currentBbl": "4111130040",
+    "currentLabel": "109-28 212 STREET, Queens Village, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl40jc00ra3dozsh4msq3b",
+    "originalAddress": "70-65 Queens Boulevard #8G",
+    "currentBbl": "4013527501",
+    "currentLabel": "70-65 QUEENS BOULEVARD, Woodside, NY, USA",
+    "borough": null
+  },
+  {
+    "oppId": "cmpfl7d2w00zi3doz0d7c5obk",
+    "originalAddress": "106-15 Queens Boulevard #3J",
+    "currentBbl": "4022140001",
+    "currentLabel": "106-15 QUEENS BOULEVARD, Forest Hills, NY, USA",
+    "borough": null
+  }
+]
