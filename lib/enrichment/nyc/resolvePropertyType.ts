@@ -67,6 +67,23 @@ function toInt(v: string | null | undefined): number | null {
   return Number.isNaN(n) ? null : n
 }
 
+// Strip a trailing unit so it can't leak into the GeoSearch query and match the
+// wrong building (e.g. "49 East 21 Street 11D" → "11 East 21 Street"). Handles
+// explicit markers (apt/unit/#), a street-suffix followed by a bare alphanumeric
+// unit ("Avenue 21B"), and a comma-prefixed unit (", 2F"). Deliberately NO
+// last-ditch fallback — it must not eat a legitimate street number.
+export function stripBareUnitSuffix(addr: string): string {
+  if (!addr) return addr
+  return addr
+    // Explicit unit markers (apt / unit / #)
+    .replace(/,?\s+(?:apt|unit|#)\s*[\w-]+\s*$/i, '')
+    // Street suffix + bare alphanumeric unit ("street 11d", "avenue 21b")
+    .replace(/\b(street|avenue|ave|st|road|rd|boulevard|blvd|place|pl|drive|dr|way|lane|ln|terrace|court|ct|parkway|pkwy)\.?\s+(\d{1,3}[a-z]|ph[0-9a-z]?|[a-z]\d{1,2})\s*$/i, '$1')
+    // Trailing ", 21B" or ", 2F"
+    .replace(/,\s*(\d{1,3}[a-z]|ph[0-9a-z]?|[a-z]\d{1,2})\s*$/i, '')
+    .trim()
+}
+
 function skip(reason: string): EnrichmentResult {
   return { propertyType: null, propertyTypeReason: reason, confidence: 'skip' }
 }
@@ -137,9 +154,11 @@ export async function resolvePropertyType(opp: EnrichableOpportunity): Promise<E
   if (!address) return skip('skipped:no_address')
   if (PLACEHOLDER_ADDRESS.test(address)) return skip('skipped:placeholder_address')
 
-  // 4. Normalize; require a street number (a bare neighborhood/building name
+  // 4. Strip any unit suffix (so it can't leak into the geocode query), then
+  //    normalize. Requires a street number (a bare neighborhood/building name
   //    can't be resolved to a single parcel).
-  const norm = normalizeAddress(address)
+  const cleaned = stripBareUnitSuffix(address)
+  const norm = normalizeAddress(cleaned)
   if (!norm || !norm.streetNumber) return skip('skipped:no_street_number')
   const key = norm.normalized
   const orgId = opp.organizationId

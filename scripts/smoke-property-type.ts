@@ -6,7 +6,46 @@
 //   npx tsx scripts/smoke-property-type.ts
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
-import { resolvePropertyType, type EnrichableOpportunity } from '../lib/enrichment/nyc'
+import { resolvePropertyType, stripBareUnitSuffix, geocodeAddress, type EnrichableOpportunity } from '../lib/enrichment/nyc'
+
+// Phase 4.6.2 Step 1d — unit-strip unit tests + end-to-end geocode checks.
+async function runStep1Tests() {
+  console.log('═══════════════════════════════════════════════════════════════════')
+  console.log('Phase 4.6.2 Step 1 — stripBareUnitSuffix() unit tests')
+  console.log('═══════════════════════════════════════════════════════════════════')
+  const stripTests = [
+    { in: '49 east 21 street 11d',     out: '49 east 21 street' },
+    { in: '480 Kent Avenue 21B',       out: '480 Kent Avenue' },
+    { in: '92 Horatio Street, 2F',     out: '92 Horatio Street' },
+    { in: '505 Greenwich Street, 10E', out: '505 Greenwich Street' },
+    { in: '740 Park Avenue',           out: '740 Park Avenue' },        // unchanged
+    { in: '740 Park Avenue Apt 5A',    out: '740 Park Avenue' },        // explicit unit
+    { in: '740 Park Avenue #5A',       out: '740 Park Avenue' },        // # unit
+    { in: '120 Broadway',              out: '120 Broadway' },           // unchanged
+    { in: '3-18 Beach 87 Street',      out: '3-18 Beach 87 Street' },   // hyphenated preserved
+    { in: '1 Times Square, 5A',        out: '1 Times Square' },         // trailing unit
+  ]
+  let allPass = true
+  for (const t of stripTests) {
+    const got = stripBareUnitSuffix(t.in)
+    const ok = got === t.out
+    if (!ok) allPass = false
+    console.log(`  ${t.in.padEnd(40)} -> ${got.padEnd(40)} (expected: ${t.out.padEnd(28)}) ${ok ? 'PASS' : 'FAIL'}`)
+  }
+  console.log(`\n  unit-test result: ${allPass ? 'ALL PASS ✅' : 'FAILURES ❌'}`)
+
+  console.log('\n═══════════════════════════════════════════════════════════════════')
+  console.log('Phase 4.6.2 Step 1 — live end-to-end geocode of the 4 known-fail inputs')
+  console.log('  (each should now resolve to the CORRECT building)')
+  console.log('═══════════════════════════════════════════════════════════════════')
+  const liveTests = ['49 east 21 street 11d', '480 Kent Avenue 21B', '92 Horatio Street, 2F', '505 Greenwich Street, 10E']
+  for (const addr of liveTests) {
+    const stripped = stripBareUnitSuffix(addr)
+    const result = await geocodeAddress(stripped, null)
+    console.log(`  ${addr.padEnd(34)} stripped="${stripped}"`)
+    console.log(`  ${''.padEnd(34)} -> bbl=${result.bbl ?? 'null'} label="${result.label ?? ''}" reject=${result.rejectReason ?? 'none'}\n`)
+  }
+}
 
 interface Case {
   label:    string
@@ -30,12 +69,14 @@ const CASES: Case[] = [
 ]
 
 async function main() {
+  await runStep1Tests()
+
   const org = await prisma.organization.findFirst({ where: { slug: 'dealflow-ryan' } })
     ?? await prisma.organization.findFirst()
   const organizationId = org?.id ?? 'smoke-no-org'
   if (!org) console.warn('[smoke] no Organization found — cache writes will fail-soft (FK).')
 
-  console.log('═══════════════════════════════════════════════════════════════════')
+  console.log('\n═══════════════════════════════════════════════════════════════════')
   console.log('Phase 4.6 — propertyType enrichment smoke test')
   console.log(`  org: ${organizationId}`)
   console.log('═══════════════════════════════════════════════════════════════════\n')

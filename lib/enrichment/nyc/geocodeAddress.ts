@@ -27,7 +27,7 @@ interface GeoFeature {
 }
 interface GeoResponse { features?: GeoFeature[] }
 
-export type GeocodeRejectReason = 'no_results' | 'low_confidence' | 'no_bbl' | 'wrong_borough' | 'unreachable'
+export type GeocodeRejectReason = 'no_results' | 'low_confidence' | 'no_bbl' | 'wrong_borough' | 'unreachable' | 'number_mismatch'
 
 export interface GeocodeResult {
   bbl: string | null
@@ -42,6 +42,13 @@ export interface GeocodeResult {
 
 function bblOf(f: GeoFeature): string | null {
   return f.properties?.addendum?.pad?.bbl ?? null
+}
+
+// Leading building number of an address/label. Keeps a trailing letter (49A) and
+// a Queens-style hyphen range (3-18) so they compare faithfully.
+function leadingStreetNumber(s: string): string | null {
+  const m = s.trim().match(/^(\d+[A-Za-z]?(?:-\d+)?)\b/)
+  return m ? m[1] : null
 }
 
 /**
@@ -84,6 +91,19 @@ export async function geocodeAddress(query: string, expectedBorough?: string | n
   const bbl = bblOf(top)
   if (!bbl) {
     return { ...empty, confidence, label, lat, lng, rejectReason: 'no_bbl' }
+  }
+  // Building-number cross-check: reject when GeoSearch's matched street number
+  // differs from the input's — a unit number that leaked into the query, or a
+  // fuzzy street-name fallback, lands on the wrong building. Trailing letters are
+  // ignored (49A≈49); Queens hyphen ranges compare whole (3-18 vs 3-18).
+  const inputNum = leadingStreetNumber(query)
+  const matchedNum = leadingStreetNumber(label ?? '')
+  if (inputNum && matchedNum) {
+    const inputBase = inputNum.replace(/[A-Za-z]+$/, '')
+    const matchedBase = matchedNum.replace(/[A-Za-z]+$/, '')
+    if (inputBase !== matchedBase) {
+      return { ...empty, confidence, label, lat, lng, rejectReason: 'number_mismatch' }
+    }
   }
   return {
     bbl,
