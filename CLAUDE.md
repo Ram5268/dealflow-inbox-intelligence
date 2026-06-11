@@ -26,6 +26,7 @@ Do not build email sending yet.
 
 ## Categories
 - COMING_SOON_SALE
+- COMING_SOON_RENTAL
 - OFF_MARKET_SALE
 - ACTIVE_SALE_LISTING
 - RENTAL_LISTING
@@ -34,9 +35,15 @@ Do not build email sending yet.
 - SELLER_LEAD
 - LANDLORD_LEAD
 - DEVELOPMENT_INVENTORY
+- COMING_SOON_DEVELOPMENT
+- SPONSOR_UNIT
 - OPEN_HOUSE
 - PRICE_DROP
 - BACK_ON_MARKET
+- MARKET_REPORT
+- REAL_ESTATE_EVENT
+- CLIENT_CONVERSATION
+- SHOWING_CONFIRMATION
 - NOISE
 
 ## Extraction Rules
@@ -62,7 +69,7 @@ It should help answer questions like:
 - Tailwind CSS
 - PostgreSQL + Prisma
 - Microsoft Graph (GET only)
-- AI provider abstraction (OpenAI default, Anthropic optional)
+- Dual AI providers used in tandem: Anthropic (Claude Sonnet 4.6) for extraction + chat; OpenAI (gpt-4o-mini) for classification, query parsing, and retitle
 - Mobile-first UI (max-w-lg centered, bottom nav)
 
 ## Development Style
@@ -72,4 +79,4 @@ It should help answer questions like:
 - Add README instructions for a non-coder.
 - Avoid overengineering the MVP.
 - Prioritize a working local app over perfect architecture.
-- Default AI model: gpt-4o-mini (OpenAI) or claude-haiku (Anthropic) — fast and cheap for classification.
+- AI model defaults: Claude Sonnet 4.6 for product-surface calls (extraction, chat); gpt-4o-mini only for cheap utility calls (classification, query parsing, retitle). Do not reflex to gpt-4o-mini on product surfaces for cost reasons.
