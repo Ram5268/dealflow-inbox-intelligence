@@ -21,6 +21,9 @@ import {
 import { processInlineImages } from './processImages'
 import { processAttachments } from './processAttachments'
 import { extractEmailV2 } from '../extraction/extractEmailV2'
+import { sourceClassifier, buildIdempotencyKey } from './sourceClassifier'
+import { logClassifier } from './costLogger'
+import { PROMPT_VERSION } from './types'
 
 // Phase 3B orchestrator. Converts a RawEmail into DocumentChunk rows +
 // Qdrant vectors. Idempotent — re-running on the same email deletes prior
@@ -60,7 +63,7 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
       id: true, subject: true, senderName: true, senderEmail: true,
       receivedDateTime: true, bodyContent: true, bodyPreview: true,
       bodyContentType: true, rawJson: true, graphMessageId: true,
-      threadId: true,
+      threadId: true, classifierCategory: true,
     },
   })
   if (!email) throw new Error(`RawEmail ${emailId} not found`)
@@ -271,14 +274,65 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
     data:  { embeddedAt: new Date() },
   })
 
+  // 6b. Classifier (lifted from V1 in 2026-06-07 fix). When INGEST_V2=true
+  // gated off V1, the classifier stopped running and extractEmailV2 silently
+  // no-op'd because classifierCategory was null. We re-run it here, AFTER
+  // chunking so a classifier failure cannot undo embedding work. Guarded by
+  // `!email.classifierCategory` so re-runs are idempotent and pre-existing
+  // tags (e.g. legacy HOTSHEET sentinel, V1 classifications) are preserved.
+  let classifierCategory: string | null = email.classifierCategory ?? null
+  let needsDeepExtract = true
+  if (!email.classifierCategory) {
+    try {
+      const atts = await prisma.attachment.findMany({
+        where: { organizationId, rawEmailId: emailId },
+        select: { name: true, mimeType: true },
+      })
+      const classifierKey = buildIdempotencyKey(emailId, 'source_classifier', PROMPT_VERSION)
+      const classifyStart = Date.now()
+      const classified = await sourceClassifier({
+        rawEmailId:          emailId,
+        subject:             email.subject,
+        senderName:          email.senderName,
+        senderEmail:         email.senderEmail,
+        bodyPreview:         email.bodyPreview,
+        bodyFirst500:        bodyText ? bodyText.slice(0, 500) : null,
+        attachmentNames:     atts.map(a => a.name),
+        attachmentMimeTypes: atts.map(a => a.mimeType),
+        attachmentCount:     atts.length,
+      })
+      classifierCategory = classified.category
+      needsDeepExtract   = classified.needsDeepExtract
+      await logClassifier(emailId, classifierKey, classified, Date.now() - classifyStart).catch(() => {})
+      await prisma.rawEmail.update({
+        where: { id: emailId },
+        data: {
+          classifierStatus:     'classified',
+          classifierCategory:   classified.category,
+          classifierConfidence: classified.confidence,
+          extractionStatus:     classified.needsDeepExtract ? 'pending' : 'skipped',
+          lastProcessedAt:      new Date(),
+          idempotencyKey:       classifierKey,
+        },
+      }).catch(() => {})
+      console.log(`[ingestV2] ${emailId}: classified as ${classified.category} (conf ${classified.confidence})`)
+    } catch (e) {
+      errors.push(`classifier: ${(e as Error).message}`)
+    }
+  }
+
   // 7. Phase 4.0 — V2 extraction. Reads the chunks just persisted and writes
   // clean ExtractedOpportunity rows (Sonnet tool_use). Idempotent + non-fatal:
   // a failure here must not undo the chunking/embedding work above.
-  try {
-    const opps = await extractEmailV2(emailId, organizationId)
-    console.log(`[ingestV2] ${emailId}: extracted ${opps.length} opportunities`)
-  } catch (e) {
-    errors.push(`extractEmailV2: ${(e as Error).message}`)
+  if (needsDeepExtract && classifierCategory) {
+    try {
+      const opps = await extractEmailV2(emailId, organizationId)
+      console.log(`[ingestV2] ${emailId}: extracted ${opps.length} opportunities (${classifierCategory})`)
+    } catch (e) {
+      errors.push(`extractEmailV2: ${(e as Error).message}`)
+    }
+  } else {
+    console.log(`[ingestV2] ${emailId}: classifier=${classifierCategory ?? 'null'} needsDeepExtract=${needsDeepExtract} — skipping extraction`)
   }
 
   return {
