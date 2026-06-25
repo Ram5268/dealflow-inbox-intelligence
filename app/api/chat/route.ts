@@ -7,6 +7,7 @@ import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { composeContext } from '@/lib/chat/context/composeContext'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import OpenAI from 'openai'
+import Anthropic from '@anthropic-ai/sdk'
 
 export const maxDuration = 60
 
@@ -197,16 +198,27 @@ export async function POST(req: NextRequest) {
       ? '\n\nATTACHMENTS (parsed from broker-blast PDFs/docs):\n' + attachmentLines.join('\n\n')
       : ''
 
-    // ── Process files into text chunks and image parts ────────────────────────
-    type Part = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'high' } }
-    const imageParts: Part[] = []
+    // ── Process files into text + Anthropic image blocks ────────────────────
+    // Anthropic image source is raw base64 (NOT a data: URL) and requires
+    // media_type ∈ {image/jpeg, image/png, image/gif, image/webp}.
+    type AImagePart = {
+      type: 'image'
+      source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string }
+    }
+    type ATextPart = { type: 'text'; text: string }
+    type AUserPart = ATextPart | AImagePart
+
+    const imageParts: AImagePart[] = []
     let textContent = userMessage || '(Please analyze the attached file.)'
 
     for (const file of files) {
       if (file.type === 'image') {
+        const mt = file.mimeType as AImagePart['source']['media_type']
+        const media_type: AImagePart['source']['media_type'] =
+          mt === 'image/jpeg' || mt === 'image/png' || mt === 'image/gif' || mt === 'image/webp' ? mt : 'image/png'
         imageParts.push({
-          type: 'image_url',
-          image_url: { url: `data:${file.mimeType};base64,${file.content}`, detail: 'high' },
+          type: 'image',
+          source: { type: 'base64', media_type, data: file.content },
         })
       } else if (file.type === 'text') {
         textContent += `\n\n--- File: ${file.name} ---\n${file.content.slice(0, 15000)}\n---`
@@ -217,49 +229,100 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-    const hasImages = imageParts.length > 0
-    const userContent: Part[] | string = hasImages
-      ? [{ type: 'text', text: textContent }, ...imageParts]
-      : textContent
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+    const userBlocks: AUserPart[] = [{ type: 'text', text: textContent }, ...imageParts]
 
-    // ── Final system prompt ──────────────────────────────────────────────────
-    // PRE blocks (mortgage, acris, dob, calendar, matches, liveStreetEasy)
-    // + retrievalResult.context (top-15 [DEAL:id] lines from contextBuilder)
-    // + attachmentsContext (per-rawEmailId PDF/doc text)
-    // + POST blocks (mojo — positioned after retrieval so its BUYER_ISO match flag reads against the cited deals)
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-      { role: 'system', content: `${SYSTEM_PROMPT}${composed.pre}\n\n${retrievalResult.context}${attachmentsContext}${composed.post}` },
-      ...conversationHistory.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-      { role: 'user', content: userContent },
+    // ── System prompt: static SYSTEM_PROMPT cached; dynamic per-turn block uncached ──
+    const dynamicSystemBlock = `${composed.pre}\n\n${retrievalResult.context}${attachmentsContext}${composed.post}`
+    const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
+      { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: dynamicSystemBlock },
     ]
 
-    const firstCompletion = await client.chat.completions.create({
-      model: 'gpt-4o',
-      messages,
+    // ── Tool definition for strict JSON output ──
+    const RESPONSE_TOOL_NAME = 'drift_response'
+    const responseTool: Anthropic.Messages.Tool = {
+      name: RESPONSE_TOOL_NAME,
+      description: "Return Drift's reply to Ryan as structured JSON. Always call this tool exactly once per turn.",
+      input_schema: {
+        type: 'object',
+        properties: {
+          response: {
+            type: 'string',
+            description: 'Plain text response. No markdown, no bold, no italics, no bullet dashes. One line per listing per the rules.',
+          },
+          suggestions: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Exactly 2 specific follow-up questions.',
+          },
+          pendingEvent: {
+            type: 'object',
+            description: "Calendar event proposal awaiting Ryan's confirm. Omit entirely on non-calendar turns.",
+            properties: {
+              subject:  { type: 'string' },
+              startISO: { type: 'string', description: 'ISO 8601 datetime' },
+              endISO:   { type: 'string', description: 'Optional ISO 8601 datetime; defaults to startISO + 30min' },
+              location: { type: 'string' },
+              notes:    { type: 'string' },
+            },
+            required: ['subject', 'startISO'],
+          },
+          referencedDeals: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Exact deal IDs from [DEAL:id] tags discussed in the response. Traceability only — does not gate cards.',
+          },
+        },
+        required: ['response', 'suggestions', 'referencedDeals'],
+      } as Anthropic.Messages.Tool.InputSchema,
+    }
+
+    const anthropicHistory: Anthropic.Messages.MessageParam[] = conversationHistory.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }))
+
+    const firstCompletion = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 8192,
       temperature: 0.3,
-      max_tokens: 4000,
+      system: systemBlocks,
+      messages: [
+        ...anthropicHistory,
+        { role: 'user', content: userBlocks },
+      ],
+      tools: [responseTool],
+      tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
     })
 
-    const raw = (firstCompletion.choices[0].message.content ?? '').trim()
-    console.log('[DealFlow] Raw AI response:', raw.slice(0, 200))
-
-    // Parse JSON robustly
-    let aiResult: { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[] }
-    try {
-      aiResult = JSON.parse(raw)
-    } catch {
-      // Strip markdown fences if present
-      const stripped = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/m, '').trim()
+    // ── Extract tool_use.input (already parsed by SDK) ──
+    type AiResult = { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[] }
+    let aiResult: AiResult
+    const toolUseBlock = firstCompletion.content.find(
+      (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
+    )
+    if (toolUseBlock) {
+      aiResult = toolUseBlock.input as AiResult
+      console.log('[DealFlow] Sonnet tool_use input keys:', Object.keys(aiResult).join(','))
+    } else {
+      // Graceful degrade: Sonnet skipped the tool. Parse a text block the old way.
+      const textBlock = firstCompletion.content.find((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
+      const raw = (textBlock?.text ?? '').trim()
+      console.warn('[DealFlow] Sonnet returned no tool_use; falling back to text parse. Raw:', raw.slice(0, 200))
       try {
-        aiResult = JSON.parse(stripped)
+        aiResult = JSON.parse(raw)
       } catch {
-        // Extract JSON object from anywhere in the string
-        const match = stripped.match(/\{[\s\S]*\}/)
+        const stripped = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/m, '').trim()
         try {
-          aiResult = match ? JSON.parse(match[0]) : { response: raw, suggestions: [] }
+          aiResult = JSON.parse(stripped)
         } catch {
-          aiResult = { response: raw, suggestions: [] }
+          const match = stripped.match(/\{[\s\S]*\}/)
+          try {
+            aiResult = match ? JSON.parse(match[0]) : { response: raw || 'Sorry, I had trouble formatting that. Try rephrasing?', suggestions: [], referencedDeals: [] }
+          } catch {
+            aiResult = { response: raw || 'Sorry, I had trouble formatting that. Try rephrasing?', suggestions: [], referencedDeals: [] }
+          }
         }
       }
     }
@@ -318,7 +381,8 @@ export async function POST(req: NextRequest) {
     // Generate title after the first exchange in a new session (no title yet)
     if (!session.title && history.length === 0) {
       try {
-        const titleCompletion = await client.chat.completions.create({
+        const openaiForTitle = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+        const titleCompletion = await openaiForTitle.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: 'Generate a 4-7 word title that summarizes this real estate conversation. Title case, no punctuation at end, no quotes. Examples: "Brooklyn Buyer ISO Matches", "Coming Soon Under 2M", "Off Market Tribeca Search"' },
