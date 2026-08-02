@@ -42,7 +42,8 @@
     "three": "^0.184.0",
     "turndown": "^7.2.4",
     "web-push": "^3.6.7",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

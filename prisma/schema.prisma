@@ -689,3 +689,50 @@ model NycParcelCache {
   @@index([organizationId])
   @@index([bbl])
 }
+
+// ── Brief 2.5 — Drift chat instrumentation ──────────────────────────────────
+// Every Drift interaction leaves an auditable record: the query, the parsed
+// filters, the cards actually shown, response time, and model/token/cost.
+// Clicks and feedback are logged via POST /api/chat/interaction.
+model DriftInteraction {
+  id             String   @id @default(cuid())
+  createdAt      DateTime @default(now())
+  query          String   @db.Text
+  parsedFilters  Json?
+  topCards       Json     // array of { id, kind, title, rank, score } — max 20
+  responseTimeMs Int
+  modelUsed      String
+  tokensIn       Int?
+  tokensOut      Int?
+  costUsd        Float?
+
+  clicks         DriftInteractionClick[]
+  feedback       DriftInteractionFeedback[]
+
+  @@index([createdAt])
+}
+
+model DriftInteractionClick {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  interactionId String
+  cardId        String
+  cardKind      String
+  rank          Int
+
+  interaction   DriftInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([interactionId])
+}
+
+model DriftInteractionFeedback {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+  interactionId String
+  vote          String   // "helpful" | "wrong_result" | "missing_result"
+  note          String?  @db.Text
+
+  interaction   DriftInteraction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+
+  @@index([interactionId])
+}

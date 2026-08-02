@@ -76,6 +76,7 @@ async function parseBinary(buffer: Buffer, filename: string, mimeType: string): 
 }
 
 export async function POST(req: NextRequest) {
+  const t0 = Date.now()
   try {
     const body = await req.json()
     const userMessage: string = (body.message ?? '').trim()
@@ -399,8 +400,48 @@ export async function POST(req: NextRequest) {
       await prisma.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
     }
 
+    // ── Brief 2.5 — Drift interaction logging (non-fatal; never breaks chat) ──
+    // topCards = the cards actually shown to Ryan (already sorted by matchScore),
+    // capped at 20. We await the insert inside try/catch so we can return the
+    // interactionId for client-side click/feedback wiring, while any logging
+    // failure is swallowed and chat still responds.
+    const topCards = deals.slice(0, 20).map((d, idx) => ({
+      id:    d.id,
+      kind:  d.category,
+      title: d.extractedTitle,
+      rank:  idx,
+      score: d.matchScore,
+    }))
+    const usage     = firstCompletion.usage
+    const tokensIn  = usage?.input_tokens ?? null
+    const tokensOut = usage?.output_tokens ?? null
+    // Claude Sonnet 4.6 list pricing: ~$3 / 1M input, ~$15 / 1M output.
+    const costUsd = tokensIn != null && tokensOut != null
+      ? (tokensIn / 1_000_000) * 3 + (tokensOut / 1_000_000) * 15
+      : null
+    let interactionId: string | null = null
+    try {
+      const interaction = await prisma.driftInteraction.create({
+        data: {
+          query:          userMessage || storedMsg,
+          parsedFilters:  parsed ? (parsed as unknown as object) : undefined,
+          topCards:       topCards as unknown as object[],
+          responseTimeMs: Date.now() - t0,
+          modelUsed:      'claude-sonnet-4-6',
+          tokensIn,
+          tokensOut,
+          costUsd,
+        },
+        select: { id: true },
+      })
+      interactionId = interaction.id
+    } catch (err) {
+      console.error('[DealFlow] DriftInteraction logging failed (non-fatal):', err)
+    }
+
     return NextResponse.json({
       sessionId:    session.id,
+      interactionId,
       response:     cleanResponse,
       deals,
       suggestions:  aiResult.suggestions ?? [],

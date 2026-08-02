@@ -10,6 +10,67 @@ import ChatShaderBg from '@/components/ChatShaderBg'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
+// ─── Brief 2.5 — Drift interaction logging ────────────────
+// Fire-and-forget POST to /api/chat/interaction. Never awaited, never surfaces
+// errors to the user — instrumentation must not degrade the chat experience.
+function postInteraction(body: {
+  interactionId: string
+  event: 'click' | 'feedback'
+  cardId?: string
+  cardKind?: string
+  rank?: number
+  vote?: 'helpful' | 'wrong_result' | 'missing_result'
+  note?: string
+}) {
+  fetch('/api/chat/interaction', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => {})
+}
+
+// Small "👎 Something wrong?" affordance shown below each in-session Drift reply.
+function FeedbackRow({ interactionId }: { interactionId: string }) {
+  const [submitted, setSubmitted] = useState(false)
+  const opts: { label: string; vote: 'wrong_result' | 'missing_result' | 'helpful' }[] = [
+    { label: 'Wrong results', vote: 'wrong_result' },
+    { label: 'Missing a listing I know exists', vote: 'missing_result' },
+    { label: 'Helpful, no changes', vote: 'helpful' },
+  ]
+  if (submitted) {
+    return (
+      <div style={{ marginTop: 8, marginLeft: 4, fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.4)' }}>
+        THANKS — LOGGED
+      </div>
+    )
+  }
+  return (
+    <div style={{ marginTop: 8, marginLeft: 4 }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)', marginBottom: 5 }}>
+        👎 SOMETHING WRONG?
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {opts.map(o => (
+          <button
+            key={o.vote}
+            onClick={() => { postInteraction({ interactionId, event: 'feedback', vote: o.vote }); setSubmitted(true) }}
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              color: 'rgba(255,255,255,0.6)', borderRadius: 999,
+              padding: '5px 10px',
+              fontFamily: 'var(--font-ui)', fontSize: 10.5, fontWeight: 300,
+              cursor: 'pointer',
+            }}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Types ────────────────────────────────────────────────
 
 interface SEListing {
@@ -26,6 +87,7 @@ interface Message {
   suggestions?: string[]
   seListings?: SEListing[]
   seFilterUrl?: string | null
+  interactionId?: string
   createdAt: string
 }
 
@@ -424,6 +486,8 @@ function MemoryView({
                         </div>
                       )}
 
+                      {m.interactionId && <FeedbackRow interactionId={m.interactionId} />}
+
                     </div>
                   )}
                 </div>
@@ -719,7 +783,10 @@ function RaisedView({
                 Save
               </button>
               <button
-                onClick={() => router.push(`/opportunities/${active.id}${sessionId ? `?from=${sessionId}` : ''}`)}
+                onClick={() => {
+                  if (msg.interactionId) postInteraction({ interactionId: msg.interactionId, event: 'click', cardId: active.id, cardKind: active.category, rank: activeDealIdx })
+                  router.push(`/opportunities/${active.id}${sessionId ? `?from=${sessionId}` : ''}`)
+                }}
                 style={{
                   flex: 1.5, background: '#fff', color: '#0a1f2a', border: 'none',
                   borderRadius: 999, padding: '10px 0',
@@ -752,7 +819,10 @@ function RaisedView({
             {others.map(({ d, i }, si) => (
               <div
                 key={d.id}
-                onClick={() => onSetActive(i)}
+                onClick={() => {
+                  if (msg.interactionId) postInteraction({ interactionId: msg.interactionId, event: 'click', cardId: d.id, cardKind: d.category, rank: i })
+                  onSetActive(i)
+                }}
                 style={{
                   position: 'absolute', left: 0, right: 0,
                   top: si * 58,
@@ -919,7 +989,7 @@ function ChatPageInner() {
       })
       const data = await res.json()
       if (data.sessionId) setCurrentSessionId(data.sessionId)
-      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, createdAt: new Date().toISOString() }])
+      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, createdAt: new Date().toISOString() }])
     } catch {
       setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: 'Something went wrong. Try again.', createdAt: new Date().toISOString() }])
     } finally { setLoading(false) }
