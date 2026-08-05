@@ -3,6 +3,7 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { Category } from '@prisma/client'
 import { fromRaw, getAdjacent, getBorough } from './domain/Neighborhood'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
+import { priceOverlapScore } from './matching/priceOverlap'
 
 // Borough detection — delegates to lib/domain. Returns lowercase to preserve
 // the legacy contract used by neighborhoodScore. Falls back to 'manhattan'
@@ -26,21 +27,24 @@ function neighborhoodScore(n1: string | null | undefined, n2: string | null | un
   return 0
 }
 
-function priceScore(
+// Brief 2.5, Step 4 — fractional price component. The old priceScore returned a
+// binary/stepped 0/10/20/30. Now the [0..1] priceOverlapScore is scaled to the
+// same 0..30 band, and the pair is *price-gated* when both sides carry price
+// data but the overlap is 0 (listing >5% outside the party's range) — such a
+// pair is disqualified regardless of neighborhood/beds. When price data is
+// missing on either side we can't judge price: no gate, small neutral credit
+// (preserves prior behavior for price-less listings/demand).
+const PRICE_WEIGHT = 30
+
+function pricePart(
   listingPrice: number | null | undefined,
   isoMinPrice: number | null | undefined,
   isoMaxPrice: number | null | undefined
-): number {
-  if (!listingPrice) return 5
-  if (!isoMinPrice && !isoMaxPrice) return 5
-  const min = isoMinPrice ?? 0
-  const max = isoMaxPrice ?? Infinity
-  if (listingPrice >= min && listingPrice <= max) return 30
-  const closest = listingPrice < min ? min : max
-  const pct = Math.abs(listingPrice - closest) / closest
-  if (pct <= 0.15) return 20
-  if (pct <= 0.25) return 10
-  return 0
+): { points: number; overlap: number; gated: boolean } {
+  const hasPrice = listingPrice != null && (isoMinPrice != null || isoMaxPrice != null)
+  if (!hasPrice) return { points: 5, overlap: NaN, gated: false }
+  const overlap = priceOverlapScore(listingPrice, isoMinPrice ?? null, isoMaxPrice ?? null)
+  return { points: overlap * PRICE_WEIGHT, overlap, gated: overlap === 0 }
 }
 
 function bedsScore(listingBeds: number | null | undefined, isoBeds: number | null | undefined): number {
@@ -50,15 +54,29 @@ function bedsScore(listingBeds: number | null | undefined, isoBeds: number | nul
   return 0
 }
 
+export interface MatchScore {
+  score: number        // neighborhood(0..40) + price(0..30) + beds(0..20)
+  priceOverlap: number // [0..1] fractional overlap, or NaN when price data is missing
+  priceGated: boolean  // true => disqualified on price despite other criteria
+}
+
 export function scoreMatch(
   listing: { neighborhood?: string | null; price?: number | null; beds?: number | null },
   demand: { neighborhood?: string | null; minPrice?: number | null; maxPrice?: number | null; beds?: number | null }
-): number {
-  return (
+): MatchScore {
+  const price = pricePart(listing.price, demand.minPrice, demand.maxPrice)
+  const score =
     neighborhoodScore(listing.neighborhood, demand.neighborhood) +
-    priceScore(listing.price, demand.minPrice, demand.maxPrice) +
+    price.points +
     bedsScore(listing.beds, demand.beds)
-  )
+  return { score, priceOverlap: price.overlap, priceGated: price.gated }
+}
+
+// A pair qualifies as a match when it is not price-gated AND clears the score
+// threshold. Fractional near-misses (overlap 0.01..0.99) are retained — those
+// are exactly the pairs Brief 2.5 wants surfaced.
+export function qualifiesAsMatch(m: MatchScore): boolean {
+  return !m.priceGated && m.score >= 50
 }
 
 // Note: matchmaking's prior SALE_CATEGORIES omitted PRICE_DROP and
@@ -102,8 +120,9 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
     })
     for (const listing of newSaleListings) {
       for (const iso of allISOs) {
-        const score = scoreMatch(listing, iso)
-        if (score >= 50) {
+        const m = scoreMatch(listing, iso)
+        const score = Math.round(m.score)
+        if (qualifiesAsMatch(m)) {
           const reason = `${listing.extractedTitle} may match ISO: ${iso.extractedTitle} (score ${score})`
           await prisma.match.create({ data: { organizationId, opportunityId: listing.id, counterpartId: iso.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
           created.push({ score, reason, title: listing.extractedTitle })
@@ -120,8 +139,9 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
     })
     for (const listing of newRentalListings) {
       for (const inq of allInquiries) {
-        const score = scoreMatch(listing, inq)
-        if (score >= 50) {
+        const m = scoreMatch(listing, inq)
+        const score = Math.round(m.score)
+        if (qualifiesAsMatch(m)) {
           const reason = `${listing.extractedTitle} may match renter: ${inq.extractedTitle} (score ${score})`
           await prisma.match.create({ data: { organizationId, opportunityId: listing.id, counterpartId: inq.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
           created.push({ score, reason, title: listing.extractedTitle })
@@ -138,8 +158,9 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
     })
     for (const iso of newBuyerISOs) {
       for (const listing of allListings) {
-        const score = scoreMatch(listing, { neighborhood: iso.neighborhood, minPrice: iso.minPrice, maxPrice: iso.maxPrice, beds: iso.beds })
-        if (score >= 50) {
+        const m = scoreMatch(listing, { neighborhood: iso.neighborhood, minPrice: iso.minPrice, maxPrice: iso.maxPrice, beds: iso.beds })
+        const score = Math.round(m.score)
+        if (qualifiesAsMatch(m)) {
           const reason = `ISO: ${iso.extractedTitle} may match ${listing.extractedTitle} (score ${score})`
           await prisma.match.create({ data: { organizationId, opportunityId: iso.id, counterpartId: listing.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
           created.push({ score, reason, title: iso.extractedTitle })
@@ -175,8 +196,9 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
     })
     for (const inq of newRenterInquiries) {
       for (const rental of allRentals) {
-        const score = scoreMatch(rental, { neighborhood: inq.neighborhood, minPrice: inq.minPrice, maxPrice: inq.maxPrice, beds: inq.beds })
-        if (score >= 50) {
+        const m = scoreMatch(rental, { neighborhood: inq.neighborhood, minPrice: inq.minPrice, maxPrice: inq.maxPrice, beds: inq.beds })
+        const score = Math.round(m.score)
+        if (qualifiesAsMatch(m)) {
           const reason = `Renter inquiry may match ${rental.extractedTitle} (score ${score})`
           await prisma.match.create({ data: { organizationId, opportunityId: inq.id, counterpartId: rental.id, counterpartType: 'opportunity', score, reason } }).catch(() => {})
           created.push({ score, reason, title: inq.extractedTitle })

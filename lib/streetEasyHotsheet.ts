@@ -5,7 +5,7 @@
 import { prisma } from './prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { buildOpportunityText, upsertOpportunityEmbedding, semanticSearch } from './embeddings'
-import { scoreMatch } from './matchmaking'
+import { scoreMatch, qualifiesAsMatch } from './matchmaking'
 import { Category, TransactionType } from '@prisma/client'
 
 export interface HotsheetListing {
@@ -317,11 +317,12 @@ async function findBuyerMatches(type: 'sale' | 'rental', listing: HotsheetListin
 
     let matched = 0
     for (const demand of demandRecords) {
-      const score = scoreMatch(
+      const m = scoreMatch(
         { neighborhood: listing.neighborhood, price: listing.price, beds: listing.beds },
         { neighborhood: demand.neighborhood,  minPrice: demand.minPrice, maxPrice: demand.maxPrice, beds: demand.beds },
       )
-      if (score < 50) continue
+      if (!qualifiesAsMatch(m)) continue
+      const score = Math.round(m.score)
 
       // Skip if this pair already has a Match record
       const existing = await prisma.match.findFirst({

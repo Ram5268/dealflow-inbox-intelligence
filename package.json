@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/matching/priceOverlap.test.ts",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
