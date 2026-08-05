@@ -13,6 +13,15 @@ _(none open)_
 
 ## ITERATE
 
+- **Calendar READ during chat returns "no context" when the Outlook fetch fails.**
+  The chat surface has a calendar-confirm WRITE fast-path (propose → "confirm" →
+  `createCalendarEvent`), but no way for Haiku to actively *read* the schedule —
+  it only sees whatever the `calendarFetcher` side-channel injects, and answers
+  "I can't access your calendar" when that fetch is empty/fails. Consider adding
+  a dedicated `get_calendar_events` tool in a future brief so Haiku can query the
+  calendar the same way it queries listings/parties. Distinct from the existing
+  calendar-confirm WRITE fast-path. — logged 2026-08-05 (Brief 3.0).
+
 - **`bedsScore` treats studios (`beds = 0`) as unknown.** In `lib/matchmaking.ts`,
   `bedsScore()` starts with `if (!listingBeds || !isoBeds) return 5` — because `0`
   is falsy, an exact studio↔studio match scores **5** (the "unknown" credit)

@@ -670,7 +670,7 @@ function ThreadView({
 
 
 function RaisedView({
-  msg, userQuestion, activeDealIdx, onSetActive, onBack, sessionId,
+  msg, userQuestion, activeDealIdx, onSetActive, onBack, sessionId, seenCardIds, onCardSeen,
 }: {
   msg: Message
   userQuestion: string
@@ -678,6 +678,8 @@ function RaisedView({
   onSetActive: (idx: number) => void
   onBack: () => void
   sessionId: string | null
+  seenCardIds: Set<string>
+  onCardSeen: (id: string) => void
 }) {
   const router = useRouter()
   const deals  = msg.deals ?? []
@@ -749,6 +751,11 @@ function RaisedView({
                     {(CATEGORY_LABELS[active.category] ?? active.category).toUpperCase()}
                   </span>
                 )}
+                {seenCardIds.has(active.id) && (
+                  <span style={{ marginLeft: 8, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'rgba(255,255,255,0.5)' }}>
+                    👁 VIEWED
+                  </span>
+                )}
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 300, letterSpacing: '-0.016em', marginTop: 6, lineHeight: 1.05 }}>
                   {active.extractedTitle?.split('–')[0]?.trim() ?? active.address ?? 'Untitled'}
                 </div>
@@ -785,6 +792,7 @@ function RaisedView({
               <button
                 onClick={() => {
                   if (msg.interactionId) postInteraction({ interactionId: msg.interactionId, event: 'click', cardId: active.id, cardKind: active.category, rank: activeDealIdx })
+                  onCardSeen(active.id)
                   router.push(`/opportunities/${active.id}${sessionId ? `?from=${sessionId}` : ''}`)
                 }}
                 style={{
@@ -821,6 +829,7 @@ function RaisedView({
                 key={d.id}
                 onClick={() => {
                   if (msg.interactionId) postInteraction({ interactionId: msg.interactionId, event: 'click', cardId: d.id, cardKind: d.category, rank: i })
+                  onCardSeen(d.id)
                   onSetActive(i)
                 }}
                 style={{
@@ -838,13 +847,14 @@ function RaisedView({
                   cursor: 'pointer',
                   transition: 'top .3s cubic-bezier(.22,1,.36,1)',
                   zIndex: 10 + si,
+                  opacity: seenCardIds.has(d.id) ? 0.6 : 1,
                 }}
                 onMouseEnter={e => { e.currentTarget.style.top = `${si * 58 - 6}px` }}
                 onMouseLeave={e => { e.currentTarget.style.top = `${si * 58}px` }}
               >
                 <div style={{ display: 'grid', gridTemplateColumns: '82px 1fr auto', gap: 10, alignItems: 'center', height: 28 }}>
                   <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.16em', color: 'var(--sr-cream)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {(CATEGORY_LABELS[d.category] ?? d.category).slice(0, 12).toUpperCase()}
+                    {seenCardIds.has(d.id) ? '👁 ' : ''}{(CATEGORY_LABELS[d.category] ?? d.category).slice(0, 12).toUpperCase()}
                   </span>
                   <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 400, letterSpacing: '-0.005em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {d.extractedTitle?.split('–')[0]?.trim() ?? d.address ?? 'Untitled'}
@@ -902,6 +912,20 @@ function ChatPageInner() {
   const [cs, dispatch] = useReducer(reducer, INITIAL)
   const [messages, setMessages] = useState<Message[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  // Brief 3.0, Step 3 — cards Ryan has already tapped (from click history),
+  // fetched once on mount and optimistically extended when he taps a card.
+  const [seenCardIds, setSeenCardIds] = useState<Set<string>>(new Set())
+  const markCardSeen = useCallback((id: string) => {
+    setSeenCardIds(prev => prev.has(id) ? prev : new Set(prev).add(id))
+  }, [])
+  useEffect(() => {
+    let alive = true
+    fetch('/api/chat/seen-cards')
+      .then(r => r.json())
+      .then(d => { if (alive && Array.isArray(d.seenCardIds)) setSeenCardIds(new Set<string>(d.seenCardIds)) })
+      .catch(() => { /* non-fatal — indicator just won't show */ })
+    return () => { alive = false }
+  }, [])
   const [chips, setChips] = useState<Chip[]>([])
   const [greeting, setGreeting] = useState(GREETINGS[0])
   const [showShader, setShowShader] = useState(true)
@@ -1030,6 +1054,8 @@ function ChatPageInner() {
           onSetActive={idx => dispatch({ type: 'SET_ACTIVE', idx })}
           onBack={() => dispatch({ type: 'BACK' })}
           sessionId={currentSessionId}
+          seenCardIds={seenCardIds}
+          onCardSeen={markCardSeen}
         />
       )}
       <style>{`
