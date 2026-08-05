@@ -2,50 +2,64 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
-import { runRetrieval } from '@/lib/retrieval'
+import { parseQuery } from '@/lib/retrieval/queryParser'
+import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { composeContext } from '@/lib/chat/context/composeContext'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
+import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
+import { searchParties, type SearchPartiesInput } from '@/lib/chat/tools/searchParties'
+import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL } from '@/lib/chat/tools/schemas'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 
+// Brief 3.0 — chat runs on Haiku 4.5 (cheaper sibling of Sonnet, knows NYC
+// natively). Extraction/classifier are unchanged elsewhere.
+const CHAT_MODEL = 'claude-haiku-4-5-20251001'
+// Haiku 4.5 list pricing: $1 / 1M input, $5 / 1M output.
+const HAIKU_INPUT_PER_M = 1
+const HAIKU_OUTPUT_PER_M = 5
+// Safety cap on the tool_use loop — if Haiku hasn't finished after this many
+// search rounds it's spinning; we force a final structured reply.
+const MAX_ITERATIONS = 6
+
 export const maxDuration = 60
 
-const SYSTEM_PROMPT = `You are Drift — Ryan Martin's private real estate deal intelligence layer. Ryan is a Douglas Elliman agent working NYC residential real estate across all transaction types.
+const SYSTEM_PROMPT = `You are Drift — Ryan Martin's private real estate deal intelligence assistant. Ryan is a Douglas Elliman agent working NYC residential real estate across all transaction types.
 
-Your full behavior rules are defined in DEALFLOW_AI.md. Follow them exactly. Key rules summarized here:
+TOOLS — you read Ryan's English directly and decide what to search for; you may search more than once:
+- search_listings: property inventory (sale + rental). Use for "what's available", buyer/renter searches, deals, inventory.
+- search_parties: the demand + lead side — OTHER agents' buyers/renters (co-broke) and Ryan's Mojo CRM seller/landlord leads.
+- drift_response: your FINAL structured reply. Call it exactly once, ALONE, after you have gathered what you need. Never call it in the same turn as a search.
+Workflow: search first, review the results, then respond. If the first search returns fewer than ~5 results and the ask was broad, widen ONCE (raise priceTolerance to ~0.15, or drop the tightest filter) and say in your reply that you widened. For "show me everything" queries use a high limit (up to 200) or iterate, and state the total count.
 
-DATA AVAILABLE:
-- DATABASE: Classified opportunities extracted from Ryan's Outlook inbox emails + StreetEasy hotsheet scraper. This is the ONLY source of listings — there is no external API, no MLS feed, no third-party listings API. Never say "returned by the API" or "from the API". Say "in your database" or "from your inbox" instead.
-- MOJO CRM: Ryan's personal NYC seller leads — real property owners he's prospecting. Shown under MOJO SELLER LEADS. Always include name + phone when flagging a Mojo match.
-- CALENDAR: Ryan's Outlook schedule (read + propose with confirmation)
-- ACRIS: NYC property records (when triggered)
-- MORTGAGE RATES: Current rate context (always present)
+NYC BROKER CONVENTIONS (critical — apply these when choosing tool arguments):
+- "Below 70th street" or ANY numbered-street reference → borough="Manhattan" unless another borough is named (Brooklyn, Queens, Bronx, Staten Island).
+- "Uptown" = above 59th St Manhattan; "Midtown" = 34th–59th; "Downtown" = below 34th.
+- Shorthand: UWS=Upper West Side, UES=Upper East Side, LES=Lower East Side, FiDi=Financial District, DUMBO=Brooklyn.
+- "for a buyer" / "for a client" → search listings. "who's looking for…" → search parties.
+- Budget: "under $X" / "up to $X" → priceMax=X. "around $X" → priceMin=X*0.9, priceMax=X*1.1.
+- Studio = beds 0.
 
-BUYER ISO RULE: BUYER_ISO and RENTER_INQUIRY are OTHER agents' clients — not Ryan's. When a listing matches a BUYER_ISO, it's a co-brokering opportunity. Always name the source agent and brokerage.
+DATA: listings and parties come from your tool calls. Extra context may appear below the rules (live StreetEasy listings, Mojo seller leads, mortgage rates, calendar, ACRIS, DOB) — use it when relevant. There is no external MLS/API: say "in your database" or "from your inbox", never "from the API".
 
-CALENDAR PROTOCOL: When Ryan asks to schedule anything — PROPOSE first, do not create immediately.
-Format: I'll create: [title], [Day Date] at [time][, at [location]]. Reply "confirm" to add it to your Outlook.
-Only create after receiving "confirm", "yes", "do it", or similar explicit confirmation.
+BUYER ISO RULE: BUYER_ISO and RENTER_INQUIRY are OTHER agents' clients — co-brokering opportunities. Name the source agent/brokerage when known.
+MOJO: Mojo leads are Ryan's own seller/landlord prospects — always include name + phone when you flag one.
 
-MATCHING: Three tiers — EXACT (all criteria met), CLOSE (off on one: ±1BR, adjacent neighborhood, within 15% price, within 7 days date), STRETCH (off on two). Show ALL results in every tier — no cap. "Available now" is NEVER a date mismatch.
+CALENDAR PROTOCOL: When Ryan asks to schedule anything — PROPOSE first via pendingEvent, do not create.
+Format the proposal text: I'll create: [title], [Day Date] at [time][, at [location]]. Reply "confirm" to add it to your Outlook.
+Actual creation happens only after he confirms (handled outside this turn).
 
-PROPERTY TYPE TERMS: "N-family" means a building with N residential units, NOT N bedrooms. "2-3 family" = a building with 2 or 3 units (typical NYC brownstone/townhouse). A 3BR condo is NEVER a match for a "2-3 family" query. If the user specifies family/unit count and a deal's units field is null or doesn't match, do not present it as an "exact match" — present it as a mismatch or omit.
-
-STRICT NEIGHBORHOOD MATCH (Phase D.5): Retrieval is strict by default. If the user said "in Bed-Stuy" and zero cards came back, that means there are zero active listings in Bed-Stuy (and its variant spellings) matching the other criteria. Do NOT invent results, do NOT pull from adjacent neighborhoods, do NOT recommend listings the retrieval didn't return. Say plainly: "No active listings matching your exact criteria in [neighborhood]. Want me to broaden to nearby areas?" — then if Ryan asks to broaden, he can re-phrase with "near X" or "around X" or "or nearby" and the next turn will include adjacent areas.
-
-RESPONSE FORMAT: Plain text only. No markdown, no bold, no italics, no bullet dashes. One line per listing: [Address] — $[exact price], [beds]BR, [neighborhood]. [key detail]. Available [date]. (exact match)
-
-PRICES: Never round. $9,895 stays $9,895. Copy exactly.
-ATTACHMENTS: If 📎 attachment data exists, use it — it's more detailed than the summary.
-SUGGESTIONS: Always return exactly 2 specific follow-up questions.
-NO FILLER: No "feel free to ask", no "I hope that helps", no "I cannot find" without an alternative.
-DEAL CITING: In "referencedDeals", list the exact IDs from [DEAL:id] tags for every deal you mention in your response — this lets us trace which deals you discussed. Cards are shown to the user automatically based on retrieval ranking; this list does NOT gate which cards appear.
-STREETEASY LINKS: When a deal's data line contains "SE: https://..." include that URL in your response so Ryan can tap directly to the listing. Never construct or invent a streeteasy.com URL. Only include a StreetEasy URL if it appears verbatim in a [DEAL:] line's SE: field or in the LIVE STREETEASY LISTINGS block. If neither contains a URL for a listing you want to mention, omit the URL entirely.
-LIVE STREETEASY RESULTS: When LIVE STREETEASY LISTINGS data is present, lead your response with those results. List each one on its own line: address, price, beds, and the full www.streeteasy.com URL. These are live on-market listings — present them as the primary answer to buyer/renter searches.
-
-Respond with this exact JSON (no markdown, no code fences):
-{"response":"your plain text response","suggestions":["specific follow-up 1","specific follow-up 2"],"pendingEvent":null,"referencedDeals":["deal_id_1","deal_id_2"]}`
+RESPONSE (returned via the drift_response tool):
+- Plain text only. No markdown, no bold, no italics, no bullet dashes. One line per listing: [Address] — $[exact price], [beds]BR, [neighborhood]. [key detail]. (match quality)
+- PRICES exact — never round. $9,895 stays $9,895.
+- Lead with the strongest fits. State the count ("I found 12 matches, top 5 shown"). If a search hit its limit, say more exist.
+- Be terse. Brokers are busy. Skip preamble and process narration.
+- Never invent a listing or party. Every id you cite must come from a tool result.
+- Seed/test rows are excluded by default; only set includeTestData=true if Ryan explicitly says "test" or "seed" data.
+- STREETEASY: if a LIVE STREETEASY LISTINGS block is present, lead with it and include the verbatim www.streeteasy.com URLs. Never construct or invent a StreetEasy URL.
+- suggestions: exactly 2 specific follow-up questions.
+- referencedDeals: the exact ids you mentioned (traceability only — cards are shown to Ryan from the tool results regardless).`
 
 interface FileData {
   name: string
@@ -111,15 +125,25 @@ export async function POST(req: NextRequest) {
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
 
-    // ── Single retrieval pipeline (PR 4) ─────────────────────────────────────
-    // runRetrieval is wrapped in its own try/catch (returns safe-empty + error field on failure),
-    // so this never throws. parsed.* drives all side-channel triggers below.
-    const retrievalResult = await runRetrieval(queryText)
-    const parsed          = retrievalResult.parsed
-    if (retrievalResult.error) {
-      console.error('[chat] runRetrieval error (continuing with empty records):', retrievalResult.error)
-    } else {
-      console.log('[chat] retrieval records:', retrievalResult.records.length, '| durationMs:', retrievalResult.durationMs)
+    // ── Brief 3.0: lightweight parse drives the side-channels only ───────────
+    // The lossy parseQuery → rigid-SQL → 25-cap card retrieval (runRetrieval) is
+    // gone; Haiku's search_listings / search_parties tools now find the cards.
+    // We still call parseQuery here to feed composeContext's side-channels
+    // (live StreetEasy, Mojo, mortgage, calendar, ACRIS, DOB) — those are
+    // orthogonal features preserved from the old pipeline.
+    let parsed: ParsedQuery
+    try {
+      parsed = await parseQuery(queryText)
+    } catch (err) {
+      console.error('[chat] parseQuery error (side-channels degrade gracefully):', err)
+      parsed = {
+        raw: queryText, neighborhoods: [], boroughs: [],
+        beds: null, minBeds: null, maxBeds: null, minUnits: null, maxUnits: null,
+        minPrice: null, maxPrice: null, isRental: null, categories: [],
+        intent: 'general', isCalendar: false, isACRIS: false, isDOB: false,
+        isMyBuyer: false, isSellerLead: false, isEmailCampaign: false,
+        broaden: false, freshnessOverrideHours: null, usedLLM: false, confidence: 0,
+      }
     }
 
     // Calendar confirmation check — based on message history, not query intent
@@ -176,28 +200,9 @@ export async function POST(req: NextRequest) {
       showMatches: body.showMatches === true,
     })
 
-    // ── Hydrate full ExtractedOpportunity rows for the cards GPT cites (PR 4) ─
+    // Cards are hydrated AFTER the tool_use loop (from the ids Haiku's tools
+    // actually returned), not pre-fetched from a retrieval pool.
     const oppIncludeForCards = { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } }
-    const pipelineDeals = retrievalResult.records.length > 0
-      ? await prisma.extractedOpportunity.findMany({
-          where:   { id: { in: retrievalResult.records.map(r => r.id) } },
-          include: oppIncludeForCards,
-        })
-      : []
-
-    // Attachment text appendix — dedupe per rawEmailId so we don't bloat context with
-    // duplicate broker-blast PDFs across multiple listings from the same email.
-    const shownAttachmentFor = new Set<string>()
-    const attachmentLines: string[] = []
-    for (const o of pipelineDeals) {
-      if (!o.rawEmail?.attachmentsText || o.rawEmail.attachmentsText.length === 0) continue
-      if (shownAttachmentFor.has(o.rawEmailId)) continue
-      shownAttachmentFor.add(o.rawEmailId)
-      attachmentLines.push(`[DEAL:${o.id}] 📎 ATTACHMENT: ${o.rawEmail.attachmentsText.slice(0, 5000)}`)
-    }
-    const attachmentsContext = attachmentLines.length > 0
-      ? '\n\nATTACHMENTS (parsed from broker-blast PDFs/docs):\n' + attachmentLines.join('\n\n')
-      : ''
 
     // ── Process files into text + Anthropic image blocks ────────────────────
     // Anthropic image source is raw base64 (NOT a data: URL) and requires
@@ -233,18 +238,21 @@ export async function POST(req: NextRequest) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const userBlocks: AUserPart[] = [{ type: 'text', text: textContent }, ...imageParts]
 
-    // ── System prompt: static SYSTEM_PROMPT cached; dynamic per-turn block uncached ──
-    const dynamicSystemBlock = `${composed.pre}\n\n${retrievalResult.context}${attachmentsContext}${composed.post}`
+    // ── System prompt: static SYSTEM_PROMPT cached; dynamic side-channel block uncached ──
+    // The dynamic block carries composeContext's side-channels (live StreetEasy,
+    // Mojo, mortgage, calendar, ACRIS, DOB). Cards are NOT injected here anymore
+    // — Haiku pulls them via the search tools.
+    const dynamicSystemBlock = [composed.pre, composed.post].filter(Boolean).join('\n\n').trim()
     const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
       { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: dynamicSystemBlock },
     ]
+    if (dynamicSystemBlock) systemBlocks.push({ type: 'text', text: dynamicSystemBlock })
 
-    // ── Tool definition for strict JSON output ──
+    // ── Tool definition for the final structured reply ──
     const RESPONSE_TOOL_NAME = 'drift_response'
     const responseTool: Anthropic.Messages.Tool = {
       name: RESPONSE_TOOL_NAME,
-      description: "Return Drift's reply to Ryan as structured JSON. Always call this tool exactly once per turn.",
+      description: "Return Drift's FINAL reply to Ryan as structured JSON. Call this exactly once, alone, after you have searched. Do not call it in the same turn as a search.",
       input_schema: {
         type: 'object',
         properties: {
@@ -272,7 +280,7 @@ export async function POST(req: NextRequest) {
           referencedDeals: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Exact deal IDs from [DEAL:id] tags discussed in the response. Traceability only — does not gate cards.',
+            description: 'Exact card ids you mentioned (e.g. SEED_SALE_06). Traceability only — does not gate which cards Ryan sees.',
           },
         },
         required: ['response', 'suggestions', 'referencedDeals'],
@@ -284,48 +292,97 @@ export async function POST(req: NextRequest) {
       content: m.content,
     }))
 
-    const firstCompletion = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8192,
-      temperature: 0.3,
-      system: systemBlocks,
-      messages: [
-        ...anthropicHistory,
-        { role: 'user', content: userBlocks },
-      ],
-      tools: [responseTool],
-      tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
-    })
-
-    // ── Extract tool_use.input (already parsed by SDK) ──
+    // ── Haiku 4.5 tool_use loop ─────────────────────────────────────────────
+    // tool_choice='any' forces a tool call every turn, so the loop deterministically
+    // terminates on drift_response (Haiku's structured final reply) rather than a
+    // free-text end_turn — this preserves suggestions + calendar pendingEvent.
     type AiResult = { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[] }
-    let aiResult: AiResult
-    const toolUseBlock = firstCompletion.content.find(
-      (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
-    )
-    if (toolUseBlock) {
-      aiResult = toolUseBlock.input as AiResult
-      console.log('[DealFlow] Sonnet tool_use input keys:', Object.keys(aiResult).join(','))
-    } else {
-      // Graceful degrade: Sonnet skipped the tool. Parse a text block the old way.
-      const textBlock = firstCompletion.content.find((b): b is Anthropic.Messages.TextBlock => b.type === 'text')
-      const raw = (textBlock?.text ?? '').trim()
-      console.warn('[DealFlow] Sonnet returned no tool_use; falling back to text parse. Raw:', raw.slice(0, 200))
-      try {
-        aiResult = JSON.parse(raw)
-      } catch {
-        const stripped = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/m, '').trim()
-        try {
-          aiResult = JSON.parse(stripped)
-        } catch {
-          const match = stripped.match(/\{[\s\S]*\}/)
+    const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, responseTool]
+    const messages: Anthropic.Messages.MessageParam[] = [
+      ...anthropicHistory,
+      { role: 'user', content: userBlocks },
+    ]
+    // Every card Haiku saw across all tool calls, deduped by id (order preserved).
+    const allToolCalls: Array<{ name: string; input: unknown; totalMatched: number; cardIds: string[] }> = []
+    const seenCardIds = new Set<string>()
+    const cardOverlap = new Map<string, number>()   // id → priceOverlapScore (for matchScore)
+    let tokensIn = 0
+    let tokensOut = 0
+    let aiResult: AiResult | null = null
+    let maxIterationsHit = false
+
+    async function runSearchTool(name: string, input: unknown): Promise<{ cards: Array<{ id: string; priceOverlapScore?: number }>; totalMatched: number }> {
+      if (name === 'search_listings') return searchListings(input as SearchListingsInput)
+      if (name === 'search_parties')  return searchParties(input as SearchPartiesInput)
+      return { cards: [], totalMatched: 0 }
+    }
+
+    for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+      const completion = await anthropic.messages.create({
+        model: CHAT_MODEL,
+        max_tokens: 4096,
+        system: systemBlocks,
+        messages,
+        tools,
+        tool_choice: { type: 'any' },
+      })
+      tokensIn  += completion.usage?.input_tokens  ?? 0
+      tokensOut += completion.usage?.output_tokens ?? 0
+
+      // drift_response = terminal. Take it even if searches appear in the same turn
+      // (we instruct against that; finalizing avoids an unmatched-tool_use error).
+      const driftUse = completion.content.find(
+        (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
+      )
+      if (driftUse) { aiResult = driftUse.input as AiResult; break }
+
+      const searchUses = completion.content.filter(
+        (b): b is Anthropic.Messages.ToolUseBlock =>
+          b.type === 'tool_use' && (b.name === 'search_listings' || b.name === 'search_parties'),
+      )
+      if (searchUses.length === 0) break  // shouldn't happen under tool_choice='any'
+
+      messages.push({ role: 'assistant', content: completion.content })
+      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = await Promise.all(
+        searchUses.map(async (tu) => {
+          let output: { cards: Array<{ id: string; priceOverlapScore?: number }>; totalMatched: number }
           try {
-            aiResult = match ? JSON.parse(match[0]) : { response: raw || 'Sorry, I had trouble formatting that. Try rephrasing?', suggestions: [], referencedDeals: [] }
-          } catch {
-            aiResult = { response: raw || 'Sorry, I had trouble formatting that. Try rephrasing?', suggestions: [], referencedDeals: [] }
+            output = await runSearchTool(tu.name, tu.input)
+          } catch (e) {
+            console.error(`[chat] tool ${tu.name} failed:`, e)
+            return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify({ error: String(e) }), is_error: true }
           }
-        }
-      }
+          allToolCalls.push({ name: tu.name, input: tu.input, totalMatched: output.totalMatched, cardIds: output.cards.map(c => c.id) })
+          for (const c of output.cards) {
+            if (!seenCardIds.has(c.id)) seenCardIds.add(c.id)
+            if (c.priceOverlapScore !== undefined && !cardOverlap.has(c.id)) cardOverlap.set(c.id, c.priceOverlapScore)
+          }
+          return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify(output) }
+        }),
+      )
+      messages.push({ role: 'user', content: toolResults })
+
+      if (iter === MAX_ITERATIONS - 1) maxIterationsHit = true
+    }
+
+    // Force a final structured reply if the loop exhausted its budget without one.
+    if (!aiResult) {
+      console.warn('[chat] MAX_ITERATIONS reached without drift_response — forcing final reply')
+      maxIterationsHit = true
+      const forced = await anthropic.messages.create({
+        model: CHAT_MODEL,
+        max_tokens: 4096,
+        system: systemBlocks,
+        messages,
+        tools: [responseTool],
+        tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
+      })
+      tokensIn  += forced.usage?.input_tokens  ?? 0
+      tokensOut += forced.usage?.output_tokens ?? 0
+      const forcedUse = forced.content.find(
+        (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
+      )
+      aiResult = (forcedUse?.input as AiResult) ?? { response: 'Sorry, I had trouble pulling that together. Try rephrasing?', suggestions: [], referencedDeals: [] }
     }
 
     const cleanResponse = (aiResult.response ?? '')
@@ -333,26 +390,20 @@ export async function POST(req: NextRequest) {
       .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
       .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
 
-    // ── Phase D card-count policy ──────────────────────────────────────────
-    // POLICY: cards = every record the retrieval pipeline surfaced, sorted by
-    // ScoredRecord.score (descending). The LLM's `referencedDeals` array is no
-    // longer a gate — it's only kept for traceability (to log which deals the
-    // LLM actually discussed). This eliminates non-determinism (same query
-    // returning 25 vs 2 cards across sessions) and respects DEALFLOW_AI.md's
-    // "show ALL results" rule: if a record matched the user's criteria, the
-    // user sees it. The LLM response narrates highlights; the cards present.
-    //
-    // matchScore reflects retrieval relevance (ScoredRecord.score, 0-100,
-    // normalized to 0-1). Falls back to extraction confidenceScore only when
-    // the deal isn't in the retrieval pool at all — a real pipeline score of
-    // 0 is shown as 0, not silently replaced by classifier confidence.
-    const scoreMap = new Map<string, number>(retrievalResult.records.map(r => [r.id, r.score]))
-    const deals = pipelineDeals
+    // ── Hydrate the cards Haiku's tools returned into full rows for the UI ──
+    // Only ExtractedOpportunity-backed cards render as `deals`; Mojo CRM leads
+    // (MOJO_LEAD ids belong to MojoContact) surface in Haiku's text (name+phone),
+    // matching the prior pipeline where Mojo was context, not a card.
+    const oppCardIds = [...seenCardIds].filter(id => id.length > 0)
+    const hydrated = oppCardIds.length > 0
+      ? await prisma.extractedOpportunity.findMany({ where: { id: { in: oppCardIds } }, include: oppIncludeForCards })
+      : []
+    // matchScore: fractional price overlap when the model filtered by budget,
+    // else the extraction confidenceScore (unknown-fit fallback, same as before).
+    const deals = hydrated
       .map(d => ({
         ...d,
-        matchScore: scoreMap.has(d.id)
-          ? (scoreMap.get(d.id) ?? 0) / 100
-          : d.confidenceScore,
+        matchScore: cardOverlap.has(d.id) ? (cardOverlap.get(d.id) ?? 0) : d.confidenceScore,
         streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
       }))
       .sort((a, b) => b.matchScore - a.matchScore)
@@ -412,22 +463,18 @@ export async function POST(req: NextRequest) {
       rank:  idx,
       score: d.matchScore,
     }))
-    const usage     = firstCompletion.usage
-    const tokensIn  = usage?.input_tokens ?? null
-    const tokensOut = usage?.output_tokens ?? null
-    // Claude Sonnet 4.6 list pricing: ~$3 / 1M input, ~$15 / 1M output.
-    const costUsd = tokensIn != null && tokensOut != null
-      ? (tokensIn / 1_000_000) * 3 + (tokensOut / 1_000_000) * 15
-      : null
+    // Brief 3.0: parsedFilters now records the tool calls Haiku actually made
+    // (what it searched for + how many matched), and cost is at Haiku pricing.
+    const costUsd = (tokensIn / 1_000_000) * HAIKU_INPUT_PER_M + (tokensOut / 1_000_000) * HAIKU_OUTPUT_PER_M
     let interactionId: string | null = null
     try {
       const interaction = await prisma.driftInteraction.create({
         data: {
           query:          userMessage || storedMsg,
-          parsedFilters:  parsed ? (parsed as unknown as object) : undefined,
+          parsedFilters:  { toolCalls: allToolCalls, maxIterationsHit } as unknown as object,
           topCards:       topCards as unknown as object[],
           responseTimeMs: Date.now() - t0,
-          modelUsed:      'claude-sonnet-4-6',
+          modelUsed:      CHAT_MODEL,
           tokensIn,
           tokensOut,
           costUsd,
