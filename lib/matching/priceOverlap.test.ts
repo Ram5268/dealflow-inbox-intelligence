@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { priceOverlapScore } from './priceOverlap'
+import { bedsScore } from './bedsScore'
 
 // Run: `npm test` (ts-node executes this file; node:test auto-runs + exits
 // non-zero on failure). No external test-runner dependency.
@@ -42,4 +43,24 @@ test('open-ended max (only min, price above it) → 1', () => {
 test('exactly at tolerance edge (5% over max) → 0', () => {
   // 4200 is 5% over 4000; distance 200 == bound 200 → score 0 (not > 0).
   assert.equal(priceOverlapScore(4200, 3000, 4000), 0)
+})
+
+// ── Brief 3.0 Step 4 — studio bedsScore fix ──────────────────────────────────
+test('studio↔studio (0,0) → full credit 20 (not 5)', () => {
+  assert.equal(bedsScore(0, 0), 20)
+})
+test('one side unknown (null,0) → neutral 5', () => {
+  assert.equal(bedsScore(null, 0), 5)
+})
+test('mismatch (2BR demand vs studio listing) → 0', () => {
+  assert.equal(bedsScore(0, 2), 0)
+})
+test('exact non-studio (2,2) → 20', () => {
+  assert.equal(bedsScore(2, 2), 20)
+})
+test('±1 bedroom (2,3) → 10', () => {
+  assert.equal(bedsScore(2, 3), 10)
+})
+test('both unknown (undefined,undefined) → 5', () => {
+  assert.equal(bedsScore(undefined, undefined), 5)
 })

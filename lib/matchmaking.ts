@@ -4,6 +4,7 @@ import { Category } from '@prisma/client'
 import { fromRaw, getAdjacent, getBorough } from './domain/Neighborhood'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
 import { priceOverlapScore } from './matching/priceOverlap'
+import { bedsScore } from './matching/bedsScore'
 
 // Borough detection — delegates to lib/domain. Returns lowercase to preserve
 // the legacy contract used by neighborhoodScore. Falls back to 'manhattan'
@@ -45,13 +46,6 @@ function pricePart(
   if (!hasPrice) return { points: 5, overlap: NaN, gated: false }
   const overlap = priceOverlapScore(listingPrice, isoMinPrice ?? null, isoMaxPrice ?? null)
   return { points: overlap * PRICE_WEIGHT, overlap, gated: overlap === 0 }
-}
-
-function bedsScore(listingBeds: number | null | undefined, isoBeds: number | null | undefined): number {
-  if (!listingBeds || !isoBeds) return 5
-  if (listingBeds === isoBeds) return 20
-  if (Math.abs(listingBeds - isoBeds) === 1) return 10
-  return 0
 }
 
 export interface MatchScore {
