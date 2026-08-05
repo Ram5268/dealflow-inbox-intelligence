@@ -35,4 +35,4 @@ _(none open)_
   Verified on seed data: Lauren Park (studio) ↔ SEED_RENT_02 (Midtown studio
   $2,800) went **75 → 90**; a 2BR-seeker vs the same studio dropped to **70**, so
   the studio-seeker now correctly out-scores the mismatch. 6 unit tests added to
-  `lib/matching/priceOverlap.test.ts`. — fixed 2026-08-05 (Brief 3.0, commit 33aa1b2).
+  `lib/matching/priceOverlap.test.ts`. — fixed 2026-08-05 (Brief 3.0, commit 2e64c31).
