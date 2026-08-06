@@ -97,7 +97,7 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
   const organizationId = await getCurrentOrgId()
 
   const limit = input.limit ?? 50
-  const includeTestData = input.includeTestData ?? false
+  const includeTestData = input.includeTestData ?? true  // seed-only test mode: default on
   const wantBorough = input.borough ?? null
   const wantHoods = (input.neighborhoods ?? []).map(canon).filter((c): c is string => c != null)
   const range = input.priceRangeOverlaps ?? null

@@ -89,7 +89,7 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
   const categories = resolveCategories(input)
   const limit = input.limit ?? 50
   const tolerance = input.priceTolerance ?? 0.05
-  const includeTestData = input.includeTestData ?? false
+  const includeTestData = input.includeTestData ?? true  // seed-only test mode: default on
 
   // ── SQL-level filters (cheap, exact) ──────────────────────────────────────
   // Price is intentionally excluded here — it's applied via priceOverlapScore

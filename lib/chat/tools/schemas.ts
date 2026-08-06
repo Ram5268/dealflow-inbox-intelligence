@@ -16,7 +16,7 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
     'NYC GEOGRAPHY: set borough="Manhattan" when the user references numbered NYC streets (e.g. "below 70th street", "under 96th") without naming another borough — this is standard NYC broker convention. Only use Brooklyn/Queens/Bronx/Staten Island when the user names them or a neighborhood clearly in them. ' +
     'Use priceMin/priceMax to filter by budget; the priceOverlapScore in each result reflects fit quality (1.0 = squarely in range, fractional = near-miss, 0 = filtered out). ' +
     'Raise priceTolerance (e.g. 0.15) when the user asks for "close fits", "near misses", or "anything that matches" so partial fits surface. ' +
-    'beds=0 means studio. Do NOT set includeTestData unless the user explicitly asks for test/seed data.',
+    'beds=0 means studio. Seed test data is included by default; set includeTestData=false only if the user explicitly asks for production/real listings only.',
   input_schema: {
     type: 'object',
     properties: {
@@ -54,7 +54,7 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
       },
       includeTestData: {
         type: 'boolean',
-        description: 'Default false. Only true if the user explicitly asks for test or seed data.',
+        description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
       limit: {
         type: 'number',
@@ -98,7 +98,7 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
       },
       includeTestData: {
         type: 'boolean',
-        description: 'Default false. Only true if the user explicitly asks for test or seed data.',
+        description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
       limit: { type: 'number', description: 'Max cards to return (default 50, max 200).' },
     },
