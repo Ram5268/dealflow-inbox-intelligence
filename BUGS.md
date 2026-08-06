@@ -14,6 +14,16 @@ _(none open)_
 
 ## ITERATE
 
+- **REMINDER: re-enable the StreetEasy sync when connecting real Microsoft auth.**
+  During seed-only trial mode the StreetEasy status sweep was *paused* via
+  `STREETEASY_SYNC_ENABLED=false` in `.env` — with no real inbox flow it had no
+  legitimate work and was marking seed test rows `stale` (draining the demo
+  inventory; e.g. the West Village 2BR went stale between smoke tests). When real
+  Microsoft auth + inbox flow goes live, flip `STREETEASY_SYNC_ENABLED` back to
+  `true`. Also decide at that point whether to add an `isTestData` guard to the
+  sweep (the proper long-term fix) so real + seed test data can coexist safely
+  without the sweep draining the test rows. — logged 2026-08-05 (Brief 3.0 follow-up).
+
 - **Calendar READ during chat returns "no context" when the Outlook fetch fails.**
   The chat surface has a calendar-confirm WRITE fast-path (propose → "confirm" →
   `createCalendarEvent`), but no way for Haiku to actively *read* the schedule —

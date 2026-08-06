@@ -1,6 +1,16 @@
 import { prisma } from './prisma'
 import { normalizeAddress } from './domain/Address'
 
+// Brief 3.0 follow-up — trial-mode kill switch. In seed-only trial mode there's
+// no real inbox flow, so the StreetEasy status sweep has no legitimate work and
+// was marking seed test rows 'stale' (draining the demo inventory over time).
+// Set STREETEASY_SYNC_ENABLED=false to pause every sweep / stale-marking entry
+// point. Flip back to true (the default) once real Microsoft auth + inbox flow
+// is connected — see BUGS.md ITERATE. Guards the mutating entry points only;
+// the live chat-context search (searchStreetEasyListings) is read-only and stays on.
+const SYNC_ENABLED = process.env.STREETEASY_SYNC_ENABLED !== 'false'
+if (!SYNC_ENABLED) console.log('[StreetEasy] Sync PAUSED (STREETEASY_SYNC_ENABLED=false).')
+
 const RAPIDAPI_KEY  = process.env.RAPIDAPI_KEY  ?? ''
 const RAPIDAPI_HOST = process.env.RAPIDAPI_SE_HOST ?? 'nyc-real-estate-api.p.rapidapi.com'
 const BASE_URL      = `https://${RAPIDAPI_HOST}`
@@ -434,6 +444,8 @@ export async function syncOpportunityStatus(opportunityId: string): Promise<{
   streetEasyStatus: string | null
   previous: string | null
 }> {
+  if (!SYNC_ENABLED) return { updated: false, streetEasyStatus: null, previous: null }
+
   const opp = await prisma.extractedOpportunity.findUnique({
     where: { id: opportunityId },
     select: {
@@ -539,6 +551,7 @@ async function markDelistedMatches(
 // (rented after sitting 6 days). 30 days covers typical short-term rental
 // cycles without scanning the entire DB.
 export async function sweepForDelistings(daysBack = 30): Promise<number> {
+  if (!SYNC_ENABLED) return 0
   const closedAfter = new Date(Date.now() - daysBack * 86_400_000).toISOString().split('T')[0]
 
   const SALE_CATS   = ['ACTIVE_SALE_LISTING','OFF_MARKET_SALE','BACK_ON_MARKET','PRICE_DROP',
@@ -600,6 +613,7 @@ export async function sweepForDelistings(daysBack = 30): Promise<number> {
 
 // ── Sweep for coming-soon that have gone active (sales + rentals) ─────────────
 export async function sweepForActivations(): Promise<number> {
+  if (!SYNC_ENABLED) return 0
   const comingSoon = await prisma.extractedOpportunity.findMany({
     where: {
       processingStatus: 'active',
@@ -650,6 +664,7 @@ export async function sweepForActivations(): Promise<number> {
 // ── Date-based expiration (no StreetEasy needed) ─────────────────────────────
 // Group 3: categories that expire purely based on time
 export async function sweepDateExpirations(): Promise<number> {
+  if (!SYNC_ENABLED) return 0
   const now  = new Date()
   const ago30 = new Date(Date.now() - 30 * 86_400_000)
   let expiredCount = 0
@@ -724,6 +739,8 @@ export async function runDailyStatusSweep(): Promise<{
   activatedFound: number
   expiredFound: number
 }> {
+  if (!SYNC_ENABLED) return { checked: 0, updated: 0, delistedFound: 0, activatedFound: 0, expiredFound: 0 }
+
   // 1. Sweep for recently delisted (sales + rentals)
   const delistedFound  = await sweepForDelistings(3)
 
