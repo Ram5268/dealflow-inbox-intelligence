@@ -1,9 +1,13 @@
 import type { ContextFetcher } from './types'
 import { prisma } from '@/lib/prisma'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 // Triggered when there's a neighborhood OR Ryan asked about sellers / his buyer / email campaigns.
 // Self-contained: does its own BUYER_ISO query for the cross-match annotation.
 export const mojoFetcher: ContextFetcher = async ({ parsed }) => {
+  // Brief 5.0 — this side-channel surfaces real Mojo CRM data into the chat
+  // context block. Skip entirely in test mode (still has a live caller: registry.ts).
+  if (isTestModeOnly()) return { block: null }
   const shouldFetch =
     parsed.neighborhoods.length > 0 ||
     parsed.isSellerLead ||
