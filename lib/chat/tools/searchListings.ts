@@ -21,6 +21,7 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { Category, Prisma } from '@prisma/client'
 import { fromRaw, getBorough } from '@/lib/domain/Neighborhood'
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 // Listing categories this tool exposes (sale + rental supply the chat surfaces).
 const SALE_CATS = ['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'ACTIVE_SALE_LISTING'] as const
@@ -102,6 +103,9 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
     processingStatus: 'active',
   }
   if (!includeTestData) where.isTestData = false
+  // TEST_MODE_ONLY hard gate: force seed data, overriding whatever Haiku sent
+  // for includeTestData. Transparent to the model — the tool schema is unchanged.
+  if (isTestModeOnly()) where.isTestData = true
   // Address substring — case-insensitive, parameterized by Prisma (injection-safe).
   // Lets Haiku answer direct-address queries ("anything at 88 Greenwich Ave?")
   // instead of falling back to a broad search + mental filter.

@@ -19,6 +19,7 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { Category, Prisma } from '@prisma/client'
 import { fromRaw, getBorough } from '@/lib/domain/Neighborhood'
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 export const searchPartiesInputSchema = z.object({
   role: z.enum(['buyer', 'renter', 'seller', 'landlord']).optional(),
@@ -125,6 +126,8 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
       processingStatus: 'active',
     }
     if (!includeTestData) where.isTestData = false
+    // TEST_MODE_ONLY hard gate: force seed data on the demand side.
+    if (isTestModeOnly()) where.isTestData = true
     if (input.beds != null) where.beds = input.beds
     else if (input.bedsMin != null || input.bedsMax != null) {
       where.beds = {
@@ -174,7 +177,9 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
   }
 
   // ── Mojo CRM seller/landlord leads (always real data) ─────────────────────
-  if (wantMojo) {
+  // TEST_MODE_ONLY hard gate: Mojo is always real data, so skip the entire
+  // block when test mode is on. wantMojo stays computed but the query never runs.
+  if (wantMojo && !isTestModeOnly()) {
     const leads = await prisma.mojoContact.findMany({
       where: { organizationId },
       take: 500,
