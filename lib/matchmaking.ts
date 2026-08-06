@@ -5,6 +5,7 @@ import { fromRaw, getAdjacent, getBorough } from './domain/Neighborhood'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
 import { priceOverlapScore } from './matching/priceOverlap'
 import { bedsScore } from './matching/bedsScore'
+import { isTestModeOnly } from './config/testMode'
 
 // Borough detection — delegates to lib/domain. Returns lowercase to preserve
 // the legacy contract used by neighborhoodScore. Falls back to 'manhattan'
@@ -92,6 +93,10 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
 
   const organizationId = await getCurrentOrgId()
 
+  // TEST_MODE_ONLY hard gate: spread into every counterpart-lookup WHERE so the
+  // matcher only ever pairs seed rows, and skip the Mojo lead lookup entirely.
+  const testGate = isTestModeOnly() ? { isTestData: true } : {}
+
   const newOpps = await prisma.extractedOpportunity.findMany({
     where: { id: { in: newOppIds }, isDuplicate: false },
     select: { id: true, category: true, neighborhood: true, borough: true,
@@ -109,7 +114,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   // New sale listings ↔ all active BUYER_ISOs
   if (newSaleListings.length > 0) {
     const allISOs = await prisma.extractedOpportunity.findMany({
-      where: { category: Category.BUYER_ISO, isDuplicate: false },
+      where: { category: Category.BUYER_ISO, isDuplicate: false, ...testGate },
       select: { id: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true, extractedTitle: true },
     })
     for (const listing of newSaleListings) {
@@ -128,7 +133,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   // New rental listings ↔ all active RENTER_INQUIRYs
   if (newRentalListings.length > 0) {
     const allInquiries = await prisma.extractedOpportunity.findMany({
-      where: { category: Category.RENTER_INQUIRY, isDuplicate: false },
+      where: { category: Category.RENTER_INQUIRY, isDuplicate: false, ...testGate },
       select: { id: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true, extractedTitle: true },
     })
     for (const listing of newRentalListings) {
@@ -147,7 +152,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   // New BUYER_ISOs ↔ all sale listings
   if (newBuyerISOs.length > 0) {
     const allListings = await prisma.extractedOpportunity.findMany({
-      where: { category: { in: SALE_CATEGORIES }, isDuplicate: false },
+      where: { category: { in: SALE_CATEGORIES }, isDuplicate: false, ...testGate },
       select: { id: true, neighborhood: true, price: true, beds: true, extractedTitle: true },
     })
     for (const iso of newBuyerISOs) {
@@ -160,7 +165,9 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
           created.push({ score, reason, title: iso.extractedTitle })
         }
       }
-      // Also match new ISO against Mojo seller leads
+      // Also match new ISO against Mojo seller leads.
+      // TEST_MODE_ONLY hard gate: Mojo is real data — skip the whole lookup.
+      if (!isTestModeOnly()) {
       const mojoLeads = await prisma.mojoContact.findMany({
         where: iso.neighborhood ? {
           OR: [
@@ -179,13 +186,14 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
           created.push({ score, reason, title: iso.extractedTitle })
         }
       }
+      } // end !isTestModeOnly Mojo gate
     }
   }
 
   // New RENTER_INQUIRYs ↔ all rental listings
   if (newRenterInquiries.length > 0) {
     const allRentals = await prisma.extractedOpportunity.findMany({
-      where: { category: { in: RENTAL_CATEGORIES }, isDuplicate: false },
+      where: { category: { in: RENTAL_CATEGORIES }, isDuplicate: false, ...testGate },
       select: { id: true, neighborhood: true, price: true, beds: true, extractedTitle: true },
     })
     for (const inq of newRenterInquiries) {
