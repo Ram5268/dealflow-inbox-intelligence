@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import OpenAI from 'openai'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,6 +30,7 @@ function deriveNeighborhood(city: string, address: string, zip: string): string 
 }
 
 export async function POST() {
+  if (isTestModeOnly()) return NextResponse.json({ ok: false, reason: 'TEST_MODE_ONLY is on' })
   // Only process rows API Nation has written that haven't been transformed yet
   const rows = await prisma.mojoRaw.findMany({ where: { processed: false }, take: 200 })
   if (rows.length === 0) return NextResponse.json({ ok: true, processed: 0 })

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 // Parses a single CSV line respecting double-quoted fields (commas inside quotes OK)
 function parseCSVLine(line: string): string[] {
@@ -28,6 +29,7 @@ function parseCSVLine(line: string): string[] {
 // Accepts a CSV body exported from Mojo CRM
 // Supports both Mojo's exact column names and common variants
 export async function POST(req: NextRequest) {
+  if (isTestModeOnly()) return NextResponse.json({ ok: false, reason: 'TEST_MODE_ONLY is on' })
   const csv = await req.text()
   const lines = csv.split('\n').map(l => l.trimEnd()).filter(Boolean)
   if (lines.length < 2) return NextResponse.json({ error: 'Empty CSV' }, { status: 400 })

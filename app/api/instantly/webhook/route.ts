@@ -2,10 +2,12 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 // Receives webhook events from Instantly AI
 // Events: reply_received, lead_marked_as_interested, email_opened, email_bounced, lead_unsubscribed, link_clicked
 export async function POST(req: NextRequest) {
+  if (isTestModeOnly()) return NextResponse.json({ ok: false, reason: 'TEST_MODE_ONLY is on' })
   let body: Record<string, unknown>
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })

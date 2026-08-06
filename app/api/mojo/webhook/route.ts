@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isSuppressed } from '@/lib/suppression'
 import OpenAI from 'openai'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,6 +38,7 @@ async function unsubscribeFromInstantly(email: string, campaignId: string) {
 }
 
 export async function POST(req: NextRequest) {
+  if (isTestModeOnly()) return NextResponse.json({ ok: false, reason: 'TEST_MODE_ONLY is on' })
   const secret = req.headers.get('x-mojo-secret')
   if (process.env.MOJO_WEBHOOK_SECRET && secret !== process.env.MOJO_WEBHOOK_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

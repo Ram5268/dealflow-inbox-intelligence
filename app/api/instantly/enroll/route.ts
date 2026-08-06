@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isSuppressed } from '@/lib/suppression'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 const INSTANTLY_API = 'https://api.instantly.ai/api/v2'
 const BATCH_SIZE = 500
@@ -39,6 +40,7 @@ async function addLeadsToInstantly(campaignId: string, leads: InstantlyLead[]) {
 // Bulk-enrolls eligible contacts from a Mojo calling list into an Instantly campaign.
 // Contacts in NYC lead groups are marked suppressed and skipped.
 export async function POST(req: NextRequest) {
+  if (isTestModeOnly()) return NextResponse.json({ ok: false, reason: 'TEST_MODE_ONLY is on' })
   let body: { campaignId?: string; mojoList?: string }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
