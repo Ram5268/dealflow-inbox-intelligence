@@ -1,3 +1,9 @@
+// KEPT INTENTIONALLY: still called by composeContext (via app/api/chat/route.ts)
+// for side-channel wiring, per the Brief 3 Gate-0 decision. The old rigid-SQL
+// retrieval pipeline (runRetrieval in lib/retrieval/index.ts) is now dead — the
+// Haiku tool_use loop replaced it — but parseQuery + the ParsedQuery type still
+// feed the mortgage/ACRIS/DOB/calendar/matches side-channels. Delete this (and
+// lib/retrieval/index.ts) when composeContext is refactored off ParsedQuery.
 import OpenAI from 'openai'
 import { classifyIntent } from './intentClassifier'
 import type { ParsedQuery, IntentBucket } from './types'

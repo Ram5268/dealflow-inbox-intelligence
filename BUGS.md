@@ -14,6 +14,16 @@ _(none open)_
 
 ## ITERATE
 
+- **parseQuery kept for side-channel wiring (Brief 3 decision).** The Haiku
+  tool_use loop replaced the old rigid-SQL retrieval pipeline, so `runRetrieval`
+  (`lib/retrieval/index.ts`) is now dead code with no importers. But `parseQuery`
+  (`lib/retrieval/queryParser.ts`) and the `ParsedQuery` type are still live —
+  `app/api/chat/route.ts` calls `parseQuery` to feed composeContext's
+  mortgage/ACRIS/DOB/calendar/matches side-channels. So the `lib/retrieval`
+  module can't be deleted yet. Revisit (delete `queryParser.ts` + `index.ts`)
+  when composeContext is refactored off `ParsedQuery`. Header comment added to
+  `queryParser.ts`. — logged 2026-08-06 (Brief 4.0 Step 4).
+
 - **REMINDER: re-enable the StreetEasy sync when connecting real Microsoft auth.**
   During seed-only trial mode the StreetEasy status sweep was *paused* via
   `STREETEASY_SYNC_ENABLED=false` in `.env` — with no real inbox flow it had no
