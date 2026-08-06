@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isTestModeOnly } from '@/lib/config/testMode'
 
 // GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all]
 // List with both sides hydrated. Sort: unseen first, then highest-scoring,
@@ -35,7 +36,9 @@ export async function GET(req: NextRequest) {
   })
 
   const oppCounterpartIds  = matches.filter(m => m.counterpartType === 'opportunity').map(m => m.counterpartId)
-  const mojoCounterpartIds = matches.filter(m => m.counterpartType === 'mojo').map(m => m.counterpartId)
+  // TEST_MODE_ONLY hard gate: never hydrate real Mojo contacts into match results.
+  const mojoCounterpartIds = isTestModeOnly() ? [] :
+    matches.filter(m => m.counterpartType === 'mojo').map(m => m.counterpartId)
 
   const [oppCounterparts, mojoCounterparts] = await Promise.all([
     oppCounterpartIds.length > 0
