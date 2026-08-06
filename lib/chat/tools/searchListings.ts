@@ -32,6 +32,7 @@ const BOROUGHS = ['Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island'] a
 export const searchListingsInputSchema = z.object({
   borough: z.enum(BOROUGHS).optional(),
   neighborhoods: z.array(z.string()).optional(),
+  address: z.string().max(200).optional(),
   beds: z.number().optional(),
   bedsMin: z.number().optional(),
   bedsMax: z.number().optional(),
@@ -101,6 +102,10 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
     processingStatus: 'active',
   }
   if (!includeTestData) where.isTestData = false
+  // Address substring — case-insensitive, parameterized by Prisma (injection-safe).
+  // Lets Haiku answer direct-address queries ("anything at 88 Greenwich Ave?")
+  // instead of falling back to a broad search + mental filter.
+  if (input.address) where.address = { contains: input.address, mode: 'insensitive' }
   if (input.beds != null) where.beds = input.beds
   else if (input.bedsMin != null || input.bedsMax != null) {
     where.beds = {

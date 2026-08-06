@@ -26,6 +26,10 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
         items: { type: 'string' },
         description: 'Neighborhood names, e.g. ["Park Slope", "Chelsea"].',
       },
+      address: {
+        type: 'string',
+        description: 'Filter by address substring, case-insensitive. Use for direct-address queries like "is there anything at 88 Greenwich Ave?". Matches any listing whose address contains the given string.',
+      },
       beds: { type: 'number', description: 'Exact bedroom count. 0 = studio.' },
       bedsMin: { type: 'number', description: 'Minimum bedrooms (inclusive).' },
       bedsMax: { type: 'number', description: 'Maximum bedrooms (inclusive).' },
