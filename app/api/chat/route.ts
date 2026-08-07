@@ -10,19 +10,28 @@ import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
 import { searchParties, type SearchPartiesInput } from '@/lib/chat/tools/searchParties'
 import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL } from '@/lib/chat/tools/schemas'
+import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
+import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
+import {
+  MAX_GUARD_RETRIES,
+  CANNED_FALLBACK,
+  buildFeedbackPrompt,
+  formatFlagLines,
+  type GuardAttempt,
+  type GuardTelemetry,
+} from '@/lib/chat/guards/retry'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 
-// Council swap (post-Brief-5.1 evaluation) — chat runs on Sonnet 4.6 per
-// CLAUDE.md's product-surface rule. Cost breaks were the reason we shipped on
-// Haiku; the 32-query stress test surfaced 3 prompt-adherence bugs that all
-// trace back to model choice, so we're testing whether Sonnet passes them
-// without the proposed Brief 5.1 prompt patches.
+// Council swap — chat runs on Sonnet 4.6 per CLAUDE.md's product-surface rule
+// (swapped from Haiku 4.5 in commit 5fdeb44). Haiku's cost was the reason we
+// originally shipped on it, but the 32-query stress test traced its
+// prompt-adherence bugs to model choice; Sonnet cleared them.
 const CHAT_MODEL = 'claude-sonnet-4-6'
 // Sonnet 4.6 list pricing: $3 / 1M input, $15 / 1M output.
-const HAIKU_INPUT_PER_M = 3
-const HAIKU_OUTPUT_PER_M = 15
-// Safety cap on the tool_use loop — if Haiku hasn't finished after this many
+const CHAT_INPUT_PER_M = 3
+const CHAT_OUTPUT_PER_M = 15
+// Safety cap on the tool_use loop — if the model hasn't finished after this many
 // search rounds it's spinning; we force a final structured reply.
 const MAX_ITERATIONS = 6
 
@@ -43,6 +52,19 @@ Behavior:
 - Extra context (live StreetEasy listings, Mojo, mortgage, calendar, ACRIS, DOB) may appear below — use it when relevant. If a live StreetEasy block is present, include its verbatim www.streeteasy.com URLs; never invent one.
 
 Reply through the drift_response tool: plain text (no markdown, no bullet dashes), exactly two short follow-up suggestions, and the card ids you referenced. For a scheduling request, propose the event via pendingEvent (the broker confirms separately; the calendar-confirm fast-path handles the actual confirm before your loop runs, so you won't see those). For everything else, use your tools.`
+
+// Trim a search-tool card down to the fact-bearing fields the guard verifier
+// needs to ground Sonnet's response. Drops scoring/UI noise; keeps anything a
+// claim could reference (address, price, beds, category, neighborhood, and for
+// parties name/phone/title).
+function trimCardForGuard(card: Record<string, unknown>): Record<string, unknown> {
+  const keep = ['id', 'category', 'title', 'address', 'neighborhood', 'beds', 'price', 'priceRange', 'name', 'phone', 'role'] as const
+  const out: Record<string, unknown> = {}
+  for (const k of keep) {
+    if (card[k] !== undefined && card[k] !== null) out[k] = card[k]
+  }
+  return out
+}
 
 interface FileData {
   name: string
@@ -287,6 +309,10 @@ export async function POST(req: NextRequest) {
     ]
     // Every card Haiku saw across all tool calls, deduped by id (order preserved).
     const allToolCalls: Array<{ name: string; input: unknown; totalMatched: number; cardIds: string[] }> = []
+    // Trimmed tool outputs for the hallucination guard's verifier — the exact
+    // grounding Sonnet had. Kept compact (id/address/price/beds/category/hood
+    // + party name/phone) to keep verifier token cost near-zero.
+    const toolResultsForGuard: ToolResultForVerify[] = []
     const seenCardIds = new Set<string>()
     const cardOverlap = new Map<string, number>()   // id → priceOverlapScore (for matchScore)
     let tokensIn = 0
@@ -336,6 +362,14 @@ export async function POST(req: NextRequest) {
             return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify({ error: String(e) }), is_error: true }
           }
           allToolCalls.push({ name: tu.name, input: tu.input, totalMatched: output.totalMatched, cardIds: output.cards.map(c => c.id) })
+          toolResultsForGuard.push({
+            name: tu.name,
+            input: tu.input,
+            output: {
+              cards: (output.cards as Array<Record<string, unknown>>).map(trimCardForGuard),
+              totalMatched: output.totalMatched,
+            },
+          })
           for (const c of output.cards) {
             if (!seenCardIds.has(c.id)) seenCardIds.add(c.id)
             if (c.priceOverlapScore !== undefined && !cardOverlap.has(c.id)) cardOverlap.set(c.id, c.priceOverlapScore)
@@ -366,6 +400,87 @@ export async function POST(req: NextRequest) {
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
       )
       aiResult = (forcedUse?.input as AiResult) ?? { response: 'Sorry, I had trouble pulling that together. Try rephrasing?', suggestions: [], referencedDeals: [] }
+    }
+
+    // ── Brief 5.1 — Hallucination guard (regex + Sonnet verifier, informed retry) ──
+    // Runs on every final response: scan for structural hallucinations (URLs,
+    // external source citations, invented LLC/ownership, dated sale amounts) and
+    // fact-check remaining claims against the exact tool results Sonnet saw. On a
+    // flag, feed the specific claims back and force a fresh drift_response; after
+    // MAX_GUARD_RETRIES, return a canned honest-decline. Telemetry is logged even
+    // on clean passes (parsedFilters.guard). Runtime kill switch:
+    // HALLUCINATION_GUARD_ENABLED=false. Calendar turns are skipped — the confirm
+    // fast-path returns earlier, and a proposal's pendingEvent date/time
+    // legitimately isn't in tool results, so guarding it would false-positive.
+    const guardEnabled = process.env.HALLUCINATION_GUARD_ENABLED !== 'false'
+    const guardApplies = guardEnabled && !aiResult.pendingEvent
+    let currentResponse = aiResult.response ?? ''
+    const guardHistory: GuardAttempt[] = []
+    let fellbackToCanned = false
+    let guardFinalAttempt = 0
+    let latestSuggestions: string[] | undefined
+    let latestReferenced: string[] | undefined
+
+    if (guardApplies) {
+      let attempt = 0
+      while (attempt <= MAX_GUARD_RETRIES) {
+        const regexFlags = scanForStructuralHallucinations(currentResponse)
+        const verifier = await verifyResponse(userMessage || queryText, toolResultsForGuard, currentResponse)
+        guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
+        if (regexFlags.length === 0 && verifier.isGrounded) break
+
+        attempt++
+        if (attempt > MAX_GUARD_RETRIES) {
+          currentResponse = CANNED_FALLBACK
+          fellbackToCanned = true
+          break
+        }
+
+        // Informed retry — feed the flagged claims back and force a fresh
+        // drift_response (no new searches; restate only grounded facts).
+        const flagLines = formatFlagLines(regexFlags, verifier.flags)
+        const retryMessages: Anthropic.Messages.MessageParam[] = [
+          ...messages,
+          { role: 'assistant', content: currentResponse },
+          { role: 'user', content: buildFeedbackPrompt(flagLines) },
+        ]
+        const retry = await anthropic.messages.create({
+          model: CHAT_MODEL,
+          max_tokens: 4096,
+          system: systemBlocks,
+          messages: retryMessages,
+          tools,
+          tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
+        })
+        tokensIn  += retry.usage?.input_tokens  ?? 0
+        tokensOut += retry.usage?.output_tokens ?? 0
+        const retryUse = retry.content.find(
+          (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
+        )
+        const retryResult = retryUse?.input as AiResult | undefined
+        if (retryResult) {
+          currentResponse   = retryResult.response ?? currentResponse
+          latestSuggestions = retryResult.suggestions ?? latestSuggestions
+          latestReferenced  = retryResult.referencedDeals ?? latestReferenced
+        }
+      }
+      guardFinalAttempt = attempt
+    }
+
+    // Fold the guard's final text (corrected / canned / unchanged) back into aiResult.
+    aiResult = {
+      ...aiResult,
+      response:        currentResponse,
+      suggestions:     latestSuggestions ?? aiResult.suggestions,
+      referencedDeals: latestReferenced ?? aiResult.referencedDeals,
+    }
+
+    const guardTelemetry: GuardTelemetry = {
+      enabled:              guardEnabled,
+      finalAttempt:         guardFinalAttempt,
+      fellbackToCanned,
+      history:              guardHistory,
+      totalVerifierCostUsd: guardHistory.reduce((a, h) => a + h.verifierCost, 0),
     }
 
     const cleanResponse = (aiResult.response ?? '')
@@ -448,13 +563,13 @@ export async function POST(req: NextRequest) {
     }))
     // Brief 3.0: parsedFilters now records the tool calls Haiku actually made
     // (what it searched for + how many matched), and cost is at Haiku pricing.
-    const costUsd = (tokensIn / 1_000_000) * HAIKU_INPUT_PER_M + (tokensOut / 1_000_000) * HAIKU_OUTPUT_PER_M
+    const costUsd = (tokensIn / 1_000_000) * CHAT_INPUT_PER_M + (tokensOut / 1_000_000) * CHAT_OUTPUT_PER_M
     let interactionId: string | null = null
     try {
       const interaction = await prisma.driftInteraction.create({
         data: {
           query:          userMessage || storedMsg,
-          parsedFilters:  { toolCalls: allToolCalls, maxIterationsHit } as unknown as object,
+          parsedFilters:  { toolCalls: allToolCalls, maxIterationsHit, guard: guardTelemetry } as unknown as object,
           topCards:       topCards as unknown as object[],
           responseTimeMs: Date.now() - t0,
           modelUsed:      CHAT_MODEL,
