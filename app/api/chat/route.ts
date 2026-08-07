@@ -13,12 +13,15 @@ import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL } from '@/lib/chat/tools/sche
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 
-// Brief 3.0 — chat runs on Haiku 4.5 (cheaper sibling of Sonnet, knows NYC
-// natively). Extraction/classifier are unchanged elsewhere.
-const CHAT_MODEL = 'claude-haiku-4-5-20251001'
-// Haiku 4.5 list pricing: $1 / 1M input, $5 / 1M output.
-const HAIKU_INPUT_PER_M = 1
-const HAIKU_OUTPUT_PER_M = 5
+// Council swap (post-Brief-5.1 evaluation) — chat runs on Sonnet 4.6 per
+// CLAUDE.md's product-surface rule. Cost breaks were the reason we shipped on
+// Haiku; the 32-query stress test surfaced 3 prompt-adherence bugs that all
+// trace back to model choice, so we're testing whether Sonnet passes them
+// without the proposed Brief 5.1 prompt patches.
+const CHAT_MODEL = 'claude-sonnet-4-6'
+// Sonnet 4.6 list pricing: $3 / 1M input, $15 / 1M output.
+const HAIKU_INPUT_PER_M = 3
+const HAIKU_OUTPUT_PER_M = 15
 // Safety cap on the tool_use loop — if Haiku hasn't finished after this many
 // search rounds it's spinning; we force a final structured reply.
 const MAX_ITERATIONS = 6
