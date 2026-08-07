@@ -56,9 +56,16 @@ const PATTERNS: NamedPattern[] = [
     regex: /\b(last sold|previous sale|sold in \d{4}|purchased in \d{4}|acquired in \d{4}|closed on \d{4})\b/gi,
   },
   {
-    // Market statistics Drift has no source for.
+    // Market statistics Drift has no source for. Two shapes:
+    //   1. number-first: "10% higher", "8.5% year-over-year", "12% increase"
+    //   2. appreciation-first: "appreciation of 8%", "appreciated 5%"
+    // NOTE (Brief 5.1.1, Fix 1): bare direction tokens `up`/`down` were dropped
+    // from shape 1. "25% down" / "20% down payment" is mortgage LTV terminology,
+    // not a market claim, and was firing false positives on straightforward
+    // mortgage-math questions. Genuine market declines carry a timeframe/token
+    // we still catch ("down 10% YoY" matches on "10% YoY"; "5% lower" on lower).
     name: 'invented_stat',
-    regex: /\b\d+(?:\.\d+)?%\s+(?:yoy|year[- ]over[- ]year|higher|lower|up|down|increase|decrease|appreciation)\b/gi,
+    regex: /\b\d+(?:\.\d+)?%\s+(?:yoy|year[- ]over[- ]year|higher|lower|increase|decrease|appreciation)\b|\bappreciat(?:ion|ing|ed)\s+(?:of\s+)?\d+(?:\.\d+)?%/gi,
   },
 ]
 

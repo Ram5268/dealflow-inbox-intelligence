@@ -50,6 +50,43 @@ test('invented market stat flags', () => {
   assert.ok(patternsHit('prices are up 8.5% year-over-year in the UWS').has('invented_stat'))
 })
 
+// ── Brief 5.1.1, Fix 1 — "% down" mortgage LTV must NOT flag invented_stat ────
+// The old pattern matched any "N% down" via the `down` direction token, which
+// false-positived on mortgage-math questions (F03/F04 in Ryan's trial). These
+// are legitimate down-payment terminology, not market claims.
+test('mortgage down-payment percentages do NOT flag invented_stat', () => {
+  for (const resp of [
+    '20% down',
+    '25% down',
+    '20% down payment',
+    '25% down closing',
+    'On a $2M purchase at 20% down, your loan is $1.6M.',
+    'Cash to close on the PH at 25% down is roughly the deposit plus fees.',
+  ]) {
+    assert.deepEqual(
+      scanForStructuralHallucinations(resp),
+      [],
+      `expected no flags for ${JSON.stringify(resp)}, got ${JSON.stringify(scanForStructuralHallucinations(resp))}`,
+    )
+  }
+})
+
+// ── Brief 5.1.1, Fix 1 — genuine market stats must STILL flag ────────────────
+test('genuine market stats still flag invented_stat', () => {
+  for (const resp of [
+    'prices down 10% YoY',
+    'UWS is up 5% year-over-year',
+    'appreciation of 8% annually',
+    'the block saw 8% appreciation',
+    'Chelsea is 10% higher than last year',
+  ]) {
+    assert.ok(
+      patternsHit(resp).has('invented_stat'),
+      `expected invented_stat flag for ${JSON.stringify(resp)}`,
+    )
+  }
+})
+
 test('dated dollar amount with ISO date flags', () => {
   assert.ok(patternsHit('recorded at $6,750,000 on 2026-06-16').has('dated_dollar_amount'))
 })
