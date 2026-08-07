@@ -14,6 +14,16 @@ _(none open)_
 
 ## ITERATE
 
+- **Cross-turn verifier grounding — verifier only sees the current turn's
+  `tool_results`.** In a multi-turn chat, a reference to a listing surfaced in an
+  earlier turn (e.g. Turn 1 lists "461 6th St at $1.75M", Turn 2 does a party
+  search and mentions it) can be flagged as ungrounded by the Sonnet verifier,
+  because the verifier is scoped to the *current* turn's tool output only. Benign
+  today: it triggers one informed retry, self-corrects, does NOT fall back to
+  canned, and returns the correct answer (observed on Gate 3 Flow A T2). Consider
+  feeding prior-turn `tool_results` into the verifier grounding in Brief 6+ to
+  eliminate the extra retry. — logged 2026-08-07 (Brief 5.1.2 Gate 3).
+
 - **parseQuery kept for side-channel wiring (Brief 3 decision).** The Haiku
   tool_use loop replaced the old rigid-SQL retrieval pipeline, so `runRetrieval`
   (`lib/retrieval/index.ts`) is now dead code with no importers. But `parseQuery`

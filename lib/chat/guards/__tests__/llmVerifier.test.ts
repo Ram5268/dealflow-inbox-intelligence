@@ -111,6 +111,47 @@ test('verifier API error fails safe', async () => {
   assert.equal(r.flags[0].claim, 'verifier_api_error')
 })
 
+// ── Brief 5.1.2 Gate 3, Step 4 — failure-path contracts ──────────────────────
+// These pin the runtime fail-safe behavior the chat route relies on: a verifier
+// that returns garbage or throws must NEVER let an unverified response through
+// and must NEVER crash the chat route. The fail-safe direction is ALWAYS
+// "ungrounded" so the guard's retry/canned path takes over.
+
+// 4a — verifier returns non-JSON prose → fail safe to ungrounded (parse_error).
+test('Gate3/4a: malformed non-JSON verifier output → fail-safe parse_error', async () => {
+  const client = fakeClient('this is not JSON')
+  const r = await verifyResponse('q', SEED_TOOL_RESULTS, 'some candidate response', { client })
+  assert.equal(r.isGrounded, false, 'must not pass an unverified response')
+  assert.equal(r.flags.length, 1)
+  assert.equal(r.flags[0].claim, 'verifier_parse_error')
+})
+
+// 4a(ii) — truncated/partial JSON is also unparseable → same fail-safe path.
+test('Gate3/4a: truncated JSON verifier output → fail-safe parse_error', async () => {
+  const client = fakeClient('{"isGrounded": false, "flags": [')
+  const r = await verifyResponse('q', SEED_TOOL_RESULTS, 'resp', { client })
+  assert.equal(r.isGrounded, false)
+  assert.equal(r.flags[0].claim, 'verifier_parse_error')
+})
+
+// 4b — verifier API throws (e.g. rate_limit) → fail safe, no throw into route.
+test('Gate3/4b: verifier API error (rate_limit) → fail-safe, does not propagate', async () => {
+  const throwing = {
+    messages: { create: async () => { throw new Error('rate_limit') } },
+  } as unknown as VerifierClient
+  let threw = false
+  let r
+  try {
+    r = await verifyResponse('q', SEED_TOOL_RESULTS, 'resp', { client: throwing })
+  } catch {
+    threw = true
+  }
+  assert.equal(threw, false, 'verifyResponse must not propagate the API error')
+  assert.equal(r!.isGrounded, false)
+  assert.equal(r!.flags[0].claim, 'verifier_api_error')
+  assert.match(r!.flags[0].reason, /rate_limit/)
+})
+
 // ── Cost calc unit test ──────────────────────────────────────────────────────
 test('computeCostUsd uses Sonnet 4.6 pricing ($3/M in, $15/M out)', () => {
   // 1M input + 1M output => $3 + $15 = $18

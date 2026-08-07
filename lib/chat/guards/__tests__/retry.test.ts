@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  MAX_GUARD_RETRIES,
   selectCannedFallback,
   CANNED_PUBLIC_RECORDS,
   CANNED_FINANCE,
@@ -95,4 +96,46 @@ test('buildFeedbackPrompt embeds the flag lines', () => {
   const p = buildFeedbackPrompt(["Structural: 'http://x.com' (external_url)"])
   assert.ok(p.includes("Structural: 'http://x.com' (external_url)"))
   assert.ok(p.includes('Regenerate the response'))
+})
+
+// ── Brief 5.1.2 Gate 3, Step 4c — retry loop is bounded ──────────────────────
+// The actual loop lives in app/api/chat/route.ts (it needs the live Anthropic
+// client). This pins the invariant it depends on, using the REAL exported
+// MAX_GUARD_RETRIES + selectCannedFallback: a response that trips the guard on
+// EVERY attempt must terminate at MAX_GUARD_RETRIES (no infinite loop) and land
+// on the canned fallback — never an unbounded regenerate.
+test('Gate3/4c: retry loop is bounded and falls back to canned when every attempt flags', () => {
+  // Verifier stub that flags on every attempt (never grounded).
+  const alwaysFlags = () => ({
+    regexFlags: [] as ReturnType<typeof rx>[],
+    verifierFlags: [vf('invented cap rate 5.8%', 'no NOI/cap rate in tool results')],
+  })
+
+  let attempt = 0
+  let attemptsRun = 0
+  let fellback = false
+  let finalText: string | null = null
+  const history: Array<{ regexFlags: RegexFlag[]; verifierFlags: VerifierFlag[] }> = []
+
+  // Mirrors route.ts: while (attempt <= MAX_GUARD_RETRIES) { scan; if clean break; attempt++; if exhausted -> canned }
+  while (attempt <= MAX_GUARD_RETRIES) {
+    const flags = alwaysFlags()
+    history.push(flags)
+    attemptsRun++
+    const grounded = flags.regexFlags.length === 0 && flags.verifierFlags.length === 0
+    if (grounded) break
+    attempt++
+    if (attempt > MAX_GUARD_RETRIES) {
+      const last = history[history.length - 1]
+      finalText = selectCannedFallback({ regexFlags: last.regexFlags, verifierFlags: last.verifierFlags })
+      fellback = true
+      break
+    }
+    // guard against a runaway test loop if the invariant ever breaks
+    assert.ok(attemptsRun <= MAX_GUARD_RETRIES + 1, 'loop exceeded MAX_GUARD_RETRIES+1 — not bounded')
+  }
+
+  assert.equal(attemptsRun, MAX_GUARD_RETRIES + 1, '1 initial attempt + MAX_GUARD_RETRIES retries')
+  assert.equal(fellback, true, 'exhausted retries must fall back to canned')
+  assert.equal(finalText, CANNED_FINANCE, 'cap-rate flag routes to the finance canned variant')
 })
