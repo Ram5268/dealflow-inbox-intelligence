@@ -14,7 +14,7 @@ import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
 import {
   MAX_GUARD_RETRIES,
-  CANNED_FALLBACK,
+  selectCannedFallback,
   buildFeedbackPrompt,
   formatFlagLines,
   type GuardAttempt,
@@ -431,7 +431,14 @@ export async function POST(req: NextRequest) {
 
         attempt++
         if (attempt > MAX_GUARD_RETRIES) {
-          currentResponse = CANNED_FALLBACK
+          // Contextual fallback — pick the variant matching what the final
+          // attempt actually flagged (public-records vs finance vs
+          // self-description vs generic) instead of always assuming records.
+          const finalFlags = guardHistory[guardHistory.length - 1]
+          currentResponse = selectCannedFallback({
+            regexFlags: finalFlags?.regexFlags ?? [],
+            verifierFlags: finalFlags?.verifierFlags ?? [],
+          })
           fellbackToCanned = true
           break
         }

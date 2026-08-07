@@ -11,10 +11,59 @@ import type { VerifierFlag } from './llmVerifier'
 // total attempts = 1 initial + MAX_GUARD_RETRIES informed retries.
 export const MAX_GUARD_RETRIES = 2
 
-// Shown to Ryan when the guard can't get a verified answer after all retries.
-export const CANNED_FALLBACK = `I can't produce a fully verified answer for that. Drift only has access to your inbox listings + parties (currently seed data in test mode). If you're asking about public records, MLS/RLS/StreetEasy data, ownership history, or comps from external sources, I don't have that access.
+// Brief 5.1.1, Fix 3 — contextual canned fallbacks.
+// After retries are exhausted, the fallback message should match WHAT the guard
+// actually flagged instead of always assuming a public-records ask. Ryan's trial
+// showed a mortgage-math question (F04) and a system-capability question (MT2)
+// both getting the public-records boilerplate — wrong for the situation.
+//
+// selectCannedFallback inspects the final attempt's flag text and picks one of
+// four variants. Order matters: the most specific/consequential intents
+// (public-records citations, then finance math) are matched before the softer
+// self-description and generic buckets.
+export const CANNED_PUBLIC_RECORDS = `I can't produce a verified answer for that. This system doesn't have access to public records, MLS/RLS/StreetEasy, or external property databases — only your inbox listings + parties (currently seed data in test mode). Try rephrasing to ask about a listing or party in the system.`
 
-Try rephrasing to ask about a listing or party in the system — I can help with those.`
+export const CANNED_FINANCE = `I can't give a verified answer on that math — the data needed (sqft, maintenance, purchase price, tax figures) isn't in this system. If you can share the missing inputs I can run the calculation, or check the offering plan / managing agent directly.`
+
+export const CANNED_SELF_DESCRIPTION = `Let me answer that directly: I search your listings and parties via two tools — search_listings and search_parties — against the database. I can find matches, compare, and draft outreach. I can't send email, and I don't have real-time public records access. Ask me about a listing, a buyer, or a match.`
+
+export const CANNED_GENERIC = `I couldn't produce a verified answer for that. Try rephrasing to ask about a specific listing, party, or match in the system.`
+
+// Back-compat alias — the generic variant is the closest analogue to the old
+// single message. Retained so any external caller importing CANNED_FALLBACK
+// keeps working; the route now uses selectCannedFallback.
+export const CANNED_FALLBACK = CANNED_GENERIC
+
+/**
+ * Pick the fallback message that best matches what the guard flagged on the
+ * final attempt. Concatenates all flag text (regex pattern+match and verifier
+ * claim) and matches against intent buckets in priority order.
+ */
+export function selectCannedFallback(finalAttemptFlags: {
+  regexFlags: RegexFlag[]
+  verifierFlags: VerifierFlag[]
+}): string {
+  const allFlagText = [
+    ...finalAttemptFlags.regexFlags.map(f => `${f.pattern} ${f.match}`),
+    ...finalAttemptFlags.verifierFlags.map(f => `${f.claim} ${f.reason}`),
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  // Public-records / MLS-style ask (ownership, external sources, sale history).
+  if (/acris|propertyshark|streeteasy|zillow|trulia|realtor|redfin|corelogic|\bmls\b|\brls\b|\bdob\b|owner|ownership|zoning|sale.?history|last sold|transfer|deed/.test(allFlagText)) {
+    return CANNED_PUBLIC_RECORDS
+  }
+  // Financial calculation with insufficient data.
+  if (/cap rate|\bnoi\b|mortgage|closing cost|mansion tax|transfer tax|\btax\b|maintenance|common charge|sqft|square f|price per|\$\/sqft/.test(allFlagText)) {
+    return CANNED_FINANCE
+  }
+  // Self-description / capability question.
+  if (/drift|assistant|capabilit|\btools?\b|\bcrm\b|mojo|inbox|database|calendar|\bsearch_/.test(allFlagText)) {
+    return CANNED_SELF_DESCRIPTION
+  }
+  return CANNED_GENERIC
+}
 
 // One entry per guard attempt (attempt 0 = initial response, 1+ = retries).
 export interface GuardAttempt {
