@@ -1,0 +1,14 @@
+{
+  "id": "adv_buried_newsletter_listing",
+  "notes": "A marketing newsletter (rates, market stats, generic blurbs) with one genuine actionable exclusive listing buried at the very bottom. Correct = extract the listing (ACTIVE_SALE_LISTING) rather than dismissing the whole email as NOISE/MARKET_REPORT. Watch for the buried listing being missed.",
+  "edgeCase": true,
+  "input": {
+    "subject": "The Chelsea Monthly — August rates, trends & one to watch",
+    "from": { "name": "Alexandra Whitmore", "email": "alexandra.whitmore@corcoran.com" },
+    "receivedAt": "2026-08-01T08:00:00-04:00",
+    "bodyText": "Welcome to this month's edition of The Chelsea Monthly.\n\nMORTGAGE RATES: The 30-year fixed ticked down slightly this month to around 6.3%, the third consecutive decline. Many buyers who paused in the spring are quietly re-entering the market to lock in before any autumn volatility.\n\nMARKET TRENDS: Downtown inventory remains tight, with well-priced 1BRs still moving in under three weeks. We're seeing bidding activity return to prewar co-ops in particular, while newer condo product is sitting a bit longer as buyers weigh carrying costs.\n\nAROUND THE NEIGHBORHOOD: Save the date — the annual Chelsea Art Walk returns the third weekend of September. A great chance to see the galleries after hours.\n\nFEATURED NEW EXCLUSIVE: 240 West 23rd St, #4C, Chelsea — 1BR/1BA, $875,000, low CC, prewar. Reply for a private showing.\n\nUntil next month,\nAlexandra",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "address": "240 West 23rd St", "neighborhood": "Chelsea", "borough": "Manhattan", "beds": 1, "price": 875000 }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "adv_buried_thankyou_future_listing",
+  "notes": "A warm thank-you after a closing that buries future seller intent ('thinking of selling next spring'). Correct = SELLER_LEAD. The known failure mode is routing thank-yous to NOISE and missing the lead — this is a deliberately aggressive expectation; a NOISE/CLIENT_CONVERSATION result is exactly the signal we're hunting.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Thank you — we finally have the keys!",
+    "from": { "name": "Gregory Tan", "email": "greg.tan.nyc@gmail.com" },
+    "receivedAt": "2026-07-08T20:34:00-04:00",
+    "bodyText": "Hi,\n\nI just wanted to say thank you from both of us. We closed this morning and picked up the keys, and it still doesn't feel real. You were patient with every one of our second-guesses and somehow kept us calm through the appraisal drama and the board interview. We could not have done this without you.\n\nThe kids already picked their rooms and we're ordering takeout on the floor tonight because none of the furniture has arrived.\n\nand honestly, we're already thinking about selling the Chelsea apartment next spring once we're settled — you'll be the first call.\n\nWith gratitude,\nGreg & Marisol",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "SELLER_LEAD", "neighborhood": "Chelsea", "borough": "Manhattan", "shouldExtractParty": true }
+}

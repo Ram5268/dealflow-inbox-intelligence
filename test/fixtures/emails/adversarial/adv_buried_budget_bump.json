@@ -1,0 +1,14 @@
+{
+  "id": "adv_buried_budget_bump",
+  "notes": "A long procedural closing thread (title, walkthrough, wire) with one buried buyer-budget update mid-thread. Correct routing = CLIENT_CONVERSATION; the extractor must not fabricate a listing/address from the logistics (address must be null). Signal = whether the buried '$2.2M' budget bump is surfaced at all. (BUYER_ISO is a defensible alternative read.)",
+  "edgeCase": true,
+  "input": {
+    "subject": "RE: Miller closing — logistics for this week",
+    "from": { "name": "Jonathan Pierce", "email": "jonathan.pierce@serhant.com" },
+    "receivedAt": "2026-06-23T09:11:00-04:00",
+    "bodyText": "Hi,\n\nQuick roundup on the Miller closing so we're all aligned for the week.\n\nTitle company confirmed they'll have the clear-to-close package back to us by Wednesday morning. They flagged one lien release still pending but expect it resolved by EOD Tuesday, so we should be fine.\n\nFinal walkthrough is set for Thursday at 4pm — I'll meet the Millers at the unit and go through the punch list one more time. Please make sure the sellers have everything removed by then.\n\nWire cutoff at the bank is 2pm Friday, so funds need to be initiated no later than Thursday afternoon to be safe. The board package for the co-op was accepted last week, so that's off our plate finally.\n\noh also — my client Emily just upped her budget to $2.2M so we can look a little higher in the West Village on the next one. Wanted to flag it while it's on my mind.\n\nAnyway, back to Miller — I'll send the walkthrough checklist tonight and confirm the wire instructions once title sends the final numbers.\n\nBest,\nJonathan",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "CLIENT_CONVERSATION", "address": null, "neighborhood": "West Village", "borough": "Manhattan" }
+}
