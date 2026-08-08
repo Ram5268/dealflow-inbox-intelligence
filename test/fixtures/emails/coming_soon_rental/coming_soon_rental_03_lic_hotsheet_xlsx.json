@@ -1,0 +1,29 @@
+{
+  "id": "coming_soon_rental_03_lic_hotsheet_xlsx",
+  "notes": "Body says 'see attached' — the units live ONLY in the xlsx parsedText, rendered as a markdown rental sheet (Address | Nbhd | Beds | Rent | Available). Multi-listing: expectedMultipleOpportunities=4, grade category + borough only. Forces the extractor to read the spreadsheet.",
+  "edgeCase": false,
+  "input": {
+    "subject": "COMING SOON RENTALS - LIC/Sunnyside hotsheet (see attached)",
+    "from": { "name": "Queensboro Residential", "email": "leasing@queensbororesidential.com" },
+    "receivedAt": "2026-08-03T08:20:00Z",
+    "bodyText": "Good morning brokers,\n\nFour new coming soon rentals across Long Island City and Sunnyside going live next week. Full unit details, rents and availability on the attached sheet. All no-fee, co-broke welcome.\n\nQueensboro Residential Leasing Team",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "coming_soon_rentals_lic_aug.xlsx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "parsedText": "Coming Soon Rentals — Week of Aug 10\n\n| Address | Nbhd | Beds | Rent | Available |\n| --- | --- | --- | --- | --- |\n| 10-25 Jackson Ave, #5B | Long Island City | 1 | $3,400/mo | 9/1 |\n| 47-20 Center Blvd, #812 | Long Island City | 2 | $5,650/mo | 9/15 |\n| 43-18 Queens Blvd, #3F | Sunnyside | Studio | $2,300/mo | 8/20 |\n| 39-05 43rd Ave, #6A | Sunnyside | 3 | $4,900/mo | 10/1 |\n\nAll units no-fee. Co-broke 1 month. Contact leasing@queensbororesidential.com.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "COMING_SOON_RENTAL",
+    "borough": "Queens",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["coming soon", "rental"],
+    "shouldExtractParty": false,
+    "expectedMultipleOpportunities": 4
+  }
+}

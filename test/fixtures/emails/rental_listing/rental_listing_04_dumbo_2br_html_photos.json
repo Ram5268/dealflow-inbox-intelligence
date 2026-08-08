@@ -1,0 +1,24 @@
+{
+  "id": "rental_listing_04_dumbo_2br_html_photos",
+  "notes": "Realistic marketing bodyHtml with a photo table (img cells + captions) and an inline listing spec block. Single 2BR rental in DUMBO. Tests that the extractor pulls the rent and address from styled HTML with images present. All data IS in the HTML/body (photos are decorative).",
+  "edgeCase": false,
+  "input": {
+    "subject": "New DUMBO 2BR rental - waterfront views - $6,800/mo",
+    "from": { "name": "Camille Rhodes", "email": "crhodes@serhant.com" },
+    "receivedAt": "2026-08-06T14:05:00Z",
+    "bodyText": "Just listed in DUMBO — 60 Water St, Apt 11G. 2 bed / 2 bath, $6,800/mo, no fee, available Sept 1. Floor-to-ceiling windows, East River + bridge views, W/D in unit, gym + roof deck. Photos below. Co-broke welcome.\n\nCamille Rhodes, SERHANT.",
+    "bodyHtml": "<div style=\"font-family:Helvetica,Arial,sans-serif;max-width:600px\"><h2 style=\"margin:0 0 4px\">60 Water St, Apt 11G &mdash; DUMBO</h2><p style=\"margin:0 0 12px;color:#333\">2 bed / 2 bath &bull; <strong>$6,800/mo</strong> &bull; No fee &bull; Available Sept 1</p><table style=\"border-collapse:collapse;width:100%\"><tr><td style=\"width:50%;padding:2px\"><img src=\"cid:livingroom\" alt=\"Living room with East River view\" style=\"width:100%;border-radius:4px\"/><div style=\"font-size:12px;color:#666;padding:4px\">Living room, bridge + river view</div></td><td style=\"width:50%;padding:2px\"><img src=\"cid:kitchen\" alt=\"Chef kitchen\" style=\"width:100%;border-radius:4px\"/><div style=\"font-size:12px;color:#666;padding:4px\">Windowed chef kitchen</div></td></tr></table><ul style=\"color:#333;font-size:14px\"><li>Floor-to-ceiling windows, southern exposure</li><li>W/D in unit, central A/C</li><li>Full gym, landscaped roof deck, 24hr doorman</li></ul><p style=\"font-size:13px;color:#555\">Co-broke welcome &mdash; text Camille to schedule.</p></div>",
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTAL_LISTING",
+    "address": "60 Water St",
+    "neighborhood": "DUMBO",
+    "borough": "Brooklyn",
+    "beds": 2,
+    "price": 6800,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": false
+  }
+}

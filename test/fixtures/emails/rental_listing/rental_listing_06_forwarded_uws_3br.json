@@ -1,0 +1,24 @@
+{
+  "id": "rental_listing_06_forwarded_uws_3br",
+  "notes": "Forwarded chain with quoted '>' lines and From:/Sent:/To:/Subject: headers. A colleague forwards a UWS 3BR rental listing to the network. Tests that the extractor pulls the listing out of a forwarded wrapper and does not mistake the forwarder for a client (still shouldExtractParty=false — it's a listing).",
+  "edgeCase": false,
+  "input": {
+    "subject": "FW: Available 3BR rental - West 78th St UWS",
+    "from": { "name": "Tom Bradley", "email": "tbradley@corcoran.com" },
+    "receivedAt": "2026-08-08T10:10:00Z",
+    "bodyText": "Passing this along to my network - great UWS family rental, easy to show. Reach out to Ellen directly or through me.\n\nTom\n\n> From: Ellen Park <epark@corcoran.com>\n> Sent: Thursday, August 7, 2026 4:12 PM\n> To: Tom Bradley\n> Subject: Available 3BR rental - West 78th St UWS\n>\n> Hi Tom,\n>\n> Do you have anyone for this? 145 W 78th St, Apt 5, Upper West Side.\n> 3 bed / 2 bath, $7,500/mo, no fee, available Sept 1.\n> Prewar, high ceilings, W/D in unit, half a block to the park.\n> Co-broke welcome.\n>\n> Ellen Park, Corcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTAL_LISTING",
+    "address": "145 W 78th St",
+    "neighborhood": "Upper West Side",
+    "borough": "Manhattan",
+    "beds": 3,
+    "price": 7500,
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": false
+  }
+}

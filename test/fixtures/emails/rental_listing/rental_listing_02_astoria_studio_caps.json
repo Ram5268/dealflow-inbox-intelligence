@@ -1,0 +1,24 @@
+{
+  "id": "rental_listing_02_astoria_studio_caps",
+  "notes": "ALL-CAPS subject dump, terse body, landlord/gmail sender (not a brokerage). Studio in Astoria, Queens. Tests borough inference for an outer-borough rental and beds=0.",
+  "edgeCase": false,
+  "input": {
+    "subject": "FOR RENT - STUDIO ASTORIA - $2,100/MO - AVAIL NOW",
+    "from": { "name": "Sal Marino", "email": "salmarino72@gmail.com" },
+    "receivedAt": "2026-08-02T09:30:00Z",
+    "bodyText": "31-40 33rd St Astoria. Ground floor studio, heat/hot water included, cats ok. $2100 a month, one month security, no broker fee direct from owner. Available now. Call or text me to see it.\n\nSal",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTAL_LISTING",
+    "address": "31-40 33rd St",
+    "neighborhood": "Astoria",
+    "borough": "Queens",
+    "beds": 0,
+    "price": 2100,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": false
+  }
+}

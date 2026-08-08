@@ -1,0 +1,24 @@
+{
+  "id": "coming_soon_rental_02_ues_studio",
+  "notes": "Subject-line info dump + short body. Studio (0 beds) on the UES, pre-market rental. Tests that a monthly price routes to COMING_SOON_RENTAL not a sale, and that beds=0 is captured.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Pre-market: 245 E 84th St #2R, UES studio, $2,750/mo, avail 8/15",
+    "from": { "name": "Priya Nair", "email": "pnair@corcoran.com" },
+    "receivedAt": "2026-07-30T10:45:00Z",
+    "bodyText": "Sharing before it lists next week - large alcove studio on the Upper East Side, pet friendly, laundry in building, elevator. No fee. Landlord wants it pre-leased if possible. Co-broke welcome.\n\nPriya | Corcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_RENTAL",
+    "address": "245 E 84th St",
+    "neighborhood": "Upper East Side",
+    "borough": "Manhattan",
+    "beds": 0,
+    "price": 2750,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": false
+  }
+}

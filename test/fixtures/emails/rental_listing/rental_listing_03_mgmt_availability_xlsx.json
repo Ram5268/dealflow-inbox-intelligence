@@ -1,0 +1,29 @@
+{
+  "id": "rental_listing_03_mgmt_availability_xlsx",
+  "notes": "Property-management company weekly availability blast. Body says 'current availability attached'; the 5 units live ONLY in the xlsx parsedText as a multi-unit sheet. Multi-listing: expectedMultipleOpportunities=5, grade category + borough only. Forces spreadsheet reading.",
+  "edgeCase": false,
+  "input": {
+    "subject": "FiDi Portfolio - Current Availability (week of 8/4)",
+    "from": { "name": "Waterline Property Mgmt", "email": "leasing@waterlinepm.com" },
+    "receivedAt": "2026-08-04T07:50:00Z",
+    "bodyText": "Brokers,\n\nAttached is our current availability across the FiDi portfolio. All units are live and showing now. Rents and unit details on the sheet. No fee to tenant, we co-broke one month.\n\nWaterline Property Management\nLeasing Desk",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "waterline_fidi_availability_0804.xlsx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "parsedText": "Waterline PM — FiDi Availability (week of 8/4)\n\n| Unit | Address | Nbhd | Beds | Rent | Available |\n| --- | --- | --- | --- | --- | --- |\n| 12H | 90 Washington St | FiDi | Studio | $3,150/mo | Now |\n| 18C | 90 Washington St | FiDi | 1 | $4,050/mo | Now |\n| 7A | 100 Maiden Ln | FiDi | 2 | $6,300/mo | 8/20 |\n| 22F | 100 Maiden Ln | FiDi | 2 | $6,750/mo | 9/1 |\n| 31B | 20 Exchange Pl | FiDi | 3 | $8,900/mo | 9/15 |\n\nAll no-fee to tenant. Co-broke one month. Contact leasing@waterlinepm.com.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "RENTAL_LISTING",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": false,
+    "expectedMultipleOpportunities": 5
+  }
+}

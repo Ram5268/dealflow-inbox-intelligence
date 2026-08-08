@@ -1,0 +1,32 @@
+{
+  "id": "rental_listing_05_rent_only_in_flyer_edge",
+  "notes": "EDGE CASE: the monthly rent appears ONLY in the attached flyer image (vision caption parsedText), never in the body — body says 'price on the flyer'. Extractor must read the attachment to grade price=3800. Address and beds are in the body; rent is the leakage/omission risk. Image attachment, parsedText is a plain-language vision caption including the visible numbers.",
+  "edgeCase": true,
+  "input": {
+    "subject": "LES 1BR rental - flyer attached",
+    "from": { "name": "Marisol Vega", "email": "mvega@bhsusa.com" },
+    "receivedAt": "2026-08-07T12:25:00Z",
+    "bodyText": "Hi team,\n\nNew rental on the Lower East Side - 88 Rivington St, Apt 3B. 1 bed / 1 bath, available Sept 1, no fee. I left the rent off the email on purpose, it's on the flyer attached. Renovated, elevator, laundry in building. Co-broke welcome, text me to show.\n\nMarisol Vega, Brown Harris Stevens",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "88_rivington_3b_flyer.png",
+        "mimeType": "image/png",
+        "parsedText": "Marketing flyer for 88 Rivington St, Apt 3B on the Lower East Side. Large header reads 'FOR RENT - LES 1 BEDROOM'. A photo of a renovated living room. The price is printed prominently in the corner: '$3,800/MO - NO FEE'. Below it: '1 Bed / 1 Bath - Available Sept 1 - Elevator - Laundry in Building'. Footer: 'Marisol Vega, Brown Harris Stevens'.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "RENTAL_LISTING",
+    "address": "88 Rivington St",
+    "neighborhood": "Lower East Side",
+    "borough": "Manhattan",
+    "beds": 1,
+    "price": 3800,
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": false
+  }
+}
