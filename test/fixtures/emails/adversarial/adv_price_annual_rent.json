@@ -1,0 +1,14 @@
+{
+  "id": "adv_price_annual_rent",
+  "notes": "Rent quoted annually ('$54,000/yr'). NYC convention stores the monthly-equivalent ($4,500/mo); storing 54,000 as the rent is the failure (an explicit ambiguity flag is also acceptable). Watch annual-vs-monthly handling.",
+  "edgeCase": true,
+  "input": {
+    "subject": "No-Fee 2BR | 30-25 Steinway St | Astoria",
+    "from": { "name": "Nikolas Papadopoulos", "email": "nikolas@astoriapropertymgmt.com" },
+    "receivedAt": "2026-08-05T09:50:00Z",
+    "bodyText": "Hi,\n\nWe have a no-fee 2BR available at 30-25 Steinway St in the heart of Astoria.\n\nBright corner unit, laundry in building, hardwood floors, and a quick walk to the N/W. Available Sept 1.\n\nRent is $54,000/yr. No broker fee to the tenant. Reach out and I'll set up a showing.\n\nBest,\nNikolas Papadopoulos\nAstoria Property Management",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "RENTAL_LISTING", "address": "30-25 Steinway St", "neighborhood": "Astoria", "borough": "Queens", "beds": 2, "price": 4500 }
+}
