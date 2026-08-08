@@ -1,8 +1,6 @@
 import { randomUUID } from 'crypto'
 import { prisma } from '../prisma'
 import { captionImage } from '../parsing/imageCaption'
-import { embedChunk } from '../embeddings/dispatcher'
-import { upsertChunk, type ChunkPayload } from '../vectorstore/qdrant'
 import { chunkImage, chunkPdfPage, type Chunk } from './chunker'
 import { parsePdf } from '../parsing/llamaParse'
 
@@ -243,37 +241,11 @@ async function handleImageAttachment(
 
 // ── Persistence helpers ─────────────────────────────────────────────────────
 async function persistTextChunk(chunk: Chunk, att: AttachmentRow, ctx: Context): Promise<void> {
-  const embedded = await embedChunk({
-    chunkType:   chunk.chunkType,
-    textContent: chunk.content,
-  })
-
-  const chunkId = randomUUID()
-  const payload: ChunkPayload = {
-    tenant_id:            ctx.organizationId,
-    chunk_id:             chunkId,
-    parent_email_id:      ctx.rawEmailId,
-    parent_attachment_id: att.id,
-    thread_id:            ctx.threadId,
-    chunk_type:           chunk.chunkType,
-    page_number:          chunk.pageNumber ?? null,
-    section_heading:      chunk.sectionHeading ?? null,
-    has_table:            chunk.hasTable ?? false,
-    has_image:            chunk.hasImage ?? false,
-    embedding_model:      embedded.model,
-    embedding_version:    embedded.embeddingVersion,
-    created_at:           new Date().toISOString(),
-  }
-
-  await upsertChunk(embedded.collection, {
-    id:     chunkId,
-    vector: embedded.vector,
-    payload,
-  })
-
+  // Persist to Postgres only. The extractor reads DocumentChunk rows from
+  // Postgres; the Voyage-embed + Qdrant-upsert step was removed (6.1 addendum).
   await prisma.documentChunk.create({
     data: {
-      id:                 chunkId,
+      id:                 randomUUID(),
       organizationId:     ctx.organizationId,
       parentEmailId:      ctx.rawEmailId,
       parentAttachmentId: att.id,
@@ -285,45 +257,18 @@ async function persistTextChunk(chunk: Chunk, att: AttachmentRow, ctx: Context):
       hasTable:           chunk.hasTable ?? false,
       hasImage:           chunk.hasImage ?? false,
       tokenCount:         chunk.tokenCount,
-      embeddingModel:     embedded.model,
-      embeddingVersion:   embedded.embeddingVersion,
-      embeddedAt:         new Date(),
-      qdrantPointId:      chunkId,
+      embeddingModel:     'none',
+      embeddingVersion:   '0',
     },
   })
 }
 
 async function persistImageChunk(chunk: Chunk, att: AttachmentRow, ctx: Context): Promise<void> {
-  const embedded = await embedChunk({
-    chunkType:     chunk.chunkType,
-    textContent:   chunk.content,
-    imageBase64:   chunk.imageBase64,
-    imageMimeType: chunk.imageMimeType,
-  })
-
-  const chunkId = randomUUID()
-  const payload: ChunkPayload = {
-    tenant_id:            ctx.organizationId,
-    chunk_id:             chunkId,
-    parent_email_id:      ctx.rawEmailId,
-    parent_attachment_id: att.id,
-    thread_id:            ctx.threadId,
-    chunk_type:           chunk.chunkType,
-    has_image:            true,
-    embedding_model:      embedded.model,
-    embedding_version:    embedded.embeddingVersion,
-    created_at:           new Date().toISOString(),
-  }
-
-  await upsertChunk(embedded.collection, {
-    id:     chunkId,
-    vector: embedded.vector,
-    payload,
-  })
-
+  // Postgres only (see persistTextChunk). The image caption text is the chunk
+  // content; raw image bytes were never stored on DocumentChunk.
   await prisma.documentChunk.create({
     data: {
-      id:                 chunkId,
+      id:                 randomUUID(),
       organizationId:     ctx.organizationId,
       parentEmailId:      ctx.rawEmailId,
       parentAttachmentId: att.id,
@@ -332,10 +277,8 @@ async function persistImageChunk(chunk: Chunk, att: AttachmentRow, ctx: Context)
       content:            chunk.content,
       hasImage:           true,
       tokenCount:         chunk.tokenCount,
-      embeddingModel:     embedded.model,
-      embeddingVersion:   embedded.embeddingVersion,
-      embeddedAt:         new Date(),
-      qdrantPointId:      chunkId,
+      embeddingModel:     'none',
+      embeddingVersion:   '0',
     },
   })
 }

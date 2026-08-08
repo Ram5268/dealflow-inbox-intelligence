@@ -1,9 +1,19 @@
-import type { ChunkType } from '../embeddings/dispatcher'
 import type { ParsedPdfPage } from '../parsing/llamaParse'
 
-// Chunk shape consumed by Phase 3B's ingestion orchestrator. The orchestrator
-// embeds via the dispatcher (which routes text vs multimodal), upserts to
-// Qdrant under the right collection, and persists a DocumentChunk row.
+// Chunk-type union. Previously lived in lib/embeddings/dispatcher.ts, which was
+// removed with the Voyage/Qdrant vector pipeline (Brief 6.1 addendum).
+export type ChunkType =
+  | 'email_body'
+  | 'pdf_text'
+  | 'pdf_table'
+  | 'pdf_image'
+  | 'linked_html'
+  | 'image_attachment'
+  | 'inline_image'
+
+// Chunk shape consumed by Phase 3B's ingestion orchestrator, which persists a
+// DocumentChunk row to Postgres. (The extractor reads these rows from Postgres;
+// the former Voyage-embed + Qdrant-upsert step was removed in the 6.1 addendum.)
 export interface Chunk {
   chunkType:       ChunkType
   content:         string
