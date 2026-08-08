@@ -191,6 +191,12 @@ model ExtractedOpportunity {
   clientSide           String?
   status               String?
 
+  // Brief 6.3 — extraction provenance. null = direct extraction (default);
+  // 'comp_reference' = derived from a sold/historical comp (EXCLUDED from match
+  // pools — a comp is not a live lead); 'buried_recovery' = surfaced by the
+  // lead-recovery second pass over an informational-tone email.
+  provenance           String?
+
   // Phase 4.0.7 — demand-side criteria, folded in from the deprecated
   // CriteriaProfile table. Populated for BUYER_ISO / RENTER_INQUIRY.
   neighborhoods   String[]  @default([])
