@@ -116,10 +116,15 @@ function stripHtml(html: string): string {
 }
 
 function bodyForClassifier(fx: Fixture): string {
+  // Brief 6.3: feed BOTH the text body and the stripped HTML. In production an
+  // HTML email's classifier body is the stripped HTML; a fixture that puts an
+  // intro in bodyText and the actual listings in bodyHtml (e.g. a hotsheet table)
+  // must still expose those listings to the classifier, or it can't route them.
+  const parts: string[] = []
   const t = fx.input.bodyText?.trim()
-  if (t) return t
-  if (fx.input.bodyHtml) return stripHtml(fx.input.bodyHtml)
-  return ''
+  if (t) parts.push(t)
+  if (fx.input.bodyHtml) parts.push(stripHtml(fx.input.bodyHtml))
+  return parts.join('\n\n')
 }
 
 // ── Build the extractor context from a fixture (mirrors what ingestEmailV2 would
@@ -415,7 +420,10 @@ async function main() {
       senderName: fx.input.from.name ?? null,
       senderEmail: fx.input.from.email ?? null,
       bodyPreview: bodyText.slice(0, 250) || null,
-      bodyFirst500: bodyText.slice(0, 500) || null,
+      // Brief 6.3: mirror the production window widening (ingestEmailV2 now slices
+      // 1200) so the harness feeds the classifier the same body it sees live. This
+      // is classifier-input assembly, NOT the grader.
+      bodyFirst500: bodyText.slice(0, 1200) || null,
       attachmentNames: atts.map(a => a.filename),
       attachmentMimeTypes: atts.map(a => a.mimeType),
       attachmentCount: atts.length,
