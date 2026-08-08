@@ -604,7 +604,6 @@ model DocumentChunk {
   embeddingModel   String
   embeddingVersion String
   embeddedAt       DateTime?
-  qdrantPointId    String?  @unique
 
   propertyId String?
   property   Property? @relation(fields: [propertyId], references: [id])
