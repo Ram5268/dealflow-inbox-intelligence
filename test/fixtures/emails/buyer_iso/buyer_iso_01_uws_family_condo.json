@@ -15,12 +15,8 @@
     "address": null,
     "neighborhood": "Upper West Side",
     "borough": "Manhattan",
-    "beds": null,
-    "price": null,
-    "propertyType": null,
     "confidenceScoreMin": 0.7,
     "classificationReasonThemes": ["buyer"],
-    "shouldExtractParty": true,
-    "expectedMultipleOpportunities": null
+    "shouldExtractParty": true
   }
 }

@@ -1,0 +1,22 @@
+{
+  "id": "renter_inquiry_03_astoria_studio_budget",
+  "notes": "Budget renter inquiry: studio in Astoria, $3k/mo, guarantor. shouldExtractParty=true; address null. Lower end of monthly range.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Tenant looking - studio/1BR Astoria under $3,000/mo",
+    "from": { "name": "Maya Osei", "email": "mosei@elliman.com" },
+    "receivedAt": "2026-08-04T09:55:00Z",
+    "bodyText": "Hi everyone,\n\nI have a reliable tenant relocating for a new job in LIC and open to Astoria.\n\n- Studio or 1BR\n- Up to $3,000/mo, ideally no fee\n- Astoria (Ditmars/Steinway area fine), close to N/W\n- Cats OK a big plus\n- Move-in flexible, Aug-Sept\n- Guarantor available (Insurent OK)\n\nAnything available or coming up? Co-broke welcome.\n\nMaya Osei\nDouglas Elliman",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTER_INQUIRY",
+    "address": null,
+    "neighborhood": "Astoria",
+    "borough": "Queens",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": true
+  }
+}

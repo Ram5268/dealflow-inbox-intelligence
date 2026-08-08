@@ -1,0 +1,22 @@
+{
+  "id": "buyer_iso_04_ues_investor_subject_only",
+  "notes": "Sparse subject-line info dump with a one-liner body. Investor buyer ISO on the UES. shouldExtractParty=true; address null. Tests extraction from a terse blast.",
+  "edgeCase": false,
+  "input": {
+    "subject": "ISO UES 1-2BR investment condo, DM/EV, up to $1.4M, cash",
+    "from": { "name": "Rob Feldman", "email": "rfeldman@bhsusa.com" },
+    "receivedAt": "2026-08-01T13:07:00Z",
+    "bodyText": "Investor client, easy to work with. Anything below 86th, high floor a plus. Off-market welcome. Co-broke.\n\nRob",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "BUYER_ISO",
+    "address": null,
+    "neighborhood": "Upper East Side",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["buyer"],
+    "shouldExtractParty": true
+  }
+}

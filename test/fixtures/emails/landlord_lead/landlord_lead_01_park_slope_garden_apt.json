@@ -1,0 +1,22 @@
+{
+  "id": "landlord_lead_01_park_slope_garden_apt",
+  "notes": "Small owner-landlord reaching out to an agent to help rent out a garden apartment in their Park Slope brownstone. A lead to win (owner wants a tenant found), not another broker's RENTAL_LISTING. shouldExtractParty=true. Property address present and gradeable.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Need help renting my garden apartment",
+    "from": { "name": "Susan Delgado", "email": "susandelgado@gmail.com" },
+    "receivedAt": "2026-07-28T16:40:00Z",
+    "bodyText": "Hi Ryan,\n\nWe own a brownstone at 588 3rd St in Park Slope and the garden-level 1BR is opening up Sept 1 - our long-term tenant is moving out. We've never used an agent before and honestly don't want to deal with the screening and showings ourselves this time.\n\nIt's a nice space, about 650 sf, private garden access, renovated kitchen. We were thinking around $3,300/mo but would trust your read on the market. Would you be able to list it and find us a good tenant? What do you charge?\n\nThanks,\nSusan",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "LANDLORD_LEAD",
+    "address": "588 3rd St",
+    "neighborhood": "Park Slope",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["landlord"],
+    "shouldExtractParty": true
+  }
+}

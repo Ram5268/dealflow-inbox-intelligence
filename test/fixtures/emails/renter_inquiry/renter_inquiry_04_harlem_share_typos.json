@@ -1,0 +1,22 @@
+{
+  "id": "renter_inquiry_04_harlem_share_typos",
+  "notes": "Casual, typo-ridden renter inquiry from an agent, roommate share in Harlem, ~$3,600/mo combined. shouldExtractParty=true; address null. Tests messy formatting.",
+  "edgeCase": false,
+  "input": {
+    "subject": "renters need 2br harlem ~3600/mo sept",
+    "from": { "name": "Terrence Blake", "email": "tblake@bhsusa.com" },
+    "receivedAt": "2026-08-05T18:22:00Z",
+    "bodyText": "hey all quick one - two grad students (roommates) lookin for a 2br in harlem, prefereably south harlem / morningside area. combined budget around 3600/mo, can stretch a lil for no fee. need it by sept 1st. both have guarantors. lmk what u got or whats coming up. cobroke ofc thx\n\nTerrence",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTER_INQUIRY",
+    "address": null,
+    "neighborhood": "Harlem",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": true
+  }
+}

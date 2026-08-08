@@ -1,0 +1,22 @@
+{
+  "id": "landlord_lead_04_lic_ambiguous_sell_or_rent",
+  "notes": "EDGE CASE: owner is torn between selling and renting their LIC condo but explicitly leans toward renting it out for now ('lean toward leasing it', 'not ready to sell'), which makes the true intent LANDLORD_LEAD rather than SELLER_LEAD. Tests the sell-vs-rent lead distinction. shouldExtractParty=true. Address gradeable.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Sell or rent? Leaning toward renting my LIC place",
+    "from": { "name": "Priyanka Shah", "email": "priyanka.shah.lic@gmail.com" },
+    "receivedAt": "2026-08-07T09:28:00Z",
+    "bodyText": "Hi Ryan,\n\nI've been going back and forth on what to do with my apartment at 4720 Center Blvd in Long Island City (waterfront, 2BR/2BA, unit 21F). I could sell, but honestly with where rates are I'm not ready to sell - I think I'd rather lease it out for a couple of years and revisit later.\n\nSo really what I need is help renting it. It's a beautiful unit, I'd guess $6,000/mo-ish. Could you help me find a qualified tenant and handle the lease? If it turns out selling makes more sense down the road we can talk then, but for now I want to rent.\n\nThanks,\nPriyanka",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "LANDLORD_LEAD",
+    "address": "4720 Center Blvd",
+    "neighborhood": "Long Island City",
+    "borough": "Queens",
+    "confidenceScoreMin": 0.55,
+    "classificationReasonThemes": ["landlord"],
+    "shouldExtractParty": true
+  }
+}
