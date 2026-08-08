@@ -13,8 +13,8 @@
         "filename": "the_harper_price_list.pdf",
         "mimeType": "application/pdf",
         "parsedText": "THE HARPER — 254 W 23rd St, Chelsea | Current Price List (as of 7/28/26)\n\nRes 3B — Studio — 1BA — 512 sf — $845,000 — AVAILABLE\nRes 5C — 1BR — 1BA — 690 sf — $1,190,000 — AVAILABLE\nRes 7A — 1BR — 1.5BA — 780 sf — $1,410,000 — AVAILABLE\nRes 9D — 2BR — 2BA — 1,105 sf — $2,050,000 — AVAILABLE\nRes 11B — 2BR — 2.5BA — 1,240 sf — $2,395,000 — IN CONTRACT\nRes 14A — 3BR — 3BA — 1,610 sf — $3,650,000 — AVAILABLE\nRes PH — 3BR — 3.5BA — 2,020 sf — $6,200,000 — AVAILABLE\n\nCommon charges est. $1.65/sf. Tax abatement 421-a in place. Co-broke 2.5%.",
-        "live": false,
-        "file": null
+        "live": true,
+        "file": "development_inventory_02_price_list.pdf"
       }
     ]
   },

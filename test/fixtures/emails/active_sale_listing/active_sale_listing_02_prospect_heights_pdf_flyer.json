@@ -13,8 +13,8 @@
         "filename": "635_dean_st_flyer.pdf",
         "mimeType": "application/pdf",
         "parsedText": "DOUGLAS ELLIMAN | NOW AVAILABLE\n\n635 Dean St, Unit 3B\nProspect Heights, Brooklyn\n\n2 Bedrooms | 2 Bathrooms | 1,080 sq ft\nAsking $1,325,000\nCommon Charges $745/mo | Taxes $210/mo\n\nBoutique 8-unit condo, private balcony, in-unit W/D, virtual doorman, common roof deck. Steps to the Brooklyn Museum and Grand Army Plaza.\n\nOpen House Sunday 12-2pm. Co-broke 2.5%.\nDanielle Brooks | Douglas Elliman | 718-555-0455",
-        "live": false,
-        "file": null
+        "live": true,
+        "file": "active_sale_listing_02_flyer.pdf"
       }
     ]
   },
