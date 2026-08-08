@@ -1,0 +1,19 @@
+{
+  "id": "client_conversation_02_forwarded_coop_board_question",
+  "notes": "Multi-level FORWARDED chain (From:/Sent:/To:/Subject: headers + > quoted lines). Agent-to-agent 1:1 back-and-forth about a client's board-package question, NOT a listing blast. A co-op building is named in quoted text but the email is a conversation. Tests reply-chain parsing and that quoted address is not treated as a new listing.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Fwd: Re: Board package timing for the Whitman?",
+    "from": { "name": "Gwen Alvarez", "email": "galvarez@bhsusa.com" },
+    "receivedAt": "2026-07-30T10:15:00Z",
+    "bodyText": "Ryan - forwarding the thread below so you have the full context. Bottom line, the managing agent says the board only meets monthly and the next meeting is the 19th, so if your buyer wants to close before Labor Day we need the package in by the 5th. Can your side turn the financials around that fast?\n\nGwen\n\n-------- Forwarded message --------\nFrom: Gwen Alvarez <galvarez@bhsusa.com>\nSent: Wednesday, July 29, 2026 4:51 PM\nTo: Dominic Serra <dserra@bhsusa.com>\nSubject: Re: Board package timing for the Whitman?\n\n> Dom, any word from the managing agent on turnaround?\n\nJust got off the phone with them. Board meets monthly, next one is the 19th. They want the full package two weeks prior. So realistically the 5th is the drop-dead date.\n\n> On Jul 29, 2026, at 2:03 PM, Dominic Serra <dserra@bhsusa.com> wrote:\n>\n> Gwen - my seller is getting antsy about the timeline at the Whitman.\n> The unit's been in contract three weeks and they keep asking when\n> the board will actually sign off. Can you get me a real date?\n>\n> Dom",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "CLIENT_CONVERSATION",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["conversation"],
+    "shouldExtractParty": false
+  }
+}

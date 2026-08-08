@@ -1,0 +1,20 @@
+{
+  "id": "client_conversation_03_seller_reply_chain",
+  "notes": "REPLY chain (> quoted, single nesting level) between agent and an existing seller client about offer strategy on THEIR unit. Concrete property is clearly this conversation's subject (their own place at 340 E 51st), so category CLIENT_CONVERSATION but address IS graded since the thread is unambiguously about one property. Still shouldExtractParty=false (this is a conversation, not a lead to win).",
+  "edgeCase": false,
+  "input": {
+    "subject": "Re: The two offers on 340 E 51st, 12F",
+    "from": { "name": "Harold Weiss", "email": "hweiss.nyc@aol.com" },
+    "receivedAt": "2026-08-01T18:07:00Z",
+    "bodyText": "Ryan,\n\nMy wife and I talked it over. We'd rather take the slightly lower all-cash offer than deal with a mortgage contingency again. Once bitten. If they can close in 45 days we're comfortable.\n\nCall me tomorrow morning and we'll make it official.\n\nHarold\n\n> On Aug 1, 2026, at 3:22 PM, Ryan Martin <ryan.martin@elliman.com> wrote:\n>\n> Harold - quick recap of where we stand on 340 E 51st, 12F. We have\n> two offers in. Offer A is $1,285,000 financed, 20% down, standard\n> contingencies. Offer B is $1,255,000 all cash, no mortgage\n> contingency, flexible closing. My read is B is the cleaner deal even\n> though it's 30k lighter. Let me know which way you're leaning.\n>\n> Ryan",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "CLIENT_CONVERSATION",
+    "address": "340 E 51st",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["conversation"],
+    "shouldExtractParty": false
+  }
+}

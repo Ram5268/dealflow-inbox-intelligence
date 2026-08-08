@@ -1,0 +1,18 @@
+{
+  "id": "noise_03_crm_vendor_pitch",
+  "notes": "SaaS/CRM vendor cold pitch aimed at real estate agents. Mentions 'listings', 'leads', 'deals' as product buzzwords, which could bait a keyword classifier, but contains no actual property/opportunity. NOISE.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Ryan, close 30% more deals with FollowUpFox CRM",
+    "from": { "name": "Tyler from FollowUpFox", "email": "tyler@followupfox.io" },
+    "receivedAt": "2026-08-04T14:48:00Z",
+    "bodyText": "Hi Ryan,\n\nNoticed you're a top producer at Douglas Elliman - congrats on the momentum!\n\nQuick question: how are you tracking your leads and follow-ups right now? Most agents we talk to are losing deals to slow response times.\n\nFollowUpFox is the CRM built for real estate teams. Our clients see 30% more closed deals within 90 days by automating listing alerts, drip campaigns, and buyer nurture.\n\nCan I grab 15 minutes this week to show you a demo? Here's my calendar link.\n\nBest,\nTyler Brandt\nAccount Executive, FollowUpFox\n\nNot interested? Unsubscribe here.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "NOISE",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["noise"]
+  }
+}

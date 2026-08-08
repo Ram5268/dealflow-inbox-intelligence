@@ -1,0 +1,18 @@
+{
+  "id": "noise_04_personal_email",
+  "notes": "Purely personal email from a friend/family member. No business content at all. Tests that personal correspondence is filtered as NOISE even though it lands in the same work inbox.",
+  "edgeCase": false,
+  "input": {
+    "subject": "fantasy football draft - saturday??",
+    "from": { "name": "Mike Delgado", "email": "mikedelgado87@gmail.com" },
+    "receivedAt": "2026-08-05T22:19:00Z",
+    "bodyText": "yo\n\nare we still doing the draft at my place saturday or did that fall apart? Kev said he's out of town so we might need to do it online again which honestly was a disaster last year lol\n\nalso you still owe me $40 from the playoff pool. don't think I forgot\n\nlmk\nmike",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "NOISE",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["noise"]
+  }
+}

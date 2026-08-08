@@ -1,0 +1,18 @@
+{
+  "id": "noise_06_calendar_meeting_notice",
+  "notes": "Calendar / meeting invite notice (internal office all-hands). Has a date/time/location which could bait OPEN_HOUSE or REAL_ESTATE_EVENT, but it's an internal admin meeting with no real estate substance. NOISE.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Invitation: Q3 Office All-Hands @ Thu Aug 6, 2026 10am (EDT)",
+    "from": { "name": "Douglas Elliman Office Ops", "email": "calendar-notification@google.com" },
+    "receivedAt": "2026-08-04T15:30:00Z",
+    "bodyText": "You have been invited to the following event.\n\nQ3 Office All-Hands\nWhen: Thursday, August 6, 2026 10:00am - 11:00am (Eastern Time - New York)\nWhere: 4th Floor Conference Room, 575 Madison Ave\nOrganizer: Office Ops\n\nAgenda: Q3 numbers recap, new compliance training rollout, summer intern intros, and reminders about expense report deadlines. Coffee provided.\n\nGoing?  Yes  -  Maybe  -  No\n\nInvitation from Google Calendar. You are receiving this because you are an attendee.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "NOISE",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["noise"]
+  }
+}

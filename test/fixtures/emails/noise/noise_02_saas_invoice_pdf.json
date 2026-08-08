@@ -1,0 +1,26 @@
+{
+  "id": "noise_02_saas_invoice_pdf",
+  "notes": "Invoice/billing email with an IRRELEVANT PDF attachment (software subscription invoice). The invoice text lives in parsedText. Tests that a PDF attachment full of dollar amounts and addresses (billing address) is NOT misread as a real estate opportunity. Attachment fixture (a). live:false.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Your Adobe Creative Cloud invoice for August",
+    "from": { "name": "Adobe", "email": "billing@adobe.com" },
+    "receivedAt": "2026-07-31T05:00:00Z",
+    "bodyText": "Hi Ryan,\n\nThank you for being an Adobe customer. Your monthly invoice is attached. Your card ending in 4417 will be charged automatically. No action is needed.\n\nQuestions about your bill? Manage your plan anytime in your account.\n\nThe Adobe Team",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "adobe_invoice_aug2026.pdf",
+        "mimeType": "application/pdf",
+        "parsedText": "ADOBE INC. — INVOICE\nInvoice #: ADB-2026-8841027\nDate: August 1, 2026\nBill To: Ryan Martin, 90 5th Ave, New York, NY 10011\n\nDescription: Creative Cloud All Apps (monthly)\nQty: 1    Unit Price: $59.99    Amount: $59.99\nSubtotal: $59.99\nTax: $5.33\nTotal Due: $65.32\n\nPayment method: Visa ending 4417\nThis invoice is for your records. No remittance required.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "NOISE",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["noise"]
+  }
+}

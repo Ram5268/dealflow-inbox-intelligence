@@ -1,0 +1,18 @@
+{
+  "id": "noise_08_appraisal_refi_marketing_edge",
+  "notes": "EDGE CASE / trap: a mortgage-refi + appraisal-services MARKETING blast from a lender vendor. It superficially reads like a SELLER_LEAD/LANDLORD_LEAD (talks about 'your home's value', 'find out what your property is worth', 'homeowners in your area') but there is NO actual owner reaching out to list and NO concrete property - it's mass vendor spam soliciting refinances. Correct answer is NOISE. This is the category's misread-as-real-category test.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Rates just dropped - see what your home is worth in 60 seconds",
+    "from": { "name": "HomeValue Direct", "email": "offers@homevaluedirect-lending.com" },
+    "receivedAt": "2026-08-06T13:37:00Z",
+    "bodyText": "Dear Homeowner,\n\nGreat news - mortgage rates just dropped to their lowest level in months, and homeowners in your neighborhood are cashing in.\n\nYou may be sitting on more equity than you realize. Find out what your property is worth today with our FREE instant home valuation - no obligation, no appraisal fee.\n\nWhy homeowners are calling us:\n- Refinance and potentially lower your monthly payment\n- Tap into your home equity for renovations or debt\n- Complimentary comparative market analysis of your area\n\nClick below to get your free valuation and see if you qualify. It only takes 60 seconds.\n\n>> GET MY FREE HOME VALUE <<\n\nHomeValue Direct | NMLS #339821\nThis is an advertisement. You are receiving this offer because you may be a homeowner. To stop receiving these offers, unsubscribe or write to us at PO Box 4410, Wilmington, DE 19801.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "NOISE",
+    "confidenceScoreMin": 0.5,
+    "classificationReasonThemes": ["noise"]
+  }
+}

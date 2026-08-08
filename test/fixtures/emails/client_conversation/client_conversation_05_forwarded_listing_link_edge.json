@@ -1,0 +1,20 @@
+{
+  "id": "client_conversation_05_forwarded_listing_link_edge",
+  "notes": "EDGE CASE: buyer client forwards Ryan a StreetEasy listing they found (full address + price sit in the quoted forwarded content) and asks his opinion. Superficially looks like an ACTIVE_SALE_LISTING because a concrete address/price/beds are present, but the intent is a 1:1 conversation ('what do you think, should we see it?'). Correct answer is CLIENT_CONVERSATION, and the extractor must NOT treat the quoted listing address as a new opportunity to add -> address graded null. Two-level nesting.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Fwd: what do you think of this one??",
+    "from": { "name": "Devin Cho", "email": "devincho2011@gmail.com" },
+    "receivedAt": "2026-08-03T21:14:00Z",
+    "bodyText": "Ryan!! Found this scrolling last night and can't stop thinking about it. Is $1.1M crazy for the area? Should we go see it this weekend before someone snaps it up? Be honest lol.\n\nDevin\n\n---------- Forwarded message ----------\nFrom: StreetEasy <no-reply@streeteasy.com>\nDate: Sun, Aug 3, 2026 at 8:02 PM\nSubject: A listing you might like\nTo: devincho2011@gmail.com\n\n> New to market on your saved search:\n>\n> 55 Berry St, Unit 3R, Williamsburg\n> 2 bed / 1 bath | 812 sqft\n> $1,100,000\n> Maint/CC $640/mo\n>\n> > See it before it's gone. Contact the listing agent through StreetEasy.\n> > 55 Berry St, Williamsburg, Brooklyn 11249",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "CLIENT_CONVERSATION",
+    "address": null,
+    "confidenceScoreMin": 0.5,
+    "classificationReasonThemes": ["conversation"],
+    "shouldExtractParty": false
+  }
+}
