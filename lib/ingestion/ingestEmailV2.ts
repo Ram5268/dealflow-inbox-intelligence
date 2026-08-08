@@ -25,6 +25,7 @@ import { sourceClassifier, buildIdempotencyKey } from './sourceClassifier'
 import { logClassifier } from './costLogger'
 import { PROMPT_VERSION } from './types'
 import { isTestModeOnly } from '../config/testMode'
+import { isIngestionTestModeOnly } from '../config/ingestionTestMode'
 
 // Phase 3B orchestrator. Converts a RawEmail into DocumentChunk rows +
 // Qdrant vectors. Idempotent — re-running on the same email deletes prior
@@ -56,16 +57,19 @@ interface PendingChunk {
 }
 
 export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
-  // Brief 5.0 — TEST_MODE_ONLY entry gate. No real email is ingested in test mode.
-  // Returns a well-formed zero-result (IngestV2Result has no dedicated skip field).
-  if (isTestModeOnly()) {
-    console.log('[ingest v2] skipped: TEST_MODE_ONLY is on')
+  // Brief 5.0 / 6.0 — entry gate. No real email is ingested when either the chat
+  // seed-only mode (TEST_MODE_ONLY) or the ingestion isolation mode
+  // (INGESTION_TEST_MODE_ONLY) is on. Returns a well-formed zero-result
+  // (IngestV2Result has no dedicated skip field).
+  if (isTestModeOnly() || isIngestionTestModeOnly()) {
+    const flag = isIngestionTestModeOnly() ? 'INGESTION_TEST_MODE_ONLY' : 'TEST_MODE_ONLY'
+    console.log(`[ingest v2] skipped: ${flag} is on`)
     return {
       emailId, threadId: '', chunksCreated: 0, byType: {},
       linksFound: 0, linksScraped: 0, linksDeferred: 0, linksFiltered: 0,
       imagesProcessed: 0, imagesSkipped: 0,
       attachmentsProcessed: 0, attachmentsSkipped: 0,
-      errors: ['skipped: TEST_MODE_ONLY is on'],
+      errors: [`skipped: ${flag} is on`],
     }
   }
 

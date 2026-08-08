@@ -14,6 +14,7 @@ import { prisma } from '../lib/prisma'
 import { getCurrentOrgId } from '../lib/auth/orgContext'
 import { ingestEmailV2 } from '../lib/ingestion/ingestEmailV2'
 import { extractEmailV2 } from '../lib/extraction/extractEmailV2'
+import { isIngestionTestModeOnly } from '../lib/config/ingestionTestMode'
 
 process.env.INGEST_V2 = 'true'
 
@@ -111,6 +112,14 @@ async function buildCohort(organizationId: string): Promise<Candidate[]> {
 }
 
 async function main() {
+  // Brief 6.0 — ingestion isolation gate. This script runs the real extractor
+  // against real backlog emails (writes ExtractedOpportunity rows), so it must
+  // not run while fixtures are being validated. Escape hatch: unset the flag.
+  if (isIngestionTestModeOnly()) {
+    console.log('[reprocess-v2] blocked: INGESTION_TEST_MODE_ONLY is on (unset it in .env to run against real data)')
+    return
+  }
+
   const organizationId = await getCurrentOrgId()
   const runStart = new Date()
 
