@@ -11,13 +11,6 @@ import {
   filterScrapeWorthyLinks,
 } from '../parsing/linkExtractor'
 import { scrapeUrl } from '../scraping/scrapeUrl'
-import { embedChunk } from '../embeddings/dispatcher'
-import {
-  upsertChunk,
-  deleteChunks,
-  COLLECTIONS,
-  type ChunkPayload,
-} from '../vectorstore/qdrant'
 import { processInlineImages } from './processImages'
 import { processAttachments } from './processAttachments'
 import { extractEmailV2 } from '../extraction/extractEmailV2'
@@ -25,6 +18,7 @@ import { sourceClassifier, buildIdempotencyKey } from './sourceClassifier'
 import { logClassifier } from './costLogger'
 import { PROMPT_VERSION } from './types'
 import { isTestModeOnly } from '../config/testMode'
+import { isIngestionTestModeOnly } from '../config/ingestionTestMode'
 
 // Phase 3B orchestrator. Converts a RawEmail into DocumentChunk rows +
 // Qdrant vectors. Idempotent — re-running on the same email deletes prior
@@ -56,16 +50,19 @@ interface PendingChunk {
 }
 
 export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
-  // Brief 5.0 — TEST_MODE_ONLY entry gate. No real email is ingested in test mode.
-  // Returns a well-formed zero-result (IngestV2Result has no dedicated skip field).
-  if (isTestModeOnly()) {
-    console.log('[ingest v2] skipped: TEST_MODE_ONLY is on')
+  // Brief 5.0 / 6.0 — entry gate. No real email is ingested when either the chat
+  // seed-only mode (TEST_MODE_ONLY) or the ingestion isolation mode
+  // (INGESTION_TEST_MODE_ONLY) is on. Returns a well-formed zero-result
+  // (IngestV2Result has no dedicated skip field).
+  if (isTestModeOnly() || isIngestionTestModeOnly()) {
+    const flag = isIngestionTestModeOnly() ? 'INGESTION_TEST_MODE_ONLY' : 'TEST_MODE_ONLY'
+    console.log(`[ingest v2] skipped: ${flag} is on`)
     return {
       emailId, threadId: '', chunksCreated: 0, byType: {},
       linksFound: 0, linksScraped: 0, linksDeferred: 0, linksFiltered: 0,
       imagesProcessed: 0, imagesSkipped: 0,
       attachmentsProcessed: 0, attachmentsSkipped: 0,
-      errors: ['skipped: TEST_MODE_ONLY is on'],
+      errors: [`skipped: ${flag} is on`],
     }
   }
 
@@ -182,39 +179,13 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
 
   for (const p of pending) {
     try {
-      const embedded = await embedChunk({
-        chunkType:     p.chunk.chunkType,
-        textContent:   p.chunk.content,
-        imageBase64:   p.chunk.imageBase64,
-        imageMimeType: p.chunk.imageMimeType,
-      })
-
-      const chunkId = randomUUID()
-      const payload: ChunkPayload = {
-        tenant_id:         organizationId,
-        chunk_id:          chunkId,
-        parent_email_id:   emailId,
-        thread_id:         thread.id,
-        chunk_type:        p.chunk.chunkType,
-        page_number:       p.chunk.pageNumber ?? null,
-        section_heading:   p.chunk.sectionHeading ?? null,
-        has_table:         p.chunk.hasTable ?? false,
-        has_image:         p.chunk.hasImage ?? false,
-        embedding_model:   embedded.model,
-        embedding_version: embedded.embeddingVersion,
-        created_at:        new Date().toISOString(),
-        ...(p.parentType === 'linked' ? { parent_linked_resource_id: p.parentId } : {}),
-      }
-
-      await upsertChunk(embedded.collection, {
-        id:     chunkId,
-        vector: embedded.vector,
-        payload,
-      })
-
+      // Persist the chunk to Postgres. The extractor reads DocumentChunk rows
+      // from Postgres; the former Voyage-embed + Qdrant-upsert step was removed
+      // (Brief 6.1 addendum). embeddingModel/embeddingVersion columns are retained
+      // but vestigial ('none').
       await prisma.documentChunk.create({
         data: {
-          id:                     chunkId,
+          id:                     randomUUID(),
           organizationId,
           parentEmailId:          emailId,
           parentLinkedResourceId: p.parentType === 'linked' ? p.parentId : null,
@@ -226,17 +197,15 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
           hasTable:               p.chunk.hasTable ?? false,
           hasImage:               p.chunk.hasImage ?? false,
           tokenCount:             p.chunk.tokenCount,
-          embeddingModel:         embedded.model,
-          embeddingVersion:       embedded.embeddingVersion,
-          embeddedAt:             new Date(),
-          qdrantPointId:          chunkId,
+          embeddingModel:         'none',
+          embeddingVersion:       '0',
         },
       })
 
       chunksCreated++
       byType[p.chunk.chunkType] = (byType[p.chunk.chunkType] ?? 0) + 1
     } catch (e) {
-      errors.push(`embed/persist chunk: ${(e as Error).message}`)
+      errors.push(`persist chunk: ${(e as Error).message}`)
     }
   }
 
@@ -418,9 +387,6 @@ async function deleteExistingChunks(emailId: string, organizationId: string) {
     })
     return
   }
-  const ids = existing.map(c => c.id)
-  await deleteChunks(COLLECTIONS.text,       ids).catch(() => {})
-  await deleteChunks(COLLECTIONS.multimodal, ids).catch(() => {})
   await prisma.documentChunk.deleteMany({
     where: { organizationId, parentEmailId: emailId },
   })

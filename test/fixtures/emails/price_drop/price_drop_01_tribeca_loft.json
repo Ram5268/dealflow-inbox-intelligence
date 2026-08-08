@@ -1,0 +1,24 @@
+{
+  "id": "price_drop_01_tribeca_loft",
+  "notes": "Standard price reduction blast with clear prior price -> new price. Canonical easy PRICE_DROP.",
+  "edgeCase": false,
+  "input": {
+    "subject": "PRICE IMPROVEMENT | 55 Warren St, Tribeca | Now $3.495M",
+    "from": { "name": "Alex Petrov", "email": "apetrov@serhant.com" },
+    "receivedAt": "2026-07-28T13:15:00Z",
+    "bodyText": "Broker friends,\n\nJust reduced on my Tribeca loft exclusive.\n\n55 Warren St, Unit 5A, Tribeca\n2 bed / 2 bath, 1,780 sqft\nWAS $3,795,000 -> NOW $3,495,000\nMotivated seller, closed most comps in the building above ask. Real estate taxes low, W/D in unit.\n\nThis is a genuine reduction, priced to move before Labor Day. Co-broke 2.5%. Private showings this week, reach out.\n\nAlex Petrov\nSERHANT.\n(646) 555-0187",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "PRICE_DROP",
+    "address": "55 Warren St",
+    "neighborhood": "Tribeca",
+    "borough": "Manhattan",
+    "beds": 2,
+    "price": 3495000,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["price"],
+    "shouldExtractParty": false
+  }
+}

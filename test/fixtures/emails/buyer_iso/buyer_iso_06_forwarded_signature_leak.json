@@ -1,0 +1,22 @@
+{
+  "id": "buyer_iso_06_forwarded_signature_leak",
+  "notes": "EDGE CASE: forwarded chain. The buyer is looking in the Financial District (FiDi), but the quoted signature at the bottom contains the forwarding agent's OFFICE address (90 Hudson St). address MUST be null - the office address must not leak in as the opportunity address. Grades neighborhood/borough of the search area.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Fwd: Downtown buyer - 2BR condo FiDi/BPC to $1.6M",
+    "from": { "name": "Greg Tan", "email": "gtan@elliman.com" },
+    "receivedAt": "2026-08-02T15:48:00Z",
+    "bodyText": "Passing this along to my downtown contacts - I know a few of you work FiDi. Anything coming soon?\n\nGreg\n\n---------- Forwarded message ----------\nFrom: Lauren Petrakis <lpetrakis@elliman.com>\nSent: Saturday, August 1, 2026 9:12 AM\nTo: Elliman Downtown Team\nSubject: Downtown buyer - 2BR condo FiDi/BPC to $1.6M\n\nTeam,\n\nMy buyer is relocating and needs to be downtown near the office. Criteria:\n- 2BR / 2BA condo\n- Financial District or Battery Park City\n- Budget up to $1.6M\n- Doorman building, gym a plus\n- Ready to close, financing pre-approved\n\nCo-broke welcome. Send anything that fits.\n\n> Lauren Petrakis\n> Licensed Associate RE Broker\n> Douglas Elliman Real Estate\n> 90 Hudson St, 3rd Floor, New York, NY 10013\n> (212) 555-0128 | lpetrakis@elliman.com",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "BUYER_ISO",
+    "address": null,
+    "neighborhood": "Financial District",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["buyer"],
+    "shouldExtractParty": true
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "price_drop_04_lic_ambiguous",
+  "notes": "EDGE CASE: 'now available at $X' with NO prior-price cue and no 'reduced/was' language. Genuinely ambiguous between a fresh ACTIVE_SALE_LISTING and a PRICE_DROP. Honest answer leans ACTIVE_SALE_LISTING (no repricing signal), but classifier confusion is exactly what we measure -> lower confidence floor. We grade the address/price/beds (unambiguous) but keep confidence low.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Now available at $1.199M | 5-49 Borden Ave #12F, LIC",
+    "from": { "name": "Ravi Menon", "email": "rmenon@compass.com" },
+    "receivedAt": "2026-08-03T11:20:00Z",
+    "bodyText": "Hi all,\n\n5-49 Borden Ave, Unit 12F, Long Island City\n2 bed / 2 bath condo, 1,040 sqft\nNow available at $1,199,000\nHigh floor, open city + partial river views, 421a tax abatement, W/D in unit, full amenity building.\n\nBuilding sells fast at this price point. Co-broke 2.5%, showings by appointment.\n\nRavi Menon\nCompass\n(917) 555-0233",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "ACTIVE_SALE_LISTING",
+    "address": "5-49 Borden Ave",
+    "neighborhood": "Long Island City",
+    "borough": "Queens",
+    "beds": 2,
+    "price": 1199000,
+    "confidenceScoreMin": 0.5,
+    "shouldExtractParty": false
+  }
+}

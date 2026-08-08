@@ -1,0 +1,21 @@
+{
+  "id": "coming_soon_development_03_reservations_2027",
+  "notes": "Now accepting reservations with refundable deposits ahead of launch; closings estimated 2027. Clearly pre-market -> COMING_SOON_DEVELOPMENT. Plain text, subject-forward info. Grade category + neighborhood + borough.",
+  "edgeCase": false,
+  "input": {
+    "subject": "NOW ACCEPTING RESERVATIONS | Harlem's newest condominium | Closings 2027",
+    "from": { "name": "Marcus Bell", "email": "sales@thelenoxharlem.com" },
+    "receivedAt": "2026-08-02T14:10:00Z",
+    "bodyText": "Brokers,\n\nThe Lenox at 275 Lenox Ave, Harlem is now accepting reservations ahead of our formal sales launch. Reservation agreements come with a fully refundable deposit and lock in priority unit selection.\n\nThe building is not yet on the market for contract — estimated first closings in Q3 2027. 68 condominium residences, studios to 3BR. Reserve your buyers now to secure early access and pricing.\n\n2.5% co-broke honored for reserved buyers who close.\n\nMarcus Bell\nThe Lenox Sales Team",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_DEVELOPMENT",
+    "neighborhood": "Harlem",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false
+  }
+}

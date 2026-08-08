@@ -1,0 +1,24 @@
+{
+  "id": "open_house_03_dumbo_condo",
+  "notes": "By-appointment open house window for a DUMBO condo, plain text, weekday twilight OH. Price + address graded. Tests OH with a single explicit time slot and RSVP language.",
+  "edgeCase": false,
+  "input": {
+    "subject": "OH by appt Thurs 8/13 5:30-7PM | 1 Main St #7B DUMBO | $1.45M",
+    "from": { "name": "Sofia Ramos", "email": "sramos@corcoran.com" },
+    "receivedAt": "2026-08-07T12:10:00Z",
+    "bodyText": "Hi team,\n\nTwilight open house this Thursday at my DUMBO exclusive.\n\n1 Main St, Unit 7B, DUMBO\n1 bed / 1 bath condo, 720 sqft\nAsking $1,450,000\nOpen House (by appt): Thursday, August 13th, 5:30-7:00 PM\nBridge views, W/D in unit, full-service building with roof deck.\n\nPlease RSVP so I can manage flow. Co-broke 2.5%.\n\nSofia Ramos\nCorcoran\n(718) 555-0148",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "OPEN_HOUSE",
+    "address": "1 Main St",
+    "neighborhood": "DUMBO",
+    "borough": "Brooklyn",
+    "beds": 1,
+    "price": 1450000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["open house"],
+    "shouldExtractParty": false
+  }
+}

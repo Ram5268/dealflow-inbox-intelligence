@@ -1,0 +1,21 @@
+{
+  "id": "development_inventory_01_lic_tower_now_selling",
+  "notes": "Building-level new dev ACTIVELY selling now: sales gallery open, current pricing across multiple unit tiers. Canonical DEVELOPMENT_INVENTORY case, no attachment. Grades category + neighborhood + borough only.",
+  "edgeCase": false,
+  "input": {
+    "subject": "NOW SELLING | The Vernon LIC | Studios–3BR from $760K | Sales Gallery Open",
+    "from": { "name": "Priya Anand", "email": "priya.anand@serhant.com" },
+    "receivedAt": "2026-07-28T13:15:00Z",
+    "bodyText": "Brokers,\n\nThe Vernon at 44-15 Vernon Blvd, Long Island City is NOW SELLING and our on-site sales gallery is open daily 10-6.\n\nCurrent availability across tiers:\n- Studios from $760,000\n- 1BR from $1,020,000\n- 2BR from $1,485,000\n- 3BR from $2,250,000\n\n130 residences, 24 already in contract since we opened. Amenities include a 60' pool, residents' lounge, and landscaped roof deck. 2% co-broke paid at closing, register your buyer on first visit.\n\nSchedule a gallery tour: priya.anand@serhant.com\n\nPriya Anand\nSERHANT. New Development",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "DEVELOPMENT_INVENTORY",
+    "neighborhood": "Long Island City",
+    "borough": "Queens",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["development"],
+    "shouldExtractParty": false
+  }
+}

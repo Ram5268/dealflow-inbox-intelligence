@@ -1,0 +1,19 @@
+{
+  "id": "real_estate_event_01_broker_mixer",
+  "notes": "Industry networking mixer invite, informational. Grade category + themes + confidence only; no property fields.",
+  "edgeCase": false,
+  "input": {
+    "subject": "You're invited: REBNY Brokers Summer Mixer — Aug 20, Tribeca Rooftop",
+    "from": { "name": "REBNY Events", "email": "events@rebny.com" },
+    "receivedAt": "2026-07-28T15:30:00Z",
+    "bodyText": "Join us for the REBNY Brokers Summer Mixer!\n\nWhen: Thursday, August 20, 2026, 6:00-9:00 PM\nWhere: Tribeca Rooftop, 2 Desbrosses St\n\nNetwork with residential and commercial brokers across the city. Open bar, passed hors d'oeuvres, and a raffle for a weekend in the Hamptons. Members free, guests $40.\n\nRSVP by Aug 15.\n\nREBNY Events Team",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "REAL_ESTATE_EVENT",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["event"],
+    "shouldExtractParty": false
+  }
+}

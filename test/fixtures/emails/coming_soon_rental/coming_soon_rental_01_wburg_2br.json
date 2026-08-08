@@ -1,0 +1,24 @@
+{
+  "id": "coming_soon_rental_01_wburg_2br",
+  "notes": "Standard coming-soon rental blast, single unit, plain text. Canonical easy case. Monthly rent = RENTAL category, price graded as the monthly number. shouldExtractParty=false (this is a listing, not a client need).",
+  "edgeCase": false,
+  "input": {
+    "subject": "COMING SOON RENTAL | 2BR N. Williamsburg | $5,200/mo",
+    "from": { "name": "Alyssa Trent", "email": "atrent@compass.com" },
+    "receivedAt": "2026-07-28T13:10:00Z",
+    "bodyText": "Hey all,\n\nGiving my network a heads up before this hits StreetEasy Thursday.\n\n120 N 6th St, Williamsburg\n2 bed / 1 bath, true 2BR\nAsking $5,200/mo, no fee\nAvailable Sept 1. Renovated kitchen, W/D in unit, dishwasher, 5 min to Bedford L.\n\nHappy to co-broke. Reach out if you have a qualified renter and I'll set up an early showing this weekend.\n\nBest,\nAlyssa Trent\nCompass | (917) 555-0188",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_RENTAL",
+    "address": "120 N 6th St",
+    "neighborhood": "Williamsburg",
+    "borough": "Brooklyn",
+    "beds": 2,
+    "price": 5200,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["coming soon", "rental"],
+    "shouldExtractParty": false
+  }
+}

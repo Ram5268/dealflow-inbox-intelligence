@@ -1,0 +1,22 @@
+{
+  "id": "seller_lead_01_cobble_hill_owner",
+  "notes": "Direct FSBO-curious owner reaching out to interview an agent about selling their Cobble Hill brownstone. A lead to win. shouldExtractParty=true. The owner's own property address IS present and gradeable.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Thinking about selling our brownstone - can we talk?",
+    "from": { "name": "Harold Weiss", "email": "harold.weiss@gmail.com" },
+    "receivedAt": "2026-07-26T17:05:00Z",
+    "bodyText": "Hi Ryan,\n\nMy wife and I own the townhouse at 312 Warren St in Cobble Hill and we've been thinking it might be time to downsize now that the kids are grown. We're not in a rush, but we'd like to understand what it might be worth in today's market and what the process looks like.\n\nA neighbor recommended you. Could we set up a time for you to come by and give us your honest take? We haven't spoken to any other agents yet.\n\nThanks,\nHarold Weiss\n(718) 555-0164",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SELLER_LEAD",
+    "address": "312 Warren St",
+    "neighborhood": "Cobble Hill",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["seller"],
+    "shouldExtractParty": true
+  }
+}

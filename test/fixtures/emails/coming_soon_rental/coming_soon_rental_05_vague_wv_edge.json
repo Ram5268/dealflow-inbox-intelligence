@@ -1,0 +1,23 @@
+{
+  "id": "coming_soon_rental_05_vague_wv_edge",
+  "notes": "EDGE CASE: vague address (no street number, just 'on Bank St in the West Village') — extractor must NOT invent a street number, so address is a graded null. Still clearly a coming-soon rental with a monthly price. Neighborhood is stated as 'WV' abbreviation, tests normalization. Confidence floor lowered because the listing is loosely specified.",
+  "edgeCase": true,
+  "input": {
+    "subject": "quiet heads up - 1BR coming on Bank St WV",
+    "from": { "name": "Nora Feldman", "email": "nora.feldman@serhant.com" },
+    "receivedAt": "2026-07-29T18:05:00Z",
+    "bodyText": "hey - not public yet, dont have the exact unit # finalized but wanted to flag early. charming 1 bed on Bank St in the WV, prewar, exposed brick, around $4,300/mo. landlord finishing a light reno, should be ready early sept. lmk if you have someone good and ill get you in first. co-broke of course\n\nNora",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_RENTAL",
+    "address": null,
+    "neighborhood": "West Village",
+    "borough": "Manhattan",
+    "beds": 1,
+    "confidenceScoreMin": 0.55,
+    "classificationReasonThemes": ["coming soon", "rental"],
+    "shouldExtractParty": false
+  }
+}

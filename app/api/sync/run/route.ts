@@ -3,9 +3,20 @@ import { NextResponse } from 'next/server'
 import { runIncrementalSync } from '@/lib/backgroundSync'
 import { prisma } from '@/lib/prisma'
 import { runMatchmaking } from '@/lib/matchmaking'
+import { isIngestionTestModeOnly } from '@/lib/config/ingestionTestMode'
 
 // Internal route — only calls Microsoft Graph GET requests externally.
 export async function POST() {
+  // Brief 6.0 — ingestion isolation gate. Blocks the production sync +
+  // ingestion path so fixture validation can't trigger real Graph fetches or
+  // pollute production tables. Escape hatch: INGESTION_TEST_MODE_ONLY=false.
+  if (isIngestionTestModeOnly()) {
+    return NextResponse.json(
+      { ok: false, reason: 'INGESTION_TEST_MODE_ONLY is on', readOnly: true },
+      { status: 423 },
+    )
+  }
+
   const isFirst = (await prisma.rawEmail.count()) === 0
 
   // Capture sync start so we can identify opportunities created during this

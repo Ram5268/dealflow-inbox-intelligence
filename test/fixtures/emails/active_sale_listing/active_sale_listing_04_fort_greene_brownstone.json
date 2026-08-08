@@ -1,0 +1,24 @@
+{
+  "id": "active_sale_listing_04_fort_greene_brownstone",
+  "notes": "Active townhouse listing 'now available', a broker's own exclusive already on market, price shorthand ($3.4M). Plain text single listing. Tests the 'now available' active-listing signal distinct from off-market/coming-soon.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Now available: Fort Greene brownstone, $3.4M exclusive",
+    "from": { "name": "Marcus Whitfield", "email": "mwhitfield@bhsusa.com" },
+    "receivedAt": "2026-08-06T13:15:00Z",
+    "bodyText": "Hi all,\n\nMy new exclusive is now available and on market:\n\n284 Carlton Ave, Fort Greene\n2-family brownstone, currently configured as owner's duplex + garden rental\n4BR / 3BA total, ~2,900 sf, landmarked block, delivered with tenant in place downstairs\nAsking $3,400,000\n\nShowing by appointment; broker open Tuesday 10-12. Co-broke 2.5% - bring me your townhouse buyers.\n\nMarcus Whitfield\nBrown Harris Stevens\n347-555-0620",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "ACTIVE_SALE_LISTING",
+    "address": "284 Carlton Ave",
+    "neighborhood": "Fort Greene",
+    "borough": "Brooklyn",
+    "beds": 4,
+    "price": 3400000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["listing"],
+    "shouldExtractParty": false
+  }
+}

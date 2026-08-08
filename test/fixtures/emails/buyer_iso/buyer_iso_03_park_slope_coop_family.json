@@ -1,0 +1,22 @@
+{
+  "id": "buyer_iso_03_park_slope_coop_family",
+  "notes": "Buyer ISO for a Park Slope co-op, growing family, sub-$2M. shouldExtractParty=true; address null. Grades neighborhood/borough of search area.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Buyer needs 3BR co-op in Park Slope / Prospect Heights <$1.9M",
+    "from": { "name": "Ellen Vasquez", "email": "evasquez@corcoran.com" },
+    "receivedAt": "2026-07-30T09:42:00Z",
+    "bodyText": "Good morning network,\n\nI have a lovely young family that just outgrew their rental. They are pre-approved and ready to move.\n\nCriteria:\n- 3 bed (or a real 2BR+home office they can convert)\n- Park Slope or Prospect Heights, walk to the park a big plus\n- Co-op is fine, low maintenance preferred, pet-friendly building (they have a dog)\n- Budget up to $1.9M\n- Elevator not required, but no 5th-floor walk-ups please\n\nZoned for good schools is the whole point of the move. If you have something coming soon, I'd love a look before it lists. Co-broke of course.\n\nThanks,\nEllen Vasquez\nCorcoran | Brooklyn",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "BUYER_ISO",
+    "address": null,
+    "neighborhood": "Park Slope",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["buyer"],
+    "shouldExtractParty": true
+  }
+}

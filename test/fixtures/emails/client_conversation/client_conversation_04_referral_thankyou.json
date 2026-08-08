@@ -1,0 +1,19 @@
+{
+  "id": "client_conversation_04_referral_thankyou",
+  "notes": "Short warm 1:1 note from a past client thanking Ryan and casually mentioning they told a friend about him. No property, no criteria, no listing. Tests that pure relationship maintenance is CLIENT_CONVERSATION and not mistaken for a SELLER_LEAD/BUYER_ISO just because a 'friend looking' is name-dropped without any actionable detail.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Thank you (and a hello)",
+    "from": { "name": "Marisol Fuentes", "email": "marisol.fuentes@outlook.com" },
+    "receivedAt": "2026-08-02T09:33:00Z",
+    "bodyText": "Hi Ryan,\n\nJust wanted to say the housewarming was lovely and we're finally unpacked. You made the whole thing so painless - we still can't believe how fast it all came together.\n\nOh - I was telling my coworker Aisha about you over lunch. She and her partner might start looking next spring, nothing serious yet, but I gave her your number. Hope that's okay!\n\nWe owe you a dinner. Thank you for everything.\n\nWarmly,\nMarisol",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "CLIENT_CONVERSATION",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["client"],
+    "shouldExtractParty": false
+  }
+}

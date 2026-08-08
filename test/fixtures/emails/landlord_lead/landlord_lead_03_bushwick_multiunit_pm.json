@@ -1,0 +1,22 @@
+{
+  "id": "landlord_lead_03_bushwick_multiunit_pm",
+  "notes": "Small-portfolio landlord with several vacancies in a Bushwick building reaching out to bring on an agent for leasing. A lead to win. shouldExtractParty=true. Building address gradeable; multiple vacant units but this is a leasing lead (not a broker's multi-listing blast), so grade category/address/neighborhood only, no expectedMultipleOpportunities.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Owner with 3 vacancies - looking for a leasing agent",
+    "from": { "name": "Angela Ruiz", "email": "aruizproperties@gmail.com" },
+    "receivedAt": "2026-08-03T12:05:00Z",
+    "bodyText": "Hi Ryan,\n\nI own a small building at 178 Wyckoff Ave in Bushwick and I've got three units turning over at the end of the month - two 2BRs and a 1BR. My previous agent moved out of the area and I need someone reliable to take over leasing.\n\nThe 2BRs would go around $3,400/mo and the 1BR around $2,600/mo, renovated. I'd want the same person handling all three and ideally future turnovers too. Are you taking on landlord clients right now? What's your commission for rentals?\n\nBest,\nAngela Ruiz",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "LANDLORD_LEAD",
+    "address": "178 Wyckoff Ave",
+    "neighborhood": "Bushwick",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["landlord"],
+    "shouldExtractParty": true
+  }
+}

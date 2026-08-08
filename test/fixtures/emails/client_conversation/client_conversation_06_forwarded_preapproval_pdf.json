@@ -1,0 +1,28 @@
+{
+  "id": "client_conversation_06_forwarded_preapproval_pdf",
+  "notes": "Buyer client forwards their mortgage pre-approval letter (PDF) ahead of offers. 1:1 conversation, not a listing. The lender/loan detail lives only in the attachment. Must classify CLIENT_CONVERSATION; the pre-approval amount is the buyer's budget, not a listing price — the extractor must NOT emit a listing address/price from it.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Re: Ready to make offers - pre-approval attached",
+    "from": { "name": "Priya Anand", "email": "priya.anand88@gmail.com" },
+    "receivedAt": "2026-07-29T18:47:00Z",
+    "bodyText": "Hi again,\n\nGreat news - our lender came through faster than expected. Pre-approval letter is attached. We're ready to move on anything in the Prospect Heights / Crown Heights range we discussed whenever something good comes up.\n\nLet me know what you think and if you need anything else from us.\n\nThanks!\nPriya\n\n> On Jul 27, 2026, at 9:12 AM, Ryan Martin wrote:\n> Perfect - once you have the pre-approval in hand, forward it over and we can start writing offers same day. Talk soon.",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "anand_preapproval_letter.pdf",
+        "mimeType": "application/pdf",
+        "parsedText": "SUMMIT FEDERAL MORTGAGE — CONDITIONAL PRE-APPROVAL\n\nBorrower(s): Priya Anand & Rohan Anand\nDate: July 28, 2026\n\nThis letter confirms that the above borrowers are conditionally pre-approved for a residential mortgage loan up to $1,250,000, based on a purchase price of up to $1,562,500 with 20% down. Rate lock available upon executed contract. This is not a commitment to lend.\n\nLoan Officer: David Cho, NMLS #558201",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "CLIENT_CONVERSATION",
+    "address": null,
+    "confidenceScoreMin": 0.55,
+    "classificationReasonThemes": ["conversation"],
+    "shouldExtractParty": false
+  }
+}

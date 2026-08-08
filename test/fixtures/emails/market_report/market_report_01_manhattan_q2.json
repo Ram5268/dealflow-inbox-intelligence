@@ -1,0 +1,19 @@
+{
+  "id": "market_report_01_manhattan_q2",
+  "notes": "Quarterly market stats newsletter, purely informational — no listing, no party. Grade category + themes + confidence only; address/price omitted (no property).",
+  "edgeCase": false,
+  "input": {
+    "subject": "Q2 2026 Manhattan Market Report — median price, inventory & absorption",
+    "from": { "name": "Elliman Research", "email": "research@elliman.com" },
+    "receivedAt": "2026-07-26T09:00:00Z",
+    "bodyText": "The Q2 2026 Manhattan Market Report is here.\n\nHighlights:\n- Median sale price rose 3.1% year-over-year to $1.24M\n- Inventory up 8% vs Q2 2025; 6.2 months of supply\n- Days on market averaged 92, down from 101\n- Luxury (top 10%) median hit $6.8M\n\nRead the full report with borough-by-borough breakdowns online. Reply if you'd like a printable PDF for your clients.\n\nElliman Research Team",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "MARKET_REPORT",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["market"],
+    "shouldExtractParty": false
+  }
+}

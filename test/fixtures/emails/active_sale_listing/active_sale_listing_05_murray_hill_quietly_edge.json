@@ -1,0 +1,24 @@
+{
+  "id": "active_sale_listing_05_murray_hill_quietly_edge",
+  "notes": "EDGE CASE: borderline ACTIVE vs OFF_MARKET_SALE. The email says the listing is 'quietly on the market' which SOUNDS off-market, but the operative facts - it IS on the RLS/public, has an open house, and a live public price - make it a genuine ACTIVE_SALE_LISTING that the agent is simply not heavily advertising. True category is ACTIVE_SALE_LISTING. Lower confidence floor for the deliberate ambiguity.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Quietly on the market - Murray Hill 2BR, $1.15M",
+    "from": { "name": "Hannah Liu", "email": "hliu@compass.com" },
+    "receivedAt": "2026-08-07T15:30:00Z",
+    "bodyText": "Hi all,\n\nWe're keeping this one low-key - it's quietly on the market, no big push - but to be clear it IS listed on the RLS and public as of Monday, so co-brokes are fully welcome and there's a price out there.\n\n150 E 37th St, Unit 8G, Murray Hill\n2BR / 2BA co-op, ~1,050 sf, prewar full-service building, live-in super\nAsking $1,150,000 | Maintenance $1,640/mo (heat + hot water included)\nBoard approval, 20% down min\n\nAlready live and showable now - open house this Sunday 1-3. Co-broke 2.5%. Send your buyers.\n\nHannah Liu\nCompass",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "ACTIVE_SALE_LISTING",
+    "address": "150 E 37th St",
+    "neighborhood": "Murray Hill",
+    "borough": "Manhattan",
+    "beds": 2,
+    "price": 1150000,
+    "confidenceScoreMin": 0.55,
+    "classificationReasonThemes": ["listing"],
+    "shouldExtractParty": false
+  }
+}

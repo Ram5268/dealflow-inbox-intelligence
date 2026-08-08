@@ -1,0 +1,22 @@
+{
+  "id": "renter_inquiry_02_ues_luxury_2br",
+  "notes": "High-end renter inquiry: luxury 2BR rental on the UES, $12k/mo. shouldExtractParty=true; address null. Monthly budget => RENTER_INQUIRY even at a high price.",
+  "edgeCase": false,
+  "input": {
+    "subject": "ISO luxury 2BR rental UES, ~$12k/mo, doorman a must",
+    "from": { "name": "Daniel Roth", "email": "droth@corcoran.com" },
+    "receivedAt": "2026-07-29T14:11:00Z",
+    "bodyText": "Colleagues,\n\nRelocating executive, corporate lease, needs to be settled by Oct 1.\n\n- 2BR / 2BA, high-floor, light\n- Upper East Side, below 86th preferred\n- Full-service doorman, gym, valet a plus\n- Budget around $12,000/mo, some flex for the right unit\n- 12-24 month lease, pristine credit, company guarantor\n\nWhat do you have available? Happy to co-broke.\n\nDaniel Roth\nCorcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTER_INQUIRY",
+    "address": null,
+    "neighborhood": "Upper East Side",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": true
+  }
+}

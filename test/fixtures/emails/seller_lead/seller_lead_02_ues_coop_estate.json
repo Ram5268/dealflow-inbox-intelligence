@@ -1,0 +1,22 @@
+{
+  "id": "seller_lead_02_ues_coop_estate",
+  "notes": "Estate/executor seller lead: adult child selling a deceased parent's UES co-op. A lead to win. shouldExtractParty=true. Property address present and gradeable.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Selling my late mother's apartment - 245 E 79th St",
+    "from": { "name": "Diane Kessler-Roth", "email": "dkrothnyc@aol.com" },
+    "receivedAt": "2026-07-31T10:48:00Z",
+    "bodyText": "Hello,\n\nI got your name from the doorman at the building. My mother passed earlier this year and I'm the executor of her estate. We need to sell her co-op at 245 E 79th St, apartment 11C. It's a 2-bedroom, roughly 1,100 square feet, needs updating.\n\nI live out of state so I'd need an agent who can really handle everything - the board package, showings, cleanout coordination. Can you tell me how you'd approach it and what your commission is?\n\nRegards,\nDiane Kessler-Roth",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SELLER_LEAD",
+    "address": "245 E 79th St",
+    "neighborhood": "Upper East Side",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["seller"],
+    "shouldExtractParty": true
+  }
+}

@@ -1,8 +1,6 @@
 import { randomUUID } from 'crypto'
 import { prisma } from '../prisma'
 import { captionImage } from '../parsing/imageCaption'
-import { embedChunk } from '../embeddings/dispatcher'
-import { upsertChunk, type ChunkPayload } from '../vectorstore/qdrant'
 import { chunkImage } from './chunker'
 
 // Phase 3C — Processes deferred image LinkedResource rows for an email.
@@ -139,36 +137,10 @@ export async function processInlineImages(args: {
         imageBase64,
         imageMimeType: mimeType,
       })
-      const embedded = await embedChunk({
-        chunkType:     chunk.chunkType,
-        textContent:   chunk.content,
-        imageBase64:   chunk.imageBase64,
-        imageMimeType: chunk.imageMimeType,
-      })
-
-      const chunkId = randomUUID()
-      const payload: ChunkPayload = {
-        tenant_id:                 args.organizationId,
-        chunk_id:                  chunkId,
-        parent_email_id:           args.emailId,
-        parent_linked_resource_id: resource.id,
-        thread_id:                 args.threadId,
-        chunk_type:                chunk.chunkType,
-        has_image:                 true,
-        embedding_model:           embedded.model,
-        embedding_version:         embedded.embeddingVersion,
-        created_at:                new Date().toISOString(),
-      }
-
-      await upsertChunk(embedded.collection, {
-        id:     chunkId,
-        vector: embedded.vector,
-        payload,
-      })
-
+      // Persist to Postgres only (Voyage-embed + Qdrant-upsert removed, 6.1 addendum).
       await prisma.documentChunk.create({
         data: {
-          id:                     chunkId,
+          id:                     randomUUID(),
           organizationId:         args.organizationId,
           parentEmailId:          args.emailId,
           parentLinkedResourceId: resource.id,
@@ -177,10 +149,8 @@ export async function processInlineImages(args: {
           content:                chunk.content,
           hasImage:               true,
           tokenCount:             chunk.tokenCount,
-          embeddingModel:         embedded.model,
-          embeddingVersion:       embedded.embeddingVersion,
-          embeddedAt:             new Date(),
-          qdrantPointId:          chunkId,
+          embeddingModel:         'none',
+          embeddingVersion:       '0',
         },
       })
 

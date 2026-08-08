@@ -1,0 +1,23 @@
+{
+  "id": "back_on_market_03_fort_greene_edge",
+  "notes": "EDGE CASE: 'deal fell through' phrasing but the subject reads like a fresh listing ('Available again') and the body opens with 'AVAILABLE' + full listing details, no explicit 'back on market' keyword until buried mid-paragraph ('the deal fell through'). Borderline ACTIVE_SALE_LISTING vs BACK_ON_MARKET. Honest answer is BACK_ON_MARKET (deal-fell-through is the defining cue) but the fresh-listing framing invites misread -> lower confidence, no reason-theme grade.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Available again | 178 S Portland Ave, Fort Greene | $3.1M",
+    "from": { "name": "Yusuf Adeyemi", "email": "yadeyemi@compass.com" },
+    "receivedAt": "2026-08-04T10:30:00Z",
+    "bodyText": "Hi everyone,\n\n178 S Portland Ave, Fort Greene\n4 bed / 3.5 bath brownstone\nAsking $3,100,000\nOwner's triplex over garden rental, parlor floor with 11ft ceilings, delivered vacant.\n\nWe went into contract last month but the deal fell through on the buyer's side during due diligence - nothing to do with the house, inspection was clean. So it's available again and we're ready to move. Co-broke 2.5%. Private showings all week.\n\nYusuf Adeyemi\nCompass\n(347) 555-0104",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "BACK_ON_MARKET",
+    "address": "178 S Portland Ave",
+    "neighborhood": "Fort Greene",
+    "borough": "Brooklyn",
+    "beds": 4,
+    "price": 3100000,
+    "confidenceScoreMin": 0.5,
+    "shouldExtractParty": false
+  }
+}

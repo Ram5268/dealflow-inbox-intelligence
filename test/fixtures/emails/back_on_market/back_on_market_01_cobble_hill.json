@@ -1,0 +1,24 @@
+{
+  "id": "back_on_market_01_cobble_hill",
+  "notes": "Explicit 'BACK ON MARKET' subject + body, buyer's financing fell apart. Canonical easy BACK_ON_MARKET with clear address + price.",
+  "edgeCase": false,
+  "input": {
+    "subject": "BACK ON MARKET | 84 Kane St, Cobble Hill | $2.4M",
+    "from": { "name": "Priya Shah", "email": "pshah@corcoran.com" },
+    "receivedAt": "2026-07-29T09:40:00Z",
+    "bodyText": "Hi all,\n\n84 Kane St, Cobble Hill is BACK ON MARKET as of today. Previous buyer's financing fell through at the last minute - property is in great shape and shows beautifully.\n\n84 Kane St, Cobble Hill\n3 bed / 2 bath townhouse\nAsking $2,400,000\nDelivered vacant, renovated kitchen, south garden.\n\nWe're motivated and moving quickly this time. Co-broke 2.5%. Bring your buyers back!\n\nPriya Shah\nCorcoran\n(718) 555-0161",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "BACK_ON_MARKET",
+    "address": "84 Kane St",
+    "neighborhood": "Cobble Hill",
+    "borough": "Brooklyn",
+    "beds": 3,
+    "price": 2400000,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["back on market"],
+    "shouldExtractParty": false
+  }
+}

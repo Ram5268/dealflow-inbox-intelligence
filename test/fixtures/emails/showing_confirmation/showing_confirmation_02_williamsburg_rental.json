@@ -1,0 +1,22 @@
+{
+  "id": "showing_confirmation_02_williamsburg_rental",
+  "notes": "Agent-to-agent showing confirmation for a rental unit (WBurg). Personal tone, confirms a specific slot + meeting point + tenant contact. Address graded; a monthly rent is mentioned only as context (the listing's rent), so we OMIT price to keep this a logistics grade, not a listing grade.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Re: Confirming showing 129 N 6th St #2R tomorrow 11:15am",
+    "from": { "name": "Dana Kessler", "email": "dkessler@elliman.com" },
+    "receivedAt": "2026-08-07T18:22:00Z",
+    "bodyText": "Hi Marco,\n\nConfirming we're locked for tomorrow, Thursday 8/8, at 11:15 AM.\n\n129 N 6th St, Unit 2R, Williamsburg\nCurrent tenant Sarah will be home - her cell is (347) 555-0190 if you need to coordinate. Buzzer 2R, walk up two flights. Please don't be late, she has a hard stop at noon.\n\nThe unit's asking $4,200/mo, no fee. See you there.\n\nDana",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SHOWING_CONFIRMATION",
+    "address": "129 N 6th St",
+    "neighborhood": "Williamsburg",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["showing"],
+    "shouldExtractParty": false
+  }
+}

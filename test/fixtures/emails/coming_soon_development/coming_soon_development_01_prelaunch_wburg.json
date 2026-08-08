@@ -1,0 +1,21 @@
+{
+  "id": "coming_soon_development_01_prelaunch_wburg",
+  "notes": "Building-level new dev NOT yet on market: pre-launch teaser, no pricing published, register interest. Canonical COMING_SOON_DEVELOPMENT. Grade category + neighborhood + borough.",
+  "edgeCase": false,
+  "input": {
+    "subject": "PRE-LAUNCH | The Berry, Williamsburg — sales launching this fall",
+    "from": { "name": "Tomas Vega", "email": "tvega@compass.com" },
+    "receivedAt": "2026-07-27T12:00:00Z",
+    "bodyText": "Brokers,\n\nExcited to share a first look at The Berry, a new 88-unit waterfront condominium coming to 55 Berry St, Williamsburg. Sales have NOT launched yet — we're building our interest list ahead of a fall launch.\n\nStudios through 3BRs planned, with a full amenity package. Pricing to be released closer to launch. Register your qualified buyers now for priority preview access.\n\nMore to come — reserve your spot for the broker preview.\n\nTomas Vega\nCompass Development Marketing Group",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_DEVELOPMENT",
+    "neighborhood": "Williamsburg",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false
+  }
+}

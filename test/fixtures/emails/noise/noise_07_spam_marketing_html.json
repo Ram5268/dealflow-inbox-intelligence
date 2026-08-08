@@ -1,0 +1,18 @@
+{
+  "id": "noise_07_spam_marketing_html",
+  "notes": "Spam-style marketing email delivered as bodyHtml (inline-styled promo blast for an unrelated consumer product - a mattress sale). Tests that rich marketing HTML with prices/percent-off is not mistaken for a listing. Fulfills the 'spam-style bodyHtml' attachment-fixture requirement (b). bodyText is a minimal plaintext fallback.",
+  "edgeCase": false,
+  "input": {
+    "subject": "🔥 48 HOURS ONLY: 40% off every mattress + free pillows",
+    "from": { "name": "DreamCloud Sleep", "email": "deals@e.dreamcloudsleep.com" },
+    "receivedAt": "2026-07-29T11:02:00Z",
+    "bodyText": "40% OFF SITEWIDE - 48 HOURS ONLY. Plus 2 free pillows with every mattress. Shop now. Unsubscribe.",
+    "bodyHtml": "<html><body style=\"margin:0;font-family:Arial,sans-serif;background:#f4f4f4;\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:24px;\"><table width=\"600\" style=\"background:#ffffff;border-radius:8px;\"><tr><td style=\"background:#1a1a2e;color:#fff;padding:32px;text-align:center;font-size:28px;font-weight:bold;\">SUMMER SLEEP SALE</td></tr><tr><td style=\"padding:32px;text-align:center;\"><h1 style=\"color:#e63946;font-size:40px;margin:0;\">40% OFF</h1><p style=\"font-size:18px;color:#333;\">Every mattress. 48 hours only.</p><p style=\"font-size:16px;color:#666;\">Queen from <s>$1,299</s> <b style=\"color:#e63946;\">$779</b> &bull; King from <s>$1,599</s> <b style=\"color:#e63946;\">$959</b></p><p style=\"font-size:15px;color:#333;\">Plus <b>2 FREE pillows</b> ($120 value) with every order.</p><a href=\"https://dreamcloudsleep.com/sale\" style=\"display:inline-block;background:#e63946;color:#fff;padding:14px 40px;border-radius:6px;text-decoration:none;font-weight:bold;margin-top:16px;\">SHOP THE SALE</a></td></tr><tr><td style=\"padding:16px;font-size:11px;color:#999;text-align:center;\">You are receiving this because you signed up for DreamCloud emails. <a href=\"#\" style=\"color:#999;\">Unsubscribe</a> &bull; 123 Commerce Way, Austin, TX</td></tr></table></td></tr></table></body></html>",
+    "attachments": []
+  },
+  "expected": {
+    "category": "NOISE",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["noise"]
+  }
+}

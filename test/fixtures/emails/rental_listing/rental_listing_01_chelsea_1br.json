@@ -1,0 +1,24 @@
+{
+  "id": "rental_listing_01_chelsea_1br",
+  "notes": "Canonical active rental listing, single unit, plain text. Already on market ('now available'), monthly rent. Price graded as the monthly number. shouldExtractParty=false — this is a unit for rent, not a client's need.",
+  "edgeCase": false,
+  "input": {
+    "subject": "NOW AVAILABLE | 1BR Chelsea | $4,200/mo no fee",
+    "from": { "name": "Grant Ellison", "email": "gellison@elliman.com" },
+    "receivedAt": "2026-08-01T11:15:00Z",
+    "bodyText": "Hi all,\n\nJust listed and showing now:\n\n255 W 23rd St, Apt 6C, Chelsea\n1 bed / 1 bath\n$4,200/mo, NO FEE\nAvailable immediately. Doorman building, elevator, laundry in building, renovated kitchen. Steps to the 1/C/E.\n\nEasy to show - text me to set up. Co-broke welcome.\n\nGrant Ellison\nDouglas Elliman | (646) 555-0173",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTAL_LISTING",
+    "address": "255 W 23rd St",
+    "neighborhood": "Chelsea",
+    "borough": "Manhattan",
+    "beds": 1,
+    "price": 4200,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": false
+  }
+}

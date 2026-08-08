@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getMessageAttachments, testConnection } from '@/lib/microsoftGraph'
 import { parseAttachment } from '@/lib/attachmentParser'
+import { isIngestionTestModeOnly } from '@/lib/config/ingestionTestMode'
 
 export const maxDuration = 300
 
@@ -49,6 +50,15 @@ async function processEmail(graphMessageId: string, dbId: string): Promise<{ sta
 }
 
 export async function POST() {
+  // Brief 6.0 — ingestion isolation gate. Blocks production attachment
+  // reprocessing (real Graph fetches + DB writes) during fixture validation.
+  if (isIngestionTestModeOnly()) {
+    return NextResponse.json(
+      { ok: false, reason: 'INGESTION_TEST_MODE_ONLY is on' },
+      { status: 423 },
+    )
+  }
+
   // Fail fast if token is invalid
   const conn = await testConnection()
   if (!conn.ok) {

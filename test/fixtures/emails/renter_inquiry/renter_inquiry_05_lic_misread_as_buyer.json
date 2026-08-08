@@ -1,0 +1,22 @@
+{
+  "id": "renter_inquiry_05_lic_misread_as_buyer",
+  "notes": "EDGE CASE: could be misread as BUYER_ISO - uses buy-adjacent language ('purchase-level finishes', 'condo-quality', client 'may buy later') and a large-sounding number, but the operative budget is a MONTHLY rent ($8,500/mo) for a lease. Monthly budget => RENTER_INQUIRY, not BUYER_ISO. shouldExtractParty=true; address null. Search area LIC.",
+  "edgeCase": true,
+  "input": {
+    "subject": "ISO condo-quality 2BR LIC - long lease, $8,500/mo",
+    "from": { "name": "Vivian Castellano", "email": "vcastellano@serhant.com" },
+    "receivedAt": "2026-08-06T11:40:00Z",
+    "bodyText": "Hi network,\n\nMy client is thinking they may buy in a year or two, but for now they want to lease and get to know the neighborhood. Please don't send me sales listings - this is a RENTAL search.\n\n- 2BR / 2BA, condo-quality / new construction finishes\n- Long-term lease, 18-24 months, renewal option ideal\n- Long Island City, waterfront buildings preferred\n- Budget up to $8,500/mo\n- Full amenities: doorman, gym, roof deck, parking a plus\n- Move-in Oct 1, immaculate credit, will prepay if needed\n\nEven though the number is high, this is a lease, not a purchase. Send available units. Co-broke.\n\nVivian Castellano\nSERHANT.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTER_INQUIRY",
+    "address": null,
+    "neighborhood": "Long Island City",
+    "borough": "Queens",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": true
+  }
+}

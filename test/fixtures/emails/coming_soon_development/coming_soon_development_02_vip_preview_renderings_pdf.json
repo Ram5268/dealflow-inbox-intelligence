@@ -1,0 +1,29 @@
+{
+  "id": "coming_soon_development_02_vip_preview_renderings_pdf",
+  "notes": "VIP broker preview invite for an unlaunched building; the building description + anticipated pricing live ONLY in the attached renderings brochure PDF parsedText (body just says 'see the brochure'). Not yet selling -> COMING_SOON_DEVELOPMENT. Grade category + neighborhood + borough; single building so no expectedMultipleOpportunities.",
+  "edgeCase": false,
+  "input": {
+    "subject": "VIP Broker Preview — new Tribeca condominium (renderings attached)",
+    "from": { "name": "Grace Lin", "email": "glin@serhant.com" },
+    "receivedAt": "2026-07-31T09:30:00Z",
+    "bodyText": "Brokers,\n\nYou're invited to a private VIP preview of a new Tribeca condominium ahead of its public sales launch. Full details, renderings, and anticipated pricing are in the attached brochure. Nothing is on sale yet — this is an advance look for our top brokers.\n\nRSVP for the preview event.\n\nGrace Lin\nSERHANT. New Development",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "tribeca_preview_brochure.pdf",
+        "mimeType": "application/pdf",
+        "parsedText": "THE FRANKLIN — 108 Franklin St, Tribeca\nA new 42-residence boutique condominium by Studio Renderings.\n\nSales launch: anticipated Q4 2026. Not yet on the market.\n\nAnticipated pricing (subject to offering plan):\n- 2BR homes anticipated from ~$2.9M\n- 3BR homes anticipated from ~$4.4M\n- Penthouse duplex anticipated ~$11M\n\nAmenities: attended lobby, fitness suite, children's playroom, private storage. Estimated first closings 2027. Register interest for a priority preview appointment.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "COMING_SOON_DEVELOPMENT",
+    "neighborhood": "Tribeca",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false
+  }
+}

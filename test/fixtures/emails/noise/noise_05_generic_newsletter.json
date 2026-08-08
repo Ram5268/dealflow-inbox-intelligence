@@ -1,0 +1,18 @@
+{
+  "id": "noise_05_generic_newsletter",
+  "notes": "Generic lifestyle/productivity newsletter with NO listings and no market data. Distinct from MARKET_REPORT (which carries real estate stats). Tests that a newsletter format alone doesn't trigger MARKET_REPORT.",
+  "edgeCase": false,
+  "input": {
+    "subject": "The Sunday Sharpener - 5 ideas to start your week",
+    "from": { "name": "The Sunday Sharpener", "email": "hello@sundaysharpener.substack.com" },
+    "receivedAt": "2026-08-02T12:00:00Z",
+    "bodyText": "Good morning,\n\nHere are 5 things worth your attention this week:\n\n1. The two-minute rule for beating procrastination - if it takes less than two minutes, do it now.\n2. Why 'deep work' blocks beat multitasking every time.\n3. A recipe: 15-minute lemon garlic shrimp.\n4. The book everyone's quietly re-reading this summer.\n5. One question to ask yourself every Friday.\n\nHave a great week,\nThe Sunday Sharpener\n\nYou're receiving this because you subscribed. Unsubscribe anytime.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "NOISE",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["noise"]
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "id": "renter_inquiry_01_wburg_1br",
+  "notes": "Standard renter inquiry blast: client looking to RENT a 1BR in Williamsburg, monthly budget. shouldExtractParty=true; address null (renter is looking). Monthly budget => RENTER_INQUIRY.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Renter looking: 1BR Williamsburg, up to $4,200/mo, no fee",
+    "from": { "name": "Sofia Marin", "email": "smarin@compass.com" },
+    "receivedAt": "2026-07-27T12:33:00Z",
+    "bodyText": "Hi all,\n\nI have a great tenant looking to lease in Williamsburg for a Sept 1 move-in.\n\n- True 1BR (or big alcove studio)\n- Budget up to $4,200/mo, prefers no fee\n- Laundry in building, dishwasher\n- Near the L or G\n- 700+ credit, guarantor available if needed\n\nSend me listings or let me know if you have something coming available. Co-broke standard.\n\nSofia Marin\nCompass",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "RENTER_INQUIRY",
+    "address": null,
+    "neighborhood": "Williamsburg",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["rental"],
+    "shouldExtractParty": true
+  }
+}

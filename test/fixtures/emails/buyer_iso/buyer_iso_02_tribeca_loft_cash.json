@@ -1,0 +1,22 @@
+{
+  "id": "buyer_iso_02_tribeca_loft_cash",
+  "notes": "All-cash buyer ISO for a Tribeca loft, broadcast to network. shouldExtractParty=true; address must be null (buyer is looking). Grades neighborhood/borough of the search area.",
+  "edgeCase": false,
+  "input": {
+    "subject": "ISO Tribeca loft, all cash, up to $6M - qualified buyer",
+    "from": { "name": "Priya Anand", "email": "panand@serhant.com" },
+    "receivedAt": "2026-07-28T11:15:00Z",
+    "bodyText": "Hey all,\n\nWorking with a serious all-cash buyer relocating from SF. Looking for a true loft feel in Tribeca:\n\n- 2BR+ / 2BA, minimum 1,800 sf\n- High ceilings (12ft+), original details, big windows\n- Prewar conversion preferred, condo or condop\n- Budget to $6M, flexible for the right space\n- No board approval headaches - they want to close fast\n\nWould consider northern Soho too. Send me anything off-market or coming soon. Full co-broke.\n\nPriya Anand\nSERHANT.\n(646) 555-0173",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "BUYER_ISO",
+    "address": null,
+    "neighborhood": "Tribeca",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["buyer"],
+    "shouldExtractParty": true
+  }
+}

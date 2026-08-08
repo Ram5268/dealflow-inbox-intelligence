@@ -1,0 +1,22 @@
+{
+  "id": "landlord_lead_02_hells_kitchen_condo_owner",
+  "notes": "Absentee condo owner-landlord relocating, wants agent to lease their Hell's Kitchen condo. A lead to win. shouldExtractParty=true. Address gradeable.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Landlord looking for an agent to rent out my condo - Hell's Kitchen",
+    "from": { "name": "Marcus Lee", "email": "marcuslee.nyc@gmail.com" },
+    "receivedAt": "2026-08-01T19:12:00Z",
+    "bodyText": "Hi Ryan,\n\nI'm being relocated to Chicago for work and rather than sell I want to rent out my condo. It's a 1BR/1BA at 555 W 44th St, unit 8H - full-service building, doorman, gym, great light facing south. About 720 sf.\n\nI was thinking $4,500/mo but I'm open to your opinion. I'll need someone to handle everything since I'll be out of state by mid-September. Can you manage the listing, showings, and tenant screening? Let me know your fee structure.\n\nThanks so much,\nMarcus",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "LANDLORD_LEAD",
+    "address": "555 W 44th St",
+    "neighborhood": "Hell's Kitchen",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["landlord"],
+    "shouldExtractParty": true
+  }
+}

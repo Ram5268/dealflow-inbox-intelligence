@@ -1,0 +1,24 @@
+{
+  "id": "open_house_01_west_village",
+  "notes": "Standard public open house announcement with explicit date/time and address + price. Canonical easy OPEN_HOUSE.",
+  "edgeCase": false,
+  "input": {
+    "subject": "OPEN HOUSE Sun 8/9 12-2PM | 288 W 12th St #3, West Village | $1.895M",
+    "from": { "name": "Claire Donovan", "email": "cdonovan@bhsusa.com" },
+    "receivedAt": "2026-08-06T08:15:00Z",
+    "bodyText": "Hi all,\n\nHosting an open house this Sunday - please send your buyers.\n\n288 W 12th St, Unit 3, West Village\n2 bed / 1 bath co-op\nAsking $1,895,000\nOPEN HOUSE: Sunday, August 9th, 12:00-2:00 PM\nPrewar charm, wood-burning fireplace, on a picture-perfect WV block.\n\nNo appointment needed, just stop by. Co-broke welcome.\n\nClaire Donovan\nBrown Harris Stevens\n(212) 555-0176",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "OPEN_HOUSE",
+    "address": "288 W 12th St",
+    "neighborhood": "West Village",
+    "borough": "Manhattan",
+    "beds": 2,
+    "price": 1895000,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["open house"],
+    "shouldExtractParty": false
+  }
+}

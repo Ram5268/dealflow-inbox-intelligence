@@ -1,0 +1,21 @@
+{
+  "id": "development_inventory_04_fidi_conversion",
+  "notes": "Condo conversion actively selling now with released inventory across tiers, single-listing framing but clearly building-level. No attachment, HTML body with an inline table. Grade category + neighborhood + borough.",
+  "edgeCase": false,
+  "input": {
+    "subject": "88 Pine — FiDi conversion NOW SELLING, first release priced",
+    "from": { "name": "Elena Marchetti", "email": "emarchetti@bhsusa.com" },
+    "receivedAt": "2026-08-01T11:05:00Z",
+    "bodyText": "Brokers,\n\n88 Pine Street in the Financial District has begun sales on its first release of converted residences. Sales gallery open now on-site. Pricing below; 2.5% co-broke at closing.\n\nStudios from $695,000\n1BR from $985,000\n2BR from $1,650,000\nPenthouse collection from $4.2M\n\nElena Marchetti\nBrown Harris Stevens Development Marketing",
+    "bodyHtml": "<p>Brokers,</p><p><strong>88 Pine Street</strong> (Financial District) has begun sales on its first release of converted residences. Sales gallery open now on-site. 2.5% co-broke at closing.</p><table style=\"border-collapse:collapse\"><tr style=\"background:#f0f0f0\"><th align=\"left\">Tier</th><th align=\"left\">From</th></tr><tr><td>Studio</td><td>$695,000</td></tr><tr><td>1BR</td><td>$985,000</td></tr><tr><td>2BR</td><td>$1,650,000</td></tr><tr><td>Penthouse</td><td>$4,200,000</td></tr></table><p>Elena Marchetti<br/>Brown Harris Stevens Development Marketing</p>",
+    "attachments": []
+  },
+  "expected": {
+    "category": "DEVELOPMENT_INVENTORY",
+    "neighborhood": "Financial District",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["development"],
+    "shouldExtractParty": false
+  }
+}

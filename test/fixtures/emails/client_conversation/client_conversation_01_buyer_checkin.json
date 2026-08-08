@@ -1,0 +1,19 @@
+{
+  "id": "client_conversation_01_buyer_checkin",
+  "notes": "Direct 1:1 reply from a buyer client checking in on the search. Personal, back-and-forth tone, no listing being marketed. Tests that a warm client thread is CLIENT_CONVERSATION, not a lead. shouldExtractParty=false.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Re: This weekend's showings",
+    "from": { "name": "Priya Ramanathan", "email": "priya.raman88@gmail.com" },
+    "receivedAt": "2026-07-28T13:42:00Z",
+    "bodyText": "Hi Ryan,\n\nThanks so much for setting those up on Saturday. We loved the light in the second one but the kitchen felt tight for us. My husband is still hung up on having a real dining area.\n\nAre you around this week to talk through what's realistic in our range? We're flexible on the exact block, just want to stay close to the express train. And honestly after seeing a few in person I think we could stretch a little if the right thing came up.\n\nNo rush - just let me know what works for you.\n\nTalk soon,\nPriya",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "CLIENT_CONVERSATION",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["client"],
+    "shouldExtractParty": false
+  }
+}

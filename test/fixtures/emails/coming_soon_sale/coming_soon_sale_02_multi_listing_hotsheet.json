@@ -1,0 +1,29 @@
+{
+  "id": "coming_soon_sale_02_multi_listing_hotsheet",
+  "notes": "Body says 'see attached hotsheet'; the 3 listings live ONLY in the PDF parsedText. Forces attachment parsing. expectedMultipleOpportunities=3. Also flagged live so --attachments-live exercises real LlamaParse against the companion PDF.",
+  "edgeCase": true,
+  "input": {
+    "subject": "This week's coming soon hotsheet - Downtown BK",
+    "from": { "name": "Marcus Reed", "email": "mreed@corcoran.com" },
+    "receivedAt": "2026-08-06T09:05:00Z",
+    "bodyText": "Team,\n\nThree new coming soon exclusives going live next week across Downtown Brooklyn / Boerum Hill. Full details on the attached hotsheet. Co-broke welcome on all three.\n\nMarcus Reed\nCorcoran",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "coming_soon_hotsheet_aug.pdf",
+        "mimeType": "application/pdf",
+        "parsedText": "CORCORAN — COMING SOON HOTSHEET (Week of Aug 11)\n\n1) 129 Dean St, Boerum Hill — 3BR / 2BA townhouse — $2,950,000 — On market 8/12\n2) 88 Schermerhorn St, Unit 4C, Downtown Brooklyn — 1BR / 1BA condo — $985,000 — On market 8/13\n3) 210 Pacific St, Cobble Hill — 2BR / 2BA co-op — $1,495,000 — On market 8/14\n\nAll co-broke 2.5%. Contact Marcus Reed, Corcoran, (718) 555-0199.",
+        "live": true,
+        "file": "coming_soon_sale_02_hotsheet.pdf"
+      }
+    ]
+  },
+  "expected": {
+    "category": "COMING_SOON_SALE",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false,
+    "expectedMultipleOpportunities": 3
+  }
+}

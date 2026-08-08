@@ -1,0 +1,22 @@
+{
+  "id": "seller_lead_04_valuation_borderline_noise",
+  "notes": "EDGE CASE near NOISE: reads like a generic 'what's my home worth' valuation inquiry (the kind of language appraisal-marketing spam uses), but it's a GENUINE owner with a specific property (Riverdale co-op) asking a real agent for a valuation because they intend to sell within the year. Correct answer is SELLER_LEAD, not NOISE. shouldExtractParty=true. Address gradeable.",
+  "edgeCase": true,
+  "input": {
+    "subject": "What is my apartment worth?",
+    "from": { "name": "Grace Lombardi", "email": "glombardi88@gmail.com" },
+    "receivedAt": "2026-08-06T13:15:00Z",
+    "bodyText": "Hi Ryan,\n\nI'd like to know what my apartment is worth. It's a 2BR co-op at 3671 Hudson Manor Terrace in Riverdale, unit 4G. We're planning to relocate to be closer to grandkids and want to list it sometime in the next 6-12 months, so I want to start understanding the value now and what I'd need to do to prep it.\n\nCould you put together a valuation and let me know your thoughts on timing? I'd rather work with a real agent than one of those online estimate sites.\n\nThank you,\nGrace Lombardi",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SELLER_LEAD",
+    "address": "3671 Hudson Manor Terrace",
+    "neighborhood": "Riverdale",
+    "borough": "Bronx",
+    "confidenceScoreMin": 0.55,
+    "classificationReasonThemes": ["seller"],
+    "shouldExtractParty": true
+  }
+}

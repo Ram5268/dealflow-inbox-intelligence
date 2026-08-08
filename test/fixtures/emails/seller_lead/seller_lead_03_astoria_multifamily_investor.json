@@ -1,0 +1,22 @@
+{
+  "id": "seller_lead_03_astoria_multifamily_investor",
+  "notes": "Investor-owner seller lead: wants to quietly sell a multifamily in Astoria, exploring an off-market sale. Still a SELLER_LEAD (owner reaching out to list/sell), not ACTIVE_SALE_LISTING (not another broker's active listing). shouldExtractParty=true. Address gradeable.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Considering selling my 6-unit building in Astoria",
+    "from": { "name": "Nick Papadopoulos", "email": "nickpapinvest@gmail.com" },
+    "receivedAt": "2026-08-02T08:30:00Z",
+    "bodyText": "Ryan,\n\nI own a 6-family building at 31-42 34th Ave in Astoria - fully occupied, stabilized and free-market mix. I'm starting to think about selling, maybe doing a 1031 into something in Florida.\n\nI'd want to keep it quiet at first, not blast it everywhere, to avoid spooking the tenants. Do you handle small multifamily? What kind of number do you think it could get, and how would you market it discreetly?\n\nLet's talk this week if you have time.\n\nNick",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SELLER_LEAD",
+    "address": "31-42 34th Ave",
+    "neighborhood": "Astoria",
+    "borough": "Queens",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["seller"],
+    "shouldExtractParty": true
+  }
+}

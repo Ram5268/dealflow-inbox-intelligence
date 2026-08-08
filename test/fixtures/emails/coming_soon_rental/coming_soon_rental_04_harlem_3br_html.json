@@ -1,0 +1,24 @@
+{
+  "id": "coming_soon_rental_04_harlem_3br_html",
+  "notes": "Realistic bodyHtml with an inline-styled listing card. Single coming-soon rental in Harlem. Tests HTML parsing on a rental with an explicit monthly price.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Before it lists: gut-reno 3BR in Central Harlem",
+    "from": { "name": "Devon Clarke", "email": "dclarke@bhsusa.com" },
+    "receivedAt": "2026-08-05T15:40:00Z",
+    "bodyText": "Coming soon rental in Central Harlem before it hits the market. 3BR, gut renovated, $4,600/mo, no fee. Available Sept 15. Details below — co-broke welcome.\n\nDevon Clarke, Brown Harris Stevens",
+    "bodyHtml": "<div style=\"font-family:Arial,sans-serif;max-width:560px\"><h2 style=\"color:#1a1a1a\">COMING SOON &mdash; Central Harlem Rental</h2><table style=\"border-collapse:collapse;width:100%\"><tr><td style=\"padding:6px;border-bottom:1px solid #eee\"><strong>Address</strong></td><td style=\"padding:6px;border-bottom:1px solid #eee\">118 W 123rd St, Apt 4</td></tr><tr><td style=\"padding:6px;border-bottom:1px solid #eee\"><strong>Layout</strong></td><td style=\"padding:6px;border-bottom:1px solid #eee\">3 bed / 2 bath, gut renovated</td></tr><tr><td style=\"padding:6px;border-bottom:1px solid #eee\"><strong>Rent</strong></td><td style=\"padding:6px;border-bottom:1px solid #eee\">$4,600/mo &mdash; no fee</td></tr><tr><td style=\"padding:6px\"><strong>Available</strong></td><td style=\"padding:6px\">September 15</td></tr></table><p style=\"color:#555;font-size:13px\">Private preview this weekend for qualified renters. Co-broke welcome.</p></div>",
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_RENTAL",
+    "address": "118 W 123rd St",
+    "neighborhood": "Harlem",
+    "borough": "Manhattan",
+    "beds": 3,
+    "price": 4600,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["coming soon", "rental"],
+    "shouldExtractParty": false
+  }
+}
