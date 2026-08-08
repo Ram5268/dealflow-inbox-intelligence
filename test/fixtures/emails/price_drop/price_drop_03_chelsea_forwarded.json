@@ -1,0 +1,24 @@
+{
+  "id": "price_drop_03_chelsea_forwarded",
+  "notes": "Forwarded chain: agent forwards a listing team's reduction notice to their buyer list. Prior price only in the quoted portion. Tests reduction cue inside a '>' quoted forward.",
+  "edgeCase": false,
+  "input": {
+    "subject": "FW: Price adjustment - 200 W 24th St PH2, Chelsea",
+    "from": { "name": "Nina Okafor", "email": "nokafor@bhsusa.com" },
+    "receivedAt": "2026-08-02T15:44:00Z",
+    "bodyText": "Passing this along for anyone with a Chelsea buyer - just came down $400k, seller wants it done.\n\nNina\n\n-----Original Message-----\nFrom: Listings Team <team@westsidegroup.com>\nSent: Saturday, August 1, 2026 9:12 AM\nTo: Broker Network\nSubject: Price adjustment - 200 W 24th St PH2\n\n> We've adjusted pricing on the penthouse exclusive:\n> 200 W 24th St, PH2, Chelsea\n> 3BR / 3.5BA + private roof cabana\n> Previously asking $6,200,000, now offered at $5,800,000\n> Co-broke 2.5%. Board approval required.\n> Reach out to schedule.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "PRICE_DROP",
+    "address": "200 W 24th St",
+    "neighborhood": "Chelsea",
+    "borough": "Manhattan",
+    "beds": 3,
+    "price": 5800000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["price"],
+    "shouldExtractParty": false
+  }
+}

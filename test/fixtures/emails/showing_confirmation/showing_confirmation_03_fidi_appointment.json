@@ -1,0 +1,22 @@
+{
+  "id": "showing_confirmation_03_fidi_appointment",
+  "notes": "Listing agent replying to a buyer's agent to confirm a private appointment at a FiDi condo, with COI/building access requirements. Address graded, no price mentioned at all (omitted, ungraded). Tests logistics-only confirmation with building-access detail.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Confirmed - private showing 20 Pine St #2011 Fri 8/15 3:30pm",
+    "from": { "name": "Gregory Lang", "email": "glang@elliman.com" },
+    "receivedAt": "2026-08-08T10:45:00Z",
+    "bodyText": "Hi Amanda,\n\nYou're all set for Friday, August 15th at 3:30 PM.\n\n20 Pine St, Unit 2011, Financial District\nCheck in at the concierge desk in the lobby and they'll send you up - I'll meet you at the unit. Photo ID required for building access.\n\nText me at (212) 555-0119 when you're 10 min out. Looking forward to it.\n\nGreg Lang\nDouglas Elliman",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SHOWING_CONFIRMATION",
+    "address": "20 Pine St",
+    "neighborhood": "Financial District",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["showing"],
+    "shouldExtractParty": false
+  }
+}

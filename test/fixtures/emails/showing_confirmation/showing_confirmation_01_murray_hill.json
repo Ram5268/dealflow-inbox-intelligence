@@ -1,0 +1,22 @@
+{
+  "id": "showing_confirmation_01_murray_hill",
+  "notes": "Standard showing-service confirmation email: specific date/time, address, listing-agent contact, access instructions. Canonical easy SHOWING_CONFIRMATION. Address present so we grade it; no sale being marketed so price is omitted (ungraded).",
+  "edgeCase": false,
+  "input": {
+    "subject": "Showing Confirmed: 155 E 34th St #12J, Tue 8/11 at 2:00 PM",
+    "from": { "name": "ShowingTime Notifications", "email": "noreply@showingtime.com" },
+    "receivedAt": "2026-08-08T13:00:00Z",
+    "bodyText": "Your showing is confirmed.\n\nProperty: 155 E 34th St, Unit 12J, Murray Hill\nDate/Time: Tuesday, August 11, 2026 at 2:00 PM (30 min window)\nListing Agent: Tom Riley, Corcoran - (212) 555-0130\nAccess: Doorman will have keys, please provide business card. Remove shoes.\n\nPlease arrive on time and confirm cancellations 2 hours in advance.\n\nShowingTime",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SHOWING_CONFIRMATION",
+    "address": "155 E 34th St",
+    "neighborhood": "Murray Hill",
+    "borough": "Manhattan",
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["showing"],
+    "shouldExtractParty": false
+  }
+}

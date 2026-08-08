@@ -1,0 +1,21 @@
+{
+  "id": "showing_confirmation_04_reschedule_edge",
+  "notes": "EDGE CASE: a reschedule/confirmation thread (forwarded '>' chain). The original slot is cancelled and a NEW confirmed time is set in the top reply - the extractor must anchor on the CONFIRMED new appointment, not read the whole thread as a back-and-forth CLIENT_CONVERSATION. Two candidate dates appear (old cancelled + new confirmed) which invites confusion -> lower confidence, no reason-theme grade. Address graded (single property throughout).",
+  "edgeCase": true,
+  "input": {
+    "subject": "Re: Reschedule - 480 Humboldt St #3, Greenpoint",
+    "from": { "name": "Nina Okafor", "email": "nokafor@bhsusa.com" },
+    "receivedAt": "2026-08-06T17:05:00Z",
+    "bodyText": "Great, that works - CONFIRMED for the new time:\n\n480 Humboldt St, Unit 3, Greenpoint\nNEW: Saturday, August 9th at 1:00 PM (the original Wed 8/6 slot is cancelled)\n\nI'll meet you out front. Buzzer 3, second floor. See you Saturday.\n\nNina\n\n-----Original Message-----\nFrom: Nina Okafor <nokafor@bhsusa.com>\nSent: Wednesday, August 6, 2026 8:10 AM\nSubject: Reschedule - 480 Humboldt St #3\n\n> Hi - something came up and I need to move our showing today at 4pm.\n> Could we do Saturday 8/9 early afternoon instead for 480 Humboldt St #3?\n> Let me know what time works.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SHOWING_CONFIRMATION",
+    "address": "480 Humboldt St",
+    "neighborhood": "Greenpoint",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.5,
+    "shouldExtractParty": false
+  }
+}

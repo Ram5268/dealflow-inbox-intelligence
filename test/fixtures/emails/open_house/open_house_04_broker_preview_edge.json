@@ -1,0 +1,23 @@
+{
+  "id": "open_house_04_broker_preview_edge",
+  "notes": "EDGE CASE: broker-only preview of a listing that is technically 'coming soon' (hits market next week) but is being previewed at a specific date/time this Friday. Borderline OPEN_HOUSE vs COMING_SOON_SALE. Honest answer is OPEN_HOUSE because it has a concrete date/time to visit (a broker preview is an OH-type event) even though 'coming soon' language is present -> lower confidence, no reason-theme grade to avoid brittleness. Address/price/beds graded.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Brokers-only preview Fri 8/8 10-11:30AM | 22 Bond St, NoHo (coming soon)",
+    "from": { "name": "Isabelle Chen", "email": "ichen@elliman.com" },
+    "receivedAt": "2026-08-05T09:00:00Z",
+    "bodyText": "Hi all,\n\nBefore this one hits the market next week, I'm hosting a brokers-only preview so you can see it first.\n\n22 Bond St, NoHo\n3 bed / 2.5 bath loft condo\nAsking $4,250,000\nBrokers Preview: Friday, August 8th, 10:00-11:30 AM\nOfficially coming soon / on market 8/12, but bring qualified buyers to the preview and we can talk before it goes live.\n\nCoffee provided. Co-broke 2.5%. RSVP appreciated.\n\nIsabelle Chen\nDouglas Elliman\n(212) 555-0119",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "OPEN_HOUSE",
+    "address": "22 Bond St",
+    "neighborhood": "NoHo",
+    "borough": "Manhattan",
+    "beds": 3,
+    "price": 4250000,
+    "confidenceScoreMin": 0.5,
+    "shouldExtractParty": false
+  }
+}

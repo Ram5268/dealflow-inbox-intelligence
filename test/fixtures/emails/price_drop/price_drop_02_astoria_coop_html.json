@@ -1,0 +1,24 @@
+{
+  "id": "price_drop_02_astoria_coop_html",
+  "notes": "HTML auto-mailer style with an inline table showing old vs new price. Rental-adjacent co-op sale reduction. Tests HTML parsing + explicit reduction cue.",
+  "edgeCase": false,
+  "input": {
+    "subject": "REDUCED: 31-25 30th Ave #4G, Astoria - was $625K now $589K",
+    "from": { "name": "Corcoran Listing Alerts", "email": "noreply@corcoran-alerts.com" },
+    "receivedAt": "2026-07-30T10:02:00Z",
+    "bodyText": "Price Reduced\n\n31-25 30th Ave, Unit 4G, Astoria (Queens)\n1 bed / 1 bath co-op\nPrevious: $625,000\nNew Price: $589,000\nMaintenance $742/mo, sponsor unit no board approval.\n\nView listing / schedule a showing via the link.\n\nCorcoran Listing Alerts",
+    "bodyHtml": "<html><body><h2 style=\"color:#c00\">Price Reduced</h2><p><strong>31-25 30th Ave, Unit 4G, Astoria</strong> (Queens)<br>1 bed / 1 bath co-op</p><table style=\"border-collapse:collapse\"><tr><td style=\"padding:4px 12px;color:#888\">Previous</td><td style=\"padding:4px 12px;text-decoration:line-through\">$625,000</td></tr><tr><td style=\"padding:4px 12px;font-weight:bold\">New Price</td><td style=\"padding:4px 12px;color:#c00;font-weight:bold\">$589,000</td></tr></table><p>Maintenance $742/mo. Sponsor unit, no board approval.</p></body></html>",
+    "attachments": []
+  },
+  "expected": {
+    "category": "PRICE_DROP",
+    "address": "31-25 30th Ave",
+    "neighborhood": "Astoria",
+    "borough": "Queens",
+    "beds": 1,
+    "price": 589000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["price"],
+    "shouldExtractParty": false
+  }
+}

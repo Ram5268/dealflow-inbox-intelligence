@@ -1,0 +1,24 @@
+{
+  "id": "open_house_02_harlem_html",
+  "notes": "HTML flyer-style open house with styled table (date/time/address). Tests OPEN_HOUSE recognition from HTML with a townhouse. Public OH, two time windows.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Open House this weekend - 118 W 130th St, Harlem",
+    "from": { "name": "Marcus Bell", "email": "mbell@serhant.com" },
+    "receivedAt": "2026-07-31T16:50:00Z",
+    "bodyText": "You're invited to our open house.\n\n118 W 130th St, Harlem\n5 bed / 3 bath two-family townhouse\nAsking $2,650,000\nOpen House: Saturday 8/1 & Sunday 8/2, 1:00-3:00 PM both days\nDelivered vacant, original detail throughout, private garden + finished cellar.\n\nStop by or reach out for a private tour.\n\nMarcus Bell, SERHANT.",
+    "bodyHtml": "<html><body><p>You're invited to our <strong>Open House</strong>.</p><table style=\"font-family:Arial;border:1px solid #ddd\"><tr><td style=\"padding:6px;background:#111;color:#fff\">Address</td><td style=\"padding:6px\">118 W 130th St, Harlem</td></tr><tr><td style=\"padding:6px;background:#111;color:#fff\">Type</td><td style=\"padding:6px\">5BR / 3BA two-family townhouse</td></tr><tr><td style=\"padding:6px;background:#111;color:#fff\">Price</td><td style=\"padding:6px\">$2,650,000</td></tr><tr><td style=\"padding:6px;background:#111;color:#fff\">Open House</td><td style=\"padding:6px\">Sat 8/1 &amp; Sun 8/2, 1:00-3:00 PM</td></tr></table><p>Delivered vacant. Private garden + finished cellar.</p></body></html>",
+    "attachments": []
+  },
+  "expected": {
+    "category": "OPEN_HOUSE",
+    "address": "118 W 130th St",
+    "neighborhood": "Harlem",
+    "borough": "Manhattan",
+    "beds": 5,
+    "price": 2650000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["open house"],
+    "shouldExtractParty": false
+  }
+}

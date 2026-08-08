@@ -1,0 +1,24 @@
+{
+  "id": "back_on_market_02_ues_coop",
+  "notes": "BOM after a co-op board turndown (very NYC reason a deal dies). Uses 'back on' phrasing + 'board declined the previous purchaser'. Clear repricing-free return to market.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Back on - 45 E 89th St #9C, UES (board turndown)",
+    "from": { "name": "Gregory Lang", "email": "glang@elliman.com" },
+    "receivedAt": "2026-08-01T14:05:00Z",
+    "bodyText": "Broker network,\n\nUnfortunately the co-op board declined the previous purchaser, so 45 E 89th St, Unit 9C is back on the market. No issue with the apartment - it was a financials thing on the buyer's end.\n\n45 E 89th St, #9C, Upper East Side\n1 bed / 1 bath co-op\nAsking $735,000\nMaintenance $1,180/mo, 50% financing allowed, pied-a-terre OK.\n\nWould love to get this one closed. Co-broke standard. Reach out for a showing.\n\nGreg Lang\nDouglas Elliman",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "BACK_ON_MARKET",
+    "address": "45 E 89th St",
+    "neighborhood": "Upper East Side",
+    "borough": "Manhattan",
+    "beds": 1,
+    "price": 735000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["back on market"],
+    "shouldExtractParty": false
+  }
+}
