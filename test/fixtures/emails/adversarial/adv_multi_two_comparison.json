@@ -1,0 +1,14 @@
+{
+  "id": "adv_multi_two_comparison",
+  "notes": "Two distinct active listings compared side-by-side in one email. Correct = 2 opportunities. Watch for merging into 1 or splitting into more than 2.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Two Battery Park City Options to Weigh — 2BR/2BA",
+    "from": { "name": "Priya Nandakumar", "email": "priya.nandakumar@corcoran.com" },
+    "receivedAt": "2026-07-11T16:30:00-04:00",
+    "bodyText": "Hi Jordan,\n\nFollowing up from our call — here are the two comparable Battery Park City options I'd have you weigh. Both are 2BR/2BA, both active now.\n\nOPTION A — 225 Rector Pl #12F\n- 2BR / 2BA\n- $1,450,000\n- Northern exposure, softer light, more traditional split layout\n- Lower common charges\n\nOPTION B — 70 Little West St #18G\n- 2BR / 2BA\n- $1,520,000\n- Higher floor with brighter western light, open river-adjacent views\n- More open-plan living/kitchen, slightly higher common charges\n\nQuick take: A is the value play with the lower carrying cost; B is the light-and-views play with the more modern layout. Happy to set up back-to-back showings so you can feel the difference in person.\n\nLet me know which direction pulls you.\n\nBest,\nPriya Nandakumar\nCorcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "borough": "Manhattan", "expectedMultipleOpportunities": 2 }
+}

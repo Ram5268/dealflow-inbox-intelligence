@@ -1,0 +1,14 @@
+{
+  "id": "adv_multi_forward_chain_3",
+  "notes": "A forwarded reply chain where 3 different brokers each add one 'just listed' in successive replies. Correct = 3 opportunities pulled from the quoted history. Watch for extracting only the top/most-recent message and ignoring the quoted ones.",
+  "edgeCase": true,
+  "input": {
+    "subject": "RE: RE: Downtown broker group — drop your new ones",
+    "from": { "name": "Kevin Ostrowski", "email": "kevin.ostrowski@elliman.com" },
+    "receivedAt": "2026-02-27T11:48:00-05:00",
+    "bodyText": "Adding mine to keep this going —\n\njust listed: 88 Greenwich St #3A, FiDi, 1BR, $895K. Great light, low common charges, easy to show this week.\n\nKevin\n\n> On Feb 27, 2026, at 10:12 AM, Sofia Marchetti <sofia.marchetti@compass.com> wrote:\n>\n> adding mine — 415 Main St #12D, Roosevelt Island, 2BR, $1.1M. Renovated, river views, priced to move.\n>\n> Sofia\n>\n>> On Feb 27, 2026, at 9:03 AM, Marcus Bell <marcus.bell@serhant.com> wrote:\n>>\n>> kicking it off: 210 Warren St #4B, Battery Park City, 2BR, $1.65M. Corner unit, southern exposure, open kitchen.\n>>\n>> Let's get some deals done this week, everyone drop your new ones.\n>>\n>> Marcus",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "expectedMultipleOpportunities": 3 }
+}

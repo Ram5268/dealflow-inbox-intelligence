@@ -1,0 +1,14 @@
+{
+  "id": "adv_multi_html_table_10",
+  "notes": "HTML hotsheet table with 9 distinct coming-soon listings. Correct = 9 opportunities. Watch for collapsing to a single opportunity or dropping rows (a known truncation risk on long hotsheets).",
+  "edgeCase": true,
+  "input": {
+    "subject": "Weekly Coming-Soon Hotsheet — 9 New to Preview",
+    "from": { "name": "Anthony DeLuca", "email": "anthony.deluca@serhant.com" },
+    "receivedAt": "2026-06-08T08:15:00-04:00",
+    "bodyText": "Our weekly coming-soon hotsheet — 9 new to preview:",
+    "bodyHtml": "<html><body><p>Our weekly coming-soon hotsheet — 9 new to preview:</p><table border=\"1\" cellpadding=\"6\" cellspacing=\"0\"><thead><tr><th>Address</th><th>Neighborhood</th><th>Beds</th><th>Ask</th></tr></thead><tbody><tr><td>44 W 62nd St</td><td>Lincoln Square</td><td>2BR</td><td>$1.95M</td></tr><tr><td>305 E 63rd St</td><td>Upper East Side</td><td>1BR</td><td>$995K</td></tr><tr><td>150 W 82nd St</td><td>Upper West Side</td><td>3BR</td><td>$3.2M</td></tr><tr><td>27 W 96th St</td><td>Upper West Side</td><td>2BR</td><td>$1.75M</td></tr><tr><td>340 E 74th St</td><td>Upper East Side</td><td>Studio</td><td>$625K</td></tr><tr><td>200 W 20th St</td><td>Chelsea</td><td>1BR</td><td>$1.35M</td></tr><tr><td>55 Bethune St</td><td>West Village</td><td>2BR</td><td>$2.8M</td></tr><tr><td>15 William St</td><td>Financial District</td><td>1BR</td><td>$1.05M</td></tr><tr><td>400 E 51st St</td><td>Midtown East</td><td>2BR</td><td>$1.6M</td></tr></tbody></table><p>All coming soon — reach out to preview before they hit the market.</p><p>Anthony DeLuca<br/>SERHANT.</p></body></html>",
+    "attachments": []
+  },
+  "expected": { "category": "COMING_SOON_SALE", "borough": "Manhattan", "expectedMultipleOpportunities": 9 }
+}
