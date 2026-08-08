@@ -1,0 +1,14 @@
+{
+  "id": "adv_boundary_openhouse_vs_comingsoon",
+  "notes": "A brokers-only preview showing that straddles OPEN_HOUSE and COMING_SOON (public launch is next week). Expected = OPEN_HOUSE (a scheduled showing event); COMING_SOON_SALE is defensible. Signal = which the classifier picks and whether the address/date survive.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Brokers-only preview Sat 12-2 — Hudson Square 2BR",
+    "from": { "name": "Priya Nair", "email": "pnair@compass.com" },
+    "receivedAt": "2026-07-08T13:30:00Z",
+    "bodyText": "Hi everyone,\n\nBrokers-only preview showing this Saturday 12-2pm at 255 Hudson St #6B, Hudson Square — 2BR/2BA, $2.35M.\n\nBring your buyers; it launches publicly next week so this is your window for a first look before the crowds. Light refreshments, no appointment needed during the window.\n\nSee you Saturday,\nPriya",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "OPEN_HOUSE", "address": "255 Hudson St", "neighborhood": "Hudson Square", "borough": "Manhattan", "beds": 2, "price": 2350000 }
+}

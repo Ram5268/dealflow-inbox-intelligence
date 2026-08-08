@@ -1,0 +1,14 @@
+{
+  "id": "adv_boundary_comingsoon_vs_active",
+  "notes": "'Hitting the market Monday' sent on a Sunday = not yet active. Correct = COMING_SOON_SALE. Watch for an ACTIVE_SALE_LISTING misroute; the address and price are still extractable.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Heads up before it goes live Monday — Tribeca 2BR",
+    "from": { "name": "Alyssa Chen", "email": "alyssa.chen@serhant.com" },
+    "receivedAt": "2026-07-19T16:00:00Z",
+    "bodyText": "Hi all,\n\nWanted to give you a heads up before it goes live — hitting the market this Monday: 88 Leonard St #4A, Tribeca, 2BR/2BA, $2.6M.\n\nNot active yet, previews start Monday morning. If you have a buyer who wants a first look before it's officially listed, reply today and I'll get you in early.\n\nMore photos to come once we launch.\n\nBest,\nAlyssa",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "COMING_SOON_SALE", "address": "88 Leonard St", "neighborhood": "Tribeca", "borough": "Manhattan", "beds": 2, "price": 2600000, "confidenceScoreMin": 0.5 }
+}
