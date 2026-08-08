@@ -1,0 +1,14 @@
+{
+  "id": "adv_addr_building_name",
+  "notes": "Building name only ('The Astoria'), no street number - and 'Astoria' is also a Queens neighborhood (trap). Correct = address null AND neighborhood null (do not infer Queens/Astoria from the building name); the email says to RSVP for the address. Watch for a fabricated address or an 'Astoria'/Queens leakage.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Private Showings Begin Tomorrow | 2BR Line at The Astoria",
+    "from": { "name": "Priya Ramakrishnan", "email": "priya.ramakrishnan@elliman.com" },
+    "receivedAt": "2026-08-01T16:45:00Z",
+    "bodyText": "Good afternoon,\n\nPrivate showings begin tomorrow for the 2BR line at The Astoria, and I'd love to get your qualified buyers in early.\n\nThese are bright, full-service condo residences with an in-unit washer/dryer, chef's kitchen, and a live-in super. Ask: $1,950,000.\n\nAccess is by appointment only. RSVP and I'll send over the address and access details directly.\n\nWarmly,\nPriya Ramakrishnan\nDouglas Elliman",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "address": null, "neighborhood": null, "beds": 2, "price": 1950000 }
+}

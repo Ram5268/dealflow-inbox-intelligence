@@ -1,0 +1,14 @@
+{
+  "id": "adv_addr_numeric_unit_suffix",
+  "notes": "The unit designator '14A' immediately follows the address and could be misread as part of the street or as a bed count. Correct address = '2 Park Ave South', beds = 1. Watch for beds=14 or the unit glued into a wrong address.",
+  "edgeCase": true,
+  "input": {
+    "subject": "2 Park Ave South, 14A | 1BR w/ Low CC",
+    "from": { "name": "Jonathan Reyes", "email": "jonathan.reyes@serhant.com" },
+    "receivedAt": "2026-05-22T11:30:00Z",
+    "bodyText": "Hi everyone,\n\nBringing 2 Park Ave South, 14A to market - a sharp, high-floor 1BR/1BA with open city views.\n\nLow common charges, doorman building, great light in the AM. Move-in ready.\n\nAsk: $1,100,000. Co-broke welcome, please reach out for the OneKey setup and to book a showing.\n\nBest,\nJonathan Reyes\nSERHANT.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "address": "2 Park Ave South", "borough": "Manhattan", "beds": 1, "price": 1100000, "confidenceScoreMin": 0.5 }
+}

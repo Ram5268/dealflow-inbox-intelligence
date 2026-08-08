@@ -1,0 +1,14 @@
+{
+  "id": "adv_addr_cross_street",
+  "notes": "Cross-street only ('corner of 5th and 82nd'), no street number. Correct = address null (never invent a number); borough Manhattan is inferable, beds 3 is stated. Watch for a fabricated street number.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Coming Soon | 3BR Co-op Off Museum Mile",
+    "from": { "name": "Marcus Feldman", "email": "marcus.feldman@compass.com" },
+    "receivedAt": "2026-06-03T13:05:00Z",
+    "bodyText": "Team,\n\nGiving you a heads up on a coming-soon 3BR co-op right on the corner of 5th and 82nd, steps from the Met.\n\nFull gut reno just completed - new kitchen, new baths, restored prewar details throughout. Prime Museum Mile location.\n\nPhotos and pricing going out next week. Reply and I'll add you to the early list so your buyers get first look before it hits.\n\nMarcus Feldman\nCompass",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "COMING_SOON_SALE", "address": null, "borough": "Manhattan", "beds": 3 }
+}
