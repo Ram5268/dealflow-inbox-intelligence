@@ -141,7 +141,7 @@ async function classifyIfNeeded(c: Candidate): Promise<{ category: string | null
 
 async function main() {
   // Pre-flight env check.
-  for (const k of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'VOYAGE_API_KEY', 'QDRANT_URL', 'DATABASE_URL']) {
+  for (const k of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'DATABASE_URL']) {
     if (!process.env[k]) { console.error(`Missing env: ${k}`); process.exit(1) }
   }
 

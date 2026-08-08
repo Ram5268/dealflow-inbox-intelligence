@@ -5,7 +5,7 @@
 // a diagnostic, not a pass/fail gate — a category scoring 60% is a finding we log.
 //
 // Isolation: this never calls the gated production ingestion paths and never
-// writes to Postgres/Qdrant. For each fixture it (1) runs the real gpt-4o-mini
+// writes to Postgres. For each fixture it (1) runs the real gpt-4o-mini
 // classifier, (2) mirrors production's needsDeepExtract gate, and (3) when
 // warranted, assembles context with the real buildContext() and runs the real
 // Sonnet extraction via runExtraction() — the exact functions extractEmailV2 uses.

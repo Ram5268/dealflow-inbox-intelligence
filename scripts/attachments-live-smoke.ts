@@ -2,8 +2,9 @@
 //
 // Proves the REAL binary path end-to-end for the 4 live PDF fixtures, before any
 // real Outlook connection exists:
-//   PDF bytes -> LlamaParse Premium -> DocumentChunks (+embeddings/Qdrant)
+//   PDF bytes -> LlamaParse (agentic) -> Postgres DocumentChunks
 //            -> extractEmailV2 (Sonnet) -> ExtractedOpportunity rows
+// (Voyage/Qdrant were removed in the 6.1 addendum; chunks live in Postgres.)
 //
 // It seeds a throwaway RawEmail + Attachment per fixture, runs the real
 // processAttachments() + extractEmailV2(), verifies the opportunities against the
@@ -25,7 +26,6 @@ import { processAttachments } from '../lib/ingestion/processAttachments'
 import { extractEmailV2 } from '../lib/extraction/extractEmailV2'
 import { ingestEmailV2 } from '../lib/ingestion/ingestEmailV2'
 import { isIngestionTestModeOnly } from '../lib/config/ingestionTestMode'
-import { deleteChunks, COLLECTIONS } from '../lib/vectorstore/qdrant'
 
 const FIXTURE_ROOT = join(process.cwd(), 'test', 'fixtures', 'emails')
 const ATTACH_ROOT = join(process.cwd(), 'test', 'fixtures', 'attachments')
@@ -79,15 +79,7 @@ function loadLiveFixtures(): LiveFixture[] {
 
 async function teardown(orgId: string, rawEmailIds: string[]) {
   if (!rawEmailIds.length) return
-  // Qdrant points first (chunks carry qdrantPointId), then Postgres cascade.
-  const chunks = await prisma.documentChunk.findMany({
-    where: { organizationId: orgId, parentEmailId: { in: rawEmailIds } },
-    select: { qdrantPointId: true },
-  })
-  const pointIds = chunks.map(c => c.qdrantPointId).filter((x): x is string => !!x)
-  for (const coll of Object.values(COLLECTIONS)) {
-    try { await deleteChunks(coll, pointIds) } catch (e) { console.error(`  teardown qdrant ${coll}:`, (e as Error).message) }
-  }
+  // Postgres-only cascade (Qdrant removed in the 6.1 addendum).
   await prisma.extractedOpportunity.deleteMany({ where: { organizationId: orgId, rawEmailId: { in: rawEmailIds } } }).catch(() => {})
   await prisma.reviewQueueItem.deleteMany({ where: { organizationId: orgId, rawEmailId: { in: rawEmailIds } } }).catch(() => {})
   await prisma.documentChunk.deleteMany({ where: { organizationId: orgId, parentEmailId: { in: rawEmailIds } } }).catch(() => {})
@@ -98,7 +90,7 @@ async function teardown(orgId: string, rawEmailIds: string[]) {
 
 interface PdfResult {
   id: string; category: string
-  llamaParseOk: boolean; pages: number; chunks: number; persistPath: string
+  llamaParseOk: boolean; pages: number; chunks: number
   oppsExtracted: number; expectedOpps: number; boroughOk: boolean | null
   match: boolean; sonnetCostUsd: number; error?: string
 }
@@ -150,42 +142,16 @@ async function main() {
           select: { id: true },
         })
 
-        // 1) Real LlamaParse -> chunks. Try the full production path first
-        // (LlamaParse + Voyage embed + Qdrant upsert + Postgres chunk).
+        // Real production path: LlamaParse (agentic) -> Postgres DocumentChunks.
+        // (Voyage/Qdrant were removed in the 6.1 addendum; the extractor reads
+        // chunks straight from Postgres.)
         const pa = await processAttachments({ rawEmailId, threadId: null, organizationId: orgId })
-        let chunkCount = await prisma.documentChunk.count({ where: { organizationId: orgId, parentEmailId: rawEmailId } })
-        let persistPath = 'full (llamaparse+voyage+qdrant)'
-        let llamaParseOk = pa.attachmentsProcessed >= 1 && chunkCount > 0 && !pa.errors.some(e => /parsePdf|pdf /i.test(e))
-        let pages = 0
-
-        // Fallback: if the full path produced 0 chunks (e.g. Qdrant unreachable),
-        // prove the LlamaParse -> extraction leg by persisting the real LlamaParse
-        // output as Postgres DocumentChunks directly (extractEmailV2 reads chunks
-        // from Postgres, not Qdrant). This exercises real LlamaParse + real Sonnet.
-        if (chunkCount === 0) {
-          const { parsePdf } = await import('../lib/parsing/llamaParse')
-          const { chunkPdfPage } = await import('../lib/ingestion/chunker')
-          const parsed = await parsePdf(fx.pdfBytes, fx.filename)
-          llamaParseOk = parsed.pages.length > 0
-          pages = parsed.pages.length
-          for (const pg of parsed.pages) {
-            for (const ch of chunkPdfPage(pg)) {
-              await prisma.documentChunk.create({
-                data: {
-                  organizationId: orgId, parentEmailId: rawEmailId, parentAttachmentId: att.id,
-                  chunkType: ch.chunkType, content: ch.content, pageNumber: ch.pageNumber ?? null,
-                  hasTable: ch.hasTable ?? false, tokenCount: ch.tokenCount,
-                  embeddingModel: 'voyage-3-large', embeddingVersion: '1.0',
-                },
-              })
-            }
-          }
-          chunkCount = await prisma.documentChunk.count({ where: { organizationId: orgId, parentEmailId: rawEmailId } })
-          persistPath = `postgres-direct (Qdrant unreachable: ${pa.errors[0] ?? 'no chunk persisted'})`
-        } else {
-          const cr = await prisma.documentChunk.findMany({ where: { organizationId: orgId, parentEmailId: rawEmailId }, select: { pageNumber: true } })
-          pages = new Set(cr.map(c => c.pageNumber).filter(p => p != null)).size
-        }
+        const cr = await prisma.documentChunk.findMany({
+          where: { organizationId: orgId, parentEmailId: rawEmailId }, select: { pageNumber: true },
+        })
+        const chunkCount = cr.length
+        const pages = new Set(cr.map(c => c.pageNumber).filter(p => p != null)).size
+        const llamaParseOk = pa.attachmentsProcessed >= 1 && chunkCount > 0 && !pa.errors.some(e => /parsePdf|pdf /i.test(e))
         const chunkRows = { length: chunkCount }
 
         // 2) Real Sonnet extraction -> ExtractedOpportunity rows
@@ -198,14 +164,14 @@ async function main() {
           : opps.some(o => (o.borough ?? '').toLowerCase().replace(/^the\s+/, '') === fx.expectedBorough!.toLowerCase().replace(/^the\s+/, ''))
         const oppsOk = opps.length === fx.expectedOpps
         results.push({
-          id: fx.id, category: fx.category, llamaParseOk, pages, chunks: chunkRows.length, persistPath,
+          id: fx.id, category: fx.category, llamaParseOk, pages, chunks: chunkRows.length,
           oppsExtracted: opps.length, expectedOpps: fx.expectedOpps,
           boroughOk, match: oppsOk && (boroughOk ?? true), sonnetCostUsd,
         })
         console.log(`  ${llamaParseOk ? '✅' : '❌'} ${fx.id.padEnd(46)} pages:${pages} chunks:${chunkRows.length} ` +
-          `opps:${opps.length}/${fx.expectedOpps} $${sonnetCostUsd.toFixed(4)} [${persistPath}]`)
+          `opps:${opps.length}/${fx.expectedOpps} $${sonnetCostUsd.toFixed(4)}`)
       } catch (e) {
-        results.push({ id: fx.id, category: fx.category, llamaParseOk: false, pages: 0, chunks: 0, persistPath: 'error', oppsExtracted: 0, expectedOpps: fx.expectedOpps, boroughOk: null, match: false, sonnetCostUsd: 0, error: (e as Error).message })
+        results.push({ id: fx.id, category: fx.category, llamaParseOk: false, pages: 0, chunks: 0, oppsExtracted: 0, expectedOpps: fx.expectedOpps, boroughOk: null, match: false, sonnetCostUsd: 0, error: (e as Error).message })
         console.log(`  ❌ ${fx.id}: ${(e as Error).message}`)
       }
     }
@@ -225,7 +191,6 @@ async function main() {
     console.log(`  ${r.match ? '✅' : '⚠️ '} ${r.id}`)
     console.log(`       LlamaParse: ${r.llamaParseOk ? 'success' : 'FAILED'} | pages: ${r.pages} | chunks: ${r.chunks} | ` +
       `opps: ${r.oppsExtracted}/${r.expectedOpps}${r.boroughOk == null ? '' : ` | borough: ${r.boroughOk ? 'ok' : 'MISS'}`}${r.error ? ` | err: ${r.error}` : ''}`)
-    console.log(`       persist path: ${r.persistPath}`)
   }
   const allParsed = results.every(r => r.llamaParseOk)
   console.log('\n' + '═'.repeat(75))
