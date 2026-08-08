@@ -62,3 +62,16 @@ units/pricing on dense multi-column docs, upgrade to `agentic_plus` (one-line
 change in `lib/parsing/llamaParse.ts`). The ~$75/mo delta is worth one missed match.
 Real PDFs for the benchmark can come from Ryan directly (forwarded from his current
 inbox to a fixture folder) — no live Outlook needed.
+
+## Qdrant + Voyage removed (2026-08-08)
+
+Vector infrastructure ripped out. The Voyage-embedded chunks + Qdrant Cloud vector
+database were write-only dead weight — nothing in the retrieval path ever consumed
+them. Extractor reads chunks from Postgres. Chat/matching reads structured
+ExtractedOpportunity rows from Postgres.
+
+OpenAI embeddings + Postgres pgvector on ExtractedOpportunity and MojoContact are
+UNCHANGED — System 1 continues to power semanticSearch in lib/streetEasyHotsheet.ts.
+
+If semantic search over raw email/attachment chunks is ever needed: git history
+preserves the deleted code — recovery is checkout + adapt, not rebuild from scratch.
