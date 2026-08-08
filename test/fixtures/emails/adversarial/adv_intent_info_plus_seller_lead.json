@@ -1,0 +1,14 @@
+{
+  "id": "adv_intent_info_plus_seller_lead",
+  "notes": "An informational/market note that buries a genuine seller lead ('btw I'm thinking of listing next month'). Correct = SELLER_LEAD (the actionable signal), party = seller. Watch for CLIENT_CONVERSATION or NOISE swallowing the lead. SELLER_LEAD vs CLIENT_CONVERSATION is the tension under test.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Windsor Terrace has been buzzing lately",
+    "from": { "name": "Priya Anand", "email": "priya.anand@elliman.com" },
+    "receivedAt": "2026-03-19T18:05:00-04:00",
+    "bodyText": "Hi,\n\nHope you're doing well! I keep meaning to catch up. The market around here has felt really lively lately — I swung by an open house on Prospect Ave last weekend and it was packed, easily 40 groups through the door in two hours. Feels like inventory is tight and buyers are hungry again after a slow winter.\n\nA couple of townhouses on my block traded quietly over the last month too, both over ask from what I hear.\n\nbtw — I'm thinking of finally listing my 2BR in Windsor Terrace next month. Could you run some comps and tell me what you think it'd fetch?\n\nTalk soon,\nPriya",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "SELLER_LEAD", "neighborhood": "Windsor Terrace", "borough": "Brooklyn", "shouldExtractParty": true }
+}

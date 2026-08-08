@@ -1,0 +1,14 @@
+{
+  "id": "adv_intent_colleague_buyer",
+  "notes": "A buyer ISO forwarded on behalf of a colleague's client ('my colleague Sarah's buyer is looking for...'). Correct = BUYER_ISO with the buyer criteria and party captured. Watch for a CLIENT_CONVERSATION or NOISE misroute caused by the third-party framing; no address leakage.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Anything quiet coming up in Cobble Hill? (colleague's buyer)",
+    "from": { "name": "Marcus Delgado", "email": "marcus.delgado@corcoran.com" },
+    "receivedAt": "2026-05-02T13:47:00-04:00",
+    "bodyText": "Hey everyone,\n\nMy colleague Sarah Levin's buyer is looking for a 2BR in Cobble Hill, up to $1.6M, prewar preferred, needs outdoor space. Anyone have something quiet coming up?\n\nThey're flexible on timing but very particular about charm and a little private outdoor area. Reach out to me and I'll loop Sarah in.\n\nThanks,\nMarcus",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "BUYER_ISO", "address": null, "neighborhood": "Cobble Hill", "borough": "Brooklyn", "beds": 2, "shouldExtractParty": true }
+}
