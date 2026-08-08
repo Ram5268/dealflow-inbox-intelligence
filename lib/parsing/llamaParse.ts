@@ -1,7 +1,9 @@
 import { setTimeout as sleep } from 'timers/promises'
 
 // LlamaParse Cloud wrapper — page-aware PDF parsing for OMs, rent rolls,
-// availability sheets. Uses the premium parse mode for table + layout fidelity.
+// availability sheets. Uses the `agentic` tier for table + layout fidelity (the
+// legacy `parse_mode=parse_page_with_lvm` premium mode was retired by LlamaParse
+// and now 410s; tiers replaced it — Brief 6.1 live smoke test).
 // Async API: upload → poll → fetch JSON result. Returns per-page Markdown
 // + table/image counts for the chunker.
 
@@ -32,7 +34,12 @@ async function uploadPdf(buffer: Buffer, fileName: string): Promise<string> {
   const apiKey = getApiKey()
   const form = new FormData()
   form.append('file', new Blob([new Uint8Array(buffer)], { type: 'application/pdf' }), fileName)
-  form.append('parse_mode', 'parse_page_with_lvm')
+  // LlamaParse v2 requires BOTH a tier and a version. 'latest' tracks the newest
+  // parser; pin to a dated version (e.g. '2025-11-18') for reproducibility once
+  // the agentic-vs-agentic_plus benchmark on real broker PDFs is done (see
+  // KNOWN_ISSUES.md tripwire).
+  form.append('tier', 'agentic')
+  form.append('version', 'latest')
   form.append('result_type', 'json')
 
   const res = await fetch(`${LLAMAPARSE_BASE}/upload`, {

@@ -43,3 +43,22 @@ day. Do NOT ship such a change without also shipping:
   fixture: 0 of 5 units extracted because the new-dev spec ran instead of rental).
 - REAL_ESTATE_EVENT with payload only in an image attachment → NOISE misroute
   (`real_estate_event_02`).
+
+## LlamaParse tier: agentic (committed 2026-08-08)
+
+The prior `lib/parsing/llamaParse.ts` used `parse_mode=parse_page_with_lvm`, which
+LlamaParse retired — the API now returns **410** on every call, so the production
+PDF-attachment path was fully broken (discovered by the Brief 6.1 live smoke test).
+Fixed by switching to the current tier-based API: `tier=agentic`.
+
+Reasoning: direct semantic replacement for the deprecated `parse_page_with_lvm`
+vision mode. Sustainable at production scale (~$15/mo forecast at 1,500 emails/mo ×
+20% with PDF × 10 pages avg). Pay-per-use — no subscription, no lock-in.
+
+**TRIPWIRE:** Do NOT turn on any real data source (Outlook, third-party feeds, etc.)
+without first re-benchmarking `agentic` vs `agentic_plus` on ≥20 real broker PDFs
+(sponsor OMs, hotsheets, rent rolls, flyers, price lists). If `agentic` drops
+units/pricing on dense multi-column docs, upgrade to `agentic_plus` (one-line
+change in `lib/parsing/llamaParse.ts`). The ~$75/mo delta is worth one missed match.
+Real PDFs for the benchmark can come from Ryan directly (forwarded from his current
+inbox to a fixture folder) — no live Outlook needed.
