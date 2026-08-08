@@ -1,0 +1,27 @@
+{
+  "id": "market_report_02_brooklyn_pdf",
+  "notes": "Newsletter whose headline stats live ONLY in the attached market report PDF parsedText (body just says 'report attached'). Informational — grade category + themes + confidence only; no property fields.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Brooklyn Rental Market Snapshot — July 2026 (PDF attached)",
+    "from": { "name": "MNS Research", "email": "reports@mns.com" },
+    "receivedAt": "2026-08-01T08:15:00Z",
+    "bodyText": "The July 2026 Brooklyn Rental Market Snapshot is attached.\n\nA few headline numbers are in the report. Share freely with clients — data is aggregated and anonymized.\n\nMNS Research",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "brooklyn_rental_snapshot_july2026.pdf",
+        "mimeType": "application/pdf",
+        "parsedText": "MNS — Brooklyn Rental Market Snapshot, July 2026\n\nHeadline stats:\n- Average Brooklyn rent: $3,685/mo, +2.4% MoM\n- Average studio: $2,640/mo | 1BR: $3,410/mo | 2BR: $4,520/mo\n- Vacancy rate: 2.1%, tightest since 2023\n- Williamsburg remains the priciest submarket; Bushwick the fastest-rising\n\nThis is an aggregate market report. No individual listings included.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "MARKET_REPORT",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["market"],
+    "shouldExtractParty": false
+  }
+}

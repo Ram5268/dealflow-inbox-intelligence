@@ -1,0 +1,19 @@
+{
+  "id": "real_estate_event_03_edge_project_launch_party",
+  "notes": "EDGE CASE: a new-development LAUNCH PARTY invite. It names a building and mentions previewing units, which risks being misread as COMING_SOON_DEVELOPMENT or DEVELOPMENT_INVENTORY. But the email is an invite to an event (date/time/venue/RSVP), not an inventory or pricing blast -> REAL_ESTATE_EVENT. Grade category + themes + confidence only. Lower confidence floor.",
+  "edgeCase": true,
+  "input": {
+    "subject": "RSVP: Launch Party for The Solaire — cocktails, tours & DJ | Aug 28",
+    "from": { "name": "Serhant Events", "email": "events@serhant.com" },
+    "receivedAt": "2026-08-06T14:00:00Z",
+    "bodyText": "You're invited to the official Launch Party for The Solaire!\n\nWhen: Thursday, August 28, 2026, 7:00-10:00 PM\nWhere: The Solaire Sales Gallery, 88 Kent Ave, Williamsburg\n\nCome celebrate the launch with cocktails, a live DJ, and guided preview tours of the model residences. Meet the design team. Bring a colleague. Valet available.\n\nSpace is limited — please RSVP by Aug 22.\n\nSERHANT. Events",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "REAL_ESTATE_EVENT",
+    "confidenceScoreMin": 0.5,
+    "classificationReasonThemes": ["event"],
+    "shouldExtractParty": false
+  }
+}

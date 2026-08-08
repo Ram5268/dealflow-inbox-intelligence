@@ -1,0 +1,24 @@
+{
+  "id": "sponsor_unit_01_ues_no_board",
+  "notes": "A SINGLE specific unit in a new dev with its own unit number + price, sold by sponsor: no board approval, no flip tax. Canonical SPONSOR_UNIT. Grades address (with unit) + neighborhood + borough + beds + price.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Sponsor unit — 45 E 89th St #7D, UES | 2BR $1.895M | NO BOARD APPROVAL",
+    "from": { "name": "Rachel Stein", "email": "rstein@elliman.com" },
+    "receivedAt": "2026-07-29T10:15:00Z",
+    "bodyText": "Hi all,\n\nSharing a sponsor unit at 45 E 89th St, Unit 7D on the Upper East Side.\n\n2 bed / 2 bath\nAsking $1,895,000\nSponsor sale — NO board approval, NO flip tax, financing flexible. Pieds-a-terre, gifting, and LLC purchases all welcome.\n\nOne unit only, delivered vacant. Co-broke 2.5%. Reach out for the offering plan and a private showing.\n\nRachel Stein\nDouglas Elliman",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SPONSOR_UNIT",
+    "address": "45 E 89th St",
+    "neighborhood": "Upper East Side",
+    "borough": "Manhattan",
+    "beds": 2,
+    "price": 1895000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["sponsor"],
+    "shouldExtractParty": false
+  }
+}

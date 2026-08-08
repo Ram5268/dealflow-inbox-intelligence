@@ -1,0 +1,20 @@
+{
+  "id": "coming_soon_development_04_edge_teaser_no_price",
+  "notes": "EDGE CASE: sparse, coy teaser with NO published price, NO unit tiers, and only a neighborhood (no street address). Uses 'sales gallery previewing soon' which risks being misread as DEVELOPMENT_INVENTORY (now selling), but nothing is on sale yet -> COMING_SOON_DEVELOPMENT. address asserted null (no street number to invent); neighborhood only stated vaguely so it is OMITTED (ungraded). Lower confidence floor.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Something new is coming to the Lower East Side",
+    "from": { "name": "Studio Nine Marketing", "email": "hello@studioninenyc.com" },
+    "receivedAt": "2026-08-06T16:55:00Z",
+    "bodyText": "Brokers,\n\nA distinctive new condominium is coming to the Lower East Side. We're keeping the details under wraps for now — sales gallery previewing soon, launch to follow.\n\nWant first access? Add your name and your buyers to the interest list and we'll reach out before anyone else. No pricing or floor plans released yet.\n\nStay tuned.\n\nStudio Nine Marketing",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_DEVELOPMENT",
+    "address": null,
+    "confidenceScoreMin": 0.5,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "development_inventory_05_edge_final_units",
+  "notes": "EDGE CASE: borderline DEVELOPMENT_INVENTORY vs COMING_SOON_DEVELOPMENT. Building is already selling ('final release now available', current prices) but the subject leads with 'LAUNCH' and mentions a future closing date, which can pull the classifier toward coming-soon. True answer is DEVELOPMENT_INVENTORY because units are actively on sale now with published prices. Lower confidence floor.",
+  "edgeCase": true,
+  "input": {
+    "subject": "FINAL RELEASE LAUNCH | The Astorian — last 12 residences now available",
+    "from": { "name": "Nadia Rahman", "email": "nadia@theastorian.com" },
+    "receivedAt": "2026-08-05T15:45:00Z",
+    "bodyText": "Brokers,\n\nThe Astorian at 30-77 Steinway St, Astoria is releasing its FINAL 12 residences — available for purchase now. These are the last homes in the building and they are priced and contract-ready today.\n\n1BR from $815,000\n2BR from $1,240,000\n3BR from $1,690,000\n\nClosings for these final units projected Q2 2027 as the building completes its punch list, but contracts are being signed now at current pricing. Sales gallery open daily. 2.5% co-broke.\n\nNadia Rahman\nThe Astorian Sales Gallery",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "DEVELOPMENT_INVENTORY",
+    "neighborhood": "Astoria",
+    "borough": "Queens",
+    "confidenceScoreMin": 0.5,
+    "classificationReasonThemes": ["development"],
+    "shouldExtractParty": false
+  }
+}

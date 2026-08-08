@@ -1,0 +1,19 @@
+{
+  "id": "market_report_03_edge_neighborhood_recap",
+  "notes": "EDGE CASE: a neighborhood 'market recap' that name-drops a specific building and a recent closing price as a data point, which risks being misread as an ACTIVE_SALE_LISTING or PRICE_DROP. It is still informational commentary (recap of closed comps and trends), not a listing being offered -> MARKET_REPORT. Grade category + themes + confidence only; deliberately omit price/address (the numbers are cited comps, not an offer). Lower confidence floor.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Park Slope closed-comps recap — where prices actually landed this summer",
+    "from": { "name": "Sofia Reyes", "email": "sreyes@compass.com" },
+    "receivedAt": "2026-08-05T17:20:00Z",
+    "bodyText": "Quick summer recap for my Park Slope-watching clients and colleagues — this is market commentary, nothing for sale here.\n\nWhat actually closed:\n- Brownstones on the numbered streets traded 4-6% under initial ask on average\n- A 2BR at 300 Garfield Pl closed at $1.42M after 71 days (asked $1.55M)\n- Well-renovated 3BRs still moving fast; unrenovated sitting\n- Bidding wars are back only under $1.2M\n\nTakeaway: price it right the first time. Full comp sheet available on request.\n\nSofia Reyes\nCompass",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "MARKET_REPORT",
+    "confidenceScoreMin": 0.5,
+    "classificationReasonThemes": ["market"],
+    "shouldExtractParty": false
+  }
+}

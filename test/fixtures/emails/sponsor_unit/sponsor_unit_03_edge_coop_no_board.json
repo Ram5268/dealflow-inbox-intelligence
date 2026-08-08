@@ -1,0 +1,24 @@
+{
+  "id": "sponsor_unit_03_edge_coop_no_board",
+  "notes": "EDGE CASE: borderline SPONSOR_UNIT vs ACTIVE_SALE_LISTING. It's a single unit already on market with a current price, but the defining sponsor angle (sponsor sale of a co-op, no board approval / no interview) makes SPONSOR_UNIT the true category over a generic active listing. Also a co-op where sponsor units normally require board approval — here explicitly waived, which is the signal. Lower confidence floor.",
+  "edgeCase": true,
+  "input": {
+    "subject": "312 W 22nd St #3R, Chelsea — sponsor co-op, NO board interview | $1.35M",
+    "from": { "name": "Hannah Cole", "email": "hcole@corcoran.com" },
+    "receivedAt": "2026-08-07T11:40:00Z",
+    "bodyText": "Hi all,\n\nJust to be clear this is a SPONSOR sale of a co-op unit — no board approval and no board interview required, which is rare for a co-op.\n\n312 W 22nd St, Unit 3R, Chelsea\n1 bed / 1 bath\nAsking $1,350,000\nSponsor holds the unit; buyer avoids the co-op board process entirely. Flip tax waived for sponsor sales. Financing to 80%.\n\nOne unit. Co-broke 2.5%. Ask me for the offering plan.\n\nHannah Cole\nCorcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "SPONSOR_UNIT",
+    "address": "312 W 22nd St",
+    "neighborhood": "Chelsea",
+    "borough": "Manhattan",
+    "beds": 1,
+    "price": 1350000,
+    "confidenceScoreMin": 0.55,
+    "classificationReasonThemes": ["sponsor"],
+    "shouldExtractParty": false
+  }
+}

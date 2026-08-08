@@ -1,0 +1,29 @@
+{
+  "id": "development_inventory_03_unit_availability_xlsx",
+  "notes": "Weekly availability blast from a new-dev sales team; the unit grid is an xlsx parsed to a markdown table in parsedText (body has none of it). Multi-listing -> expectedMultipleOpportunities=5. Grade category + borough only.",
+  "edgeCase": false,
+  "input": {
+    "subject": "One Greenpoint — updated unit availability (wk of 8/3)",
+    "from": { "name": "Sales Team", "email": "sales@onegreenpoint.com" },
+    "receivedAt": "2026-08-03T08:20:00Z",
+    "bodyText": "Good morning brokers,\n\nOne Greenpoint at 21 India St is now selling. This week's live availability is attached as a spreadsheet. Bring your buyers — gallery open by appointment. 2% co-broke.\n\nBest,\nOne Greenpoint Sales Team",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "one_greenpoint_availability.xlsx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "parsedText": "| Unit | Type | Baths | SqFt | Exposure | Price | Status |\n|------|------|-------|------|----------|-------|--------|\n| 3G | 1BR | 1 | 705 | N | $1,095,000 | Available |\n| 6J | 1BR | 1 | 740 | E | $1,175,000 | Available |\n| 8K | 2BR | 2 | 1,050 | SE | $1,795,000 | Available |\n| 12L | 2BR | 2 | 1,120 | S | $1,995,000 | Available |\n| 15A | 3BR | 3 | 1,540 | SW | $2,875,000 | Available |\n\nBuilding: One Greenpoint, 21 India St, Greenpoint, Brooklyn. Common charges ~$1.40/sf. 421-a abatement.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "DEVELOPMENT_INVENTORY",
+    "borough": "Brooklyn",
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["development"],
+    "shouldExtractParty": false,
+    "expectedMultipleOpportunities": 5
+  }
+}

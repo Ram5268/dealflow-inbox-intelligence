@@ -1,0 +1,27 @@
+{
+  "id": "real_estate_event_02_ce_class_image_invite",
+  "notes": "CE (continuing education) class invite delivered as an image flyer; the date/venue/details live ONLY in the image caption (parsedText = vision caption). Body is minimal. Informational -> REAL_ESTATE_EVENT. Grade category + themes + confidence only.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Your CE credits — free 3-hour Fair Housing class (flyer)",
+    "from": { "name": "Douglas Elliman Education", "email": "education@elliman.com" },
+    "receivedAt": "2026-08-03T10:00:00Z",
+    "bodyText": "See the attached flyer for details and registration. Seats are limited.\n\nDE Education",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "ce_class_flyer.png",
+        "mimeType": "image/png",
+        "parsedText": "Flyer image caption: A navy-and-white event flyer titled 'FAIR HOUSING & AGENCY — 3 CE CREDITS (FREE)'. It reads: Wednesday, September 9, 2026, 9:00 AM to 12:00 PM. Location: Douglas Elliman Training Center, 575 Madison Ave, 2nd Floor, Manhattan. Instructor: Karen Whitfield, NYS-approved. 'Fulfills your mandatory Fair Housing continuing-education requirement.' A 'Register Now' button and a QR code appear at the bottom.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "REAL_ESTATE_EVENT",
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["event"],
+    "shouldExtractParty": false
+  }
+}

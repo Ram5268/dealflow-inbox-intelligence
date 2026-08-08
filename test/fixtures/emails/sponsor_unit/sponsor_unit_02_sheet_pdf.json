@@ -1,0 +1,32 @@
+{
+  "id": "sponsor_unit_02_sheet_pdf",
+  "notes": "Single sponsor unit where the unit number, beds, and price live ONLY in the attached sponsor-unit sheet PDF parsedText; body says 'details attached'. Forces attachment read. Grades address + neighborhood + borough + beds + price.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Sponsor unit available — Murray Hill (sheet attached)",
+    "from": { "name": "Owen Petrakis", "email": "opetrakis@bhsusa.com" },
+    "receivedAt": "2026-08-04T13:25:00Z",
+    "bodyText": "Team,\n\nOne remaining sponsor unit in a Murray Hill condominium. All the specifics — unit, layout, and price — are on the attached sponsor unit sheet. No board approval, delivered vacant. Co-broke 2.5%.\n\nOwen Petrakis\nBrown Harris Stevens",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "sponsor_unit_sheet.pdf",
+        "mimeType": "application/pdf",
+        "parsedText": "SPONSOR UNIT — 160 E 38th St, Murray Hill\n\nUnit: 12H\nBeds/Baths: 1BR / 1BA\nInterior: 715 sf\nExposure: South, city views\nAsking: $1,150,000\nCommon charges: $1,020/mo | RE taxes: $985/mo\n\nSPONSOR SALE: No board approval. No flip tax. Purchaser pays NYS/NYC transfer taxes and sponsor's attorney fee. Delivered vacant. Co-broke 2.5% at closing.\n\nContact: Owen Petrakis, Brown Harris Stevens, (212) 555-0166.",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "SPONSOR_UNIT",
+    "address": "160 E 38th St",
+    "neighborhood": "Murray Hill",
+    "borough": "Manhattan",
+    "beds": 1,
+    "price": 1150000,
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["sponsor"],
+    "shouldExtractParty": false
+  }
+}
