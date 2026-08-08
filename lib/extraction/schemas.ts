@@ -45,6 +45,8 @@ export interface OppRowData {
   sourceBrokerage:      string | null
   clientSide:           string | null
   status:               string | null
+  // Brief 6.3 — extraction provenance (null | 'comp_reference' | 'buried_recovery').
+  provenance?:          string | null
   extractedTitle:       string
   extractedSummary:     string
   classificationReason: string
@@ -164,6 +166,7 @@ MULTI-LISTING: If the email contains multiple properties, extract each as a sepa
 EXTRACTION RULES:
 - Extract from subject line first, then body, then attachments.
 - Never invent address, price, beds, baths, or neighborhood. Use null if not stated anywhere.
+- A cross-street or intersection with no street number ("corner of 5th and 82nd", "5th & 82nd") is NOT a mailable address — output null for address (a neighborhood may still be set).
 - price: number only (e.g. 650000, not "$650,000")
 - beds/baths: number (e.g. 2, not "2BR")
 - availabilityDate: ISO date string "YYYY-MM-DD" or null
@@ -253,6 +256,7 @@ Example: availability reports with "1BR $3,500 / 2BR $4,800" → two entries.
 EXTRACTION RULES:
 - Extract from subject line first, then body, then attachments.
 - Never invent address, rent, or beds. Use null if not stated anywhere.
+- A cross-street or intersection with no street number ("corner of 5th and 82nd", "5th & 82nd") is NOT a mailable address — output null for address (a neighborhood may still be set).
 - Return at least one entry if any listing details are found (even just from the subject).
 - price: monthly rent as a number (e.g. 3500, not "$3,500/mo"). Use for exact rent.
 - minPrice/maxPrice: use when a range is given (e.g. "$3,500-$4,000/mo")
@@ -342,6 +346,7 @@ SUBJECT LINE IS KEY: Broker emails often put key details in the subject. Extract
 EXTRACTION RULES:
 - Extract from subject line first, then body, then attachments
 - address: specific unit address (e.g., "317 East 18th Street #4A"). Never null if stated in subject
+- CROSS-STREET / INTERSECTION: if the only location is a cross-street or intersection with NO specific street number ("corner of 5th and 82nd", "5th & 82nd", "5th Ave and 82nd St"), output null for address — a cross-street is not a mailable address. (A neighborhood may still be set if clearly implied.)
 - price: expected asking price as a number. For ranges, use minPrice/maxPrice
 - availabilityDate: when the listing will go live or be available ("YYYY-MM-DD" or null)
 - beds: number (0=studio). Never null if stated
@@ -688,6 +693,7 @@ EXTRACTION RULES:
 - propertyType: condo, co-op, townhouse, multi-family, etc.
 - transactionType: always "SALE"
 - Never invent address, price, or motivation. Use null if not stated
+- A cross-street or intersection with no street number ("corner of 5th and 82nd", "5th & 82nd") is NOT a mailable address — output null for address (a neighborhood may still be set)
 - confidenceScore: 0.9+ unambiguous, 0.7–0.9 probable
 
 Return ONLY valid JSON: { "leads": [...] }`
