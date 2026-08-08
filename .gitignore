@@ -44,3 +44,6 @@ next-env.d.ts
 
 # Local-only test PDF for parsing smoke tests (do not commit)
 public/test.pdf
+
+# Brief 6.0 ingestion fixture harness output
+test/fixtures/last-run-report.json

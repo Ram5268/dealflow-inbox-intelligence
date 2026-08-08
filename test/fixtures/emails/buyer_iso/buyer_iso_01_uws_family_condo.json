@@ -1,0 +1,26 @@
+{
+  "id": "buyer_iso_01_uws_family_condo",
+  "notes": "Classic buyer ISO blast broadcasting a client's purchase criteria to the broker network. shouldExtractParty=true; address should be null (buyer is looking, not selling). Criteria (neighborhoods, beds, budget) fold onto the opportunity row.",
+  "edgeCase": false,
+  "input": {
+    "subject": "ISO: 3BR condo UWS for qualified buyer, up to $3.2M",
+    "from": { "name": "Dana Kessler", "email": "dkessler@elliman.com" },
+    "receivedAt": "2026-08-04T16:20:00Z",
+    "bodyText": "Hi everyone,\n\nI have a well-qualified, pre-approved buyer actively looking on the Upper West Side. Sharing their criteria in case you have something coming soon or off-market:\n\n- 3 bed / 2 bath minimum\n- Condo or condop (no co-ops - they want flexibility to sublet)\n- Budget up to $3.2M\n- Doorman + elevator, in-unit W/D a big plus\n- Below 96th St, ideally near the park\n- Closing flexible, all cash available\n\nMust-have: real second bath. Dealbreaker: walk-up.\n\nPlease send anything that fits - happy to co-broke.\n\nDana Kessler\nDouglas Elliman",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "BUYER_ISO",
+    "address": null,
+    "neighborhood": "Upper West Side",
+    "borough": "Manhattan",
+    "beds": null,
+    "price": null,
+    "propertyType": null,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["buyer"],
+    "shouldExtractParty": true,
+    "expectedMultipleOpportunities": null
+  }
+}

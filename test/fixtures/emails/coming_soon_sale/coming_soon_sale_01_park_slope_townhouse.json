@@ -1,0 +1,26 @@
+{
+  "id": "coming_soon_sale_01_park_slope_townhouse",
+  "notes": "Broker blast, standard plain-text format, single listing. The canonical easy case.",
+  "edgeCase": false,
+  "input": {
+    "subject": "COMING SOON | 461 6th St, Park Slope | 2BR $1.75M",
+    "from": { "name": "Jane Smith", "email": "jane.smith@compass.com" },
+    "receivedAt": "2026-08-05T14:32:00Z",
+    "bodyText": "Hi all,\n\nWanted to give my broker network a heads up on a coming soon listing before it hits the market Monday.\n\n461 6th St, Park Slope\n2 bed / 1 bath\nAsking $1,750,000\nClassic brownstone floor-through with original details, south-facing garden.\n\nHappy to co-broke. Reach out if you have a qualified buyer and I can arrange a private preview this weekend.\n\nBest,\nJane Smith\nLicensed RE Salesperson | Compass\n(917) 555-0142",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_SALE",
+    "address": "461 6th St",
+    "neighborhood": "Park Slope",
+    "borough": "Brooklyn",
+    "beds": 2,
+    "price": 1750000,
+    "propertyType": null,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false,
+    "expectedMultipleOpportunities": null
+  }
+}
