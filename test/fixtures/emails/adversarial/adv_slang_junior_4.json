@@ -1,0 +1,14 @@
+{
+  "id": "adv_slang_junior_4",
+  "notes": "'Junior 4' is NYC jargon for a 1-bedroom plus a windowed dining alcove (4 rooms total). Correct beds = 1 (some agents market it as a flex-2). The failure is reading the '4' as 4 bedrooms.",
+  "edgeCase": true,
+  "input": {
+    "subject": "No-Fee Junior 4 in Murray Hill — Prewar Doorman, Avail Now",
+    "from": { "name": "Danielle Ferraro", "email": "danielle.ferraro@corcoran.com" },
+    "receivedAt": "2026-04-14T10:22:00-04:00",
+    "bodyText": "Hi all,\n\nJust picked up a great rental listing at 155 East 34th St, right in the heart of Murray Hill.\n\nIt's a classic prewar Junior 4 — so you've got the one bedroom plus a windowed dining alcove off the living room that a lot of my clients use as a home office or flex space. Some folks market these as a flex-2, but to be clear it's a true 1BR layout with the extra windowed room.\n\nDetails:\n- $3,800/mo\n- Prewar building, beautiful details, high ceilings\n- Full-time doorman\n- NO FEE\n- Available now\n\nEasy to show this week — let me know if you have anyone.\n\nBest,\nDanielle Ferraro\nCorcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "RENTAL_LISTING", "address": "155 East 34th St", "neighborhood": "Murray Hill", "borough": "Manhattan", "beds": 1, "price": 3800, "confidenceScoreMin": 0.5 }
+}

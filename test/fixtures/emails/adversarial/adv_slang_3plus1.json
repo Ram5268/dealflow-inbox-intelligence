@@ -1,0 +1,14 @@
+{
+  "id": "adv_slang_3plus1",
+  "notes": "'3+1' means 3 bedrooms plus a convertible/den — true bedrooms = 3, not 4. The failure is counting the '+1' flex room as a 4th bedroom.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Park Slope 3+1 Floor-Through on 4th St — $2.9M",
+    "from": { "name": "Meredith Callahan", "email": "meredith.callahan@compass.com" },
+    "receivedAt": "2026-05-19T13:40:00-04:00",
+    "bodyText": "Hi everyone,\n\nJust listed a beautiful townhouse-style floor-through at 470 4th St in the heart of Park Slope.\n\nIt's a 3+1 — three proper bedrooms plus a bonus '+1' that's a windowed home office/den off the hallway. To set expectations, the +1 is not a legal bedroom, it's a flexible windowed office/den, but it's a fantastic work-from-home space.\n\nDetails:\n- 3 bedrooms + windowed office/den\n- Full floor-through with original detail\n- Private outdoor space\n- Asking $2,900,000\n\nLet me know who you're working with and I'll get you in.\n\nWarmly,\nMeredith Callahan\nCompass",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "address": "470 4th St", "neighborhood": "Park Slope", "borough": "Brooklyn", "beds": 3, "price": 2900000, "confidenceScoreMin": 0.5 }
+}

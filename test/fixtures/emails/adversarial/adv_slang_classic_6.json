@@ -1,0 +1,14 @@
+{
+  "id": "adv_slang_classic_6",
+  "notes": "'Classic 6' is a prewar 6-room layout = 2 bedrooms + living room + formal dining room + kitchen + a maid's/staff room. Canonical true-bedroom count = 2 (a '3' is defensible if the maid's room is counted). The failure is reading the '6' as 6 bedrooms.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Prewar Classic 6 Co-op on Riverside Dr — $2.4M, Co-Broke Welcome",
+    "from": { "name": "Jonathan Reyes", "email": "jonathan.reyes@elliman.com" },
+    "receivedAt": "2026-03-02T09:05:00-05:00",
+    "bodyText": "Good morning brokers,\n\nExcited to bring 315 Riverside Dr to market — a gorgeous prewar Classic 6 co-op on the Upper West Side with sweeping park and river views.\n\nAs a true Classic 6, you get the two bedrooms, a grand living room, a separate formal dining room, an eat-in kitchen, and a staff/maid's room off the kitchen (perfect as a nursery, office, or guest room).\n\nHighlights:\n- Original herringbone hardwood floors\n- Formal dining room with prewar moldings\n- Staff room + full second bath\n- Asking $2,400,000\n\nFull co-broke offered. Happy to arrange private showings for qualified buyers.\n\nBest regards,\nJonathan Reyes\nDouglas Elliman",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "address": "315 Riverside Dr", "neighborhood": "Upper West Side", "borough": "Manhattan", "beds": 2, "price": 2400000, "confidenceScoreMin": 0.5 }
+}
