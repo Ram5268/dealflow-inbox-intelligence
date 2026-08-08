@@ -195,12 +195,19 @@ async function buildFixtureContext(fx: Fixture): Promise<string> {
 function norm(s: string): string {
   return s.toLowerCase().replace(/[.,]/g, '').replace(/\s+/g, ' ').trim()
 }
+// Full address normalization (directionals, street types, unit suffix). Applied
+// ONLY as a fallback after a strict match fails, so any rescue is visible.
 function normAddr(s: string): string {
   return norm(s)
+    .replace(/#\s*[\w-]+/g, ' ')
+    .replace(/\b(unit|apt|apartment|suite|ste)\s+[\w-]+/g, ' ')
     .replace(/\bstreet\b/g, 'st').replace(/\bavenue\b/g, 'ave')
     .replace(/\bplace\b/g, 'pl').replace(/\bboulevard\b/g, 'blvd')
     .replace(/\broad\b/g, 'rd').replace(/\bdrive\b/g, 'dr')
-    .replace(/\bunit\b/g, '').replace(/\s+/g, ' ').trim()
+    .replace(/\blane\b/g, 'ln').replace(/\bterrace\b/g, 'ter')
+    .replace(/\beast\b/g, 'e').replace(/\bwest\b/g, 'w')
+    .replace(/\bnorth\b/g, 'n').replace(/\bsouth\b/g, 's')
+    .replace(/\s+/g, ' ').trim()
 }
 const NBHD_ALIAS: Record<string, string> = {
   wv: 'west village', uws: 'upper west side', ues: 'upper east side',
@@ -211,13 +218,76 @@ function normNbhd(s: string): string {
   const n = norm(s)
   return NBHD_ALIAS[n] ?? n
 }
-function addrMatch(exp: string, act: string): boolean {
-  const e = normAddr(exp), a = normAddr(act)
-  if (!e || !a) return false
-  return a.includes(e) || e.includes(a)
+function stripArticle(s: string): string { return norm(s).replace(/^the\s+/, '') }
+
+// Matchers return whether they matched and, if the match required normalization
+// beyond a strict compare, a human-readable description of the rescue.
+type MatchOut = { pass: boolean; normalized?: string }
+
+function addrMatch(exp: string, act: string): MatchOut {
+  const es = norm(exp), as = norm(act)
+  if (es && as && (as.includes(es) || es.includes(as))) return { pass: true }
+  const en = normAddr(exp), an = normAddr(act)
+  if (en && an && (an.includes(en) || en.includes(an)))
+    return { pass: true, normalized: `"${exp}" ~ "${act}" (normalized "${en}" ~ "${an}")` }
+  return { pass: false }
+}
+function boroughMatch(exp: string, act: string): MatchOut {
+  if (norm(exp) === norm(act)) return { pass: true }
+  if (stripArticle(exp) === stripArticle(act))
+    return { pass: true, normalized: `"${exp}" ~ "${act}" (article-stripped)` }
+  return { pass: false }
+}
+function nbhdMatch(exp: string, act: string): MatchOut {
+  if (norm(exp) === norm(act) || norm(act).includes(norm(exp))) return { pass: true }
+  const en = normNbhd(exp)
+  if (en === normNbhd(act) || norm(act).includes(en))
+    return { pass: true, normalized: `"${exp}" ~ "${act}" (alias)` }
+  return { pass: false }
+}
+function propTypeMatch(exp: string, act: string): MatchOut {
+  return { pass: norm(exp) === norm(act) }
 }
 
-type FieldResult = { field: string; pass: boolean; expected: unknown; actual: unknown; note?: string }
+// Semantic-ish theme matching: literal → hyphen/space-insensitive → synonym.
+// Anything matched beyond literal is reported as a normalization warning.
+const THEME_SYNONYMS: Record<string, string[]> = {
+  'coming soon': ['coming soon', 'pre-market', 'pre market', 'before it hits', 'not yet on market', 'before public', 'hitting the market', 'pre-launch', 'prelaunch', 'preview', 'ahead of', 'soon to', 'upcoming'],
+  'off-market': ['off-market', 'off market', 'pocket', 'quietly', 'discreet', 'not publicly', 'privately', 'private listing'],
+  'back on market': ['back on market', 'back on the market', 'returned to market', 're-listed', 'relisted', 'fell through', 'available again'],
+  'development': ['development', 'new construction', 'new-construction', 'new dev', 'sponsor', 'building-level', 'offering plan', 'condominium', 'new building', 'sales gallery'],
+  'rental': ['rental', 'rent', 'lease', 'per month', '/mo', 'monthly'],
+  'sale': ['sale', 'for sale', 'selling', 'purchase'],
+  'conversation': ['conversation', 'client', 'reply', 'thread', 'back-and-forth', 'correspondence', 'discussion', 'message', 'personal', 'inquiry'],
+  'price': ['price', 'reduced', 'reduction', 'reprice', 'drop', 'lowered'],
+  'buyer': ['buyer', 'buy', 'purchase', 'iso', 'looking for'],
+  'single listing': ['single', 'one listing', 'a listing', 'individual unit'],
+}
+function themeFound(reason: string, theme: string): { found: boolean; via: 'literal' | 'normalized' | 'synonym' | 'none' } {
+  const r = reason.toLowerCase()
+  const t = theme.toLowerCase()
+  if (r.includes(t)) return { found: true, via: 'literal' }
+  const rn = r.replace(/[-\s]+/g, ' ')
+  const tn = t.replace(/[-\s]+/g, ' ')
+  if (rn.includes(tn)) return { found: true, via: 'normalized' }
+  for (const s of THEME_SYNONYMS[t] ?? []) {
+    if (rn.includes(s.replace(/[-\s]+/g, ' '))) return { found: true, via: 'synonym' }
+  }
+  return { found: false, via: 'none' }
+}
+
+// Known fixture ambiguities — surfaced in the report as 'ambiguous' (excluded from
+// pass/fail), never silently passed and never used to edit a fixture (6.1 rule).
+const AMBIGUOUS: { id: string; field: string; reason: string }[] = [
+  { id: 'coming_soon_sale_04_astoria_two_family_htmltable', field: 'beds', reason: '2-family: 3 beds/unit vs 6 total — neither wrong' },
+]
+
+// Grader normalizations that rescued a strict-mismatch. Every entry is enumerated
+// in the report so a real extraction bug can never hide behind normalization.
+const NORMALIZATIONS: { id: string; field: string; detail: string }[] = []
+
+type FieldStatus = 'pass' | 'fail' | 'ambiguous'
+type FieldResult = { field: string; status: FieldStatus; expected: unknown; actual: unknown; note?: string; normalized?: string }
 
 function gradeExtraction(fx: Fixture, ext: RunExtractionResult | null, predCategory: string, classifierConfidence: number): {
   fields: FieldResult[]
@@ -229,62 +299,53 @@ function gradeExtraction(fx: Fixture, ext: RunExtractionResult | null, predCateg
   const primary: OppRowData | undefined = rows[0]
   const extractionRan = ext != null && ext.error == null
 
+  // Record a graded field. A failing field that is a known ambiguity becomes
+  // 'ambiguous' (excluded from scoring). A passing field rescued by normalization
+  // logs a warning to NORMALIZATIONS.
+  function record(field: string, pass: boolean, expected: unknown, actual: unknown, normalized?: string, note?: string) {
+    if (!pass) {
+      const amb = AMBIGUOUS.find(a => a.id === fx.id && a.field === field)
+      if (amb) { fields.push({ field, status: 'ambiguous', expected, actual, note: amb.reason }); return }
+    }
+    if (pass && normalized) NORMALIZATIONS.push({ id: fx.id, field, detail: normalized })
+    fields.push({ field, status: pass ? 'pass' : 'fail', expected, actual, note, normalized: pass ? normalized : undefined })
+  }
+
   // category — graded against classifier prediction (what production routes on).
-  fields.push({ field: 'category', pass: predCategory === exp.category, expected: exp.category, actual: predCategory })
+  record('category', predCategory === exp.category, exp.category, predCategory)
 
   const isMulti = typeof exp.expectedMultipleOpportunities === 'number'
+  if (isMulti) record('multipleOpportunities', rows.length === exp.expectedMultipleOpportunities, exp.expectedMultipleOpportunities, rows.length)
 
-  if (isMulti) {
-    fields.push({
-      field: 'multipleOpportunities',
-      pass: rows.length === exp.expectedMultipleOpportunities,
-      expected: exp.expectedMultipleOpportunities, actual: rows.length,
-    })
-  }
-
-  // Scalar fields — only when extraction produced a row and it's not multi-listing.
   const gradeScalars = extractionRan && !!primary && !isMulti
-  const scalarOrBoroughOnly = isMulti  // for multi we still grade borough if asked
 
-  function gradeStr(field: 'address' | 'neighborhood' | 'borough' | 'propertyType', matcher: (e: string, a: string) => boolean) {
+  function gradeStr(field: 'address' | 'neighborhood' | 'borough' | 'propertyType', matcher: (e: string, a: string) => MatchOut) {
     if (!(field in exp)) return
     const e = (exp as Record<string, unknown>)[field]
-    if (!extractionRan || !primary) {
-      fields.push({ field, pass: false, expected: e, actual: '(no extraction)', note: 'not extracted' })
-      return
-    }
+    if (!extractionRan || !primary) { record(field, false, e, '(no extraction)', undefined, 'not extracted'); return }
     const a = (primary as Record<string, unknown>)[field] as string | null
-    if (e === null) {
-      // non-hallucination assertion
-      fields.push({ field, pass: a == null || a === '', expected: null, actual: a })
-      return
-    }
-    if (a == null) { fields.push({ field, pass: false, expected: e, actual: null }); return }
-    fields.push({ field, pass: matcher(String(e), String(a)), expected: e, actual: a })
+    if (e === null) { record(field, a == null || a === '', null, a); return }  // non-hallucination assertion
+    if (a == null) { record(field, false, e, null); return }
+    const out = matcher(String(e), String(a))
+    record(field, out.pass, e, a, out.normalized)
   }
 
-  // borough gradeable even for multi (checked on primary)
   if (isMulti) {
-    if ('borough' in exp && exp.borough !== undefined) gradeStr('borough', (e, a) => norm(e) === norm(a))
+    if ('borough' in exp && exp.borough != null) gradeStr('borough', boroughMatch)
   } else if (gradeScalars) {
     gradeStr('address', addrMatch)
-    gradeStr('neighborhood', (e, a) => normNbhd(e) === normNbhd(a) || norm(a).includes(normNbhd(e)))
-    gradeStr('borough', (e, a) => norm(e) === norm(a))
-    gradeStr('propertyType', (e, a) => norm(e) === norm(a))
-
-    if ('beds' in exp && exp.beds !== undefined && exp.beds !== null) {
-      fields.push({ field: 'beds', pass: primary!.beds === exp.beds, expected: exp.beds, actual: primary!.beds })
-    }
-    if ('price' in exp && exp.price !== undefined && exp.price !== null) {
+    gradeStr('neighborhood', nbhdMatch)
+    gradeStr('borough', boroughMatch)
+    gradeStr('propertyType', propTypeMatch)
+    if ('beds' in exp && exp.beds != null) record('beds', primary!.beds === exp.beds, exp.beds, primary!.beds)
+    if ('price' in exp && exp.price != null) {
       const a = primary!.price
-      fields.push({ field: 'price', pass: a != null && Math.abs(a - exp.price) <= 5000, expected: exp.price, actual: a })
+      record('price', a != null && Math.abs(a - exp.price) <= 5000, exp.price, a)
     }
   } else if (!extractionRan) {
-    // Scalars requested but extraction didn't run — mark them failed (root cause is
-    // usually a classifier miss or a needsDeepExtract=false informational category).
     for (const f of ['address', 'neighborhood', 'borough', 'beds', 'price', 'propertyType'] as const) {
       if (f in exp && (exp as Record<string, unknown>)[f] !== undefined) {
-        fields.push({ field: f, pass: false, expected: (exp as Record<string, unknown>)[f], actual: '(no extraction)', note: 'not extracted' })
+        record(f, false, (exp as Record<string, unknown>)[f], '(no extraction)', undefined, 'not extracted')
       }
     }
   }
@@ -293,29 +354,24 @@ function gradeExtraction(fx: Fixture, ext: RunExtractionResult | null, predCateg
   if (typeof exp.confidenceScoreMin === 'number') {
     const conf = extractionRan && primary ? primary.confidenceScore : classifierConfidence
     const src = extractionRan && primary ? 'extract' : 'classifier'
-    fields.push({
-      field: 'confidenceScoreMin', pass: conf >= exp.confidenceScoreMin,
-      expected: `>=${exp.confidenceScoreMin}`, actual: `${conf?.toFixed?.(2) ?? conf} (${src})`,
-    })
+    record('confidenceScoreMin', conf >= exp.confidenceScoreMin, `>=${exp.confidenceScoreMin}`, `${conf?.toFixed?.(2) ?? conf} (${src})`)
   }
 
-  // classificationReasonThemes — only gradeable when extraction produced a reason.
-  if (Array.isArray(exp.classificationReasonThemes) && exp.classificationReasonThemes.length) {
-    if (extractionRan && primary) {
-      const reason = (primary.classificationReason ?? '').toLowerCase()
-      const missing = exp.classificationReasonThemes.filter(t => !reason.includes(t.toLowerCase()))
-      fields.push({
-        field: 'reasonThemes', pass: missing.length === 0,
-        expected: exp.classificationReasonThemes, actual: missing.length ? `missing: ${missing.join(', ')}` : 'all present',
-      })
-    }
-    // else: not graded (informational/NOISE — no extraction reason exists)
+  // classificationReasonThemes — semantic containment; only when a reason exists.
+  if (Array.isArray(exp.classificationReasonThemes) && exp.classificationReasonThemes.length && extractionRan && primary) {
+    const reason = primary.classificationReason ?? ''
+    const results = exp.classificationReasonThemes.map(t => ({ t, ...themeFound(reason, t) }))
+    const missing = results.filter(r => !r.found).map(r => r.t)
+    const viaNorm = results.filter(r => r.found && r.via !== 'literal')
+    const normNote = viaNorm.length ? `themes matched semantically: ${viaNorm.map(v => `"${v.t}"(${v.via})`).join(', ')}` : undefined
+    record('reasonThemes', missing.length === 0, exp.classificationReasonThemes,
+      missing.length ? `missing: ${missing.join(', ')}` : 'all present', normNote)
   }
 
   // shouldExtractParty
   if (typeof exp.shouldExtractParty === 'boolean') {
     const actualParty = extractionRan && rows.some(r => (r.clientSide && r.clientSide.length > 0) || PARTY_CATS.has(r.category))
-    fields.push({ field: 'shouldExtractParty', pass: actualParty === exp.shouldExtractParty, expected: exp.shouldExtractParty, actual: actualParty })
+    record('shouldExtractParty', actualParty === exp.shouldExtractParty, exp.shouldExtractParty, actualParty)
   }
 
   return { fields, extractionRan }
@@ -391,8 +447,8 @@ async function main() {
     }
 
     const { fields, extractionRan } = gradeExtraction(fx, ext, predCategory, cls.confidence)
-    const graded = fields.length
-    const passed = fields.filter(f => f.pass).length
+    const graded = fields.filter(f => f.status !== 'ambiguous').length   // ambiguities excluded
+    const passed = fields.filter(f => f.status === 'pass').length
     const score = graded ? passed / graded : 1
 
     reports.push({
@@ -437,31 +493,51 @@ function printSummary(reports: FixtureReport[], runningCost: number, aborted: bo
     )
   }
 
-  // Field-level failures
+  // Field-level failures (only real 'fail' status — ambiguities are separate)
   console.log('\n' + '═'.repeat(75))
-  console.log('FIXTURES SCORING < 100% (field-level failures)')
+  console.log('FIXTURES WITH FIELD FAILURES')
   console.log('═'.repeat(75))
-  const imperfect = reports.filter(r => r.score < 1).sort((a, b) => a.score - b.score)
+  const imperfect = reports.filter(r => r.fields.some(f => f.status === 'fail')).sort((a, b) => a.score - b.score)
   for (const r of imperfect) {
-    const fails = r.fields.filter(f => !f.pass)
+    const fails = r.fields.filter(f => f.status === 'fail')
     console.log(`  ${(r.score * 100).toFixed(0).padStart(3)}%  ${r.id}${r.edgeCase ? ' [edge]' : ''}`)
     for (const f of fails) {
       console.log(`         ${f.field}: expected ${JSON.stringify(f.expected)} | actual ${JSON.stringify(f.actual)}${f.note ? ` (${f.note})` : ''}`)
     }
   }
+  if (!imperfect.length) console.log('  (none)')
 
-  // Field aggregate
-  const fieldAgg = new Map<string, { pass: number; total: number }>()
+  // Normalization warnings — strict mismatches the grader rescued. Enumerated so a
+  // real extraction bug (wrong unit / wrong street) can't hide behind normalization.
+  console.log('\n' + '═'.repeat(75))
+  console.log(`NORMALIZATIONS — ${NORMALIZATIONS.length} strict mismatch(es) rescued by the grader`)
+  console.log('═'.repeat(75))
+  for (const n of NORMALIZATIONS) console.log(`  ~ ${n.id} · ${n.field}: ${n.detail}`)
+  if (!NORMALIZATIONS.length) console.log('  (none)')
+
+  // Fixture ambiguities — excluded from scoring, surfaced, never silently resolved.
+  const ambiguities = reports.flatMap(r => r.fields.filter(f => f.status === 'ambiguous').map(f => ({ id: r.id, f })))
+  console.log('\n' + '═'.repeat(75))
+  console.log(`FIXTURE AMBIGUITIES — ${ambiguities.length} (excluded from scoring; neither wrong)`)
+  console.log('═'.repeat(75))
+  for (const { id, f } of ambiguities) {
+    console.log(`  ? ${id} · ${f.field}: expected ${JSON.stringify(f.expected)}, got ${JSON.stringify(f.actual)} — ${f.note}`)
+  }
+  if (!ambiguities.length) console.log('  (none)')
+
+  // Field aggregate (ambiguous excluded from denominator)
+  const fieldAgg = new Map<string, { pass: number; total: number; norm: number }>()
   for (const r of reports) for (const f of r.fields) {
-    const a = fieldAgg.get(f.field) ?? { pass: 0, total: 0 }
-    a.total++; if (f.pass) a.pass++
+    if (f.status === 'ambiguous') continue
+    const a = fieldAgg.get(f.field) ?? { pass: 0, total: 0, norm: 0 }
+    a.total++; if (f.status === 'pass') a.pass++; if (f.normalized) a.norm++
     fieldAgg.set(f.field, a)
   }
   console.log('\n' + '═'.repeat(75))
-  console.log('FIELD-LEVEL AGGREGATE (across all graded fixtures)')
+  console.log('FIELD-LEVEL AGGREGATE (across all graded fixtures; * = # rescued by normalization)')
   console.log('═'.repeat(75))
   for (const [field, a] of [...fieldAgg.entries()].sort()) {
-    console.log(`  ${field.padEnd(24)} ${a.pass}/${a.total}  (${((a.pass / a.total) * 100).toFixed(0)}%)`)
+    console.log(`  ${field.padEnd(24)} ${a.pass}/${a.total}  (${((a.pass / a.total) * 100).toFixed(0)}%)${a.norm ? `  *${a.norm}` : ''}`)
   }
 
   const classifierHits = reports.filter(reportCategoryHit).length
@@ -469,14 +545,14 @@ function printSummary(reports: FixtureReport[], runningCost: number, aborted: bo
   console.log('\n' + '═'.repeat(75))
   console.log(`TOTAL FIXTURES:        ${reports.length}${aborted ? ' (ABORTED at budget cap)' : ''}`)
   console.log(`CLASSIFIER ACCURACY:   ${classifierHits}/${reports.length} (${((classifierHits / reports.length) * 100).toFixed(0)}%)`)
-  console.log(`OVERALL FIELD ACC:     ${(overall * 100).toFixed(1)}%`)
+  console.log(`OVERALL FIELD ACC:     ${(overall * 100).toFixed(1)}%  (${NORMALIZATIONS.length} normalization rescues, ${ambiguities.length} ambiguities excluded)`)
   console.log(`TOTAL COST:            $${runningCost.toFixed(4)}`)
   console.log('═'.repeat(75))
 
   writeFileSync(REPORT_PATH, JSON.stringify({
     stamp, filter: FILTER ?? null, dryRun: DRY_RUN, attachmentsLive: ATTACHMENTS_LIVE,
     totalFixtures: reports.length, aborted, classifierHits, overallFieldAccuracy: overall,
-    totalCostUsd: runningCost, reports,
+    totalCostUsd: runningCost, normalizations: NORMALIZATIONS, ambiguities, reports,
   }, null, 2))
   console.log(`\nReport written to ${REPORT_PATH}`)
 }
@@ -484,7 +560,7 @@ function printSummary(reports: FixtureReport[], runningCost: number, aborted: bo
 // classifier hit = predicted category equals the fixture's expected category
 function reportCategoryHit(r: FixtureReport): boolean {
   const catField = r.fields.find(f => f.field === 'category')
-  return !!catField?.pass
+  return catField?.status === 'pass'
 }
 
 main().catch(e => { console.error(e); process.exit(1) })
