@@ -15,8 +15,8 @@
 // tree's "on failure: leave it").
 import { prisma } from '../prisma'
 import { Category, TransactionType, type ExtractedOpportunity } from '@prisma/client'
-import { EXTRACTION_SPEC_BY_CATEGORY, type MapCtx, type OppRowData } from './schemas'
-import { extractWithSonnet } from './sonnetExtractor'
+import { EXTRACTION_SPEC_BY_CATEGORY, type MapCtx, type OppRowData, type ExtractionSpec } from './schemas'
+import { extractWithSonnet, type SonnetUsage } from './sonnetExtractor'
 import { buildOpportunityText, upsertOpportunityEmbedding } from '../embeddings'
 
 const VALID_CATEGORY = new Set<string>(Object.values(Category))
@@ -34,7 +34,7 @@ const PRICE = {
 // multi-page PDFs are truncated with a logged note rather than silently.
 const MAX_CONTEXT_CHARS = 60_000
 
-interface ChunkRow {
+export interface ChunkRow {
   chunkType:              string
   content:                string
   pageNumber:             number | null
@@ -44,7 +44,7 @@ interface ChunkRow {
   parentLinkedResourceId: string | null
 }
 
-function buildContext(
+export function buildContext(
   email: { subject: string; senderName: string | null; senderEmail: string | null; receivedDateTime: Date },
   chunks: ChunkRow[],
   attachmentNames: Map<string, string>,
@@ -122,6 +122,70 @@ function buildContext(
   return { text, truncated }
 }
 
+export interface RunExtractionResult {
+  /** mapItem'd rows, with invalid-category and NOISE rows already dropped. */
+  rows:         OppRowData[]
+  /** Count of raw items Sonnet returned, before the validity/NOISE filter. */
+  rawItemCount: number
+  usage:        SonnetUsage | null
+  costUsd:      number | null
+  durationMs:   number
+  /** Non-null when the extraction should be treated as a skip. */
+  error:        string | null
+}
+
+// Pure extraction step: given an already-assembled context string and the target
+// category spec, run Sonnet in forced tool_use mode and map + filter its output
+// into OppRowData rows. Writes NOTHING (no DB, no enrichment, no embedding) — the
+// caller owns persistence. Exposed so the fixture harness (Brief 6.0) can exercise
+// the exact same extraction path extractEmailV2 uses in production.
+export async function runExtraction(
+  spec: ExtractionSpec,
+  context: string,
+  ctx: MapCtx,
+): Promise<RunExtractionResult> {
+  const userMessage = `Extract all relevant records from this email. The content below is assembled from the email body, any linked pages, attachment text/tables, and inline-image vision captions.\n\n${context}`
+
+  const t0 = Date.now()
+  const result = await extractWithSonnet({
+    systemPrompt:    spec.systemPrompt,
+    userMessage,
+    toolName:        spec.toolName,
+    toolDescription: spec.toolDescription,
+    inputSchema:     spec.inputSchema,
+    zodSchema:       spec.responseSchema,
+  })
+  const durationMs = Date.now() - t0
+
+  const usage = result.usage
+  const costUsd = usage
+    ? usage.inputTokens * PRICE.input + usage.outputTokens * PRICE.output +
+      usage.cacheReadTokens * PRICE.cacheRead + usage.cacheCreationTokens * PRICE.cacheCreation
+    : null
+
+  if (result.error || !result.data) {
+    return { rows: [], rawItemCount: 0, usage, costUsd, durationMs, error: result.error ?? 'no data' }
+  }
+
+  const items = (result.data as Record<string, unknown[]>)[spec.arrayKey] ?? []
+  if (!Array.isArray(items) || items.length === 0) {
+    return { rows: [], rawItemCount: 0, usage, costUsd, durationMs, error: null }
+  }
+
+  const rows = items
+    .map((item): OppRowData => spec.mapItem(item, ctx))
+    .filter(row => {
+      if (!VALID_CATEGORY.has(row.category)) {
+        console.error(`[extractV2] dropping item with invalid category "${row.category}"`)
+        return false
+      }
+      if (row.category === 'NOISE') return false
+      return true
+    })
+
+  return { rows, rawItemCount: items.length, usage, costUsd, durationMs, error: null }
+}
+
 export async function extractEmailV2(
   rawEmailId: string,
   organizationId: string,
@@ -173,56 +237,31 @@ export async function extractEmailV2(
   const { text: context, truncated } = buildContext(email, chunks, attachmentNames, linkedUrls)
   if (truncated) console.log(`[extractV2] ${rawEmailId}: context truncated to ${MAX_CONTEXT_CHARS} chars`)
 
-  const userMessage = `Extract all relevant records from this email. The content below is assembled from the email body, any linked pages, attachment text/tables, and inline-image vision captions.\n\n${context}`
-
-  const t0 = Date.now()
-  const result = await extractWithSonnet({
-    systemPrompt:    spec.systemPrompt,
-    userMessage,
-    toolName:        spec.toolName,
-    toolDescription: spec.toolDescription,
-    inputSchema:     spec.inputSchema,
-    zodSchema:       spec.responseSchema,
-  })
-  const durationMs = Date.now() - t0
+  const ctx: MapCtx = { subject: email.subject, senderName: email.senderName, senderEmail: email.senderEmail }
+  const ext = await runExtraction(spec, context, ctx)
+  const durationMs = ext.durationMs
 
   // Cost log (non-fatal). Lives in AIExtractionLog like the V1 cost logger.
-  const usage = result.usage
-  const estimatedCostUsd = usage
-    ? usage.inputTokens * PRICE.input + usage.outputTokens * PRICE.output +
-      usage.cacheReadTokens * PRICE.cacheRead + usage.cacheCreationTokens * PRICE.cacheCreation
-    : null
   await prisma.aIExtractionLog.create({
     data: {
       organizationId, rawEmailId, model: 'claude-sonnet-4-6',
       extractorType: spec.kind, extractorVersion: '2.0', promptVersion: '2.0', schemaVersion: '2.0',
-      inputTokens: usage?.inputTokens ?? null, outputTokens: usage?.outputTokens ?? null,
-      estimatedCostUsd, durationMs, error: result.error,
+      inputTokens: ext.usage?.inputTokens ?? null, outputTokens: ext.usage?.outputTokens ?? null,
+      estimatedCostUsd: ext.costUsd, durationMs, error: ext.error,
     },
   }).catch(() => {})
 
-  if (result.error || !result.data) {
-    console.error(`[extractV2] ${rawEmailId}: extraction skipped — ${result.error ?? 'no data'}`)
+  if (ext.error) {
+    console.error(`[extractV2] ${rawEmailId}: extraction skipped — ${ext.error}`)
     return []
   }
 
-  const items = (result.data as Record<string, unknown[]>)[spec.arrayKey] ?? []
-  if (!Array.isArray(items) || items.length === 0) {
+  if (ext.rawItemCount === 0) {
     console.log(`[extractV2] ${rawEmailId}: 0 records extracted — skipping (non-destructive)`)
     return []
   }
 
-  const ctx: MapCtx = { subject: email.subject, senderName: email.senderName, senderEmail: email.senderEmail }
-  const insertData = items
-    .map((item): OppRowData => spec.mapItem(item, ctx))
-    .filter(row => {
-      if (!VALID_CATEGORY.has(row.category)) {
-        console.error(`[extractV2] ${rawEmailId}: dropping item with invalid category "${row.category}"`)
-        return false
-      }
-      if (row.category === 'NOISE') return false
-      return true
-    })
+  const insertData = ext.rows
     .map(row => ({
       organizationId,
       rawEmailId,
@@ -336,7 +375,7 @@ export async function extractEmailV2(
     }
   }
 
-  const costStr = estimatedCostUsd != null ? `$${estimatedCostUsd.toFixed(4)}` : 'n/a'
+  const costStr = ext.costUsd != null ? `$${ext.costUsd.toFixed(4)}` : 'n/a'
   console.log(
     `[extractV2] ${rawEmailId}: ${created.length} opportunit${created.length === 1 ? 'y' : 'ies'} ` +
     `(${spec.kind}) in ${durationMs}ms, cost ${costStr}; enriched ${enriched}/${created.length}; embedded ${embedded}/${created.length}`,
