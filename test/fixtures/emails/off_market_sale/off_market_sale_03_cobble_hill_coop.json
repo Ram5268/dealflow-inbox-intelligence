@@ -1,0 +1,24 @@
+{
+  "id": "off_market_sale_03_cobble_hill_coop",
+  "notes": "Off-market co-op with board-approval slang and a flip tax mention. Plain text, single listing. Tests off-market classification when the body leans on co-op jargon rather than the phrase 'off-market' being front-and-center.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Quietly available - Cobble Hill co-op, no public listing",
+    "from": { "name": "Marisol Vega", "email": "mvega@bhsusa.com" },
+    "receivedAt": "2026-07-29T09:52:00Z",
+    "bodyText": "Hi all,\n\nOwner is testing the waters privately before deciding whether to formally list - so this is off-market for now, no RLS, no signage.\n\n55 Kane St, Apt 5C, Cobble Hill\n1BR / 1BA prewar co-op, ~825 sf, high floor, open city views\nMaintenance $1,180/mo, 2% flip tax paid by buyer\nBoard approval required, 20% min down, no pieds\nAsking $795,000\n\nShowable now to pre-qualified, board-friendly buyers. Co-broke 2.5%. Reply for the private link.\n\nMarisol Vega\nBrown Harris Stevens",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "OFF_MARKET_SALE",
+    "address": "55 Kane St",
+    "neighborhood": "Cobble Hill",
+    "borough": "Brooklyn",
+    "beds": 1,
+    "price": 795000,
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["off-market"],
+    "shouldExtractParty": false
+  }
+}

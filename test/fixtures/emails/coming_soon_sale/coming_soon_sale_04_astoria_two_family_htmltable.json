@@ -1,0 +1,24 @@
+{
+  "id": "coming_soon_sale_04_astoria_two_family_htmltable",
+  "notes": "Realistic HTML broker email: bodyText is a thin plaintext fallback, and the actual listing spec lives in a bodyHtml <table> with inline styles (the format Compass/Corcoran mailers use). Tests that the extractor reads the HTML table, not just bodyText.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Coming Soon: Astoria 2-family, pre-market this Thursday",
+    "from": { "name": "Nikos Papadakis", "email": "npapadakis@bhsusa.com" },
+    "receivedAt": "2026-08-03T13:40:00Z",
+    "bodyText": "Hi all - sharing a coming soon two-family in Astoria before it hits the market Thursday. Details in the table below. Co-broke welcome, DM for a private walkthrough.\n\nNikos Papadakis\nBrown Harris Stevens",
+    "bodyHtml": "<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#222\"><p>Hi all &mdash; sharing a <strong>coming soon</strong> two-family in Astoria before it hits the market Thursday. Co-broke welcome; reply for a private walkthrough this weekend.</p><table style=\"border-collapse:collapse;width:100%;max-width:520px\" cellpadding=\"8\"><tr style=\"background:#f4f4f4\"><td style=\"border:1px solid #ddd;font-weight:bold\">Address</td><td style=\"border:1px solid #ddd\">31-42 34th St, Astoria, Queens</td></tr><tr><td style=\"border:1px solid #ddd;font-weight:bold\">Type</td><td style=\"border:1px solid #ddd\">Legal 2-family townhouse</td></tr><tr style=\"background:#f4f4f4\"><td style=\"border:1px solid #ddd;font-weight:bold\">Layout</td><td style=\"border:1px solid #ddd\">3BR over 3BR, 2 full baths</td></tr><tr><td style=\"border:1px solid #ddd;font-weight:bold\">Lot</td><td style=\"border:1px solid #ddd\">20 x 100, finished basement + garage</td></tr><tr style=\"background:#f4f4f4\"><td style=\"border:1px solid #ddd;font-weight:bold\">Asking</td><td style=\"border:1px solid #ddd\"><strong>$1,595,000</strong></td></tr><tr><td style=\"border:1px solid #ddd;font-weight:bold\">On market</td><td style=\"border:1px solid #ddd\">Thursday 8/6 &mdash; co-broke 2.5%</td></tr></table><p style=\"font-size:12px;color:#888\">Nikos Papadakis | Brown Harris Stevens | 718-555-0288</p></div>",
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_SALE",
+    "address": "31-42 34th St",
+    "neighborhood": "Astoria",
+    "borough": "Queens",
+    "beds": 3,
+    "price": 1595000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false
+  }
+}

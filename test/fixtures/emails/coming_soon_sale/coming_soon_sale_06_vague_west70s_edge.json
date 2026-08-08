@@ -1,0 +1,23 @@
+{
+  "id": "coming_soon_sale_06_vague_west70s_edge",
+  "notes": "EDGE CASE: teaser blast that deliberately withholds the exact address ('a townhouse in the West 70s') to protect the seller pre-market. There is no street number anywhere, so expected.address is null (non-hallucination assertion) - the extractor must NOT invent a street number. Neighborhood and price are stated, so those are graded. Lower confidence floor for the vague identity.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Coming soon (address on request) - UWS townhouse in the West 70s",
+    "from": { "name": "Gabriel Stein", "email": "gstein@elliman.com" },
+    "receivedAt": "2026-08-01T10:05:00Z",
+    "bodyText": "Hi all,\n\nDiscreet coming soon - seller does not want the address circulating yet, so I'm keeping it off the blast for now.\n\nWhat I can share:\n- Single-family townhouse in the West 70s, just off Central Park West\n- Upper West Side\n- 20-ft wide, 4 stories + garden level\n- 6BR / 4.5BA, owner's triplex over a garden rental\n- Asking in the low $8Ms - call me for the exact number and address\n- Coming to market late August\n\nIf you have a serious townhouse buyer in this range, reply and I'll share the full package under NDA. Co-broke of course.\n\nGabriel Stein\nDouglas Elliman\n917 555 0126",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_SALE",
+    "address": null,
+    "neighborhood": "Upper West Side",
+    "borough": "Manhattan",
+    "beds": 6,
+    "confidenceScoreMin": 0.55,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false
+  }
+}

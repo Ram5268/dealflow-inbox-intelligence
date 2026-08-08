@@ -17,10 +17,8 @@
     "borough": "Brooklyn",
     "beds": 2,
     "price": 1750000,
-    "propertyType": null,
     "confidenceScoreMin": 0.75,
     "classificationReasonThemes": ["coming soon"],
-    "shouldExtractParty": false,
-    "expectedMultipleOpportunities": null
+    "shouldExtractParty": false
   }
 }

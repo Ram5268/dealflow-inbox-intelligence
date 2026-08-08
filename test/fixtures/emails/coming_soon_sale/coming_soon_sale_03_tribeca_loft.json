@@ -1,0 +1,24 @@
+{
+  "id": "coming_soon_sale_03_tribeca_loft",
+  "notes": "Single coming-soon loft, ALL-CAPS subject with the price and beds crammed in, terse plain-text body. Tests parsing of a subject-heavy info dump plus a clean street address.",
+  "edgeCase": false,
+  "input": {
+    "subject": "COMING SOON - 145 HUDSON ST #6B TRIBECA - 2BR/2.5BA - $4.25M",
+    "from": { "name": "Priya Anand", "email": "panand@serhant.com" },
+    "receivedAt": "2026-07-28T11:14:00Z",
+    "bodyText": "Broker friends -\n\nQuiet heads up before this one goes live next Tuesday. Not in RLS yet.\n\n145 Hudson St, Unit 6B (Tribeca)\nTrue 2BR + home office, 2.5 bath\nApprox 1,850 sf, 11ft ceilings, keyed elevator\nAsking $4,250,000 | CC ~$2,100/mo | Taxes ~$1,600/mo\n\nFull-service loft building, roof cabana. Photos + floorplan next week. Co-broke 2.5%, will do private previews this weekend for pre-qualified buyers only.\n\nPriya Anand\nSERHANT.\nm 646 555 0173",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_SALE",
+    "address": "145 Hudson St",
+    "neighborhood": "Tribeca",
+    "borough": "Manhattan",
+    "beds": 2,
+    "price": 4250000,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false
+  }
+}

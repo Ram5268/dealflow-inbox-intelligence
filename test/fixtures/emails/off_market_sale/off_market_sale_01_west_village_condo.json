@@ -1,0 +1,24 @@
+{
+  "id": "off_market_sale_01_west_village_condo",
+  "notes": "Canonical off-market/pocket listing, single unit, currently available (not coming soon). Standard plain-text broker whisper. Clean address, beds, price.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Off-market WV condo - 2BR, $2.65M, quietly available",
+    "from": { "name": "Elena Marsh", "email": "emarsh@compass.com" },
+    "receivedAt": "2026-07-27T15:48:00Z",
+    "bodyText": "Hi network,\n\nI have an off-market condo the owner wants sold quietly - no public listing, no signage, no open houses.\n\n99 Bank St, Unit 3W (West Village)\n2BR / 2BA condo, ~1,150 sf, wood-burning fireplace\nPrewar full-service building, low carrying costs\nAsking $2,650,000\n\nAvailable to show now for serious, pre-qualified buyers only. Co-broke 2.5%. Reply and I'll send the deck privately.\n\nElena Marsh\nCompass",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "OFF_MARKET_SALE",
+    "address": "99 Bank St",
+    "neighborhood": "West Village",
+    "borough": "Manhattan",
+    "beds": 2,
+    "price": 2650000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["off-market"],
+    "shouldExtractParty": false
+  }
+}

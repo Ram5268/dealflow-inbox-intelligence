@@ -1,0 +1,23 @@
+{
+  "id": "active_sale_listing_03_fidi_condo_hotsheet",
+  "notes": "Auto-mailer hotsheet from a noreply sender, single FiDi listing 'new to market'. ALL-CAPS subject, formatted body. Tests classification of an automated new-listing blast (sender variety: noreply auto-mailer).",
+  "edgeCase": false,
+  "input": {
+    "subject": "NEW TO MARKET :: 15 WILLIAM ST #22F :: FIDI :: STUDIO :: $625,000",
+    "from": { "name": "Corcoran New Listings", "email": "noreply@corcoranlistings.com" },
+    "receivedAt": "2026-07-29T08:00:00Z",
+    "bodyText": "NEW TO MARKET\n\n15 William St, Unit 22F\nFinancial District, Manhattan\nStudio / 1 bath, 480 sf\nAsking $625,000\nCommon charges $498/mo | Taxes $340/mo\n\nCondo, doorman, gym, pool, 24hr concierge. Now showing.\nListing agent: Sofia Ramirez, Corcoran, 212-555-0777. Co-broke 2.5%.\n\nThis is an automated new-listing notification. Do not reply to this address.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "ACTIVE_SALE_LISTING",
+    "address": "15 William St",
+    "neighborhood": "Financial District",
+    "borough": "Manhattan",
+    "price": 625000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["listing"],
+    "shouldExtractParty": false
+  }
+}

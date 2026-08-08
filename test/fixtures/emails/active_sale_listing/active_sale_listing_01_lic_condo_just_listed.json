@@ -1,0 +1,24 @@
+{
+  "id": "active_sale_listing_01_lic_condo_just_listed",
+  "notes": "Canonical ACTIVE_SALE_LISTING: another broker's 'just listed', now on market, current price, co-broke invite. Plain text single listing. The easy on-market case.",
+  "edgeCase": false,
+  "input": {
+    "subject": "JUST LISTED - LIC condo 1BR $849K, now showing",
+    "from": { "name": "Kevin Zhao", "email": "kzhao@corcoran.com" },
+    "receivedAt": "2026-07-26T10:20:00Z",
+    "bodyText": "Hi all,\n\nJust listed and live on the RLS today:\n\n27-17 42nd Rd, Unit 5D, Long Island City\n1BR / 1BA condo, 712 sf, western skyline views\nFull-service building, gym, roof deck, 15-yr 421a tax abatement\nAsking $849,000 | CC $612/mo | Taxes $89/mo (abated)\n\nShowing by appointment starting tomorrow, first open house Sunday 11-1. Co-broke 2.5%. Send me your buyers.\n\nKevin Zhao\nCorcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "ACTIVE_SALE_LISTING",
+    "address": "27-17 42nd Rd",
+    "neighborhood": "Long Island City",
+    "borough": "Queens",
+    "beds": 1,
+    "price": 849000,
+    "confidenceScoreMin": 0.75,
+    "classificationReasonThemes": ["listed"],
+    "shouldExtractParty": false
+  }
+}

@@ -20,12 +20,7 @@
   },
   "expected": {
     "category": "COMING_SOON_SALE",
-    "address": null,
-    "neighborhood": null,
     "borough": "Brooklyn",
-    "beds": null,
-    "price": null,
-    "propertyType": null,
     "confidenceScoreMin": 0.6,
     "classificationReasonThemes": ["coming soon"],
     "shouldExtractParty": false,

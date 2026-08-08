@@ -1,0 +1,24 @@
+{
+  "id": "coming_soon_sale_05_harlem_brownstone_forwarded",
+  "notes": "Forwarded chain with '>' quoted original and From/Sent/To/Subject headers. The forwarder adds a one-line note; the real listing data is in the quoted original. Tests that the extractor reads through quote markers to the coming-soon listing.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Fwd: Coming soon - Hamilton Heights brownstone",
+    "from": { "name": "Rachel Okafor", "email": "rokafor@corcoran.com" },
+    "receivedAt": "2026-07-30T17:22:00Z",
+    "bodyText": "Passing this along - Devon is a solid agent and this could work for one of your townhouse buyers. Coming soon so move fast.\n\nRachel\n\n---------- Forwarded message ----------\nFrom: Devon Ellis <dellis@compass.com>\nSent: Wednesday, July 30, 2026 3:11 PM\nTo: HH Brokers List\nSubject: Coming soon - Hamilton Heights brownstone\n\n> Hi all,\n>\n> Before it hits the market next week, wanted to share a coming soon:\n>\n> 412 W 148th St, Hamilton Heights (Harlem)\n> 4-story single-family brownstone, 5BR / 3.5BA\n> ~3,600 sf, delivered vacant, mostly original detail intact\n> Asking $2,395,000\n>\n> Co-broke 2%. Private showings this weekend for pre-approved buyers.\n>\n> Devon Ellis | Compass | 212-555-0311",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "COMING_SOON_SALE",
+    "address": "412 W 148th St",
+    "neighborhood": "Hamilton Heights",
+    "borough": "Manhattan",
+    "beds": 5,
+    "price": 2395000,
+    "confidenceScoreMin": 0.65,
+    "classificationReasonThemes": ["coming soon"],
+    "shouldExtractParty": false
+  }
+}

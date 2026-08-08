@@ -1,0 +1,24 @@
+{
+  "id": "off_market_sale_04_chelsea_penthouse",
+  "notes": "Off-market penthouse, subject-only-ish info dump with a fuller body. Uses '$' shorthand ($6.9M) and 'discreet'. Single high-end listing, tests price-shorthand parsing to an exact dollar figure within tolerance.",
+  "edgeCase": false,
+  "input": {
+    "subject": "DISCREET OFF-MARKET | Chelsea PH | 3BR | $6.9M | show now",
+    "from": { "name": "Julian Frost", "email": "jfrost@serhant.com" },
+    "receivedAt": "2026-08-05T18:11:00Z",
+    "bodyText": "Broker friends,\n\nOff-market penthouse, seller wants zero public exposure until (and unless) we go live in the fall.\n\n245 W 25th St, PH-A (Chelsea)\n3BR / 3.5BA duplex penthouse, ~2,400 sf interior + 900 sf private terrace\nFull-service condo, direct-key elevator, Empire views\nAsking $6,900,000\n\nAvailable to show now. Serious, proof-of-funds buyers only please. Co-broke 2.5%.\n\nJulian Frost\nSERHANT.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": {
+    "category": "OFF_MARKET_SALE",
+    "address": "245 W 25th St",
+    "neighborhood": "Chelsea",
+    "borough": "Manhattan",
+    "beds": 3,
+    "price": 6900000,
+    "confidenceScoreMin": 0.7,
+    "classificationReasonThemes": ["off-market"],
+    "shouldExtractParty": false
+  }
+}

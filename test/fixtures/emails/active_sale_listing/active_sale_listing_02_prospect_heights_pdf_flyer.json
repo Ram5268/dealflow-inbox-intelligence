@@ -1,0 +1,32 @@
+{
+  "id": "active_sale_listing_02_prospect_heights_pdf_flyer",
+  "notes": "PDF FLYER attachment fixture. Body just says 'flyer attached' - all listing detail (address, beds, price) lives in the PDF parsedText, formatted like a marketing flyer. Forces attachment parsing. application/pdf, live:false.",
+  "edgeCase": false,
+  "input": {
+    "subject": "New to market - Prospect Heights (flyer attached)",
+    "from": { "name": "Danielle Brooks", "email": "dbrooks@elliman.com" },
+    "receivedAt": "2026-08-04T11:36:00Z",
+    "bodyText": "Hi all,\n\nNew listing, flyer attached. On market as of today, showing by appointment. Co-broke welcome.\n\nDanielle Brooks\nDouglas Elliman",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "635_dean_st_flyer.pdf",
+        "mimeType": "application/pdf",
+        "parsedText": "DOUGLAS ELLIMAN | NOW AVAILABLE\n\n635 Dean St, Unit 3B\nProspect Heights, Brooklyn\n\n2 Bedrooms | 2 Bathrooms | 1,080 sq ft\nAsking $1,325,000\nCommon Charges $745/mo | Taxes $210/mo\n\nBoutique 8-unit condo, private balcony, in-unit W/D, virtual doorman, common roof deck. Steps to the Brooklyn Museum and Grand Army Plaza.\n\nOpen House Sunday 12-2pm. Co-broke 2.5%.\nDanielle Brooks | Douglas Elliman | 718-555-0455",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "ACTIVE_SALE_LISTING",
+    "address": "635 Dean St",
+    "neighborhood": "Prospect Heights",
+    "borough": "Brooklyn",
+    "beds": 2,
+    "price": 1325000,
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["listing"],
+    "shouldExtractParty": false
+  }
+}

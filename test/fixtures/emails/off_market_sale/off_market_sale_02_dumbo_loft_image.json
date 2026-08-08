@@ -1,0 +1,32 @@
+{
+  "id": "off_market_sale_02_dumbo_loft_image",
+  "notes": "IMAGE ATTACHMENT fixture. Body deliberately says almost nothing ('pocket listing, see screenshot') - the price/beds/address live ONLY in the image parsedText, which is a vision CAPTION of a listing-detail screenshot. Forces the extractor to read the vision caption. mimeType image/png, live:false.",
+  "edgeCase": false,
+  "input": {
+    "subject": "Pocket listing DUMBO - screenshot attached",
+    "from": { "name": "Tomas Herrera", "email": "therrera@corcoran.com" },
+    "receivedAt": "2026-08-02T12:33:00Z",
+    "bodyText": "Quiet one in DUMBO, owner wants it off-market. Details in the screenshot. Co-broke, reply if you have a fit.\n\nTomas",
+    "bodyHtml": null,
+    "attachments": [
+      {
+        "filename": "dumbo_pocket_listing.png",
+        "mimeType": "image/png",
+        "parsedText": "Screenshot of an internal listing card on a dark background. Header reads 'OFF-MARKET / POCKET'. Address line: '70 Washington St, Unit 9G, DUMBO, Brooklyn'. Beds/baths row: '3 BR | 2 BA | 1,420 sf'. Price in large green text: '$2,395,000'. Below: 'Condo, full-service, parking available, Manhattan Bridge views'. Footer: 'Do not advertise. Co-broke 2.5%. Tomas Herrera, Corcoran.'",
+        "live": false,
+        "file": null
+      }
+    ]
+  },
+  "expected": {
+    "category": "OFF_MARKET_SALE",
+    "address": "70 Washington St",
+    "neighborhood": "DUMBO",
+    "borough": "Brooklyn",
+    "beds": 3,
+    "price": 2395000,
+    "confidenceScoreMin": 0.6,
+    "classificationReasonThemes": ["off-market"],
+    "shouldExtractParty": false
+  }
+}

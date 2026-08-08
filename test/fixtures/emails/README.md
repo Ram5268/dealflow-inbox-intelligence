@@ -94,10 +94,25 @@ Each fixture is one JSON file: `test/fixtures/emails/<category>/<slug>.json`.
 | `shouldExtractParty` | derived from extracted `clientSide` / category |
 | `expectedMultipleOpportunities` | extractor produced exactly N rows |
 
-Any `expected` field **omitted** is not graded for that fixture. Fill every field
-the source email/attachment actually contains; use `null` (and omit from grading by
-setting it to `null`) where the data is truly absent — per CLAUDE.md's "never
-hallucinate missing real estate data" rule, `null` is a valid, gradeable answer.
+### Grading convention for `expected` (READ THIS — it defines what the report means)
+
+- **`category` is mandatory** and always graded.
+- **Include a scalar field only when you want it graded.** A field you **omit** is
+  not graded for that fixture. So on a listing whose property type the email states
+  only vaguely ("classic brownstone"), just omit `propertyType` rather than guess.
+- **A field set to `null` is a non-hallucination assertion**: the extractor MUST NOT
+  produce a value. Use this deliberately for identity fields where *leakage* is the
+  risk — e.g. a BUYER_ISO must not emit an `address` (the buyer is looking, not
+  selling); a vague "townhouse in the West 70s" must not invent a street number.
+  Do **not** null-out soft fields just because they're absent — omit them instead.
+- **Multi-listing fixtures**: set `expectedMultipleOpportunities` to the row count
+  and grade `category` (+ optionally `borough`) only — omit the per-listing scalars,
+  since a single top-level `address`/`price` can't represent N listings. When
+  `expectedMultipleOpportunities` is omitted, the harness grades scalar fields
+  against the single extracted opportunity.
+
+Per CLAUDE.md's "never hallucinate missing real estate data" rule, a graded `null`
+is a first-class correct answer, and asserting it is how we catch leakage.
 
 ## Coverage matrix (target: 85–100 fixtures, ≥15 with attachments)
 
