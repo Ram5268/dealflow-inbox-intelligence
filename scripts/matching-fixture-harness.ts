@@ -318,6 +318,32 @@ async function dismissalSmokeTest(orgId: string, rawEmailId: string): Promise<{ 
   }
 }
 
+// comp_reference regression guard (Brief 6.3 + 7.0 hotfix) — seed a party that
+// would otherwise be a Hot match but tag it provenance='comp_reference'; assert it
+// is excluded from candidate assembly. Costs $0 (dropped before any Sonnet call).
+// Directly guards the null-safe provenance filter: a bug that dropped nulls would
+// STILL pass this (the comp row is excluded either way), so we also confirm — via
+// the main 49/50 run — that null-provenance rows are NOT dropped. Together they
+// pin both directions: comp excluded, null kept.
+async function compReferenceSmokeTest(orgId: string, rawEmailId: string): Promise<{ pass: boolean; detail: string }> {
+  const listingId = await seedListing(
+    { category: 'ACTIVE_SALE_LISTING', address: '9 Comp Reference Ct', neighborhood: 'Chelsea', borough: 'Manhattan', beds: 2, price: 2050000, createdDaysAgo: 1 },
+    orgId, rawEmailId)
+  const partyId = await seedParty(
+    { role: 'buyer', source: 'streeteasy_expert', name: 'Comp-derived Buyer', budgetMin: 1900000, budgetMax: 2100000, neighborhoods: ['Chelsea'], bedsMin: 2, bedsMax: 2, cashOnly: false, timing: null, createdDaysAgo: 1 },
+    orgId, rawEmailId)
+  try {
+    await prisma.extractedOpportunity.update({ where: { id: partyId }, data: { provenance: 'comp_reference' } })
+    const res = await findMatchesForListing(listingId, { limit: 50 })
+    const present = res.results.some(r => r.party.id === partyId)
+    return { pass: !present && res.costUSD === 0, detail: present ? 'FAIL: comp_reference party entered the match pool' : `pass: comp_reference party excluded, $${res.costUSD} spent (no tiering call)` }
+  } catch (e) {
+    return { pass: false, detail: `FAIL: ${(e as Error).message}` }
+  } finally {
+    await prisma.extractedOpportunity.deleteMany({ where: { id: { in: [listingId, partyId] } } })
+  }
+}
+
 // ── Report ───────────────────────────────────────────────────────────────────
 const DISCLAIMER =
   'Fixtures are self-authored ground truth. This report measures internal consistency ' +
@@ -355,13 +381,15 @@ async function main() {
   }
 
   const dismissal = await dismissalSmokeTest(orgId, rawEmailId)
+  const compRef = await compReferenceSmokeTest(orgId, rawEmailId)
 
-  printSummary(reports, runningCost, aborted, dismissal, stamp, fixtures.length)
+  printSummary(reports, runningCost, aborted, dismissal, compRef, stamp, fixtures.length)
 }
 
 function printSummary(
   reports: FixtureReport[], runningCost: number, aborted: boolean,
-  dismissal: { pass: boolean; detail: string }, stamp: string, totalFixtures: number,
+  dismissal: { pass: boolean; detail: string }, compRef: { pass: boolean; detail: string },
+  stamp: string, totalFixtures: number,
 ) {
   // ── Per-tier confusion matrix (rows = expected, cols = predicted) ──────────
   const matrix: Record<Tier, Record<Tier, number>> = {
@@ -411,6 +439,7 @@ function printSummary(
   console.log('═'.repeat(78))
   console.log(`  RESULT: ${sePass ? 'PASS ✓' : 'FAIL ✗'}  (${rankFixtures.length - seFails.length - seInconclusive.length} clean pass, ${seInconclusive.length} inconclusive, ${seFails.length} fail)`)
   console.log(`  DISMISSAL FILTER: ${dismissal.pass ? 'PASS ✓' : 'FAIL ✗'}  — ${dismissal.detail}`)
+  console.log(`  COMP_REFERENCE EXCLUSION: ${compRef.pass ? 'PASS ✓' : 'FAIL ✗'}  — ${compRef.detail}`)
 
   // ── Bucket rollup + cost ───────────────────────────────────────────────────
   const buckets = [...new Set(reports.map(r => r.bucket))].sort()
@@ -428,7 +457,7 @@ function printSummary(
   console.log('\n' + '═'.repeat(78))
   console.log(`FIXTURES:        ${reports.length}/${totalFixtures} run${aborted ? ' (ABORTED at run cap)' : ''}`)
   console.log(`FIXTURE PASS:    ${fixturesPassed}/${reports.length}`)
-  console.log(`SE-PRIORITY:     ${sePass ? 'PASS' : 'FAIL'} | DISMISSAL: ${dismissal.pass ? 'PASS' : 'FAIL'}`)
+  console.log(`SE-PRIORITY:     ${sePass ? 'PASS' : 'FAIL'} | DISMISSAL: ${dismissal.pass ? 'PASS' : 'FAIL'} | COMP_REF EXCL: ${compRef.pass ? 'PASS' : 'FAIL'}`)
   console.log(`TOTAL SPEND:     $${runningCost.toFixed(4)}  (avg $${perFixtureAvg.toFixed(4)}/fixture)`)
   console.log('═'.repeat(78))
   console.log('\nHONESTY DISCLAIMER:')
@@ -438,6 +467,7 @@ function printSummary(
     stamp, filter: FILTER ?? null, totalFixtures, run: reports.length, aborted,
     confusionMatrix: matrix, sePriorityPass: sePass, seInconclusive: seInconclusive.map(r => r.id),
     dismissalPass: dismissal.pass, dismissalDetail: dismissal.detail,
+    compReferencePass: compRef.pass, compReferenceDetail: compRef.detail,
     fixturesPassed, totalCostUsd: runningCost, perFixtureAvgUsd: perFixtureAvg,
     disclaimer: DISCLAIMER, reports,
   }, null, 2))
