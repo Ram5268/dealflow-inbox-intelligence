@@ -98,9 +98,12 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   const testGate = isTestModeOnly() ? { isTestData: true } : {}
 
   // Brief 6.3 — a comp-derived opportunity is NOT a live lead/listing. Keep it
-  // out of every match pool (Prisma `not` on a nullable field also keeps nulls,
-  // so direct + buried_recovery rows still match).
-  const provenanceGate = { provenance: { not: 'comp_reference' } }
+  // out of every match pool. NULL-SAFE form: the bare `{ not: 'comp_reference' }`
+  // DROPS null-provenance rows under Prisma 7.8 + @prisma/adapter-pg (SQL
+  // `provenance <> 'comp_reference'` is NULL, not TRUE, for null rows), which would
+  // exclude every normal direct-extraction lead. The explicit OR keeps null +
+  // buried_recovery and excludes only comp_reference. (6.3 hotfix; proven by probe.)
+  const provenanceGate = { OR: [{ provenance: null }, { provenance: { not: 'comp_reference' } }] }
 
   const newOpps = await prisma.extractedOpportunity.findMany({
     where: { id: { in: newOppIds }, isDuplicate: false, ...provenanceGate },
