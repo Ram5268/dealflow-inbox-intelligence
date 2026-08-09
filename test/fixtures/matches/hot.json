@@ -1,0 +1,122 @@
+[
+  {
+    "id": "hot_se_buyer_chelsea_2br_cash",
+    "kind": "tier",
+    "description": "SE Expert cash buyer wants Chelsea 2BR ~$2M; listing is 200 W 20th at $2.1M, 1 day old — exact hood + price inside range → Hot",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Emily Chen", "budgetMin": 1900000, "budgetMax": 2200000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": true, "timing": "needs by June", "createdDaysAgo": 2 },
+    "listing": { "category": "COMING_SOON_SALE", "address": "200 W 20th St", "neighborhood": "Chelsea", "borough": "Manhattan", "beds": 2, "price": 2100000, "createdDaysAgo": 1 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "chelsea"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_se_buyer_ues_3br",
+    "kind": "tier",
+    "description": "SE buyer UES 3BR $3.3–3.6M; 45 E 82nd St at $3.4M, fresh → Hot",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "David Okafor", "budgetMin": 3300000, "budgetMax": 3600000, "neighborhoods": ["Upper East Side"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": "spring closing", "createdDaysAgo": 3 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "45 E 82nd St", "neighborhood": "Upper East Side", "borough": "Manhattan", "beds": 3, "price": 3400000, "createdDaysAgo": 2 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "upper east side"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_se_renter_west_village_1br",
+    "kind": "tier",
+    "description": "SE renter West Village 1BR ~$5k/mo; 99 Bank St at $4,900, fresh → Hot",
+    "party": { "role": "renter", "source": "streeteasy_expert", "name": "Priya Nair", "budgetMin": 4500, "budgetMax": 5200, "neighborhoods": ["West Village"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": "Sept 1 move-in", "createdDaysAgo": 1 },
+    "listing": { "category": "RENTAL_LISTING", "address": "99 Bank St", "neighborhood": "West Village", "borough": "Manhattan", "beds": 1, "price": 4900, "createdDaysAgo": 1 },
+    "expected": { "tier": "Hot", "reasonThemes": ["rent", "west village"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_se_buyer_park_slope_2br",
+    "kind": "tier",
+    "description": "SE buyer Park Slope 2BR $1.4–1.6M; 500 8th St at $1.45M, fresh → Hot",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Rachel Green", "budgetMin": 1400000, "budgetMax": 1600000, "neighborhoods": ["Park Slope"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "OFF_MARKET_SALE", "address": "500 8th St", "neighborhood": "Park Slope", "borough": "Brooklyn", "beds": 2, "price": 1450000, "createdDaysAgo": 2 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "park slope"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_se_buyer_tribeca_2br_cash",
+    "kind": "tier",
+    "description": "SE cash buyer Tribeca 2BR $3.8–4.3M; 56 Leonard at $4.2M, fresh → Hot",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Marcus Webb", "budgetMin": 3800000, "budgetMax": 4300000, "neighborhoods": ["Tribeca"], "bedsMin": 2, "bedsMax": 2, "cashOnly": true, "timing": null, "createdDaysAgo": 2 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "56 Leonard St", "neighborhood": "Tribeca", "borough": "Manhattan", "beds": 2, "price": 4200000, "createdDaysAgo": 3 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "tribeca"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_se_renter_lic_studio",
+    "kind": "tier",
+    "description": "SE renter LIC studio ~$3k; 5 Court Sq at $2,950, fresh → Hot",
+    "party": { "role": "renter", "source": "streeteasy_expert", "name": "Tomas Rivera", "budgetMin": 2700, "budgetMax": 3100, "neighborhoods": ["Long Island City"], "bedsMin": 0, "bedsMax": 0, "cashOnly": false, "timing": "ASAP", "createdDaysAgo": 1 },
+    "listing": { "category": "RENTAL_LISTING", "address": "5 Court Sq", "neighborhood": "Long Island City", "borough": "Queens", "beds": 0, "price": 2950, "createdDaysAgo": 2 },
+    "expected": { "tier": "Hot", "reasonThemes": ["rent", "long island city"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_mojo_buyer_williamsburg_2br",
+    "kind": "tier",
+    "description": "Mojo buyer Williamsburg 2BR $1.65–1.9M; 111 Kent Ave at $1.75M, fresh → Hot",
+    "party": { "role": "buyer", "source": "mojo", "name": "Hannah Brooks", "budgetMin": 1650000, "budgetMax": 1900000, "neighborhoods": ["Williamsburg"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "COMING_SOON_SALE", "address": "111 Kent Ave", "neighborhood": "Williamsburg", "borough": "Brooklyn", "beds": 2, "price": 1750000, "createdDaysAgo": 1 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "williamsburg"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_mojo_buyer_fidi_1br",
+    "kind": "tier",
+    "description": "Mojo buyer FiDi 1BR $1.05–1.25M; 20 Pine St at $1.15M, fresh → Hot",
+    "party": { "role": "buyer", "source": "mojo", "name": "Grace Liu", "budgetMin": 1050000, "budgetMax": 1250000, "neighborhoods": ["Financial District"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "20 Pine St", "neighborhood": "Financial District", "borough": "Manhattan", "beds": 1, "price": 1150000, "createdDaysAgo": 2 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "financial district"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_mojo_renter_astoria_2br",
+    "kind": "tier",
+    "description": "Mojo renter Astoria 2BR ~$3.4k; 30-15 34th St at $3,400, fresh → Hot",
+    "party": { "role": "renter", "source": "mojo", "name": "Yusuf Demir", "budgetMin": 3100, "budgetMax": 3600, "neighborhoods": ["Astoria"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": "Aug 15", "createdDaysAgo": 2 },
+    "listing": { "category": "RENTAL_LISTING", "address": "30-15 34th St", "neighborhood": "Astoria", "borough": "Queens", "beds": 2, "price": 3400, "createdDaysAgo": 1 },
+    "expected": { "tier": "Hot", "reasonThemes": ["rent", "astoria"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_mojo_buyer_harlem_3br",
+    "kind": "tier",
+    "description": "Mojo buyer Central Harlem 3BR $1.45–1.7M; 2100 Fifth Ave at $1.55M, fresh → Hot",
+    "party": { "role": "buyer", "source": "mojo", "name": "Andre Jackson", "budgetMin": 1450000, "budgetMax": 1700000, "neighborhoods": ["Central Harlem"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "2100 Fifth Ave", "neighborhood": "Central Harlem", "borough": "Manhattan", "beds": 3, "price": 1550000, "createdDaysAgo": 3 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "harlem"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_mojo_buyer_forest_hills_2br",
+    "kind": "tier",
+    "description": "Mojo buyer Forest Hills 2BR $820–980k; 108-50 Queens Blvd at $880k, fresh → Hot",
+    "party": { "role": "buyer", "source": "mojo", "name": "Sofia Marino", "budgetMin": 820000, "budgetMax": 980000, "neighborhoods": ["Forest Hills"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 6 },
+    "listing": { "category": "OFF_MARKET_SALE", "address": "108-50 Queens Blvd", "neighborhood": "Forest Hills", "borough": "Queens", "beds": 2, "price": 880000, "createdDaysAgo": 2 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "forest hills"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_inbox_buyer_cobble_hill_3br",
+    "kind": "tier",
+    "description": "Inbox (co-broke) buyer Cobble Hill 3BR $2.3–2.6M; 200 Warren St at $2.45M, fresh → Hot",
+    "party": { "role": "buyer", "source": "inbox", "name": "Ben Carter", "budgetMin": 2300000, "budgetMax": 2600000, "neighborhoods": ["Cobble Hill"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "COMING_SOON_SALE", "address": "200 Warren St", "neighborhood": "Cobble Hill", "borough": "Brooklyn", "beds": 3, "price": 2450000, "createdDaysAgo": 2 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "cobble hill"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_inbox_renter_bushwick_1br",
+    "kind": "tier",
+    "description": "Inbox renter Bushwick 1BR ~$2.8k; 1234 DeKalb Ave at $2,750, fresh → Hot",
+    "party": { "role": "renter", "source": "inbox", "name": "Lena Fox", "budgetMin": 2500, "budgetMax": 2950, "neighborhoods": ["Bushwick"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": "Sept", "createdDaysAgo": 2 },
+    "listing": { "category": "RENTAL_LISTING", "address": "1234 DeKalb Ave", "neighborhood": "Bushwick", "borough": "Brooklyn", "beds": 1, "price": 2750, "createdDaysAgo": 1 },
+    "expected": { "tier": "Hot", "reasonThemes": ["rent", "bushwick"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_inbox_buyer_murray_hill_1br",
+    "kind": "tier",
+    "description": "Inbox buyer Murray Hill 1BR $780–900k; 150 E 34th St at $825k, fresh → Hot",
+    "party": { "role": "buyer", "source": "inbox", "name": "Omar Haddad", "budgetMin": 780000, "budgetMax": 900000, "neighborhoods": ["Murray Hill"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "150 E 34th St", "neighborhood": "Murray Hill", "borough": "Manhattan", "beds": 1, "price": 825000, "createdDaysAgo": 4 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "murray hill"], "shouldMatch": true }
+  },
+  {
+    "id": "hot_inbox_buyer_prospect_heights_2br",
+    "kind": "tier",
+    "description": "Inbox buyer Prospect Heights 2BR $1.2–1.4M; 550 Vanderbilt Ave at $1.28M, fresh → Hot",
+    "party": { "role": "buyer", "source": "inbox", "name": "Nina Patel", "budgetMin": 1200000, "budgetMax": 1400000, "neighborhoods": ["Prospect Heights"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "COMING_SOON_SALE", "address": "550 Vanderbilt Ave", "neighborhood": "Prospect Heights", "borough": "Brooklyn", "beds": 2, "price": 1280000, "createdDaysAgo": 3 },
+    "expected": { "tier": "Hot", "reasonThemes": ["price", "prospect heights"], "shouldMatch": true }
+  }
+]

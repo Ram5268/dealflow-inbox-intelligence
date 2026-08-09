@@ -41,6 +41,19 @@ enum TransactionType {
   UNKNOWN
 }
 
+// Brief 7.0 — reason a party↔listing match was dismissed by the user. The reason
+// is FORWARD-LOOKING: Brief 7.1+ can auto-re-surface a dismissed match when the
+// reason no longer applies (e.g. a WRONG_PRICE dismissal clears on a price drop).
+// Not used for filtering in 7.0 — a MatchDismissal row hides the pair regardless
+// of reason.
+enum DismissalReason {
+  WRONG_PRICE
+  WRONG_NEIGHBORHOOD
+  WRONG_TIMING
+  GHOSTED
+  OTHER
+}
+
 // ── Tenancy ─────────────────────────────────────────────────────────────────
 model Organization {
   id          String    @id @default(cuid())
@@ -400,6 +413,24 @@ model Match {
   @@index([organizationId])
   @@index([seen])
   @@index([createdAt])
+}
+
+// Brief 7.0 — a user-dismissed party↔listing pair. The matching engine filters
+// out any pair with a row here, regardless of reason. dismissalReason is
+// forward-looking (see DismissalReason enum) and NOT consulted for filtering in
+// 7.0. No time-decay: a dismissal is permanent until explicitly cleared or,
+// later (7.1+), auto-cleared when its reason no longer applies.
+model MatchDismissal {
+  id              String           @id @default(cuid())
+  partyId         String
+  listingId       String
+  dismissedAt     DateTime         @default(now())
+  dismissedBy     String?          // nullable — future: user id
+  dismissalReason DismissalReason? // nullable — nice-to-have, not required in 7.0
+
+  @@unique([partyId, listingId])
+  @@index([partyId])
+  @@index([listingId])
 }
 
 model PushSubscription {
