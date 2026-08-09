@@ -10,7 +10,7 @@
 // data. Nothing here is wired to a production save-hook / webhook / cron —
 // those are Brief 7.2's scope (gated by lib/config/matchingTestMode.ts).
 import { createHash } from 'crypto'
-import { Category } from '@prisma/client'
+import { Category, Prisma } from '@prisma/client'
 import { prisma } from '../prisma'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from '../domain/Categories'
 import { isMatchingTestModeOnly } from '../config/matchingTestMode'
@@ -25,6 +25,23 @@ import type {
 
 const SALE_SET = new Set<Category>(SUPPLY_SALE)
 const RENTAL_SET = new Set<Category>(SUPPLY_RENTAL)
+
+// Brief 6.3 — a sold/historical comp is never a live lead; keep provenance
+// 'comp_reference' rows out of every match pool (direct extractions [null] and
+// 'buried_recovery' still match).
+//
+// IMPORTANT: the bare `{ provenance: { not: 'comp_reference' } }` form used in
+// lib/chat/tools/searchParties.ts and lib/matchmaking.ts EXCLUDES null-provenance
+// rows in this Prisma 7.8 + @prisma/adapter-pg setup — SQL renders it as
+// `provenance <> 'comp_reference'`, which is NULL (not TRUE) for null rows, so
+// every normal direct-extraction lead (provenance = null) is dropped. Verified by
+// harness A/B: adding the bare guard took the fixture pass rate 49/50 → 5/50 with
+// $0 spend (empty candidate pools everywhere). The explicit OR below is null-safe
+// regardless of that quirk. (searchParties/matchmaking likely share this latent
+// bug — flagged to Ryan.)
+const EXCLUDE_COMP_REFERENCE: Prisma.ExtractedOpportunityWhereInput = {
+  OR: [{ provenance: null }, { provenance: { not: 'comp_reference' } }],
+}
 
 const DEFAULT_CAP = 25
 function maxCandidates(): number {
@@ -229,9 +246,7 @@ export async function findMatchesForListing(
       organizationId: row.organizationId,         // multi-tenant scope (also isolates fixtures)
       isDuplicate: false,
       isTestData: row.isTestData,                 // isolate: seed rows match seed listing
-      // NOTE: the Brief 6.3 `provenance != 'comp_reference'` guard is intentionally
-      // omitted — main's schema has no `provenance` field yet (6.3 is not merged to
-      // main; only its shared-DB column exists). Re-add this guard once 6.3 lands.
+      ...EXCLUDE_COMP_REFERENCE,                  // Brief 6.3 comp guard (null-safe; see const)
     },
     select: OPP_SELECT,
   }) as OppRow[]
@@ -276,7 +291,7 @@ export async function findMatchesForParty(
       organizationId: row.organizationId,
       isDuplicate: false,
       isTestData: row.isTestData,
-      // See note above: `provenance` guard deferred until Brief 6.3 merges to main.
+      ...EXCLUDE_COMP_REFERENCE,                  // Brief 6.3 comp guard (null-safe; see const)
     },
     select: OPP_SELECT,
   }) as OppRow[]
