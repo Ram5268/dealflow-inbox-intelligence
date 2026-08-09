@@ -38,7 +38,8 @@ const OPP_SELECT = {
   id: true, category: true, extractedTitle: true, address: true, neighborhood: true,
   borough: true, price: true, minPrice: true, maxPrice: true, beds: true,
   minBeds: true, maxBeds: true, neighborhoods: true, mustHaves: true, timeline: true,
-  sourceBrokerage: true, sourceAgentName: true, isTestData: true, createdAt: true,
+  sourceBrokerage: true, sourceAgentName: true, isTestData: true, organizationId: true,
+  createdAt: true,
 } as const
 
 type OppRow = {
@@ -48,7 +49,7 @@ type OppRow = {
   beds: number | null; minBeds: number | null; maxBeds: number | null
   neighborhoods: string[]; mustHaves: string | null; timeline: string | null
   sourceBrokerage: string | null; sourceAgentName: string | null
-  isTestData: boolean; createdAt: Date
+  isTestData: boolean; organizationId: string; createdAt: Date
 }
 
 // Source resolution — DETERMINISTIC, drives the SE ranking boost. In 7.0 all
@@ -225,6 +226,7 @@ export async function findMatchesForListing(
   const oppParties = await prisma.extractedOpportunity.findMany({
     where: {
       category: partyCategory,
+      organizationId: row.organizationId,         // multi-tenant scope (also isolates fixtures)
       isDuplicate: false,
       isTestData: row.isTestData,                 // isolate: seed rows match seed listing
       // NOTE: the Brief 6.3 `provenance != 'comp_reference'` guard is intentionally
@@ -271,6 +273,7 @@ export async function findMatchesForParty(
   const oppListings = await prisma.extractedOpportunity.findMany({
     where: {
       category: { in: listingCats },
+      organizationId: row.organizationId,
       isDuplicate: false,
       isTestData: row.isTestData,
       // See note above: `provenance` guard deferred until Brief 6.3 merges to main.

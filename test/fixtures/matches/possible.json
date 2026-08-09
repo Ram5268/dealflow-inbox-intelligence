@@ -1,0 +1,82 @@
+[
+  {
+    "id": "possible_se_buyer_manhattan_broad",
+    "kind": "tier",
+    "description": "SE buyer with BROAD Manhattan criteria (no specific hood), budget up to $2.1M; listing Murray Hill at $2.2M (near price) → borough-level fit, no sharp hood → Possible",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Kara Bishop", "budgetMin": 1900000, "budgetMax": 2100000, "neighborhoods": [], "borough": "Manhattan", "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "150 E 39th St", "neighborhood": "Murray Hill", "borough": "Manhattan", "beds": 2, "price": 2200000, "createdDaysAgo": 3 },
+    "expected": { "tier": "Possible", "reasonThemes": ["manhattan", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_mojo_buyer_brooklyn_broad",
+    "kind": "tier",
+    "description": "Mojo buyer with BROAD Brooklyn criteria (no specific hood), budget $1.4–1.6M; listing Bay Ridge at $1.35M (near price) → borough-level fit → Possible",
+    "party": { "role": "buyer", "source": "mojo", "name": "Leo Barnes", "budgetMin": 1400000, "budgetMax": 1600000, "neighborhoods": [], "borough": "Brooklyn", "bedsMin": 2, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 6 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "8501 Ridge Blvd", "neighborhood": "Bay Ridge", "borough": "Brooklyn", "beds": 3, "price": 1350000, "createdDaysAgo": 5 },
+    "expected": { "tier": "Possible", "reasonThemes": ["brooklyn", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_inbox_buyer_broad_no_hood",
+    "kind": "tier",
+    "description": "Inbox buyer with broad Manhattan criteria (no specific hood) $1.5–2M; listing Yorkville $1.85M → broad borough + price band → Possible",
+    "party": { "role": "buyer", "source": "inbox", "name": "Dana Kim", "budgetMin": 1500000, "budgetMax": 2000000, "neighborhoods": [], "borough": "Manhattan", "bedsMin": 1, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "300 E 85th St", "neighborhood": "Yorkville", "borough": "Manhattan", "beds": 2, "price": 1850000, "createdDaysAgo": 4 },
+    "expected": { "tier": "Possible", "reasonThemes": ["manhattan"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_se_renter_manhattan_price_stretch",
+    "kind": "tier",
+    "description": "SE renter Chelsea 1BR up to $4k; listing Chelsea at $5,000 (25% NEAR-over) → exact hood floors at Warm despite the price miss",
+    "party": { "role": "renter", "source": "streeteasy_expert", "name": "Ruth Adler", "budgetMin": 3500, "budgetMax": 4000, "neighborhoods": ["Chelsea"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "RENTAL_LISTING", "address": "260 W 26th St", "neighborhood": "Chelsea", "borough": "Manhattan", "beds": 1, "price": 5000, "createdDaysAgo": 3 },
+    "expected": { "tier": "Warm", "reasonThemes": ["chelsea", "rent"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_mojo_buyer_queens_broad",
+    "kind": "tier",
+    "description": "Mojo buyer with BROAD Queens criteria (no specific hood), budget $800–950k; listing Flushing at $780k → borough-level fit → Possible",
+    "party": { "role": "buyer", "source": "mojo", "name": "Henry Zhao", "budgetMin": 800000, "budgetMax": 950000, "neighborhoods": [], "borough": "Queens", "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 7 },
+    "listing": { "category": "OFF_MARKET_SALE", "address": "144-20 Barclay Ave", "neighborhood": "Flushing", "borough": "Queens", "beds": 2, "price": 780000, "createdDaysAgo": 6 },
+    "expected": { "tier": "Possible", "reasonThemes": ["queens"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_inbox_buyer_price_stretch_hood",
+    "kind": "tier",
+    "description": "Inbox buyer UWS 2BR up to $1.8M; listing exact hood UWS at $2.25M (25% NEAR-over) → exact hood floors at Warm",
+    "party": { "role": "buyer", "source": "inbox", "name": "Bianca Ferro", "budgetMin": 1500000, "budgetMax": 1800000, "neighborhoods": ["Upper West Side"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "215 W 92nd St", "neighborhood": "Upper West Side", "borough": "Manhattan", "beds": 2, "price": 2250000, "createdDaysAgo": 6 },
+    "expected": { "tier": "Warm", "reasonThemes": ["upper west side", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_se_buyer_missing_price",
+    "kind": "tier",
+    "description": "SE buyer UES 2BR, budget stated; listing exact hood but NO price on the record → exact hood with UNKNOWN price floors at Warm (missing data is not a penalty below Warm)",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Curtis Lang", "budgetMin": 1800000, "budgetMax": 2200000, "neighborhoods": ["Upper East Side"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "COMING_SOON_SALE", "address": "155 E 79th St", "neighborhood": "Upper East Side", "borough": "Manhattan", "beds": 2, "price": null, "createdDaysAgo": 3 },
+    "expected": { "tier": "Warm", "reasonThemes": ["upper east side"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_mojo_renter_brooklyn_broad",
+    "kind": "tier",
+    "description": "Mojo renter with BROAD Brooklyn criteria (no specific hood), 2BR ~$4k; listing Crown Heights at $3,600 → borough-level fit → Possible",
+    "party": { "role": "renter", "source": "mojo", "name": "Aisha Bello", "budgetMin": 3500, "budgetMax": 4200, "neighborhoods": [], "borough": "Brooklyn", "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "RENTAL_LISTING", "address": "1160 Pacific St", "neighborhood": "Crown Heights", "borough": "Brooklyn", "beds": 2, "price": 3600, "createdDaysAgo": 4 },
+    "expected": { "tier": "Possible", "reasonThemes": ["brooklyn"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_inbox_buyer_broad_bigrange",
+    "kind": "tier",
+    "description": "Inbox buyer very broad: Brooklyn, wide budget $900k–1.6M, 1–3BR; listing Bed-Stuy 2BR $1.2M → broad borough fit, nothing sharp → Possible",
+    "party": { "role": "buyer", "source": "inbox", "name": "Owen Pratt", "budgetMin": 900000, "budgetMax": 1600000, "neighborhoods": [], "borough": "Brooklyn", "bedsMin": 1, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 6 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "480 Halsey St", "neighborhood": "Bedford-Stuyvesant", "borough": "Brooklyn", "beds": 2, "price": 1200000, "createdDaysAgo": 5 },
+    "expected": { "tier": "Possible", "reasonThemes": ["brooklyn"], "shouldMatch": true }
+  },
+  {
+    "id": "possible_se_buyer_manhattan_broad_widerange",
+    "kind": "tier",
+    "description": "SE buyer with BROAD Manhattan criteria (no specific hood), wide budget $2.8–3.4M; listing FiDi at $3.1M (in range) → borough-level fit, no sharp hood → Possible",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Nadia Frost", "budgetMin": 2800000, "budgetMax": 3400000, "neighborhoods": [], "borough": "Manhattan", "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "70 Pine St", "neighborhood": "Financial District", "borough": "Manhattan", "beds": 2, "price": 3100000, "createdDaysAgo": 4 },
+    "expected": { "tier": "Possible", "reasonThemes": ["manhattan"], "shouldMatch": true }
+  }
+]

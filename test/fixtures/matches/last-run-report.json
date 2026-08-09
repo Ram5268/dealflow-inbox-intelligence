@@ -1,0 +1,1115 @@
+{
+  "stamp": "2026-08-09T03:39:26.062Z",
+  "filter": null,
+  "totalFixtures": 50,
+  "run": 50,
+  "aborted": false,
+  "confusionMatrix": {
+    "Hot": {
+      "Hot": 17,
+      "Warm": 0,
+      "Possible": 0,
+      "None": 0
+    },
+    "Warm": {
+      "Hot": 0,
+      "Warm": 21,
+      "Possible": 0,
+      "None": 0
+    },
+    "Possible": {
+      "Hot": 0,
+      "Warm": 1,
+      "Possible": 11,
+      "None": 0
+    },
+    "None": {
+      "Hot": 0,
+      "Warm": 0,
+      "Possible": 0,
+      "None": 5
+    }
+  },
+  "sePriorityPass": true,
+  "seInconclusive": [],
+  "dismissalPass": true,
+  "dismissalDetail": "pass: dismissed pair absent, $0 spent (no tiering call)",
+  "fixturesPassed": 49,
+  "totalCostUsd": 0.20534399999999997,
+  "perFixtureAvgUsd": 0.004106879999999999,
+  "disclaimer": "Fixtures are self-authored ground truth. This report measures internal consistency of the tiering rubric against Ryan's own judgment, NOT external validity. Real accuracy validation requires labeled samples from actual Mojo/inbox data — deferred to a future brief once real data sources are enabled.",
+  "reports": [
+    {
+      "id": "hot_inbox_buyer_cobble_hill_3br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Ben Carter",
+          "source": "inbox",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Cobble Hill neighborhood match, $2.45M sits squarely within the $2.30M–$2.60M budget, 3BR aligns perfectly, and both records are fresh at under 7 days.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003733,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_inbox_buyer_murray_hill_1br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Omar Haddad",
+          "source": "inbox",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Murray Hill neighborhood match, $825k price sits comfortably within the $780k–$900k budget, 1BR aligns perfectly, and both records are fresh at 4–5 days old (well under the 7-day Hot ceiling).",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003781,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_inbox_buyer_prospect_heights_2br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Nina Patel",
+          "source": "inbox",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Prospect Heights neighborhood match, $1.28M sits squarely within the $1.20M–$1.40M budget, 2BR aligns perfectly, and both records are fresh (newer is 3 days old), clearing the Hot ceiling.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.00382,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_inbox_renter_bushwick_1br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Lena Fox",
+          "source": "inbox",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Bushwick match, listing price of $2,750 falls squarely within the $2,500–$2,950 budget, beds align at 1BR, and both records are under 7 days old — no ceiling demotion needed.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003778,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_mojo_buyer_fidi_1br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Grace Liu",
+          "source": "mojo",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Financial District neighborhood match, $1.15M listing sits squarely within the $1.05M–$1.25M budget, 1BR aligns perfectly, and both records are fresh (newer is 2 days old), clearing the Hot ceiling.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003799,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_mojo_buyer_forest_hills_2br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Sofia Marino",
+          "source": "mojo",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Forest Hills neighborhood match, $880k price sits squarely within the $820k–$980k budget, 2BR aligns perfectly, and both records are fresh (newer is 2 days old), yielding a Hot tier with no ceiling demotion.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003799,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_mojo_buyer_harlem_3br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Andre Jackson",
+          "source": "mojo",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Central Harlem neighborhood match, $1.55M sits comfortably within the $1.45M–$1.70M budget, beds match perfectly at 3BR, and both records are fresh (newer is 3 days old), clearing the Hot ceiling.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003856,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_mojo_buyer_williamsburg_2br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Hannah Brooks",
+          "source": "mojo",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Williamsburg match, 2BR aligns perfectly, $1.75M sits comfortably within the $1.65M–$1.90M budget, and both records are fresh (newest is 1 day old), clearing every threshold for Hot.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003811,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_mojo_renter_astoria_2br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Yusuf Demir",
+          "source": "mojo",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Astoria neighborhood match, 2BR aligns perfectly, $3,400 price sits comfortably within the $3,100–$3,600 budget, and both records are under 7 days old — no friction anywhere.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003739,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_se_buyer_chelsea_2br_cash",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Emily Chen",
+          "source": "streeteasy_expert",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Chelsea neighborhood match, $2.10M sits squarely within the $1.90M–$2.20M budget, beds align perfectly at 2BR, and both records are fresh (newer is 1 day old), yielding a Hot tier with no demotions.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003883,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_se_buyer_park_slope_2br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Rachel Green",
+          "source": "streeteasy_expert",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Park Slope neighborhood match, $1.45M price sits squarely within the $1.40M–$1.60M budget, 2BR aligns perfectly, and both records are fresh (newer is 2 days old), clearing the Hot ceiling.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003826,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_se_buyer_tribeca_2br_cash",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Marcus Webb",
+          "source": "streeteasy_expert",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Tribeca neighborhood match, $4.20M sits comfortably within the $3.80M–$4.30M budget (FITS), beds align at 2BR, and both records are fresh at 2–3 days old, well under the 7-day Hot ceiling.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003934,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_se_buyer_ues_3br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "David Okafor",
+          "source": "streeteasy_expert",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Upper East Side neighborhood match, $3.40M sits squarely within the $3.30M–$3.60M budget, beds align perfectly at 3BR, and both records are under 7 days old — no ceiling demotion needed.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003823,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_se_renter_lic_studio",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Tomas Rivera",
+          "source": "streeteasy_expert",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Long Island City neighborhood match, studio beds align perfectly, $2,950 listing price sits squarely within the $2,700–$3,100 budget, and both records are fresh at 1–2 days old.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003679,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "hot_se_renter_west_village_1br",
+      "bucket": "hot",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Priya Nair",
+          "source": "streeteasy_expert",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact West Village neighborhood match, $4,900 price sits comfortably within the $4,500–$5,200 budget, 1BR aligns perfectly, and both records are just 1 day old — no ceiling demotion applies.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.00376,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "none_price_gap_over_50pct",
+      "bucket": "none",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Mona Reyes",
+          "source": "streeteasy_expert",
+          "expectedTier": "None",
+          "predictedTier": "None",
+          "tierStatus": "pass"
+        }
+      ],
+      "costUsd": 0.003781,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "none_price_gap_under_50pct",
+      "bucket": "none",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Reuben Stark",
+          "source": "mojo",
+          "expectedTier": "None",
+          "predictedTier": "None",
+          "tierStatus": "pass"
+        }
+      ],
+      "costUsd": 0.004075,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "none_wrong_borough",
+      "bucket": "none",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Colin Ward",
+          "source": "inbox",
+          "expectedTier": "None",
+          "predictedTier": "None",
+          "tierStatus": "pass"
+        }
+      ],
+      "costUsd": 0,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "none_wrong_side_buyer_vs_rental",
+      "bucket": "none",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Grant Hollis",
+          "source": "streeteasy_expert",
+          "expectedTier": "None",
+          "predictedTier": "None",
+          "tierStatus": "pass"
+        }
+      ],
+      "costUsd": 0,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "none_wrong_side_renter_vs_sale",
+      "bucket": "none",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Petra Volk",
+          "source": "mojo",
+          "expectedTier": "None",
+          "predictedTier": "None",
+          "tierStatus": "pass"
+        }
+      ],
+      "costUsd": 0,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_inbox_buyer_broad_bigrange",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Owen Pratt",
+          "source": "inbox",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "Same-borough Brooklyn match (party gave no specific neighborhood, capping at Possible) with the $1.2M price squarely within the $900k–$1.6M budget and 2BR fitting the 1–3BR range, both records fresh at under 7 days.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.00394,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_inbox_buyer_broad_no_hood",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Dana Kim",
+          "source": "inbox",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "The party specified no particular Manhattan neighborhood (broad demand), capping the neighborhood match at SAME-BOROUGH-ONLY/Possible despite the 2BR and $1.85M price fitting squarely within the $1.5M–$2M budget; both records are fresh (4 days), so no freshness demotion applies, leaving the tier at Possible.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004192,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_inbox_buyer_price_stretch_hood",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Bianca Ferro",
+          "source": "inbox",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Upper West Side neighborhood match with a perfect 2BR fit, but the $2.25M listing price is 25% above the buyer's $1.80M ceiling (NEAR, not FITS), keeping it at Warm — freshness (5 days) allows a Hot ceiling but the price gap prevents it.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004015,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_mojo_buyer_brooklyn_broad",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Leo Barnes",
+          "source": "mojo",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "Party has broad/unspecified Brooklyn neighborhoods (caps at BASE Possible), but price of $1.35M is within ~15% of the $1.40M–$1.60M budget (FITS) and beds match at 3BR, with both records fresh (5-day ceiling allows Hot, but borough-only neighborhood match holds the tier at Possible.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004165,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_mojo_buyer_queens_broad",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Henry Zhao",
+          "source": "mojo",
+          "expectedTier": "Possible",
+          "predictedTier": "Warm",
+          "tierStatus": "fail",
+          "reason": "Same-borough Queens match with no specific neighborhood specified (broad demand, caps at Possible on neighborhood grounds), but the $780k price is within ~15% of the $800k–$950k budget (FITS), both records are fresh (6-day newer record yields a Hot ceiling), netting Warm as the floor of Possible (neighborhood) and Hot (price+freshness) — actually resolving to Possible per SAME-BOROUGH-ONLY base, but the 2BR beds match perfectly and price fits squarely, so final tier is Possible.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004786,
+      "pass": false,
+      "error": null
+    },
+    {
+      "id": "possible_mojo_renter_brooklyn_broad",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Aisha Bello",
+          "source": "mojo",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "Crown Heights is a specific Brooklyn neighborhood but the party gave no specific neighborhood (broad/borough-level demand), capping the base at Possible, though the $3,600 price fits squarely within the $3,500–$4,200 budget, the 2BR matches exactly, and both records are fresh (4 days, under the 7-day Hot ceiling).",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.00415,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_se_buyer_manhattan_broad",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Kara Bishop",
+          "source": "streeteasy_expert",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "Both sides are fresh (3-day listing, 4-day party) allowing a Hot ceiling, but the party has no specific neighborhood (broad Manhattan demand caps the base at Possible), and the $2.20M listing price is ~5% above the $2.10M budget ceiling (NEAR/FITS borderline), so the match lands at Possible.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004123,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_se_buyer_manhattan_broad_widerange",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Nadia Frost",
+          "source": "streeteasy_expert",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "The listing is a fresh 2BR in Financial District at $3.10M, squarely within the $2.80M–$3.40M budget, but the party specified no neighborhood (broad Manhattan demand), capping the base tier at Possible despite the otherwise perfect price and bed fit; freshness (4 days) allows up to Hot but cannot override the neighborhood ceiling.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004174,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_se_buyer_missing_price",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Curtis Lang",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Upper East Side neighborhood match with a perfect 2BR fit, but the listing's missing price means the $1.8M–$2.2M budget cannot be confirmed, capping the base tier at Warm — though both records are fresh (3 days) so no freshness demotion applies.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003943,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "possible_se_renter_manhattan_price_stretch",
+      "bucket": "possible",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Ruth Adler",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Chelsea neighborhood match and correct 1BR, but the $5,000 listing price is 25% above the party's $3,500–$4,000 budget (NEAR, not FITS), keeping this at Warm despite both records being fresh (3-day ceiling allows Hot).",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003889,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "rank_freshness_se_hot_degrades_65d",
+      "bucket": "ranking",
+      "kind": "tier",
+      "edgeCase": true,
+      "parties": [
+        {
+          "partyName": "Stale S. Buyer",
+          "source": "streeteasy_expert",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "Exact Chelsea neighborhood match with $2.05M squarely inside the $1.90M–$2.10M budget and 2BR aligning perfectly, but both records are ~65–66 days old, capping an otherwise Hot match at Possible.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003814,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "rank_freshness_se_hot_degrades_90d",
+      "bucket": "ranking",
+      "kind": "tier",
+      "edgeCase": true,
+      "parties": [
+        {
+          "partyName": "Old S. Buyer",
+          "source": "streeteasy_expert",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "Exact Upper East Side neighborhood match with $3.45M squarely inside the $3.30M–$3.60M budget and a perfect 3BR fit, but both records are ~90 days old, capping the tier at Possible.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003805,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "rank_hot_pair_se_over_inbox",
+      "bucket": "ranking",
+      "kind": "ranking",
+      "edgeCase": true,
+      "parties": [
+        {
+          "partyName": "I. Inbox Buyer",
+          "source": "inbox",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Upper East Side neighborhood match, $3.40M sits squarely within the $3.30M–$3.60M budget, 3BR aligns perfectly, and both records are fresh (newer is 1 day old), clearing the Hot ceiling."
+        },
+        {
+          "partyName": "S. StreetEasy Buyer",
+          "source": "streeteasy_expert",
+          "expectedTier": "Hot",
+          "predictedTier": "Hot",
+          "tierStatus": "pass",
+          "reason": "Exact Upper East Side neighborhood match, $3.40M sits squarely within the $3.30M–$3.60M budget, 3BR aligns perfectly, and both records are fresh (newer is 1 day old), clearing the Hot ceiling."
+        }
+      ],
+      "sePriority": "pass",
+      "costUsd": 0.00764,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "rank_possible_trio_weak_fit_se_first",
+      "bucket": "ranking",
+      "kind": "ranking",
+      "edgeCase": true,
+      "parties": [
+        {
+          "partyName": "I. Inbox Buyer",
+          "source": "inbox",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "The party specified only broad Manhattan demand (no specific neighborhood), capping the base at Possible despite the listing's $1.85M price fitting squarely within the $1.5M–$2M budget and the 2BR matching perfectly, with both records fresh (4 days, no freshness demotion needed)."
+        },
+        {
+          "partyName": "S. StreetEasy Buyer",
+          "source": "streeteasy_expert",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "The party specified only broad Manhattan demand (no specific neighborhood), capping the base at Possible despite the listing's $1.85M price fitting squarely within the $1.5M–$2M budget and the 2BR matching perfectly, with both records fresh (4 days, no freshness demotion needed)."
+        },
+        {
+          "partyName": "M. Mojo Buyer",
+          "source": "mojo",
+          "expectedTier": "Possible",
+          "predictedTier": "Possible",
+          "tierStatus": "pass",
+          "reason": "The party specified only broad Manhattan demand (no specific neighborhood), capping the base at Possible despite the listing's $1.85M price fitting squarely within the $1.5M–$2M budget, 2BR matching, and both records being fresh (4 days, ceiling Hot)."
+        }
+      ],
+      "sePriority": "pass",
+      "costUsd": 0.011992,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "rank_warm_trio_se_first",
+      "bucket": "ranking",
+      "kind": "ranking",
+      "edgeCase": true,
+      "parties": [
+        {
+          "partyName": "M. Mojo Buyer",
+          "source": "mojo",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Chelsea neighborhood match and perfect 2BR fit, but the $2.50M listing price is ~19% above the buyer's $2.10M ceiling (NEAR, not FITS), keeping the base at Warm — which the 2-day freshness ceiling (Hot) does not further demote."
+        },
+        {
+          "partyName": "I. Inbox Buyer",
+          "source": "inbox",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Chelsea neighborhood match and perfect 2BR fit, but the $2.50M listing price is ~19% above the buyer's $2.10M ceiling (NEAR, not FITS), keeping it at Warm despite both records being fresh (2-day ceiling allows Hot)."
+        },
+        {
+          "partyName": "S. StreetEasy Buyer",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Chelsea neighborhood match with a perfect 2BR fit, but the $2.50M listing price is ~19% above the buyer's $1.90M–$2.10M ceiling (NEAR, not FITS), keeping it at Warm — though both records are fresh (2 days), so no freshness demotion applies."
+        }
+      ],
+      "sePriority": "pass",
+      "costUsd": 0.011899,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_inbox_buyer_fidi_adjacent_bpc",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Sam Ortiz",
+          "source": "inbox",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Battery Park City is adjacent to (but not an alias for) Financial District, the listing's $1.10M price fits squarely within the $1M–$1.20M budget and beds match perfectly, and both records are fresh (3 days), but the adjacent-neighborhood relationship caps the base tier at Warm.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_inbox_buyer_harlem_price_over",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Terrence Blake",
+          "source": "inbox",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Central Harlem neighborhood match with a perfect 3BR fit, but the $1.90M listing price is ~19% above the buyer's $1.60M ceiling (NEAR, not FITS), keeping the base at Warm — and the 4-day freshness ceiling allows Hot, so the final tier is Warm driven by the price gap.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004162,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_inbox_buyer_park_slope_stale",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Wendy Cho",
+          "source": "inbox",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Park Slope neighborhood match with $1.50M squarely within the $1.40M–$1.60M budget and a perfect 2BR fit, but the 25-day-old records cap the tier at Warm.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003766,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_inbox_renter_ev_adjacent_les",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Maya Cohen",
+          "source": "inbox",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Lower East Side is adjacent (not exact) to the renter's target East Village, but the $3,400 price lands squarely within the $3,200–$3,600 budget and beds match perfectly, with both records fresh (2 days), yielding a Warm tier capped by the adjacent neighborhood relationship.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003991,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_mojo_buyer_astoria_adjacent_lic",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Elena Popova",
+          "source": "mojo",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Long Island City is adjacent to Astoria (both in Queens, bordering neighborhoods), the $1M listing price sits squarely within the $900k–$1.1M budget (FITS), beds match exactly at 2BR, and both records are fresh (4 days), but the adjacent-neighborhood relationship caps the tier at Warm.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004072,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_mojo_buyer_forest_hills_stale",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Victor Nguyen",
+          "source": "mojo",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Forest Hills neighborhood match with $900k squarely inside the $820k–$980k budget and a perfect 2BR fit, but the 27-day-old records apply a Warm freshness ceiling, demoting what would otherwise be a Hot match.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003796,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_mojo_buyer_greenpoint_adjacent",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Ivan Petrov",
+          "source": "mojo",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Greenpoint is adjacent to (and borders) Williamsburg, the 2BR matches exactly, and $1.78M sits comfortably within the $1.65M–$1.90M budget — but the adjacent (not exact) neighborhood relationship caps the base tier at Warm, which aligns with the freshness ceiling of Hot (both records under 7 days).",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004201,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_mojo_buyer_uws_price_low",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Derek Sims",
+          "source": "mojo",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Upper West Side neighborhood match with a perfect 2BR fit, but the $2.15M listing price is ~19% above the buyer's $1.80M ceiling (NEAR, not FITS), keeping it at Warm — both records are fresh (5 days), so no freshness demotion.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_mojo_renter_bushwick_adjacent_bedstuy",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Carla Nunez",
+          "source": "mojo",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "The listing is in Bedford-Stuyvesant, which is adjacent to (and borders) Bushwick, not an exact match, but the $2,650 price fits squarely within the party's $2,400–$2,800 budget, beds match at 1BR, and both records are fresh (2 days), yielding a Warm tier (adjacent neighborhood + price fits, no freshness demotion).",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004384,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_se_buyer_chelsea_adjacent_flatiron",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Fiona Walsh",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Flatiron is adjacent to (and borders) Chelsea, the 3BR fits the 2–3BR range, and $2.55M sits comfortably within the $2.40M–$2.70M budget — but the adjacent (not exact) neighborhood match caps the base tier at Warm, which aligns with the fresh 4-day ceiling of Hot.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.004198,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_se_buyer_chelsea_price_miss",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Claire Dunn",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Chelsea neighborhood match and correct 2BR, but the $2.50M listing price is ~19% above the buyer's $2.10M ceiling (NEAR, not FITS), keeping it at Warm despite both records being fresh (2-day ceiling allows Hot).",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003856,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_se_buyer_cobble_hill_bed_gap",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Gina Russo",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Cobble Hill neighborhood match and $2.5M price fits squarely within the $2.3M–$2.6M budget, but the listing's 4BR is notably above the buyer's 2BR requirement, preventing a Hot rating despite both records being fresh (2 days old).",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003985,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_se_buyer_tribeca_bed_gap",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Alicia Vaughn",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Tribeca match and $4.10M sits comfortably within the $3.80M–$4.30M budget (both records fresh), but the listing is a 2BR while the buyer requires 3BR — a one-bedroom shortfall that prevents a Hot rating.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003907,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_se_buyer_ues_stale",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Paul Nguyen",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact Upper East Side neighborhood match with $3.45M squarely inside the $3.30M–$3.60M budget and a perfect 3BR fit, but the 22-day-old listing caps the tier at Warm.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003775,
+      "pass": true,
+      "error": null
+    },
+    {
+      "id": "warm_se_renter_wv_price_over",
+      "bucket": "warm",
+      "kind": "tier",
+      "edgeCase": false,
+      "parties": [
+        {
+          "partyName": "Jonah Reed",
+          "source": "streeteasy_expert",
+          "expectedTier": "Warm",
+          "predictedTier": "Warm",
+          "tierStatus": "pass",
+          "reason": "Exact West Village match with a perfect 1BR fit and both records fresh (ceiling: Hot), but the $5,900 listing price is ~18% above the $4,500–$5,000 budget, making it a NEAR price fit that caps the tier at Warm.",
+          "reasonThemesStatus": "pass",
+          "missingThemes": []
+        }
+      ],
+      "costUsd": 0.003847,
+      "pass": true,
+      "error": null
+    }
+  ]
+}

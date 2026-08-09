@@ -1,0 +1,58 @@
+[
+  {
+    "id": "rank_warm_trio_se_first",
+    "kind": "ranking",
+    "edgeCase": true,
+    "description": "Three buyers with IDENTICAL fit (Chelsea 2BR, budget up to $2.1M) against a $2.5M Chelsea listing — all land Warm (hood match, price over). They differ ONLY by source, so SE must rank above Mojo above inbox.",
+    "parties": [
+      { "role": "buyer", "source": "mojo", "name": "M. Mojo Buyer", "budgetMin": 1900000, "budgetMax": 2100000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+      { "role": "buyer", "source": "inbox", "name": "I. Inbox Buyer", "budgetMin": 1900000, "budgetMax": 2100000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+      { "role": "buyer", "source": "streeteasy_expert", "name": "S. StreetEasy Buyer", "budgetMin": 1900000, "budgetMax": 2100000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 3 }
+    ],
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "255 W 23rd St", "neighborhood": "Chelsea", "borough": "Manhattan", "beds": 2, "price": 2500000, "createdDaysAgo": 2 },
+    "expected": { "sePriority": true, "sameTier": "Warm" }
+  },
+  {
+    "id": "rank_hot_pair_se_over_inbox",
+    "kind": "ranking",
+    "edgeCase": true,
+    "description": "Two identically strong buyers (UES 3BR, budget $3.3–3.6M) against a fresh $3.4M UES listing — both Hot. SE must sort above inbox.",
+    "parties": [
+      { "role": "buyer", "source": "inbox", "name": "I. Inbox Buyer", "budgetMin": 3300000, "budgetMax": 3600000, "neighborhoods": ["Upper East Side"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 2 },
+      { "role": "buyer", "source": "streeteasy_expert", "name": "S. StreetEasy Buyer", "budgetMin": 3300000, "budgetMax": 3600000, "neighborhoods": ["Upper East Side"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 2 }
+    ],
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "44 E 74th St", "neighborhood": "Upper East Side", "borough": "Manhattan", "beds": 3, "price": 3400000, "createdDaysAgo": 1 },
+    "expected": { "sePriority": true, "sameTier": "Hot" }
+  },
+  {
+    "id": "rank_possible_trio_weak_fit_se_first",
+    "kind": "ranking",
+    "edgeCase": true,
+    "description": "Three broad Manhattan buyers (no specific hood, budget $1.5–2M) against a Yorkville $1.85M listing — all weak/Possible. SE weak fit must still rank above Mojo weak fit above inbox weak fit.",
+    "parties": [
+      { "role": "buyer", "source": "inbox", "name": "I. Inbox Buyer", "budgetMin": 1500000, "budgetMax": 2000000, "neighborhoods": [], "borough": "Manhattan", "bedsMin": 1, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+      { "role": "buyer", "source": "streeteasy_expert", "name": "S. StreetEasy Buyer", "budgetMin": 1500000, "budgetMax": 2000000, "neighborhoods": [], "borough": "Manhattan", "bedsMin": 1, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+      { "role": "buyer", "source": "mojo", "name": "M. Mojo Buyer", "budgetMin": 1500000, "budgetMax": 2000000, "neighborhoods": [], "borough": "Manhattan", "bedsMin": 1, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 5 }
+    ],
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "310 E 84th St", "neighborhood": "Yorkville", "borough": "Manhattan", "beds": 2, "price": 1850000, "createdDaysAgo": 4 },
+    "expected": { "sePriority": true, "sameTier": "Possible" }
+  },
+  {
+    "id": "rank_freshness_se_hot_degrades_65d",
+    "kind": "tier",
+    "edgeCase": true,
+    "description": "SE buyer whose price + hood fit would be Hot, but both records are ~65 days old — well beyond the <30d Warm window → freshness should degrade it to Possible.",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Stale S. Buyer", "budgetMin": 1900000, "budgetMax": 2100000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": true, "timing": null, "createdDaysAgo": 65 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "222 W 23rd St", "neighborhood": "Chelsea", "borough": "Manhattan", "beds": 2, "price": 2050000, "createdDaysAgo": 66 },
+    "expected": { "tier": "Possible", "reasonThemes": ["chelsea"], "shouldMatch": true }
+  },
+  {
+    "id": "rank_freshness_se_hot_degrades_90d",
+    "kind": "tier",
+    "edgeCase": true,
+    "description": "SE buyer whose UES fit would be Hot, but both records are ~90 days old → freshness degrades to Possible despite the clean price + hood fit.",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Old S. Buyer", "budgetMin": 3300000, "budgetMax": 3600000, "neighborhoods": ["Upper East Side"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 90 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "46 E 73rd St", "neighborhood": "Upper East Side", "borough": "Manhattan", "beds": 3, "price": 3450000, "createdDaysAgo": 92 },
+    "expected": { "tier": "Possible", "reasonThemes": ["upper east side"], "shouldMatch": true }
+  }
+]

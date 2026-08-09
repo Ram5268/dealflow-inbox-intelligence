@@ -1,0 +1,122 @@
+[
+  {
+    "id": "warm_se_buyer_chelsea_price_miss",
+    "kind": "tier",
+    "description": "SE buyer Chelsea 2BR budget up to $2.1M; listing is exact-hood Chelsea but $2.5M (~19% over) → hood matches, price misses → Warm",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Claire Dunn", "budgetMin": 1900000, "budgetMax": 2100000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "245 W 25th St", "neighborhood": "Chelsea", "borough": "Manhattan", "beds": 2, "price": 2500000, "createdDaysAgo": 2 },
+    "expected": { "tier": "Warm", "reasonThemes": ["chelsea", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_se_buyer_ues_stale",
+    "kind": "tier",
+    "description": "SE buyer UES 3BR, listing is a clean price+hood fit but 24 days old → freshness demotes Hot → Warm",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Paul Nguyen", "budgetMin": 3300000, "budgetMax": 3600000, "neighborhoods": ["Upper East Side"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 24 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "40 E 78th St", "neighborhood": "Upper East Side", "borough": "Manhattan", "beds": 3, "price": 3450000, "createdDaysAgo": 22 },
+    "expected": { "tier": "Warm", "reasonThemes": ["upper east side", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_mojo_buyer_greenpoint_adjacent",
+    "kind": "tier",
+    "description": "Mojo buyer Williamsburg, price fits, but listing is in adjacent Greenpoint → adjacency not exact hood → Warm",
+    "party": { "role": "buyer", "source": "mojo", "name": "Ivan Petrov", "budgetMin": 1650000, "budgetMax": 1900000, "neighborhoods": ["Williamsburg"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "COMING_SOON_SALE", "address": "160 Green St", "neighborhood": "Greenpoint", "borough": "Brooklyn", "beds": 2, "price": 1780000, "createdDaysAgo": 3 },
+    "expected": { "tier": "Warm", "reasonThemes": ["greenpoint", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_inbox_renter_ev_adjacent_les",
+    "kind": "tier",
+    "description": "Inbox renter East Village 1BR ~$3.5k; listing in adjacent LES at $3,400 → price fits, hood adjacent → Warm",
+    "party": { "role": "renter", "source": "inbox", "name": "Maya Cohen", "budgetMin": 3200, "budgetMax": 3600, "neighborhoods": ["East Village"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "RENTAL_LISTING", "address": "125 Rivington St", "neighborhood": "Lower East Side", "borough": "Manhattan", "beds": 1, "price": 3400, "createdDaysAgo": 2 },
+    "expected": { "tier": "Warm", "reasonThemes": ["lower east side", "rent"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_se_buyer_tribeca_bed_gap",
+    "kind": "tier",
+    "description": "SE buyer Tribeca wants 3BR $4M; listing is exact hood + price fit but only 2BR → minor bed gap → Warm",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Alicia Vaughn", "budgetMin": 3800000, "budgetMax": 4300000, "neighborhoods": ["Tribeca"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "70 Vestry St", "neighborhood": "Tribeca", "borough": "Manhattan", "beds": 2, "price": 4100000, "createdDaysAgo": 3 },
+    "expected": { "tier": "Warm", "reasonThemes": ["tribeca", "beds"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_mojo_buyer_uws_price_low",
+    "kind": "tier",
+    "description": "Mojo buyer UWS 2BR budget $1.6–1.8M; listing exact hood but $2.15M (~19% over) → hood matches, price over → Warm",
+    "party": { "role": "buyer", "source": "mojo", "name": "Derek Sims", "budgetMin": 1600000, "budgetMax": 1800000, "neighborhoods": ["Upper West Side"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 6 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "101 W 87th St", "neighborhood": "Upper West Side", "borough": "Manhattan", "beds": 2, "price": 2150000, "createdDaysAgo": 5 },
+    "expected": { "tier": "Warm", "reasonThemes": ["upper west side", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_inbox_buyer_park_slope_stale",
+    "kind": "tier",
+    "description": "Inbox buyer Park Slope 2BR, clean price+hood fit but records ~26 days old → Warm on staleness",
+    "party": { "role": "buyer", "source": "inbox", "name": "Wendy Cho", "budgetMin": 1400000, "budgetMax": 1600000, "neighborhoods": ["Park Slope"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 26 },
+    "listing": { "category": "OFF_MARKET_SALE", "address": "410 6th Ave", "neighborhood": "Park Slope", "borough": "Brooklyn", "beds": 2, "price": 1500000, "createdDaysAgo": 25 },
+    "expected": { "tier": "Warm", "reasonThemes": ["park slope"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_se_renter_wv_price_over",
+    "kind": "tier",
+    "description": "SE renter West Village 1BR up to $5.0k; listing exact hood but $5,900 (~18% over) → hood matches, rent over → Warm",
+    "party": { "role": "renter", "source": "streeteasy_expert", "name": "Jonah Reed", "budgetMin": 4500, "budgetMax": 5000, "neighborhoods": ["West Village"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "RENTAL_LISTING", "address": "12 Perry St", "neighborhood": "West Village", "borough": "Manhattan", "beds": 1, "price": 5900, "createdDaysAgo": 2 },
+    "expected": { "tier": "Warm", "reasonThemes": ["west village", "rent"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_mojo_buyer_astoria_adjacent_lic",
+    "kind": "tier",
+    "description": "Mojo buyer Astoria 2BR $900k–1.1M; listing in adjacent LIC at $1.0M → price fits, hood adjacent → Warm",
+    "party": { "role": "buyer", "source": "mojo", "name": "Elena Popova", "budgetMin": 900000, "budgetMax": 1100000, "neighborhoods": ["Astoria"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "COMING_SOON_SALE", "address": "10-50 Jackson Ave", "neighborhood": "Long Island City", "borough": "Queens", "beds": 2, "price": 1000000, "createdDaysAgo": 4 },
+    "expected": { "tier": "Warm", "reasonThemes": ["long island city", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_inbox_buyer_fidi_adjacent_bpc",
+    "kind": "tier",
+    "description": "Inbox buyer FiDi 1BR $1.0–1.2M; listing in adjacent Battery Park City at $1.1M → price fits, hood adjacent → Warm",
+    "party": { "role": "buyer", "source": "inbox", "name": "Sam Ortiz", "budgetMin": 1000000, "budgetMax": 1200000, "neighborhoods": ["Financial District"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": null, "createdDaysAgo": 4 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "200 Rector Pl", "neighborhood": "Battery Park City", "borough": "Manhattan", "beds": 1, "price": 1100000, "createdDaysAgo": 3 },
+    "expected": { "tier": "Warm", "reasonThemes": ["battery park city", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_se_buyer_chelsea_adjacent_flatiron",
+    "kind": "tier",
+    "description": "SE buyer Chelsea 2–3BR $2.4–2.7M; listing in adjacent, distinct Flatiron at $2.55M → adjacency (not exact) with price fit → Warm",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Fiona Walsh", "budgetMin": 2400000, "budgetMax": 2700000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "COMING_SOON_SALE", "address": "12 W 21st St", "neighborhood": "Flatiron", "borough": "Manhattan", "beds": 3, "price": 2550000, "createdDaysAgo": 4 },
+    "expected": { "tier": "Warm", "reasonThemes": ["flatiron", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_mojo_renter_bushwick_adjacent_bedstuy",
+    "kind": "tier",
+    "description": "Mojo renter Bushwick 1BR ~$2.7k; listing adjacent Bed-Stuy (same borough) at $2,650 → price fits, hood adjacent → Warm",
+    "party": { "role": "renter", "source": "mojo", "name": "Carla Nunez", "budgetMin": 2400, "budgetMax": 2800, "neighborhoods": ["Bushwick"], "bedsMin": 1, "bedsMax": 1, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "RENTAL_LISTING", "address": "1100 Bushwick Ave", "neighborhood": "Bedford-Stuyvesant", "borough": "Brooklyn", "beds": 1, "price": 2650, "createdDaysAgo": 2 },
+    "expected": { "tier": "Warm", "reasonThemes": ["adjacent", "rent"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_inbox_buyer_harlem_price_over",
+    "kind": "tier",
+    "description": "Inbox buyer Central Harlem 3BR up to $1.6M; listing exact hood but $1.9M (~19% over) → hood matches, price over → Warm",
+    "party": { "role": "buyer", "source": "inbox", "name": "Terrence Blake", "budgetMin": 1350000, "budgetMax": 1600000, "neighborhoods": ["Central Harlem"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 5 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "50 W 129th St", "neighborhood": "Central Harlem", "borough": "Manhattan", "beds": 3, "price": 1900000, "createdDaysAgo": 4 },
+    "expected": { "tier": "Warm", "reasonThemes": ["harlem", "price"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_se_buyer_cobble_hill_bed_gap",
+    "kind": "tier",
+    "description": "SE buyer Cobble Hill wants 2BR $2.3–2.6M; listing exact hood + price fit but 4BR (bed gap up) → Warm",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Gina Russo", "budgetMin": 2300000, "budgetMax": 2600000, "neighborhoods": ["Cobble Hill"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "OFF_MARKET_SALE", "address": "110 Kane St", "neighborhood": "Cobble Hill", "borough": "Brooklyn", "beds": 4, "price": 2500000, "createdDaysAgo": 2 },
+    "expected": { "tier": "Warm", "reasonThemes": ["cobble hill", "beds"], "shouldMatch": true }
+  },
+  {
+    "id": "warm_mojo_buyer_forest_hills_stale",
+    "kind": "tier",
+    "description": "Mojo buyer Forest Hills 2BR, clean price+hood fit but ~28 days old → Warm on staleness",
+    "party": { "role": "buyer", "source": "mojo", "name": "Victor Nguyen", "budgetMin": 820000, "budgetMax": 980000, "neighborhoods": ["Forest Hills"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 28 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "72-35 112th St", "neighborhood": "Forest Hills", "borough": "Queens", "beds": 2, "price": 900000, "createdDaysAgo": 27 },
+    "expected": { "tier": "Warm", "reasonThemes": ["forest hills"], "shouldMatch": true }
+  }
+]

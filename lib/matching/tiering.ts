@@ -16,18 +16,35 @@ import type { PartyContext, ListingContext, Tier } from './types'
 
 const TIERING_SYSTEM = `You score how well ONE listing (supply) matches ONE party (a buyer or renter's demand) for a NYC real estate agent. Output a single tier and a one-sentence reason.
 
-Judge ONLY fit between the two records. Do NOT consider where the party came from (source) — that is handled separately. Be decisive; when a pair is a hard mismatch, say None.
+Judge ONLY fit between the two records. Do NOT consider where the party came from (source) — that is handled separately.
 
-TIERS:
-- "Hot": strong fit on the things that matter. Price fits (listing within ~15% of the party's budget/range), neighborhood is an exact or immediately-adjacent/alias match, the record is fresh (the newer side <7 days old), and there is NO disqualifying conflict (right transaction side, beds within ~1 of what's asked, no cash-only-vs-financed clash).
-- "Warm": a solid partial fit. EITHER price fits OR neighborhood matches (not clearly both), OR a Hot-shaped fit that's slightly stale (newer side <30 days) or has a minor criteria gap (beds off by ~1, budget edge).
-- "Possible": a broad, long-tail fit worth surfacing. Same borough, price within ~30% of range, some overlap in criteria, but not a clean fit on either price or neighborhood.
-- "None": a hard mismatch that should NOT be shown. Wrong transaction side (a sale listing for a renter, or vice-versa), price gap >50% from the party's range, or a disqualifying criteria conflict. Missing data is NOT itself a mismatch — do not return None just because a field is null; judge on what IS known and lean Possible when thin.
+STEP 1 — classify the NEIGHBORHOOD relationship:
+- EXACT/ALIAS: the listing's neighborhood equals one the party wants, or a well-known alias (FiDi = Financial District, LIC = Long Island City).
+- ADJACENT: the listing is in a neighborhood that borders or is a sub-area of one the party wants (Greenpoint borders Williamsburg; West Chelsea is within Chelsea; Ridgewood borders Bushwick).
+- SAME-BOROUGH-ONLY: same borough, but the specific neighborhoods differ and are NOT adjacent (Park Slope vs Bay Ridge; Chelsea vs Murray Hill) — OR the party gave no specific neighborhood at all (broad / borough-level demand).
+- CROSS-BOROUGH: different boroughs (rare; it is pre-filtered).
+
+STEP 2 — classify the PRICE relationship (listing price vs the party's budget/range):
+- FITS: within ~15% of the range.  NEAR: ~15–30% off.  OFF: >30% off.  GAP: >50% off (a hard disqualifier).
+- If price is missing on either side, price is UNKNOWN (not a mismatch).
+
+STEP 3 — NONE override. Return "None" immediately (skip the rest) ONLY for a hard mismatch: wrong transaction side (sale vs rental), a price GAP (>50% off), or a genuine disqualifying conflict. Do NOT return None just because neighborhoods differ within the same borough, or because a field is null.
+
+STEP 4 — compute a BASE tier from neighborhood + price (ignore freshness for now):
+- BASE Hot   ← EXACT/ALIAS neighborhood AND price FITS on a KNOWN price. UNKNOWN (missing) price can NEVER be Hot — you cannot confirm the price fit — so exact hood + unknown price is BASE Warm, not Hot.
+- BASE Warm  ← EXACT/ALIAS neighborhood with price NEAR / UNKNOWN / a minor bed gap (~1 off);  OR  ADJACENT neighborhood with price FITS or NEAR.
+- BASE Possible ← SAME-BOROUGH-ONLY (different specific hoods, OR broad/no-hood demand) with price FITS or NEAR;  OR any real-but-thin fit.
+  A broad party (no specific neighborhood) can never exceed BASE Possible on neighborhood grounds — you cannot confirm a sharp hood match. An EXACT/ALIAS neighborhood never falls below BASE Warm.
+
+STEP 5 — apply the FRESHNESS CEILING using the newer of the two records' ages, then output the LOWER of the base tier and this ceiling:
+- newer record <7 days  → ceiling Hot   (no demotion).
+- newer record 7–60 days → ceiling Warm  (a base Hot becomes Warm).
+- newer record >60 days → ceiling Possible (even a perfect exact-hood price-fit becomes Possible).
+Final tier = min(BASE from step 4, freshness ceiling). ADJACENT is never Hot regardless of freshness (its base already caps at Warm).
 
 RULES:
-- The reason must be ONE sentence, concrete, and cite the actual drivers (e.g. "$2.1M list sits inside the $1.9–2.2M budget and Chelsea is an exact hood match"). No hedging boilerplate.
-- Never invent facts not in the two records. If price or beds is missing on a side, weigh what remains; don't assume.
-- Prefer None over a weak "Possible" only when there is a genuine disqualifier (wrong side, >50% price gap). Otherwise thin overlap is "Possible".`
+- The reason must be ONE sentence citing the actual drivers — name the neighborhood relationship (exact / adjacent / borough-only), the price relationship, and freshness when it changed the tier (e.g. "exact Chelsea match with $2.1M inside the $1.9–2.2M budget, both fresh" or "exact UES fit but 65-day-old records cap it at Possible"). No boilerplate.
+- Never invent facts. If price or beds is missing, weigh what remains.`
 
 const tierInputSchema = {
   type: 'object',

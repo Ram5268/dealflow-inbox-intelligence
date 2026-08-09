@@ -1,0 +1,42 @@
+[
+  {
+    "id": "none_wrong_side_buyer_vs_rental",
+    "kind": "tier",
+    "description": "Buyer party against a RENTAL listing — wrong transaction side. Engine's side filter never even pairs them → absent from results → None.",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Grant Hollis", "budgetMin": 1900000, "budgetMax": 2200000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 2 },
+    "listing": { "category": "RENTAL_LISTING", "address": "150 W 22nd St", "neighborhood": "Chelsea", "borough": "Manhattan", "beds": 2, "price": 6500, "createdDaysAgo": 1 },
+    "expected": { "tier": "None", "shouldMatch": false }
+  },
+  {
+    "id": "none_wrong_side_renter_vs_sale",
+    "kind": "tier",
+    "description": "Renter party against a SALE listing — wrong transaction side → excluded by side filter → None.",
+    "party": { "role": "renter", "source": "mojo", "name": "Petra Volk", "budgetMin": 3000, "budgetMax": 4000, "neighborhoods": ["Astoria"], "bedsMin": 1, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "25-40 30th Rd", "neighborhood": "Astoria", "borough": "Queens", "beds": 2, "price": 950000, "createdDaysAgo": 2 },
+    "expected": { "tier": "None", "shouldMatch": false }
+  },
+  {
+    "id": "none_wrong_borough",
+    "kind": "tier",
+    "description": "Manhattan (Chelsea) buyer against a Brooklyn (Williamsburg) listing — different boroughs → geo pre-filter drops it → None.",
+    "party": { "role": "buyer", "source": "inbox", "name": "Colin Ward", "budgetMin": 1700000, "budgetMax": 2000000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "125 N 10th St", "neighborhood": "Williamsburg", "borough": "Brooklyn", "beds": 2, "price": 1850000, "createdDaysAgo": 2 },
+    "expected": { "tier": "None", "shouldMatch": false }
+  },
+  {
+    "id": "none_price_gap_over_50pct",
+    "kind": "tier",
+    "description": "Chelsea buyer budget up to $2.1M against an exact-hood Chelsea listing at $5.2M (~150% over) — price gap >50% is a hard disqualifier → None.",
+    "party": { "role": "buyer", "source": "streeteasy_expert", "name": "Mona Reyes", "budgetMin": 1900000, "budgetMax": 2100000, "neighborhoods": ["Chelsea"], "bedsMin": 2, "bedsMax": 2, "cashOnly": false, "timing": null, "createdDaysAgo": 2 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "500 W 21st St", "neighborhood": "Chelsea", "borough": "Manhattan", "beds": 2, "price": 5200000, "createdDaysAgo": 1 },
+    "expected": { "tier": "None", "shouldMatch": false }
+  },
+  {
+    "id": "none_price_gap_under_50pct",
+    "kind": "tier",
+    "description": "UES buyer budget $1.8–2.2M against an exact-hood UES listing at $780k (~60% under floor) — >50% gap, wrong product tier → None.",
+    "party": { "role": "buyer", "source": "mojo", "name": "Reuben Stark", "budgetMin": 1800000, "budgetMax": 2200000, "neighborhoods": ["Upper East Side"], "bedsMin": 3, "bedsMax": 3, "cashOnly": false, "timing": null, "createdDaysAgo": 3 },
+    "listing": { "category": "ACTIVE_SALE_LISTING", "address": "301 E 87th St", "neighborhood": "Upper East Side", "borough": "Manhattan", "beds": 0, "price": 780000, "createdDaysAgo": 2 },
+    "expected": { "tier": "None", "shouldMatch": false }
+  }
+]
