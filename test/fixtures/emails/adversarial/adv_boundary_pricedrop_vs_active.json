@@ -1,0 +1,14 @@
+{
+  "id": "adv_boundary_pricedrop_vs_active",
+  "notes": "A reprice from $2.5M down to $2.2M. Correct = PRICE_DROP with the NEW price (2.2M). Two failure modes: routing to ACTIVE_SALE_LISTING, or emitting the OLD $2.5M as the price.",
+  "edgeCase": true,
+  "input": {
+    "subject": "PRICE IMPROVED — 15 Union Square West #12B",
+    "from": { "name": "Gabriela Ferro", "email": "gferro@elliman.com" },
+    "receivedAt": "2026-06-25T14:10:00Z",
+    "bodyText": "PRICE IMPROVED — 15 Union Square West #12B just came down.\n\nNow asking $2.2M (previously $2.5M). 2BR/2BA, high floor, southern light, motivated seller. Co-broke 2.5%.\n\nThe seller wants this done, so bring me a real buyer and let's make a deal. Showings start immediately — DM me for access.\n\nGabriela",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "PRICE_DROP", "address": "15 Union Square West", "neighborhood": "Union Square", "borough": "Manhattan", "beds": 2, "price": 2200000, "confidenceScoreMin": 0.5 }
+}

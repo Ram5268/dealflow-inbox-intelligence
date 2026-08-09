@@ -1,0 +1,14 @@
+{
+  "id": "adv_hist_sold_comp_forward",
+  "notes": "A just-SOLD comparable forwarded for pricing context, not a live listing. Correct = MARKET_REPORT (or NOISE). The failure = classifying it as an ACTIVE_SALE_LISTING and emitting the $2.1M/address as live inventory — a confident historical-data hallucination.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Comp for pricing your listing",
+    "from": { "name": "Daniel Rosen", "email": "drosen@corcoran.com" },
+    "receivedAt": "2026-06-03T18:40:00Z",
+    "bodyText": "Hi Ryan,\n\nPulled a great comp for pricing your Greenwich Village listing — 12 East 10th St just SOLD last week for $2.1M (2BR/2BA, 41 days on market, asked $2.195M).\n\nSame block, similar layout and floor. This should help us land on a realistic number for yours before we go live.\n\nWant to hop on a call tomorrow to talk strategy?\n\nBest,\nDaniel",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "MARKET_REPORT" }
+}

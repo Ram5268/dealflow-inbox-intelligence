@@ -1,0 +1,14 @@
+{
+  "id": "adv_hist_past_purchase_price",
+  "notes": "Deceptive historical price: the '$1.8M' is the sender's OWN past purchase, and 'your Chelsea sale' is someone else's already-closed deal. Correct = NOISE (no actionable listing). The failure = fabricating an ACTIVE_SALE_LISTING and/or emitting $1.8M as a live price.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Re: Congrats!! 🎉",
+    "from": { "name": "Marisol Vega", "email": "marisol.vega@compass.com" },
+    "receivedAt": "2026-05-14T15:22:00Z",
+    "bodyText": "Hey you!\n\nCongrats on the Chelsea sale closing, so thrilled for you both! I know how long that one dragged on.\n\nFunny enough it reminds me — I paid $1.8M for my first apartment back in 2015 and thought that was insane at the time. Wild how the market's moved since then.\n\nLet's grab coffee soon, it's been way too long. Free next week?\n\nxx\nMarisol",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "NOISE" }
+}

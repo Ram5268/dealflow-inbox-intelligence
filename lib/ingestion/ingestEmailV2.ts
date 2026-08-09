@@ -279,7 +279,9 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
         senderName:          email.senderName,
         senderEmail:         email.senderEmail,
         bodyPreview:         email.bodyPreview,
-        bodyFirst500:        bodyText ? bodyText.slice(0, 500) : null,
+        // Brief 6.3: widened 500→1200 so the classifier sees bottom-of-email
+        // buried listings/leads (e.g. a newsletter's exclusive at the very end).
+        bodyFirst500:        bodyText ? bodyText.slice(0, 1200) : null,
         attachmentNames:     atts.map(a => a.name),
         attachmentMimeTypes: atts.map(a => a.mimeType),
         attachmentCount:     atts.length,
@@ -316,6 +318,23 @@ export async function ingestEmailV2(emailId: string): Promise<IngestV2Result> {
     }
   } else {
     console.log(`[ingestV2] ${emailId}: classifier=${classifierCategory ?? 'null'} needsDeepExtract=${needsDeepExtract} — skipping extraction`)
+  }
+
+  // Brief 6.3 Fix #1B — lead-recovery second pass. For informational buckets the
+  // primary classifier can still miss a buried buyer/seller/landlord/renter lead
+  // (e.g. a lead below the classifier's body window). Run a conservative Sonnet
+  // scan and persist a provenance-tagged opportunity only if a concrete lead is
+  // found. Non-fatal. CLIENT_CONVERSATION already deep-extracts above, but its
+  // conversation spec does not surface lead intent, so it is included here too.
+  const INFORMATIONAL_FOR_RECOVERY = new Set(['CLIENT_CONVERSATION', 'NOISE', 'MARKET_REPORT'])
+  if (classifierCategory && INFORMATIONAL_FOR_RECOVERY.has(classifierCategory)) {
+    try {
+      const { recoverAndPersistBuriedLead } = await import('../extraction/extractEmailV2')
+      const recovered = await recoverAndPersistBuriedLead(emailId, organizationId)
+      if (recovered) console.log(`[ingestV2] ${emailId}: lead-recovery surfaced ${recovered.category} (provenance=${recovered.provenance})`)
+    } catch (e) {
+      errors.push(`recoverBuriedLead: ${(e as Error).message}`)
+    }
   }
 
   return {

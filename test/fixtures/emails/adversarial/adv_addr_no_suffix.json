@@ -1,0 +1,14 @@
+{
+  "id": "adv_addr_no_suffix",
+  "notes": "Address given with no street suffix ('45 East 89th'). Correct = capture the street ('45 East 89th St'); on the UES 'East 89th' unambiguously means Street. Watch for the address being dropped because no St/Ave is present.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Prewar 3BR Co-op | Upper East Side | Co-broke Welcome",
+    "from": { "name": "Danielle Kessler", "email": "danielle.kessler@corcoran.com" },
+    "receivedAt": "2026-07-18T14:20:00Z",
+    "bodyText": "Hi all,\n\nExcited to bring a beautiful prewar co-op to market at 45 East 89th, right off the park on the Upper East Side.\n\n3BR/2BA, high beamed ceilings, original hardwood floors, and a windowed eat-in kitchen. The building is a well-run prewar with a live-in super and low maintenance.\n\nAsk: $2,850,000\n\nHappy to co-broke. Reach out for the full setup and to schedule a private showing.\n\nBest,\nDanielle Kessler\nLicensed RE Salesperson | Corcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "address": "45 East 89th St", "neighborhood": "Upper East Side", "borough": "Manhattan", "beds": 3, "price": 2850000, "confidenceScoreMin": 0.5 }
+}

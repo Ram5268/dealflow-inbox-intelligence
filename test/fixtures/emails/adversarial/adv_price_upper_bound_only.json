@@ -1,0 +1,14 @@
+{
+  "id": "adv_price_upper_bound_only",
+  "notes": "Only an upper budget bound ('under $2M') on the demand side. Correct = BUYER_ISO, no address leakage (the buyer is looking, not selling), neighborhood Chelsea, party captured. Watch for treating $2M as a listing price or emitting an address.",
+  "edgeCase": true,
+  "input": {
+    "subject": "ISO Chelsea 1-2BR Under $2M for Serious Buyer",
+    "from": { "name": "Rebecca Tanaka", "email": "rebecca.tanaka@serhant.com" },
+    "receivedAt": "2026-07-31T10:15:00Z",
+    "bodyText": "Hi all,\n\nI have a well-qualified buyer actively looking in Chelsea and would love to hear about anything off-market.\n\nLooking for a 1-2BR, budget under $2M, flexible on floor and exposure. Pre-approved and needs to close by year-end - motivated and easy to work with.\n\nIf you have or know of anything quietly available, please send it my way. Happy to co-broke.\n\nThanks,\nRebecca Tanaka\nSERHANT.",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "BUYER_ISO", "address": null, "neighborhood": "Chelsea", "borough": "Manhattan", "shouldExtractParty": true }
+}

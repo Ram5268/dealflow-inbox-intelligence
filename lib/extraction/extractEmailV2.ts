@@ -287,6 +287,7 @@ export async function extractEmailV2(
       sourceBrokerage:      row.sourceBrokerage,
       clientSide:           row.clientSide,
       status:               row.status,
+      provenance:           row.provenance ?? null,
       extractedTitle:       row.extractedTitle,
       extractedSummary:     row.extractedSummary,
       classificationReason: row.classificationReason,
@@ -380,5 +381,84 @@ export async function extractEmailV2(
     `[extractV2] ${rawEmailId}: ${created.length} opportunit${created.length === 1 ? 'y' : 'ies'} ` +
     `(${spec.kind}) in ${durationMs}ms, cost ${costStr}; enriched ${enriched}/${created.length}; embedded ${embedded}/${created.length}`,
   )
+  return created
+}
+
+// Brief 6.3 Fix #1B — lead-recovery second pass, persistence side.
+//
+// Called from ingestEmailV2 when the classifier routed an email to an
+// informational bucket (CLIENT_CONVERSATION / NOISE / MARKET_REPORT). Runs the
+// conservative recoverBuriedLead() scan over the same assembled context the
+// extractor would see, and — only if a concrete lead is found — persists ONE
+// additional ExtractedOpportunity tagged with provenance:
+//   - 'comp_reference'  when the recovered item is a historical/sold comp
+//     (kept OUT of match pools by matchmaking/searchParties)
+//   - 'buried_recovery' for a genuine buried lead (enters the pool normally)
+//
+// Idempotent: prior recovered rows for this email are wiped first. Returns the
+// created row or null. Non-fatal by contract — callers wrap it in try/catch.
+export async function recoverAndPersistBuriedLead(
+  rawEmailId: string,
+  organizationId: string,
+): Promise<ExtractedOpportunity | null> {
+  const email = await prisma.rawEmail.findUnique({
+    where:  { id: rawEmailId },
+    select: { id: true, subject: true, senderName: true, senderEmail: true, receivedDateTime: true },
+  })
+  if (!email) return null
+
+  const chunks = await prisma.documentChunk.findMany({
+    where:   { organizationId, parentEmailId: rawEmailId },
+    orderBy: [{ chunkType: 'asc' }, { pageNumber: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      chunkType: true, content: true, pageNumber: true, sectionHeading: true,
+      hasTable: true, parentAttachmentId: true, parentLinkedResourceId: true,
+    },
+  })
+  if (chunks.length === 0) return null
+
+  const [linkedResources, attachments] = await Promise.all([
+    prisma.linkedResource.findMany({ where: { organizationId, parentEmailId: rawEmailId }, select: { id: true, url: true } }),
+    prisma.attachment.findMany({ where: { organizationId, rawEmailId }, select: { id: true, name: true } }),
+  ])
+  const linkedUrls = new Map(linkedResources.map(r => [r.id, r.url]))
+  const attachmentNames = new Map(attachments.map(a => [a.id, a.name]))
+
+  const { text: context } = buildContext(email, chunks, attachmentNames, linkedUrls)
+  const ctx: MapCtx = { subject: email.subject, senderName: email.senderName, senderEmail: email.senderEmail }
+
+  const { recoverBuriedLead } = await import('./recoverBuriedLead')
+  const lead = await recoverBuriedLead(context, ctx)
+  if (!lead) return null
+
+  const provenance = lead.isHistoricalComp ? 'comp_reference' : 'buried_recovery'
+  const transactionType: TransactionType =
+    (lead.category === 'RENTER_INQUIRY' || lead.category === 'LANDLORD_LEAD') ? 'RENTAL' : 'SALE'
+
+  // Idempotency: replace any prior recovered rows for this email.
+  await prisma.extractedOpportunity.deleteMany({
+    where: { organizationId, rawEmailId, provenance: { in: ['buried_recovery', 'comp_reference'] } },
+  }).catch(() => {})
+
+  const created = await prisma.extractedOpportunity.create({
+    data: {
+      organizationId, rawEmailId,
+      category:             lead.category as Category,
+      transactionType,
+      address:              lead.address,
+      neighborhood:         lead.neighborhood,
+      borough:              lead.borough,
+      price:                lead.price,
+      beds:                 lead.beds,
+      clientSide:           lead.clientSide,
+      provenance,
+      extractedTitle:       lead.summary || `Recovered ${lead.category}`,
+      extractedSummary:     lead.summary,
+      classificationReason: `[lead-recovery second pass] ${lead.reason}`,
+      confidenceScore:      lead.confidence,
+      processingStatus:     'active',
+    },
+  })
+  console.log(`[extractV2] ${rawEmailId}: recovered buried ${lead.category} (provenance=${provenance}, conf ${lead.confidence})`)
   return created
 }

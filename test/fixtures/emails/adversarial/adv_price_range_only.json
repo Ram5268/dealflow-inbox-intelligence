@@ -1,0 +1,14 @@
+{
+  "id": "adv_price_range_only",
+  "notes": "Asking given as a range ('$1.8-2.1M'), no single firm price. Expected anchors on the low/ask bound (1.8M). A fabricated firm midpoint (e.g. 1.95M) or the upper bound presented as the price is the failure; null is a defensible-conservative alternative. Watch which the extractor picks.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Hell's Kitchen 2BR | 310 West 52nd St | Co-broke",
+    "from": { "name": "Devin O'Sullivan", "email": "devin.osullivan@corcoran.com" },
+    "receivedAt": "2026-06-27T12:40:00Z",
+    "bodyText": "Hi team,\n\nBringing a flexible 2BR to market at 310 West 52nd St in Hell's Kitchen.\n\nSouth-facing light, in-unit W/D, and a well-run condo with a 24-hour doorman. Steps from the theater district and the C/E.\n\nAsking $1.8-2.1M depending on the finish package the buyer selects - we have a few build-out options.\n\nCo-broke welcome. Reach out for details.\n\nDevin O'Sullivan\nCorcoran",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "address": "310 West 52nd St", "neighborhood": "Hell's Kitchen", "borough": "Manhattan", "beds": 2, "price": 1800000 }
+}

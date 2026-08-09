@@ -4,41 +4,47 @@ Tracked, deliberately-deferred issues. Each entry states current impact and a
 tripwire: the condition under which the issue stops being cosmetic and becomes
 load-bearing (and what must ship alongside the change that trips it).
 
-## CLIENT_CONVERSATION classifier: 1/6 accuracy (cosmetic)
+## CLIENT_CONVERSATION classifier / buried-lead boundary — RESOLVED (Brief 6.3, 2026-08-08)
 
-**Status: DEFERRED** — no retrieval path currently consumes this category, so the
-low classification accuracy has no product impact today.
+**Status: RESOLVED.** The informational-boundary failures that Brief 6.2 turned from
+hypothesis into evidence (buried seller/buyer leads dropped to NOISE/CLIENT_CONVERSATION,
+sold comps promoted to phantom SELLER_LEADs, a newsletter's real listing missed) are
+addressed by the Brief 6.3 three-layer fix, verified on the 118-fixture harness.
 
-**Measured (Brief 6.0 fixture harness):** 1 of 6 CLIENT_CONVERSATION fixtures were
-classified correctly. The gpt-4o-mini classifier routes 1:1 client threads to
-BUYER_ISO / SELLER_LEAD / NOISE instead (a seller reply-chain → SELLER_LEAD, a
-forwarded pre-approval → BUYER_ISO, a board-timing thread → NOISE, a thank-you →
-NOISE). CLIENT_CONVERSATION is a fuzzy catch-all with weak lexical signal.
+**What changed (all in `lib/ingestion/sourceClassifier.ts` + extractor):**
+1. **Classifier tuning + wider body window.** A BURIED-INTENT section routes concrete,
+   actionable intent to the right lead/listing category (chatty/thank-you "I'm thinking
+   of listing" → SELLER_LEAD; colleague's buyer with real criteria → BUYER_ISO; a
+   newsletter's concrete listing → its listing category; a sold/historical comp →
+   MARKET_REPORT/NOISE, never a lead). A companion "KEEP AS CLIENT_CONVERSATION" section
+   protects genuine ongoing threads (showing follow-ups, offer negotiation on a live
+   deal, reacting to someone else's listing, vague future/third-party mentions). The
+   classifier body window was widened 500→1200 chars so a listing/lead buried at the
+   BOTTOM of an email is actually visible. `needsDeepExtract` is now derived from the
+   category (not the model's boolean) so extractable categories never skip extraction.
+2. **Lead-recovery second pass** (`lib/extraction/recoverBuriedLead.ts`, wired in
+   `ingestEmailV2` for informational buckets): a conservative Sonnet scan that recovers
+   a buried lead only on concrete intent, tags it `provenance='buried_recovery'`, and
+   flags sold comps as `provenance='comp_reference'`. Returns null on genuine
+   noise/ongoing chatter (verified directly).
+3. **Provenance field** on `ExtractedOpportunity` (`comp_reference` | `buried_recovery`
+   | null). Match pools (`lib/matchmaking.ts`, `lib/chat/tools/searchParties.ts`) now
+   EXCLUDE `comp_reference` — a sold comp can never enter the match pool as a live lead.
 
-**Verified (Brief 6.1 audit):** CLIENT_CONVERSATION is classified as INFORMATIONAL
-in `lib/domain/Categories.ts` (the `INFORMATIONAL` group). No retrieval or matching
-path filters on it — searchListings, searchParties, matchmaking, and the chips
-route all filter only on supply / demand / lead categories. Every code reference to
-CLIENT_CONVERSATION is display (`lib/utils.ts`), extraction
-(`lib/ingestion/extractors/clientConversationExtractor.ts`, `lib/ai.ts`), or
-enrichment/validator skip-lists — none are query filters. So misclassifying a
-conversation only mislabels an informational row that nothing retrieves.
+**Measured (Brief 6.3 harness, 118 fixtures):** CLIENT_CONVERSATION classification
+1/6 → **5/6** (field acc 58% → **68%**); overall classifier 86% → **94%**, overall
+field 92.3% → **96.1%**. All six Brief 6.2 target failures FAIL → PASS. No structural
+regression on the 93 existing fixtures.
 
-**TRIPWIRE:** If any retrieval path ever starts filtering on category
-CLIENT_CONVERSATION (Brief 6.2 will do exactly this — expanding searchParties to
-mine conversation-derived criteria), classifier accuracy becomes load-bearing that
-day. Do NOT ship such a change without also shipping:
+**Residual (fuzzy, not load-bearing):** a couple of CLIENT_CONVERSATION edge fixtures
+that carry real buyer readiness (`_06` forwarded pre-approval with neighborhoods) still
+lean BUYER_ISO — genuinely borderline between "existing client" and "actionable ISO."
+The provenance guard bounds the downside if such a call is wrong. The prior TRIPWIRE
+(don't wire retrieval on CLIENT_CONVERSATION without provenance + null-field guards) is
+now satisfied by the provenance field; the null-field/re-extract-gate guards remain
+advisable before mining conversation-derived criteria at scale.
 
-- CLIENT_CONVERSATION fixtures with extractable criteria (so accuracy is measurable
-  on the retrieval-relevant shape, not just the classification label)
-- Null-field enforcement: rows with hallucination-suspicious nulls do NOT enter the
-  match index
-- A provenance field on `ExtractedOpportunity` distinguishing client-derived rows
-  from co-broke-derived rows
-- A cutoff date or re-extract gate for historical rows (so pre-fix low-quality
-  conversation extractions don't silently pollute the match pool)
-
-**Related deferred (Brief 6.2 scope, not load-bearing today):**
+**Related deferred (still open, not in Brief 6.3 scope):**
 - Multi-unit rental sheet → DEVELOPMENT_INVENTORY misroute (`rental_listing_03`
   fixture: 0 of 5 units extracted because the new-dev spec ran instead of rental).
 - REAL_ESTATE_EVENT with payload only in an image attachment → NOISE misroute

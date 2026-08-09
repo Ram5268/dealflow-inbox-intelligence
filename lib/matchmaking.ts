@@ -97,8 +97,13 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   // matcher only ever pairs seed rows, and skip the Mojo lead lookup entirely.
   const testGate = isTestModeOnly() ? { isTestData: true } : {}
 
+  // Brief 6.3 — a comp-derived opportunity is NOT a live lead/listing. Keep it
+  // out of every match pool (Prisma `not` on a nullable field also keeps nulls,
+  // so direct + buried_recovery rows still match).
+  const provenanceGate = { provenance: { not: 'comp_reference' } }
+
   const newOpps = await prisma.extractedOpportunity.findMany({
-    where: { id: { in: newOppIds }, isDuplicate: false },
+    where: { id: { in: newOppIds }, isDuplicate: false, ...provenanceGate },
     select: { id: true, category: true, neighborhood: true, borough: true,
               price: true, minPrice: true, maxPrice: true, beds: true,
               propertyType: true, extractedTitle: true },
@@ -114,7 +119,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   // New sale listings ↔ all active BUYER_ISOs
   if (newSaleListings.length > 0) {
     const allISOs = await prisma.extractedOpportunity.findMany({
-      where: { category: Category.BUYER_ISO, isDuplicate: false, ...testGate },
+      where: { category: Category.BUYER_ISO, isDuplicate: false, ...testGate, ...provenanceGate },
       select: { id: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true, extractedTitle: true },
     })
     for (const listing of newSaleListings) {
@@ -133,7 +138,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   // New rental listings ↔ all active RENTER_INQUIRYs
   if (newRentalListings.length > 0) {
     const allInquiries = await prisma.extractedOpportunity.findMany({
-      where: { category: Category.RENTER_INQUIRY, isDuplicate: false, ...testGate },
+      where: { category: Category.RENTER_INQUIRY, isDuplicate: false, ...testGate, ...provenanceGate },
       select: { id: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true, extractedTitle: true },
     })
     for (const listing of newRentalListings) {
@@ -152,7 +157,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   // New BUYER_ISOs ↔ all sale listings
   if (newBuyerISOs.length > 0) {
     const allListings = await prisma.extractedOpportunity.findMany({
-      where: { category: { in: SALE_CATEGORIES }, isDuplicate: false, ...testGate },
+      where: { category: { in: SALE_CATEGORIES }, isDuplicate: false, ...testGate, ...provenanceGate },
       select: { id: true, neighborhood: true, price: true, beds: true, extractedTitle: true },
     })
     for (const iso of newBuyerISOs) {
@@ -193,7 +198,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   // New RENTER_INQUIRYs ↔ all rental listings
   if (newRenterInquiries.length > 0) {
     const allRentals = await prisma.extractedOpportunity.findMany({
-      where: { category: { in: RENTAL_CATEGORIES }, isDuplicate: false, ...testGate },
+      where: { category: { in: RENTAL_CATEGORIES }, isDuplicate: false, ...testGate, ...provenanceGate },
       select: { id: true, neighborhood: true, price: true, beds: true, extractedTitle: true },
     })
     for (const inq of newRenterInquiries) {

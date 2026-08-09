@@ -124,6 +124,9 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
       category: { in: cats },
       isDuplicate: false,
       processingStatus: 'active',
+      // Brief 6.3 — a comp-derived party is not a live lead; keep it out of the
+      // pool. `not` on a nullable field also keeps nulls (direct extractions).
+      provenance: { not: 'comp_reference' },
     }
     if (!includeTestData) where.isTestData = false
     // TEST_MODE_ONLY hard gate: force seed data on the demand side.

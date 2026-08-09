@@ -1,0 +1,14 @@
+{
+  "id": "adv_price_abbrev_m",
+  "notes": "Price written as the abbreviation '$1.9M'. Correct = 1,900,000 (not 1.9, not 19,000,000). Watch for magnitude errors.",
+  "edgeCase": true,
+  "input": {
+    "subject": "West Village 1BR | 68 Charles St | $1.9M",
+    "from": { "name": "Allison Moretti", "email": "allison.moretti@compass.com" },
+    "receivedAt": "2026-07-09T15:10:00Z",
+    "bodyText": "Hi all,\n\nJust listed a charming 1BR at 68 Charles St in the heart of the West Village.\n\nQuintessential townhouse-block co-op - beamed ceilings, decorative fireplace, and a renovated kitchen. Pin-drop quiet, tree-lined street.\n\nAsk: $1.9M. Happy to co-broke - reach out and I'll send the full package.\n\nBest,\nAllison Moretti\nCompass",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "ACTIVE_SALE_LISTING", "address": "68 Charles St", "neighborhood": "West Village", "borough": "Manhattan", "beds": 1, "price": 1900000, "confidenceScoreMin": 0.5 }
+}

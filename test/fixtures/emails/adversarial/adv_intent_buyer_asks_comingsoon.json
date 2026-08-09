@@ -1,0 +1,14 @@
+{
+  "id": "adv_intent_buyer_asks_comingsoon",
+  "notes": "A demand-side buyer request that name-drops 'coming soon' inventory. Primary intent = BUYER_ISO (a buyer's need), NOT COMING_SOON_SALE. Watch for the classifier latching onto 'coming soon' and routing supply-side; there must be no address leakage.",
+  "edgeCase": true,
+  "input": {
+    "subject": "Buyer looking for coming-soon Tribeca 2BRs before they hit the market",
+    "from": { "name": "Danielle Rosen", "email": "danielle.rosen@compass.com" },
+    "receivedAt": "2026-04-14T10:22:00-04:00",
+    "bodyText": "Hi all,\n\nI have a serious buyer client who is ready to move quickly and wants to get ahead of the market. They're specifically hunting for a 2BR in Tribeca under $3M, and they'd love to see anything coming soon before it hits the open market.\n\nIf any of you have pre-market or coming-soon inventory in Tribeca that fits, please flag it for me directly. My buyer is pre-approved and can move on the right place fast.\n\nAppreciate anyone who can point me toward off-the-radar 2BRs down there.\n\nBest,\nDanielle",
+    "bodyHtml": null,
+    "attachments": []
+  },
+  "expected": { "category": "BUYER_ISO", "address": null, "neighborhood": "Tribeca", "borough": "Manhattan", "beds": 2, "shouldExtractParty": true }
+}
