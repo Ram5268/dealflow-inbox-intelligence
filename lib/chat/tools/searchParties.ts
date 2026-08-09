@@ -124,9 +124,12 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
       category: { in: cats },
       isDuplicate: false,
       processingStatus: 'active',
-      // Brief 6.3 — a comp-derived party is not a live lead; keep it out of the
-      // pool. `not` on a nullable field also keeps nulls (direct extractions).
-      provenance: { not: 'comp_reference' },
+      // Brief 6.3 — a comp-derived party is not a live lead; keep it out of the pool.
+      // NULL-SAFE: the bare `{ not: 'comp_reference' }` DROPS null-provenance rows
+      // under Prisma 7.8 + @prisma/adapter-pg (SQL `<>` is NULL for null rows), which
+      // would exclude every normal direct-extraction lead. The OR keeps null +
+      // buried_recovery, excludes only comp_reference. (6.3 hotfix; proven by probe.)
+      OR: [{ provenance: null }, { provenance: { not: 'comp_reference' } }],
     }
     if (!includeTestData) where.isTestData = false
     // TEST_MODE_ONLY hard gate: force seed data on the demand side.
