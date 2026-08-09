@@ -2,10 +2,13 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isTestModeOnly } from '@/lib/config/testMode'
+import { resolveSourceBadge } from '@/lib/matching/engine'
 
-// GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all]
+// GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1]
 // List with both sides hydrated. Sort: unseen first, then highest-scoring,
 // then newest. seen rows are returned but visually de-emphasized client-side.
+// Brief 7.1: dismissed matches (a MatchDismissal row on the party↔listing pair)
+// are excluded by default; ?includeDismissed=1 shows them (debug only, not in UI).
 export async function GET(req: NextRequest) {
   const sp          = req.nextUrl.searchParams
   const onlyUnseen  = sp.get('unseen') === '1'
@@ -13,13 +16,14 @@ export async function GET(req: NextRequest) {
   const scoreMin    = scoreMinRaw ? parseInt(scoreMinRaw, 10) : null
   const typeRaw     = sp.get('type')
   const type        = typeRaw && typeRaw !== 'all' ? typeRaw : null
+  const includeDismissed = sp.get('includeDismissed') === '1'
 
   const where: Record<string, unknown> = {}
   if (onlyUnseen)                                    where.seen            = false
   if (scoreMin !== null && !Number.isNaN(scoreMin))  where.score           = { gte: scoreMin }
   if (type)                                          where.counterpartType = type
 
-  const matches = await prisma.match.findMany({
+  const allMatches = await prisma.match.findMany({
     where,
     orderBy: [{ seen: 'asc' }, { score: 'desc' }, { createdAt: 'desc' }],
     take: 200,
@@ -34,6 +38,20 @@ export async function GET(req: NextRequest) {
       },
     },
   })
+
+  // Brief 7.1 — hide dismissed pairs. MatchDismissal keys on (partyId, listingId)
+  // = (counterpartId, opportunityId); there's no FK to Match, so exclude in code.
+  let matches = allMatches
+  if (!includeDismissed && allMatches.length > 0) {
+    const dismissals = await prisma.matchDismissal.findMany({
+      where: {
+        OR: allMatches.map(m => ({ partyId: m.counterpartId, listingId: m.opportunityId })),
+      },
+      select: { partyId: true, listingId: true },
+    })
+    const dismissedKeys = new Set(dismissals.map(d => `${d.partyId}::${d.listingId}`))
+    matches = allMatches.filter(m => !dismissedKeys.has(`${m.counterpartId}::${m.opportunityId}`))
+  }
 
   const oppCounterpartIds  = matches.filter(m => m.counterpartType === 'opportunity').map(m => m.counterpartId)
   // TEST_MODE_ONLY hard gate: never hydrate real Mojo contacts into match results.
@@ -66,10 +84,26 @@ export async function GET(req: NextRequest) {
   const oppMap  = Object.fromEntries(oppCounterparts.map(o  => [o.id,  o]))
   const mojoMap = Object.fromEntries(mojoCounterparts.map(m => [m.id, m]))
 
+  // Brief 7.1 — partyPriority ('SE' | 'NORMAL' | null) is DERIVED, not stored:
+  // the SE preference lives in ranking.ts (SOURCE_BOOST) keyed off the party's
+  // resolved source badge. The counterpart IS the demand party, so resolve its
+  // brokerage the same way the engine does. Mojo → NORMAL; showings → null.
+  function partyPriorityFor(m: (typeof matches)[number]): 'SE' | 'NORMAL' | null {
+    if (m.counterpartType === 'opportunity') {
+      const opp = oppMap[m.counterpartId]
+      if (!opp) return null
+      return resolveSourceBadge(opp.sourceBrokerage) === 'streeteasy_expert' ? 'SE' : 'NORMAL'
+    }
+    if (m.counterpartType === 'mojo') return 'NORMAL'
+    return null
+  }
+
   const enriched = matches.map(m => ({
     id:              m.id,
     score:           m.score,
     reason:          m.reason,
+    tier:            m.tier,           // Brief 7.1 — 'HOT' | 'WARM' | 'POSSIBLE' | null
+    partyPriority:   partyPriorityFor(m),
     counterpartType: m.counterpartType,
     seen:            m.seen,
     createdAt:       m.createdAt,
