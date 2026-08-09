@@ -54,6 +54,17 @@ enum DismissalReason {
   OTHER
 }
 
+// Brief 7.1 — qualitative match tier from the Brief 7.0 matching engine
+// (lib/matching/tiering.ts scores each party↔listing pair Hot/Warm/Possible).
+// Stored on Match so the UI can render a tier chip. Nullable: legacy Match rows
+// written by the classic runMatchmaking() sync path carry no tier and must keep
+// rendering cleanly (type badge + score only).
+enum MatchTier {
+  HOT
+  WARM
+  POSSIBLE
+}
+
 // ── Tenancy ─────────────────────────────────────────────────────────────────
 model Organization {
   id          String    @id @default(cuid())
@@ -401,6 +412,7 @@ model Match {
   counterpartType String
   score           Int
   reason          String?
+  tier            MatchTier? // Brief 7.1 — nullable; legacy sync-path rows have none
   seen            Boolean  @default(false)
   createdAt       DateTime @default(now())
 

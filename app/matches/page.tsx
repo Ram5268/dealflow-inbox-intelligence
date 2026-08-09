@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import GooeyFilter from '@/components/GooeyFilter'
+import DismissReasonSheet from '@/components/DismissReasonSheet'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
 
 interface PrimaryOpp {
@@ -54,6 +55,8 @@ interface Match {
   id: string
   score: number
   reason: string | null
+  tier: 'HOT' | 'WARM' | 'POSSIBLE' | null       // Brief 7.1 — from the matching engine
+  partyPriority: 'SE' | 'NORMAL' | null           // Brief 7.1 — SE = StreetEasy Expert
   counterpartType: string
   seen: boolean
   createdAt: string
@@ -72,6 +75,16 @@ const TABS: Array<{ id: ScoreBand; label: string; scoreMin: number | null }> = [
   { id: 'strong', label: 'STRONG 70+', scoreMin: 70 },
   { id: 'all',    label: 'ALL',        scoreMin: null },
 ]
+
+// Brief 7.1 — qualitative tier chip. Null (legacy sync-path rows) renders nothing.
+function tierChip(tier: Match['tier']): { text: string; tone: string } | null {
+  switch (tier) {
+    case 'HOT':      return { text: '🔴 HOT',      tone: '#EF4444' }
+    case 'WARM':     return { text: '🟡 WARM',     tone: '#F59E0B' }
+    case 'POSSIBLE': return { text: '⚪ POSSIBLE', tone: '#94A3B8' }
+    default:         return null
+  }
+}
 
 function typeBadge(m: Match): { text: string; tone: string } {
   if (m.counterpartType === 'mojo')                 return { text: '🔥 MOJO ↔ BUYER', tone: 'rgba(230,140,80,0.95)' }
@@ -119,6 +132,12 @@ export default function MatchesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [scoreBand, setScoreBand] = useState<ScoreBand>('strong')
   const [unseenOnly, setUnseenOnly] = useState<boolean>(true)
+  // Brief 7.1 — dismiss flow: which match's reason sheet is open, which card is
+  // animating out, and the undo toast holding the last-dismissed match + its slot.
+  const [dismissSheetFor, setDismissSheetFor] = useState<string | null>(null)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ match: Match; index: number } | null>(null)
+  const toastTimer = useRef<number | null>(null)
 
   const scoreMin = TABS.find(t => t.id === scoreBand)?.scoreMin ?? null
 
@@ -156,6 +175,62 @@ export default function MatchesPage() {
         counts:  { ...d.counts, unseen: Math.max(0, d.counts.unseen - 1) },
       } : d)
     }
+  }
+
+  // Sheet already POSTed the dismissal. Animate the card out (200ms), then drop
+  // it from the list and raise the undo toast (holding the match + its old slot).
+  function handleDismissed(matchId: string) {
+    setDismissSheetFor(null)
+    const idx = data?.matches.findIndex(x => x.id === matchId) ?? -1
+    const match = idx >= 0 ? data!.matches[idx] : null
+    setRemovingId(matchId)
+    window.setTimeout(() => {
+      setData(d => {
+        if (!d) return d
+        const removed = d.matches.find(x => x.id === matchId)
+        return {
+          ...d,
+          matches: d.matches.filter(x => x.id !== matchId),
+          counts: {
+            ...d.counts,
+            total:  Math.max(0, d.counts.total - 1),
+            unseen: removed && !removed.seen ? Math.max(0, d.counts.unseen - 1) : d.counts.unseen,
+          },
+        }
+      })
+      setRemovingId(null)
+      if (match) showToast(match, idx)
+    }, 200)
+  }
+
+  function showToast(match: Match, index: number) {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    setToast({ match, index })
+    toastTimer.current = window.setTimeout(() => setToast(null), 5000)
+  }
+
+  async function undoDismiss() {
+    if (!toast) return
+    const { match, index } = toast
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    setToast(null)
+    setData(d => {
+      if (!d) return d
+      if (d.matches.some(x => x.id === match.id)) return d
+      const next = [...d.matches]
+      next.splice(Math.min(index, next.length), 0, match)
+      return {
+        ...d,
+        matches: next,
+        counts: {
+          ...d.counts,
+          total:  d.counts.total + 1,
+          unseen: match.seen ? d.counts.unseen : d.counts.unseen + 1,
+        },
+      }
+    })
+    try { await fetch(`/api/matches/${match.id}/dismiss`, { method: 'DELETE' }) }
+    catch (e) { console.warn('[matches] undo failed', e) }
   }
 
   return (
@@ -204,7 +279,9 @@ export default function MatchesPage() {
         ) : (
           data.matches.map(m => {
             const badge       = typeBadge(m)
+            const tc          = tierChip(m.tier)
             const isExpanded  = expandedId === m.id
+            const isRemoving  = removingId === m.id
             const primaryStr  = primaryLabel(m.primary)
             const counterStr  = counterpartLabel(m)
             const ctxStr      = contextLine(m)
@@ -222,12 +299,16 @@ export default function MatchesPage() {
                   WebkitBackdropFilter: 'blur(20px) saturate(160%)',
                   padding: '12px 16px',
                   cursor: 'pointer',
-                  opacity: m.seen ? 0.55 : 1,
-                  transition: 'opacity 200ms',
+                  opacity: isRemoving ? 0 : (m.seen ? 0.55 : 1),
+                  transform: isRemoving ? 'scale(0.96)' : 'scale(1)',
+                  transition: 'opacity 200ms, transform 200ms',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em' }}>
-                  <span style={{ color: badge.tone }}>{badge.text} · SCORE {m.score}</span>
+                  <span>
+                    {tc && <span style={{ color: tc.tone }}>{tc.text} · </span>}
+                    <span style={{ color: badge.tone }}>{badge.text} · SCORE {m.score}</span>
+                  </span>
                   <span style={{ color: 'rgba(255,255,255,0.4)' }}>{isExpanded ? '▾' : '→'}</span>
                 </div>
                 <div style={{ marginTop: 6, fontSize: 14, color: '#fff', fontWeight: 500, lineHeight: 1.35 }}>
@@ -236,14 +317,59 @@ export default function MatchesPage() {
                 {ctxStr && (
                   <div style={{ marginTop: 3, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>{ctxStr}</div>
                 )}
+                {m.partyPriority === 'SE' && (
+                  <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--sr-cream, #EAB308)' }}>
+                    ⭐ SE EXPERT
+                  </div>
+                )}
                 {isExpanded && (
-                  <ExpandedDetail m={m} router={router} />
+                  <ExpandedDetail m={m} router={router} onDismiss={e => { e.stopPropagation(); setDismissSheetFor(m.id) }} />
                 )}
               </div>
             )
           })
         )}
       </div>
+
+      {dismissSheetFor && (
+        <DismissReasonSheet
+          matchId={dismissSheetFor}
+          open={!!dismissSheetFor}
+          onClose={() => setDismissSheetFor(null)}
+          onDismissed={handleDismissed}
+        />
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 96, transform: 'translateX(-50%)',
+          zIndex: 120, width: '100%', maxWidth: 512, padding: '0 16px',
+          display: 'flex', justifyContent: 'center', pointerEvents: 'none',
+        }}>
+          <div style={{
+            pointerEvents: 'auto',
+            display: 'flex', alignItems: 'center', gap: 14,
+            background: 'rgba(20,24,30,0.82)',
+            border: '1px solid rgba(255,255,255,0.14)',
+            backdropFilter: 'blur(20px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+            borderRadius: 999, padding: '10px 16px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+          }}>
+            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>Match dismissed</span>
+            <button
+              onClick={undoDismiss}
+              style={{
+                background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+                color: 'var(--sr-cream, #EAB308)', textTransform: 'uppercase',
+              }}
+            >
+              Undo
+            </button>
+          </div>
+        </div>
+      )}
     </ChatSurfaceShell>
   )
 }
@@ -345,7 +471,11 @@ function TabBar({
   )
 }
 
-function ExpandedDetail({ m, router }: { m: Match; router: ReturnType<typeof useRouter> }) {
+function ExpandedDetail({ m, router, onDismiss }: {
+  m: Match
+  router: ReturnType<typeof useRouter>
+  onDismiss: (e: React.MouseEvent) => void
+}) {
   const isMojo    = m.counterpartType === 'mojo'
   const isShowing = m.counterpartType === 'showing_confirmation'
 
@@ -409,7 +539,41 @@ function ExpandedDetail({ m, router }: { m: Match; router: ReturnType<typeof use
       <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', fontFamily: 'var(--font-mono)', letterSpacing: '0.1em' }}>
         MATCHED {timeAgo(m.createdAt)}
       </div>
+
+      {/* Brief 7.1 — action row. Dismiss is live; Calendar + Draft are wired but
+          no-op (POST /me/events + outreach templates are Brief 7.3+ scope). */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <ActionPill label="✓ Dismiss"   onClick={onDismiss} />
+        <ActionPill label="📅 Calendar" onClick={e => { e.stopPropagation(); console.log('[matches] Calendar (Brief 7.3 scope) — match', m.id) }} />
+        <ActionPill label="✍️ Draft"    onClick={e => { e.stopPropagation(); console.log('[matches] Draft (Brief 7.3 scope) — match', m.id) }} />
+      </div>
     </div>
+  )
+}
+
+function ActionPill({ label, onClick }: { label: string; onClick: (e: React.MouseEvent) => void }) {
+  const [hover, setHover] = useState(false)
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        background: 'rgba(255,255,255,0.06)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderRadius: 999,
+        padding: '8px 14px',
+        fontFamily: 'var(--font-ui)', fontSize: 12, fontWeight: 400,
+        color: hover ? 'var(--sr-cream, #EAB308)' : 'rgba(255,255,255,0.75)',
+        cursor: 'pointer',
+        transition: 'color 160ms',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
   )
 }
 
