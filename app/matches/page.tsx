@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import GooeyFilter from '@/components/GooeyFilter'
 import DismissReasonSheet from '@/components/DismissReasonSheet'
+import CalendarConfirmSheet from '@/components/CalendarConfirmSheet'
+import DraftOutreachSheet from '@/components/DraftOutreachSheet'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
 
 interface PrimaryOpp {
@@ -138,6 +140,20 @@ export default function MatchesPage() {
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [toast, setToast] = useState<{ match: Match; index: number } | null>(null)
   const toastTimer = useRef<number | null>(null)
+  // Brief 7.3 — action sheets. Calendar confirm, a channel chooser, and the draft
+  // sheet (email|text). `notice` is a plain message toast (no undo), reused for
+  // "Added to calendar" / "Copied".
+  const [calendarFor, setCalendarFor] = useState<Match | null>(null)
+  const [chooserFor, setChooserFor] = useState<Match | null>(null)
+  const [draftFor, setDraftFor] = useState<{ match: Match; channel: 'email' | 'text' } | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const noticeTimer = useRef<number | null>(null)
+
+  function showNotice(message: string) {
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
+    setNotice(message)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 3000)
+  }
 
   const scoreMin = TABS.find(t => t.id === scoreBand)?.scoreMin ?? null
 
@@ -323,7 +339,13 @@ export default function MatchesPage() {
                   </div>
                 )}
                 {isExpanded && (
-                  <ExpandedDetail m={m} router={router} onDismiss={e => { e.stopPropagation(); setDismissSheetFor(m.id) }} />
+                  <ExpandedDetail
+                    m={m}
+                    router={router}
+                    onDismiss={e => { e.stopPropagation(); setDismissSheetFor(m.id) }}
+                    onCalendar={e => { e.stopPropagation(); setCalendarFor(m) }}
+                    onDraft={e => { e.stopPropagation(); setChooserFor(m) }}
+                  />
                 )}
               </div>
             )
@@ -338,6 +360,54 @@ export default function MatchesPage() {
           onClose={() => setDismissSheetFor(null)}
           onDismissed={handleDismissed}
         />
+      )}
+
+      {calendarFor && (
+        <CalendarConfirmSheet
+          matchId={calendarFor.id}
+          address={primaryLabel(calendarFor.primary)}
+          partyName={counterpartLabel(calendarFor)}
+          open={!!calendarFor}
+          onClose={() => setCalendarFor(null)}
+          onScheduled={msg => { setCalendarFor(null); showNotice(msg) }}
+        />
+      )}
+
+      {chooserFor && (
+        <ChannelChooserSheet
+          partyName={counterpartLabel(chooserFor)}
+          open={!!chooserFor}
+          onClose={() => setChooserFor(null)}
+          onPick={channel => { setDraftFor({ match: chooserFor, channel }); setChooserFor(null) }}
+        />
+      )}
+
+      {draftFor && (
+        <DraftOutreachSheet
+          matchId={draftFor.match.id}
+          partyName={counterpartLabel(draftFor.match)}
+          channel={draftFor.channel}
+          open={!!draftFor}
+          onClose={() => setDraftFor(null)}
+          onToast={showNotice}
+        />
+      )}
+
+      {notice && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 96, transform: 'translateX(-50%)',
+          zIndex: 210, width: '100%', maxWidth: 512, padding: '0 16px',
+          display: 'flex', justifyContent: 'center', pointerEvents: 'none',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'rgba(20,24,30,0.82)', border: '1px solid rgba(255,255,255,0.14)',
+            backdropFilter: 'blur(20px) saturate(160%)', WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+            borderRadius: 999, padding: '10px 18px', boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+          }}>
+            <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>{notice}</span>
+          </div>
+        </div>
       )}
 
       {toast && (
@@ -471,10 +541,12 @@ function TabBar({
   )
 }
 
-function ExpandedDetail({ m, router, onDismiss }: {
+function ExpandedDetail({ m, router, onDismiss, onCalendar, onDraft }: {
   m: Match
   router: ReturnType<typeof useRouter>
   onDismiss: (e: React.MouseEvent) => void
+  onCalendar: (e: React.MouseEvent) => void
+  onDraft: (e: React.MouseEvent) => void
 }) {
   const isMojo    = m.counterpartType === 'mojo'
   const isShowing = m.counterpartType === 'showing_confirmation'
@@ -540,12 +612,83 @@ function ExpandedDetail({ m, router, onDismiss }: {
         MATCHED {timeAgo(m.createdAt)}
       </div>
 
-      {/* Brief 7.1 — action row. Dismiss is live; Calendar + Draft are wired but
-          no-op (POST /me/events + outreach templates are Brief 7.3+ scope). */}
+      {/* Brief 7.3 — action row. All three live now: Dismiss (reason sheet),
+          Calendar (confirm sheet → Graph POST /me/events), Draft (channel chooser
+          → Sonnet-drafted email/text, native-app handoff). Draft consolidates
+          email+text behind a chooser so the row stays 3 wide. */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <ActionPill label="✓ Dismiss"   onClick={onDismiss} />
-        <ActionPill label="📅 Calendar" onClick={e => { e.stopPropagation(); console.log('[matches] Calendar (Brief 7.3 scope) — match', m.id) }} />
-        <ActionPill label="✍️ Draft"    onClick={e => { e.stopPropagation(); console.log('[matches] Draft (Brief 7.3 scope) — match', m.id) }} />
+        <ActionPill label="📅 Calendar" onClick={onCalendar} />
+        <ActionPill label="✍️ Draft"    onClick={onDraft} />
+      </div>
+    </div>
+  )
+}
+
+// Brief 7.3 — tiny bottom sheet that picks the outreach channel before drafting,
+// so the action row stays 3 buttons wide. Same glass styling as the other sheets.
+function ChannelChooserSheet({ partyName, open, onClose, onPick }: {
+  partyName: string
+  open: boolean
+  onClose: () => void
+  onPick: (channel: 'email' | 'text') => void
+}) {
+  const [entered, setEntered] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const raf = requestAnimationFrame(() => setEntered(true))
+    return () => cancelAnimationFrame(raf)
+  }, [open])
+  if (!open) return null
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', justifyContent: 'center', alignItems: 'flex-end' }}>
+      <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', opacity: entered ? 1 : 0, transition: 'opacity 200ms ease' }} />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Choose draft channel"
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: 'relative', width: '100%', maxWidth: 512,
+          background: 'rgba(20,24,30,0.72)',
+          backdropFilter: 'blur(28px) saturate(160%)', WebkitBackdropFilter: 'blur(28px) saturate(160%)',
+          borderTop: '1px solid rgba(255,255,255,0.12)',
+          borderTopLeftRadius: 22, borderTopRightRadius: 22,
+          boxShadow: '0 -12px 40px rgba(0,0,0,0.4)',
+          padding: '10px 18px calc(24px + env(safe-area-inset-bottom))',
+          transform: entered ? 'translateY(0)' : 'translateY(100%)',
+          transition: 'transform 300ms cubic-bezier(0.4, 0.2, 0.2, 1)',
+          display: 'flex', flexDirection: 'column', gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 2 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.3)' }} />
+        </div>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase' }}>
+          Draft to {partyName}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {([['email', '📧 Email'], ['text', '📱 Text']] as const).map(([ch, label]) => (
+            <button
+              key={ch}
+              onClick={() => onPick(ch)}
+              style={{
+                flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 14, padding: '16px 0', fontFamily: 'var(--font-ui)', fontSize: 15,
+                color: 'rgba(255,255,255,0.85)', cursor: 'pointer',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={onClose}
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   )
