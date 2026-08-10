@@ -99,6 +99,7 @@ model Organization {
   threads          EmailThread[]
   linkedResources  LinkedResource[]
   nycParcelCache   NycParcelCache[]
+  notificationPrefs NotificationPreferences?
 }
 
 model User {
@@ -456,6 +457,23 @@ model PushSubscription {
   organization   Organization  @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+}
+
+// Brief 7.4 — per-org notification preferences (single-tenant: one row per org =
+// per Ryan, mirroring PushSubscription's org-scoping since there is no per-user
+// auth/session identity yet). digestTime is a naive local "HH:mm" (ET). The cron
+// fires at a fixed schedule; digestTime is stored for a future per-user schedule
+// and shown in Settings today.
+model NotificationPreferences {
+  id              String   @id @default(cuid())
+  digestEnabled   Boolean  @default(true)
+  realtimeEnabled Boolean  @default(true)
+  digestTime      String   @default("08:00")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id])
 }
 
 // ── Phase 1 New Models (updated for chunking + tenancy) ─────────────────────

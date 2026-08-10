@@ -8,9 +8,24 @@ import { parseAttachment } from './attachmentParser'
 import { buildOpportunityText, upsertOpportunityEmbedding } from './embeddings'
 import { runMatchmaking } from './matchmaking'
 import { sendPushToAll } from './pushNotifications'
+import { maybeFireHotAlert } from './push/hotAlert'
+import { formatPriceRange } from './utils'
 import { checkStreetEasyStatuses } from './streetEasyStatus'
 import { Category, TransactionType } from '@prisma/client'
 import type { ValidationFlag } from './ingestion/types'
+
+// Brief 7.4 — resolve a HOT match's counterpart display name for the push body.
+async function hotPartyName(counterpartType: string, counterpartId: string): Promise<string | null> {
+  if (counterpartType === 'mojo') {
+    const c = await prisma.mojoContact.findUnique({ where: { id: counterpartId }, select: { fullName: true } })
+    return c?.fullName ?? null
+  }
+  if (counterpartType === 'opportunity') {
+    const c = await prisma.extractedOpportunity.findUnique({ where: { id: counterpartId }, select: { sourceAgentName: true, extractedTitle: true } })
+    return c ? (c.sourceAgentName ?? c.extractedTitle) : null
+  }
+  return null
+}
 
 async function isFeatureFlagEnabled(id: string): Promise<boolean> {
   try {
@@ -343,6 +358,26 @@ export async function runIncrementalSync(): Promise<{
           const scText = showingConfirmations.length > 0 ? ` + ${showingConfirmations.length} showing confirmation${showingConfirmations.length > 1 ? 's' : ''}` : ''
           const body = `${matchResult.highConfidence} new match${matchResult.highConfidence !== 1 ? 'es' : ''}${scText} found`
           await sendPushToAll('DealFlow', body, '/').catch(() => {})
+        }
+
+        // Brief 7.4 (A.2) — realtime HOT alert. The live matcher doesn't populate
+        // MatchTier, so "hot" = score >= 90 (the GOLD band). Fire for the single
+        // best just-created match; hotAlert owns the prefs check + 5/hr rate limit.
+        const topHot = await prisma.match.findFirst({
+          where: {
+            organizationId,
+            score: { gte: 90 },
+            counterpartType: { not: 'showing_confirmation' },
+            OR: [{ opportunityId: { in: newOppIds } }, { counterpartId: { in: newOppIds } }],
+          },
+          orderBy: { score: 'desc' },
+          include: { opportunity: { select: { address: true, neighborhood: true, extractedTitle: true, price: true, minPrice: true, maxPrice: true } } },
+        })
+        if (topHot) {
+          const opp = topHot.opportunity
+          const partyName = await hotPartyName(topHot.counterpartType, topHot.counterpartId)
+          const listingLabel = [opp.address ?? opp.extractedTitle, formatPriceRange(opp.minPrice, opp.maxPrice, opp.price), opp.neighborhood].filter(Boolean).join(' ').trim()
+          await maybeFireHotAlert({ organizationId, matchId: topHot.id, partyName: partyName ?? 'New match', listingLabel }).catch(() => {})
         }
       } catch (e) {
         console.error('[matchmaking] failed:', e)

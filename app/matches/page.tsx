@@ -7,6 +7,7 @@ import GooeyFilter from '@/components/GooeyFilter'
 import DismissReasonSheet from '@/components/DismissReasonSheet'
 import CalendarConfirmSheet from '@/components/CalendarConfirmSheet'
 import DraftOutreachSheet from '@/components/DraftOutreachSheet'
+import PartyCard from '@/components/PartyCard'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
 
 interface PrimaryOpp {
@@ -69,6 +70,24 @@ interface Match {
 interface MatchesResponse {
   matches: Match[]
   counts: { total: number; unseen: number; mojo: number; listings: number; showings: number }
+}
+
+// Brief 7.4 (Section B) — party grouping
+type PartyRole = 'all' | 'buyer' | 'renter' | 'seller'
+interface Party {
+  id: string
+  name: string
+  role: 'BUYER' | 'RENTER' | 'SELLER'
+  source: 'inbox' | 'mojo'
+  isSEExpert: boolean
+  criteria: string
+  matchCount: number
+  tierBreakdown: { hot: number; warm: number; possible: number }
+  topMatchId: string
+}
+interface PartiesResponse {
+  parties: Party[]
+  counts: { total: number; buyers: number; renters: number; sellers: number }
 }
 
 type ScoreBand = 'gold' | 'strong' | 'all'
@@ -148,6 +167,30 @@ export default function MatchesPage() {
   const [draftFor, setDraftFor] = useState<{ match: Match; channel: 'email' | 'text' } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const noticeTimer = useRef<number | null>(null)
+  // Brief 7.4 (Section B) — Matches | Parties view toggle (persisted), the party
+  // role filter, party data, and which party card is expanded.
+  const [viewMode, setViewMode] = useState<'matches' | 'parties'>('matches')
+  const [partyRole, setPartyRole] = useState<PartyRole>('all')
+  const [parties, setParties] = useState<PartiesResponse | null>(null)
+  const [partiesLoading, setPartiesLoading] = useState(false)
+  const [expandedPartyId, setExpandedPartyId] = useState<string | null>(null)
+
+  // Restore persisted view once on mount. A ?m=<id> deep-link (from a push
+  // notification tap) forces the Matches view and pre-expands that match.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const deepLink = new URLSearchParams(window.location.search).get('m')
+    if (deepLink) {
+      setViewMode('matches')
+      setExpandedId(deepLink)
+      return
+    }
+    const v = window.localStorage.getItem('matchesViewMode')
+    if (v === 'parties' || v === 'matches') setViewMode(v)
+  }, [])
+  useEffect(() => {
+    if (typeof window !== 'undefined') window.localStorage.setItem('matchesViewMode', viewMode)
+  }, [viewMode])
 
   function showNotice(message: string) {
     if (noticeTimer.current) window.clearTimeout(noticeTimer.current)
@@ -157,13 +200,17 @@ export default function MatchesPage() {
 
   const scoreMin = TABS.find(t => t.id === scoreBand)?.scoreMin ?? null
 
+  function bandParams(): URLSearchParams {
+    const params = new URLSearchParams()
+    if (unseenOnly)        params.set('unseen', '1')
+    if (scoreMin !== null) params.set('scoreMin', String(scoreMin))
+    return params
+  }
+
   async function fetchMatches() {
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (unseenOnly)        params.set('unseen', '1')
-      if (scoreMin !== null) params.set('scoreMin', String(scoreMin))
-      const r = await fetch(`/api/matches?${params.toString()}`)
+      const r = await fetch(`/api/matches?${bandParams().toString()}`)
       const j = await r.json() as MatchesResponse
       setData(j)
     } finally {
@@ -171,7 +218,21 @@ export default function MatchesPage() {
     }
   }
 
+  async function fetchParties() {
+    setPartiesLoading(true)
+    try {
+      const params = bandParams()
+      if (partyRole !== 'all') params.set('role', partyRole)
+      const r = await fetch(`/api/matches/parties?${params.toString()}`)
+      setParties(await r.json() as PartiesResponse)
+    } finally {
+      setPartiesLoading(false)
+    }
+  }
+
+  // Matches load for both views (party expansion reuses the loaded match cards).
   useEffect(() => { void fetchMatches() }, [scoreBand, unseenOnly])
+  useEffect(() => { if (viewMode === 'parties') void fetchParties() }, [viewMode, partyRole, scoreBand, unseenOnly])
 
   function toggleExpand(m: Match) {
     if (expandedId === m.id) {
@@ -249,9 +310,81 @@ export default function MatchesPage() {
     catch (e) { console.warn('[matches] undo failed', e) }
   }
 
+  // Brief 7.4 — single match-card renderer, shared by the Matches list and the
+  // Parties view's inline expansion (so party cards reuse the exact same card).
+  function renderMatchCard(m: Match) {
+    const badge       = typeBadge(m)
+    const tc          = tierChip(m.tier)
+    const isExpanded  = expandedId === m.id
+    const isRemoving  = removingId === m.id
+    const primaryStr  = primaryLabel(m.primary)
+    const counterStr  = counterpartLabel(m)
+    const ctxStr      = contextLine(m)
+
+    return (
+      <div
+        key={m.id}
+        onClick={() => toggleExpand(m)}
+        className="sr-anim-up"
+        style={{
+          borderRadius: 16,
+          background: 'rgba(255,255,255,0.06)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          backdropFilter: 'blur(20px) saturate(160%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+          padding: '12px 16px',
+          cursor: 'pointer',
+          opacity: isRemoving ? 0 : (m.seen ? 0.55 : 1),
+          transform: isRemoving ? 'scale(0.96)' : 'scale(1)',
+          transition: 'opacity 200ms, transform 200ms',
+        }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em' }}>
+          <span>
+            {tc && <span style={{ color: tc.tone }}>{tc.text} · </span>}
+            <span style={{ color: badge.tone }}>{badge.text} · SCORE {m.score}</span>
+          </span>
+          <span style={{ color: 'rgba(255,255,255,0.4)' }}>{isExpanded ? '▾' : '→'}</span>
+        </div>
+        <div style={{ marginTop: 6, fontSize: 14, color: '#fff', fontWeight: 500, lineHeight: 1.35 }}>
+          {primaryStr}{counterStr ? <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 400 }}>{' ↔ '}{counterStr}</span> : null}
+        </div>
+        {ctxStr && (
+          <div style={{ marginTop: 3, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>{ctxStr}</div>
+        )}
+        {m.partyPriority === 'SE' && (
+          <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--sr-cream, #EAB308)' }}>
+            ⭐ SE EXPERT
+          </div>
+        )}
+        {isExpanded && (
+          <ExpandedDetail
+            m={m}
+            router={router}
+            onDismiss={e => { e.stopPropagation(); setDismissSheetFor(m.id) }}
+            onCalendar={e => { e.stopPropagation(); setCalendarFor(m) }}
+            onDraft={e => { e.stopPropagation(); setChooserFor(m) }}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // Matches involving a given party (either side), for inline party expansion.
+  function matchesForParty(partyId: string): Match[] {
+    if (!data) return []
+    return data.matches.filter(m =>
+      m.counterpart && ('id' in m.counterpart) && (m.counterpart as { id: string }).id === partyId
+      || (m.primary?.id === partyId),
+    )
+  }
+
   return (
     <ChatSurfaceShell>
       <GooeyFilter id="goo-filter" strength={9} />
+
+      {/* Brief 7.4 — Matches | Parties view toggle */}
+      <ViewToggle mode={viewMode} onChange={setViewMode} />
 
       <TabBar
         active={scoreBand}
@@ -270,86 +403,60 @@ export default function MatchesPage() {
         }
       />
 
+      {viewMode === 'parties' && (
+        <PartyChips role={partyRole} counts={parties?.counts} onChange={setPartyRole} />
+      )}
+
       <div style={{
         flex: 1, overflowY: 'auto', scrollbarWidth: 'none',
         padding: '14px 16px 80px',
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
-        {data && (
-          <div style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
-            color: 'rgba(255,255,255,0.35)', marginBottom: 4,
-          }}>
-            {`${data.counts.unseen} UNSEEN · ${data.counts.mojo} MOJO · ${data.counts.listings} LISTINGS · ${data.counts.showings} SHOWINGS`}
-          </div>
-        )}
-        {loading ? (
-          <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 40 }}>
-            Loading…
-          </div>
-        ) : !data || data.matches.length === 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
-            <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>No matches in this tier.</div>
-            <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Try another tab — or run a Check In to pull fresh matches.</div>
-          </div>
-        ) : (
-          data.matches.map(m => {
-            const badge       = typeBadge(m)
-            const tc          = tierChip(m.tier)
-            const isExpanded  = expandedId === m.id
-            const isRemoving  = removingId === m.id
-            const primaryStr  = primaryLabel(m.primary)
-            const counterStr  = counterpartLabel(m)
-            const ctxStr      = contextLine(m)
-
-            return (
-              <div
-                key={m.id}
-                onClick={() => toggleExpand(m)}
-                className="sr-anim-up"
-                style={{
-                  borderRadius: 16,
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  backdropFilter: 'blur(20px) saturate(160%)',
-                  WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-                  padding: '12px 16px',
-                  cursor: 'pointer',
-                  opacity: isRemoving ? 0 : (m.seen ? 0.55 : 1),
-                  transform: isRemoving ? 'scale(0.96)' : 'scale(1)',
-                  transition: 'opacity 200ms, transform 200ms',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em' }}>
-                  <span>
-                    {tc && <span style={{ color: tc.tone }}>{tc.text} · </span>}
-                    <span style={{ color: badge.tone }}>{badge.text} · SCORE {m.score}</span>
-                  </span>
-                  <span style={{ color: 'rgba(255,255,255,0.4)' }}>{isExpanded ? '▾' : '→'}</span>
-                </div>
-                <div style={{ marginTop: 6, fontSize: 14, color: '#fff', fontWeight: 500, lineHeight: 1.35 }}>
-                  {primaryStr}{counterStr ? <span style={{ color: 'rgba(255,255,255,0.55)', fontWeight: 400 }}>{' ↔ '}{counterStr}</span> : null}
-                </div>
-                {ctxStr && (
-                  <div style={{ marginTop: 3, fontSize: 12, color: 'rgba(255,255,255,0.5)', lineHeight: 1.4 }}>{ctxStr}</div>
-                )}
-                {m.partyPriority === 'SE' && (
-                  <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', color: 'var(--sr-cream, #EAB308)' }}>
-                    ⭐ SE EXPERT
-                  </div>
-                )}
-                {isExpanded && (
-                  <ExpandedDetail
-                    m={m}
-                    router={router}
-                    onDismiss={e => { e.stopPropagation(); setDismissSheetFor(m.id) }}
-                    onCalendar={e => { e.stopPropagation(); setCalendarFor(m) }}
-                    onDraft={e => { e.stopPropagation(); setChooserFor(m) }}
-                  />
-                )}
+        {viewMode === 'matches' ? (
+          <>
+            {data && (
+              <div style={{
+                fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
+                color: 'rgba(255,255,255,0.35)', marginBottom: 4,
+              }}>
+                {`${data.counts.unseen} UNSEEN · ${data.counts.mojo} MOJO · ${data.counts.listings} LISTINGS · ${data.counts.showings} SHOWINGS`}
               </div>
-            )
-          })
+            )}
+            {loading ? (
+              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 40 }}>
+                Loading…
+              </div>
+            ) : !data || data.matches.length === 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>No matches in this tier.</div>
+                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Try another tab — or run a Check In to pull fresh matches.</div>
+              </div>
+            ) : (
+              data.matches.map(m => renderMatchCard(m))
+            )}
+          </>
+        ) : (
+          partiesLoading ? (
+            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 40 }}>
+              Loading…
+            </div>
+          ) : !parties || parties.parties.length === 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>No parties in this tier.</div>
+              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Try another tab or filter — or run a Check In.</div>
+            </div>
+          ) : (
+            parties.parties.map(p => (
+              <PartyCard
+                key={p.id}
+                party={p}
+                expanded={expandedPartyId === p.id}
+                onToggle={() => setExpandedPartyId(id => id === p.id ? null : p.id)}
+              >
+                {matchesForParty(p.id).map(m => renderMatchCard(m))}
+              </PartyCard>
+            ))
+          )
         )}
       </div>
 
@@ -690,6 +797,69 @@ function ChannelChooserSheet({ partyName, open, onClose, onPick }: {
           Cancel
         </button>
       </div>
+    </div>
+  )
+}
+
+// Brief 7.4 — Matches | Parties segmented control above the score-band tabs.
+function ViewToggle({ mode, onChange }: { mode: 'matches' | 'parties'; onChange: (m: 'matches' | 'parties') => void }) {
+  return (
+    <div style={{ padding: '4px 16px 6px', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ display: 'inline-flex', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 999, padding: 3 }}>
+        {(['matches', 'parties'] as const).map(m => {
+          const active = mode === m
+          return (
+            <button
+              key={m}
+              onClick={() => onChange(m)}
+              style={{
+                background: active ? 'var(--sr-cream, #f5e9d4)' : 'transparent',
+                color: active ? '#0a1f2a' : 'rgba(255,255,255,0.6)',
+                border: 'none', borderRadius: 999, padding: '6px 18px', cursor: 'pointer',
+                fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', fontWeight: active ? 600 : 400,
+                textTransform: 'uppercase', transition: 'background 160ms, color 160ms',
+              }}
+            >
+              {m === 'matches' ? 'Matches' : 'Parties'}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Brief 7.4 — role filter chips shown only in Parties view, with live counts.
+function PartyChips({ role, counts, onChange }: {
+  role: PartyRole
+  counts: PartiesResponse['counts'] | undefined
+  onChange: (r: PartyRole) => void
+}) {
+  const chips: Array<{ id: PartyRole; label: string; n?: number }> = [
+    { id: 'all',    label: 'All',     n: counts?.total },
+    { id: 'buyer',  label: 'Buyers',  n: counts?.buyers },
+    { id: 'renter', label: 'Renters', n: counts?.renters },
+    { id: 'seller', label: 'Sellers', n: counts?.sellers },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 8, padding: '2px 16px 0', flexWrap: 'wrap' }}>
+      {chips.map(c => {
+        const active = role === c.id
+        return (
+          <button
+            key={c.id}
+            onClick={() => onChange(c.id)}
+            style={{
+              background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px 2px',
+              fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+              color: active ? 'var(--sr-cream, #EAB308)' : 'rgba(255,255,255,0.45)',
+              borderBottom: active ? '1px solid var(--sr-cream, #EAB308)' : '1px solid transparent',
+            }}
+          >
+            {c.label}{typeof c.n === 'number' ? ` (${c.n})` : ''}
+          </button>
+        )
+      })}
     </div>
   )
 }
