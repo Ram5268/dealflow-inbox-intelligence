@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import MatchArc from '@/components/MatchArc'
 import ChatShaderBg from '@/components/ChatShaderBg'
+import MicButton from '@/components/MicButton'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
@@ -199,18 +200,55 @@ function TimeBreak({ label }: { label: string }) {
   )
 }
 
+// Brief 7.4 — TTS speaker button. Uses the browser SpeechSynthesis API; no
+// network call. Self-gates on voice-enabled + API availability so it silently
+// no-ops where unsupported.
+function SpeakButton({ text }: { text: string }) {
+  const [speaking, setSpeaking] = useState(false)
+  const enabled = process.env.NEXT_PUBLIC_VOICE_ENABLED === 'true'
+  if (!enabled || typeof window === 'undefined' || !('speechSynthesis' in window) || !text.trim()) return null
+
+  function toggle() {
+    const synth = window.speechSynthesis
+    if (speaking) { synth.cancel(); setSpeaking(false); return }
+    synth.cancel()
+    const u = new SpeechSynthesisUtterance(text)
+    u.onend = () => setSpeaking(false)
+    u.onerror = () => setSpeaking(false)
+    setSpeaking(true)
+    synth.speak(u)
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      aria-label={speaking ? 'Stop reading' : 'Read aloud'}
+      style={{
+        marginTop: 6, marginLeft: 4, background: 'transparent', border: 'none', cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 0',
+        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
+        color: speaking ? 'var(--sr-cream, #EAB308)' : 'rgba(255,255,255,0.4)',
+      }}
+    >
+      {speaking ? '⏹ STOP' : '🔊 LISTEN'}
+    </button>
+  )
+}
+
 // ─── Composer pill (matches design) ───────────────────────
 
 function Composer({
-  value, onChange, onSubmit, isLoading,
+  value, onChange, onSubmit, onTranscript, isLoading,
 }: {
   value: string
   onChange: (v: string) => void
   onSubmit: (files?: File[]) => void
+  onTranscript: (text: string) => void  // Brief 7.4 — voice transcript auto-submits
   isLoading: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [files, setFiles] = useState<File[]>([])
+  const voiceEnabled = process.env.NEXT_PUBLIC_VOICE_ENABLED === 'true'
 
   function submit() {
     if ((!value.trim() && files.length === 0) || isLoading) return
@@ -260,6 +298,11 @@ function Composer({
             color: '#fff', padding: '4px 0',
           }}
         />
+
+        {/* Brief 7.4 — hold-to-talk voice input; transcript auto-submits */}
+        {voiceEnabled && (
+          <MicButton onTranscript={onTranscript} disabled={isLoading} />
+        )}
 
         {/* Attach */}
         <label style={{
@@ -444,6 +487,9 @@ function MemoryView({
                         {m.content}
                       </div>
 
+                      {/* Brief 7.4 — optional TTS: read the reply aloud */}
+                      <SpeakButton text={m.content} />
+
                       {/* StreetEasy search button — shown whenever we have a filter URL */}
                       {m.seFilterUrl && (
                         <div style={{ marginTop: 10, marginLeft: 4 }}>
@@ -517,6 +563,7 @@ function MemoryView({
           value={input}
           onChange={setInput}
           onSubmit={(files) => onSend(undefined, files)}
+          onTranscript={(text) => onSend(text)}
           isLoading={loading}
         />
       </div>

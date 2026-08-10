@@ -47,17 +47,25 @@ interface CalToday {
   nextEvent: { subject: string; start: string; location: string | null } | null
 }
 
+// Brief 7.4 (Section D) — market signal
+interface MarketPulse {
+  neighborhoods: Array<{ name: string; heat: 'HOT' | 'WARM' | 'COLD'; newListings: number; newISOs: number }>
+}
+const HEAT_EMOJI: Record<MarketPulse['neighborhoods'][number]['heat'], string> = { HOT: '🔥', WARM: '🟡', COLD: '⚪' }
+
 export default function GreetPage() {
   const router = useRouter()
   const [givenName, setGivenName] = useState<string | null>(null)
   const [data, setData] = useState<GreetData | null>(null)
   const [calData, setCalData] = useState<CalToday | null | undefined>(undefined)
+  const [market, setMarket] = useState<MarketPulse | null>(null)
   const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
     fetch('/api/user/profile').then(r => r.json()).then(d => setGivenName(d.givenName ?? null)).catch(() => {})
     fetch('/api/user/greeting').then(r => r.json()).then(setData).catch(() => {})
     fetch('/api/calendar/today').then(r => r.json()).then(setCalData).catch(() => setCalData(null))
+    fetch('/api/market/pulse').then(r => r.json()).then(setMarket).catch(() => {})
 
     // Register service worker + subscribe to push notifications
     if ('serviceWorker' in navigator && 'PushManager' in window) {
@@ -150,6 +158,29 @@ export default function GreetPage() {
             >
               Review →
             </span>
+          </span>,
+    },
+    {
+      tag: 'MARKET',
+      body: !market
+        ? <span style={{ color: 'rgba(255,255,255,0.35)' }}>Loading…</span>
+        : market.neighborhoods.length === 0
+        ? <span style={{ color: 'rgba(255,255,255,0.45)' }}>No neighborhood activity in the last 7 days.</span>
+        : <span
+            onClick={() => router.push('/trends')}
+            style={{ cursor: 'pointer' }}
+          >
+            {market.neighborhoods.map((n, i) => (
+              <span key={n.name}>
+                {i > 0 && <span style={{ color: 'rgba(255,255,255,0.35)' }}>{' · '}</span>}
+                <span style={{ color: '#fff', fontWeight: 400 }}>{n.name}</span>
+                {' '}{HEAT_EMOJI[n.heat]} {n.heat}
+                <span style={{ color: 'rgba(255,255,255,0.55)' }}>
+                  {' ('}{n.newListings} new{n.newISOs > 0 ? ` · ${n.newISOs} ISOs` : ''}{')'}
+                </span>
+              </span>
+            ))}
+            <span style={{ color: 'var(--sr-cream)', textDecoration: 'underline', marginLeft: 6 }}>Trends →</span>
           </span>,
     },
     ...(data?.pendingReviewCount && data.pendingReviewCount > 0 ? [{

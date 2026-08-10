@@ -27,6 +27,25 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
+function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+      <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>{label}</span>
+      <button
+        onClick={() => onChange(!on)}
+        aria-pressed={on}
+        style={{
+          width: 44, height: 26, borderRadius: 999, border: 'none', cursor: 'pointer', padding: 2,
+          background: on ? 'var(--sr-cream, #f5e9d4)' : 'rgba(255,255,255,0.15)',
+          transition: 'background 160ms', display: 'flex', justifyContent: on ? 'flex-end' : 'flex-start',
+        }}
+      >
+        <span style={{ width: 22, height: 22, borderRadius: '50%', background: on ? '#0a1f2a' : '#fff', transition: 'all 160ms' }} />
+      </button>
+    </div>
+  )
+}
+
 function Btn({ onClick, disabled, children, variant = 'primary' }: { onClick?: () => void; disabled?: boolean; children: React.ReactNode; variant?: 'primary' | 'ghost' }) {
   return (
     <button onClick={onClick} disabled={disabled}
@@ -54,8 +73,36 @@ export default function SettingsPage() {
   const [mojoImporting, setMojoImporting] = useState(false)
   const [mojoImportResult, setMojoImportResult] = useState<{ ok: boolean; upserted?: number; error?: string } | null>(null)
   const [mojoWebhookUrl, setMojoWebhookUrl] = useState<string>('/api/mojo/webhook')
+  // Brief 7.4 — notification preferences
+  const [notif, setNotif] = useState<{ digestEnabled: boolean; realtimeEnabled: boolean; digestTime: string } | null>(null)
+  const [notifSaving, setNotifSaving] = useState(false)
+  const [testResult2, setTestResult2] = useState<string | null>(null)
+
+  async function saveNotif(patch: Partial<{ digestEnabled: boolean; realtimeEnabled: boolean; digestTime: string }>) {
+    if (!notif) return
+    const next = { ...notif, ...patch }
+    setNotif(next)
+    setNotifSaving(true)
+    try {
+      await fetch('/api/notifications/preferences', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next),
+      })
+    } finally { setNotifSaving(false) }
+  }
+
+  async function sendTestPush() {
+    setTestResult2('Sending…')
+    try {
+      const r = await fetch('/api/push/test', { method: 'POST' })
+      const j = await r.json()
+      setTestResult2(j.ok ? `✅ Delivered to ${j.delivered} device${j.delivered === 1 ? '' : 's'}` : `⚠️ ${j.error}`)
+    } catch {
+      setTestResult2('⚠️ Test failed')
+    }
+  }
 
   useEffect(() => {
+    fetch('/api/notifications/preferences').then(r => r.json()).then(setNotif).catch(() => {})
     fetch('/api/microsoft/token-status').then(r => r.json()).then(setTokenStatus).catch(() => {})
     fetch('/api/mojo/status').then(r => r.json()).then((d: { count: number; lastSync: string | null }) => {
       setMojoCount(d.count ?? 0)
@@ -166,6 +213,34 @@ export default function SettingsPage() {
           <span style={{ fontSize: 12, color: statusColor }}>{statusLabel}</span>
         </div>
 
+
+        {/* Brief 7.4 — Notifications */}
+        <Section title="Notifications">
+          {notif ? (
+            <>
+              <Toggle label="Morning digest" on={notif.digestEnabled} onChange={v => saveNotif({ digestEnabled: v })} />
+              <Toggle label="Realtime HOT alerts" on={notif.realtimeEnabled} onChange={v => saveNotif({ realtimeEnabled: v })} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
+                <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>Digest time</span>
+                <input
+                  type="time"
+                  value={notif.digestTime}
+                  onChange={e => saveNotif({ digestTime: e.target.value })}
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 13, colorScheme: 'dark' }}
+                />
+              </div>
+              <div style={{ marginTop: 10 }}>
+                <Btn onClick={sendTestPush} variant="ghost">Send Test Push</Btn>
+                {testResult2 && <p style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{testResult2}</p>}
+              </div>
+              <p style={{ marginTop: 10, fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.5 }}>
+                Digest currently runs daily at 8:00 AM ET. {notifSaving ? 'Saving…' : ''}
+              </p>
+            </>
+          ) : (
+            <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>Loading…</p>
+          )}
+        </Section>
 
         {/* Test */}
         <Section title="Connection Status">
