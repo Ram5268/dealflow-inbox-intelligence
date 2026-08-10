@@ -67,17 +67,15 @@ export async function GET(req: NextRequest) {
   const scoreMin  = sp.get('scoreMin') ? parseInt(sp.get('scoreMin')!, 10) : null
   const onlyUnseen = sp.get('unseen') === '1'
 
-  // Hard partition test vs. real data (same rule as /api/matches). Test mode → only
-  // isTestData=true opportunities + no Mojo counterparts. Off → only real matches,
-  // no seed pollution. Flip MATCHING_TEST_MODE_ONLY in .env + restart to swap views.
-  const matchingTestMode = isMatchingTestModeOnly()
+  // TEMPORARY test gate — remove post-Brief 7.2. When MATCHING_TEST_MODE_ONLY=true,
+  // show ONLY seed data. When off: no changes — normal behavior.
   const where: Record<string, unknown> = {
     organizationId,
-    opportunity: { isTestData: matchingTestMode ? true : false },
-    counterpartType: matchingTestMode
+    counterpartType: isMatchingTestModeOnly()
       ? { notIn: ['showing_confirmation', 'mojo'] }
       : { not: 'showing_confirmation' },
   }
+  if (isMatchingTestModeOnly()) where.opportunity = { isTestData: true }
   if (onlyUnseen) where.seen = false
   if (scoreMin !== null && !Number.isNaN(scoreMin)) where.score = { gte: scoreMin }
 

@@ -19,16 +19,12 @@ export async function GET(req: NextRequest) {
   const type        = typeRaw && typeRaw !== 'all' ? typeRaw : null
   const includeDismissed = sp.get('includeDismissed') === '1'
 
-  // Hard partition test data from real data so Ryan can inspect one or the other
-  // without cross-pollution. MATCHING_TEST_MODE_ONLY=true → only isTestData=true
-  // opportunities AND exclude Mojo counterparts entirely (Mojo has no isTestData
-  // column yet; every Mojo row is real production data until Brief 7.2). Flag off
-  // → only isTestData=false opportunities (no seed pollution in the real view).
-  const matchingTestMode = isMatchingTestModeOnly()
-  const where: Record<string, unknown> = {
-    opportunity: { isTestData: matchingTestMode ? true : false },
-  }
-  if (matchingTestMode) {
+  // TEMPORARY test gate — remove post-Brief 7.2. When MATCHING_TEST_MODE_ONLY=true,
+  // show ONLY seed data: isTestData=true opportunities, no Mojo counterparts (Mojo
+  // has no isTestData column yet). When off: no changes — normal behavior.
+  const where: Record<string, unknown> = {}
+  if (isMatchingTestModeOnly()) {
+    where.opportunity = { isTestData: true }
     where.counterpartType = { not: 'mojo' }
   } else if (type) {
     where.counterpartType = type
