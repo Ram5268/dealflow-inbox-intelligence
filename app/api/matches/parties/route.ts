@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { isTestModeOnly } from '@/lib/config/testMode'
+import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { resolveSourceBadge } from '@/lib/matching/engine'
 import { formatPriceRange } from '@/lib/utils'
 import { Category } from '@prisma/client'
@@ -66,7 +67,17 @@ export async function GET(req: NextRequest) {
   const scoreMin  = sp.get('scoreMin') ? parseInt(sp.get('scoreMin')!, 10) : null
   const onlyUnseen = sp.get('unseen') === '1'
 
-  const where: Record<string, unknown> = { organizationId, counterpartType: { not: 'showing_confirmation' } }
+  // Hard partition test vs. real data (same rule as /api/matches). Test mode → only
+  // isTestData=true opportunities + no Mojo counterparts. Off → only real matches,
+  // no seed pollution. Flip MATCHING_TEST_MODE_ONLY in .env + restart to swap views.
+  const matchingTestMode = isMatchingTestModeOnly()
+  const where: Record<string, unknown> = {
+    organizationId,
+    opportunity: { isTestData: matchingTestMode ? true : false },
+    counterpartType: matchingTestMode
+      ? { notIn: ['showing_confirmation', 'mojo'] }
+      : { not: 'showing_confirmation' },
+  }
   if (onlyUnseen) where.seen = false
   if (scoreMin !== null && !Number.isNaN(scoreMin)) where.score = { gte: scoreMin }
 
