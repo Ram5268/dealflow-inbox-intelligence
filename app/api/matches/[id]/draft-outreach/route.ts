@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/prisma'
 import { formatPriceRange } from '@/lib/utils'
+import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 
 // POST /api/matches/[id]/draft-outreach
 // Body: { channel: 'email' | 'text' }
@@ -126,6 +127,18 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     },
   })
   if (!match) return NextResponse.json({ error: 'match not found' }, { status: 404 })
+
+  // Test-mode isolation: MojoContact has no isTestData column yet (Brief 7.2 will
+  // add it), so every Mojo row is real production data. Block drafts against Mojo
+  // counterparts while the matching engine is in test-mode. Opportunity counterparts
+  // are already filtered to isTestData=true by the list view, so drafts against
+  // them are safe here.
+  if (isMatchingTestModeOnly() && match.counterpartType === 'mojo') {
+    return NextResponse.json(
+      { error: 'drafts against Mojo contacts are disabled in test mode' },
+      { status: 409 },
+    )
+  }
 
   // Daily cost cap — refuse before spending anything more.
   const spent = await spentTodayUsd(match.organizationId)
