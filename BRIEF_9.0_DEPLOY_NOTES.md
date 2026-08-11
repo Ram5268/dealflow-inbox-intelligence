@@ -34,9 +34,8 @@ Vercel Hobby is confirmed **daily-only** (every-10-min cron fails deployment). S
 2. New Project → Import `Ram5268/dealflow-inbox-intelligence` (auto-detects Next.js, root `./`, default build). Note the assigned URL → this is `<vercel-url>`.
 3. Set env vars for **Production + Preview** (checklist §4). Deploy.
 
-**Batch B — Azure (needs Elliman tenant access — flag as blocker if you lack it)**
-4. Azure Portal → App Registrations → DealFlow app → Authentication → add redirect URI:
-   `https://<vercel-url>/api/auth/callback`  (also confirm the device-code / public-client flow is enabled).
+**Batch B — Azure creds (NO portal changes needed)**
+4. ~~Add redirect URI in Azure Portal~~ — **NOT required.** Settings → Connect Outlook uses the **device-code flow** (`app/api/microsoft/device-code`), which needs no redirect URI and no portal edit. Just source the cred *values* for Vercel: `AZURE_CLIENT_ID` + `AZURE_TENANT` (required), `AZURE_CLIENT_SECRET` (optional — only the Elliman-blocked refresh path uses it). Check local `.env` first; if truly missing, ping executor before deploying.
 
 **Batch C — external wiring**
 5. Upstash QStash schedule (§5) — the 10-min sync tick.
@@ -46,14 +45,15 @@ Vercel Hobby is confirmed **daily-only** (every-10-min cron fails deployment). S
 7. Safari on iPhone → open `https://<vercel-url>/` → Share → Add to Home Screen. Open from home screen (standalone).
 8. In the installed PWA → grant push permission.
 
-**Batch E — smokes (Phase 3)**
-9. Open the deployed app → Settings → Connect Outlook (device-code) → authenticate. Then tell the executor "go".
+**Batch E — smokes (Phase 3) — HELD pending Outlook restore**
+9. (When Outlook access is back) Open the deployed app → Settings → Connect Outlook (device-code) → authenticate. Then tell the executor "go".
 
 ---
 
 ## 3. Blockers to watch
-- **Azure tenant access** (step 4). If Elliman blocks you from editing the app registration's redirect URIs / public-client setting, the deployed OAuth callback can't complete. This is the one hard external dependency.
-- **`AZURE_*` creds are NOT in local `.env`.** You must source `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT` from the Azure app registration to set them in Vercel (§4).
+- **Outlook access (Ryan locked out).** Phase 3 Graph smokes + Connect Outlook are HELD until access is restored. Everything else (Vercel deploy, QStash, Zapier ingest, PWA install/push) is Outlook-independent and proceeds now.
+- ~~Azure tenant / portal access~~ — no longer a blocker: device-code flow needs no portal changes (Correction 1).
+- **Source the `AZURE_*` cred values.** `AZURE_CLIENT_ID` + `AZURE_TENANT` must be set in Vercel for Connect Outlook to work later. Check local `.env` first; if missing, resolve before deploying the auth-dependent path (but the rest of the deploy can proceed).
 
 ---
 
@@ -66,10 +66,9 @@ Vercel Hobby is confirmed **daily-only** (every-10-min cron fails deployment). S
 | `ANTHROPIC_API_KEY` | copy from local `.env` |
 | `OPENAI_API_KEY` | copy from local `.env` |
 | `AI_PROVIDER` | `openai` |
-| `AZURE_CLIENT_ID` | Azure app registration (NOT in local `.env` — locate it) |
-| `AZURE_CLIENT_SECRET` | Azure app registration |
-| `AZURE_TENANT` | Azure app registration (tenant id) |
-| `AZURE_REDIRECT_URI` | `https://<vercel-url>/api/auth/callback` |
+| `AZURE_CLIENT_ID` | Azure app registration — **required** for device-code Connect Outlook (check local `.env`) |
+| `AZURE_TENANT` | Azure app registration (Elliman tenant id) — **required** |
+| `AZURE_CLIENT_SECRET` | Optional — only the Elliman-blocked refresh path uses it; set if you have it |
 | `VAPID_PUBLIC_KEY` | **new pair** (executor generated — see chat) |
 | `VAPID_PRIVATE_KEY` | **new pair** (executor generated — see chat) |
 | `VAPID_EMAIL` | copy from local `.env` (mailto: address) |
@@ -87,7 +86,7 @@ Vercel Hobby is confirmed **daily-only** (every-10-min cron fails deployment). S
 **Optional (copy from local `.env` if present; features degrade if unset):**
 `GOOGLE_MAPS_API_KEY`, `NYC_SOCRATA_KEY_ID`, `NYC_SOCRATA_KEY_SECRET`, `RAPIDAPI_KEY`, `JINA_API_KEY`, `LLAMAPARSE_API_KEY`, `BRIGHTDATA_API_KEY`, `BRIGHTDATA_ZONE`, `STREETEASY_SYNC_ENABLED`, `INGEST_V2`, `NEXT_PUBLIC_VOICE_ENABLED`.
 
-**Do NOT set in Vercel:** `MICROSOFT_GRAPH_ACCESS_TOKEN` (DB-backed), `SHADOW_DATABASE_URL` (migrate-only), `NODE_ENV` (auto), `CONFIRM_WIPE` (destructive).
+**Not needed in Vercel:** `AZURE_REDIRECT_URI` (device-code flow uses none; only the dormant redirect flow references it), `MICROSOFT_GRAPH_ACCESS_TOKEN` (DB-backed), `SHADOW_DATABASE_URL` (migrate-only), `NODE_ENV` (auto), `CONFIRM_WIPE` (destructive).
 
 ---
 
@@ -103,7 +102,8 @@ Free tier = 500 msgs/day; every 10 min = 144/day. Comfortable.
 
 ---
 
-## 6. Phase 3 smoke plan (corrected paths — run after Phase 1+2 green)
+## 6. Phase 3 smoke plan (corrected paths — HELD until Outlook access restored)
+> Carried to a follow-up: chat calendar smoke + `graphToken.status==='fresh'` require Graph auth. Merge on the Outlook-independent gate items now; these merge when they pass later. Ryan pings "Outlook is back, ready for smokes".
 Handoff line to Ryan: *"Ready for deferred smokes. Refresh the Outlook token via the deployed app → Settings → Connect Outlook, then reply 'go'. ~20-30 min, within the token window."*
 
 On "go":
