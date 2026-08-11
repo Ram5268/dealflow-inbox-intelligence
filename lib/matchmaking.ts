@@ -1,3 +1,6 @@
+// DEPRECATED — Brief 7.2 replaced with lib/matching/engine.ts. No longer invoked
+// by lib/backgroundSync.ts (or anywhere in the live sync path). Kept in place to
+// avoid a large delete in this PR; safe to remove in a follow-up cleanup brief.
 import { prisma } from './prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { Category } from '@prisma/client'
