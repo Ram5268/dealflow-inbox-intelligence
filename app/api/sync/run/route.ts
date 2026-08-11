@@ -1,12 +1,38 @@
 export const dynamic = 'force-dynamic'
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { runIncrementalSync } from '@/lib/backgroundSync'
 import { prisma } from '@/lib/prisma'
 import { runMatchmaking } from '@/lib/matchmaking'
 import { isIngestionTestModeOnly } from '@/lib/config/ingestionTestMode'
 
+// Brief 9.0 — scheduler auth. The sync tick runs on an external scheduler in
+// prod (Vercel Cron on Pro, or Upstash QStash on Hobby). Both hit this route
+// via GET. When CRON_SECRET is set we require it (as `Authorization: Bearer
+// <secret>` or `?secret=<secret>`), mirroring /api/push/digest. The existing
+// client-triggered POST (app page load) stays open — same-origin browser call.
+function authorized(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET
+  if (!secret) return true // no secret configured (local/dev) — allow
+  const auth = req.headers.get('authorization')
+  if (auth === `Bearer ${secret}`) return true
+  if (req.nextUrl.searchParams.get('secret') === secret) return true
+  return false
+}
+
 // Internal route — only calls Microsoft Graph GET requests externally.
 export async function POST() {
+  return runSync()
+}
+
+// Scheduler entrypoint (Vercel Cron / QStash). Secured by CRON_SECRET.
+export async function GET(req: NextRequest) {
+  if (!authorized(req)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+  return runSync()
+}
+
+async function runSync() {
   // Brief 6.0 — ingestion isolation gate. Blocks the production sync +
   // ingestion path so fixture validation can't trigger real Graph fetches or
   // pollute production tables. Escape hatch: INGESTION_TEST_MODE_ONLY=false.
