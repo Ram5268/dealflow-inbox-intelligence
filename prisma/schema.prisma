@@ -100,6 +100,7 @@ model Organization {
   linkedResources  LinkedResource[]
   nycParcelCache   NycParcelCache[]
   notificationPrefs NotificationPreferences?
+  zapierIngestLogs ZapierIngestLog[]
 }
 
 model User {
@@ -367,6 +368,16 @@ model MojoContact {
   mojoGroup        String?
   mojoList         String?
   groups              String[]
+  isTestData           Boolean  @default(false)
+  intent               String?  @default("SELLER")   // SELLER / BUYER / RENTER — TEXT, not enum
+  bedsMin              Int?
+  bedsMax              Int?
+  budgetMin            Float?
+  budgetMax            Float?
+  cashOnly             Boolean?
+  timing               String?
+  initialNeighborhood  String?
+  metadata             Json?              // catch-all for future Mojo custom fields
   lastCalled          DateTime?
   lastDialDate        DateTime?
   estimatedValue      Float?
@@ -386,6 +397,21 @@ model MojoContact {
   organization   Organization  @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+}
+
+model ZapierIngestLog {
+  id               String   @id @default(cuid())
+  receivedAt       DateTime @default(now())
+  organizationId   String
+  headers          Json     // request headers Zapier sent
+  body             Json     // raw payload verbatim
+  resultStatus     String   @default("pending")  // pending / upserted / rejected / errored
+  resultReason     String?  // e.g. "header_row_reject", or error message
+  resultContactId  String?  // mojoContact.id if successfully upserted
+  processedAt      DateTime?
+  organization     Organization @relation(fields: [organizationId], references: [id])
+  @@index([organizationId, receivedAt])
+  @@map("zapier_ingest_log")
 }
 
 model InstantlyEvent {

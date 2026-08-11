@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/matching/priceOverlap.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/matching/geoFilter.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/matching/ranking.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/chat/guards/__tests__/regexGuard.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/chat/guards/__tests__/llmVerifier.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/chat/guards/__tests__/retry.test.ts",
+    "test": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/matching/priceOverlap.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/matching/geoFilter.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/matching/ranking.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/chat/guards/__tests__/regexGuard.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/chat/guards/__tests__/llmVerifier.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/chat/guards/__tests__/retry.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/mojo/__tests__/validate.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/mojo/__tests__/geocode.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/mojo/__tests__/parseNotes.test.ts",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",

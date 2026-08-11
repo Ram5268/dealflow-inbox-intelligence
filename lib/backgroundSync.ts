@@ -6,13 +6,71 @@ import { ingestEmail } from './ingestion/ingestEmail'
 import { queueItem as queueReviewItem } from './ingestion/reviewQueueManager'
 import { parseAttachment } from './attachmentParser'
 import { buildOpportunityText, upsertOpportunityEmbedding } from './embeddings'
-import { runMatchmaking } from './matchmaking'
+import { findMatchesForListing, findMatchesForParty } from './matching/engine'
+import { isMatchingTestModeOnly } from './config/matchingTestMode'
+import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
 import { sendPushToAll } from './pushNotifications'
 import { maybeFireHotAlert } from './push/hotAlert'
 import { formatPriceRange } from './utils'
 import { checkStreetEasyStatuses } from './streetEasyStatus'
-import { Category, TransactionType } from '@prisma/client'
+import { Category, MatchTier, TransactionType } from '@prisma/client'
 import type { ValidationFlag } from './ingestion/types'
+
+// Brief 7.2 (Fix #9) — persistence adapter for the 7.0 matching engine.
+// The engine (findMatchesForListing / findMatchesForParty) is a pure query
+// surface — it scores but doesn't write. The classic runMatchmaking() used to
+// persist Match rows that the push + HOT-alert paths (and the UI) rely on, so
+// we persist the engine's results here. The engine returns a tier, not a
+// numeric score; we map tier → score so the existing score>=90 HOT query fires.
+const SUPPLY_SET = new Set<Category>([...SUPPLY_SALE, ...SUPPLY_RENTAL])
+const TIER_SCORE: Record<'Hot' | 'Warm' | 'Possible', number> = { Hot: 90, Warm: 70, Possible: 50 }
+const TIER_ENUM: Record<'Hot' | 'Warm' | 'Possible', MatchTier> = {
+  Hot: MatchTier.HOT, Warm: MatchTier.WARM, Possible: MatchTier.POSSIBLE,
+}
+
+async function runEngineMatches(
+  organizationId: string,
+  newOppIds: string[],
+): Promise<{ total: number; highConfidence: number }> {
+  const opps = await prisma.extractedOpportunity.findMany({
+    where: { id: { in: newOppIds } },
+    select: { id: true, category: true },
+  })
+  let total = 0
+  let highConfidence = 0
+
+  for (const opp of opps) {
+    const isListing = SUPPLY_SET.has(opp.category)
+    const isParty = opp.category === Category.BUYER_ISO || opp.category === Category.RENTER_INQUIRY
+    if (!isListing && !isParty) continue // seller/landlord leads etc. have no supply-side match
+
+    const result = isListing
+      ? await findMatchesForListing(opp.id)
+      : await findMatchesForParty(opp.id)
+
+    for (const m of result.results) {
+      // The counterpart is whichever side is not the just-created opportunity.
+      const counterpartId = isListing ? m.party.id : m.listing.id
+      const counterpartType = isListing && m.sourceBadge === 'mojo' ? 'mojo' : 'opportunity'
+      const score = TIER_SCORE[m.tier]
+      const tier = TIER_ENUM[m.tier]
+      try {
+        await prisma.match.upsert({
+          where: {
+            opportunityId_counterpartId_counterpartType: {
+              opportunityId: opp.id, counterpartId, counterpartType,
+            },
+          },
+          create: { organizationId, opportunityId: opp.id, counterpartId, counterpartType, score, reason: m.reason, tier },
+          update: { score, reason: m.reason, tier },
+        })
+        total++
+        if (m.tier === 'Hot') highConfidence++
+      } catch { /* FK/conflict — skip this pair, keep going */ }
+    }
+  }
+  return { total, highConfidence }
+}
 
 // Brief 7.4 — resolve a HOT match's counterpart display name for the push body.
 async function hotPartyName(counterpartType: string, counterpartId: string): Promise<string | null> {
@@ -347,44 +405,52 @@ export async function runIncrementalSync(): Promise<{
       }).catch(() => {})
     }
 
-    // Run matchmaking on new opportunities
-    let matchCount = 0
-    if (newOppIds.length > 0) {
+    // Run matchmaking on new opportunities.
+    // Brief 7.2 (Fix #9) — the classic runMatchmaking() is dead; the 7.0 engine
+    // is the single matcher. Gated behind MATCHING_TEST_MODE_ONLY until the
+    // follow-up flip, so live data stays isolated exactly as
+    // lib/config/matchingTestMode.ts documents.
+    let matchCount = showingConfirmations.length
+    let newMatchHigh = 0
+    if (newOppIds.length > 0 && !isMatchingTestModeOnly()) {
       try {
-        const matchResult = await runMatchmaking(newOppIds)
-        matchCount = matchResult.total + showingConfirmations.length
-        const totalHighConf = matchResult.highConfidence + showingConfirmations.length
-        if (totalHighConf > 0) {
-          const scText = showingConfirmations.length > 0 ? ` + ${showingConfirmations.length} showing confirmation${showingConfirmations.length > 1 ? 's' : ''}` : ''
-          const body = `${matchResult.highConfidence} new match${matchResult.highConfidence !== 1 ? 'es' : ''}${scText} found`
-          await sendPushToAll('DealFlow', body, '/').catch(() => {})
-        }
-
-        // Brief 7.4 (A.2) — realtime HOT alert. The live matcher doesn't populate
-        // MatchTier, so "hot" = score >= 90 (the GOLD band). Fire for the single
-        // best just-created match; hotAlert owns the prefs check + 5/hr rate limit.
-        const topHot = await prisma.match.findFirst({
-          where: {
-            organizationId,
-            score: { gte: 90 },
-            counterpartType: { not: 'showing_confirmation' },
-            OR: [{ opportunityId: { in: newOppIds } }, { counterpartId: { in: newOppIds } }],
-          },
-          orderBy: { score: 'desc' },
-          include: { opportunity: { select: { address: true, neighborhood: true, extractedTitle: true, price: true, minPrice: true, maxPrice: true } } },
-        })
-        if (topHot) {
-          const opp = topHot.opportunity
-          const partyName = await hotPartyName(topHot.counterpartType, topHot.counterpartId)
-          const listingLabel = [opp.address ?? opp.extractedTitle, formatPriceRange(opp.minPrice, opp.maxPrice, opp.price), opp.neighborhood].filter(Boolean).join(' ').trim()
-          await maybeFireHotAlert({ organizationId, matchId: topHot.id, partyName: partyName ?? 'New match', listingLabel }).catch(() => {})
-        }
+        const engineRes = await runEngineMatches(organizationId, newOppIds)
+        matchCount += engineRes.total
+        newMatchHigh = engineRes.highConfidence
       } catch (e) {
         console.error('[matchmaking] failed:', e)
         await prisma.auditLog.create({
           data: { organizationId, action: 'matchmaking_failed', detailsJson: { error: (e as Error).message, oppCount: newOppIds.length } },
         }).catch(() => {})
       }
+    }
+
+    // Push notification (showing-confirmation pushes fire regardless of the gate).
+    const totalHighConf = newMatchHigh + showingConfirmations.length
+    if (totalHighConf > 0) {
+      const scText = showingConfirmations.length > 0 ? ` + ${showingConfirmations.length} showing confirmation${showingConfirmations.length > 1 ? 's' : ''}` : ''
+      const body = `${newMatchHigh} new match${newMatchHigh !== 1 ? 'es' : ''}${scText} found`
+      await sendPushToAll('DealFlow', body, '/').catch(() => {})
+    }
+
+    // Brief 7.4 (A.2) — realtime HOT alert. "hot" = score >= 90 (the GOLD band).
+    // Fire for the single best just-created match; hotAlert owns the prefs check
+    // + 5/hr rate limit. Returns null when no Match rows were written (gated / no hits).
+    const topHot = newOppIds.length > 0 ? await prisma.match.findFirst({
+      where: {
+        organizationId,
+        score: { gte: 90 },
+        counterpartType: { not: 'showing_confirmation' },
+        OR: [{ opportunityId: { in: newOppIds } }, { counterpartId: { in: newOppIds } }],
+      },
+      orderBy: { score: 'desc' },
+      include: { opportunity: { select: { address: true, neighborhood: true, extractedTitle: true, price: true, minPrice: true, maxPrice: true } } },
+    }) : null
+    if (topHot) {
+      const opp = topHot.opportunity
+      const partyName = await hotPartyName(topHot.counterpartType, topHot.counterpartId)
+      const listingLabel = [opp.address ?? opp.extractedTitle, formatPriceRange(opp.minPrice, opp.maxPrice, opp.price), opp.neighborhood].filter(Boolean).join(' ').trim()
+      await maybeFireHotAlert({ organizationId, matchId: topHot.id, partyName: partyName ?? 'New match', listingLabel }).catch(() => {})
     }
 
     // Check StreetEasy status on existing listings (background, non-blocking)
