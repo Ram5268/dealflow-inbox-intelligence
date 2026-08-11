@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import { resolveSourceBadge } from '@/lib/matching/engine'
+import { resolveDismissKey } from '@/lib/matching/dismissKey'
 
 // GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1]
 // List with both sides hydrated. Sort: unseen first, then highest-scoring,
@@ -39,18 +40,27 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  // Brief 7.1 — hide dismissed pairs. MatchDismissal keys on (partyId, listingId)
-  // = (counterpartId, opportunityId); there's no FK to Match, so exclude in code.
+  // Brief 7.1 — hide dismissed pairs. MatchDismissal keys on (partyId, listingId);
+  // there's no FK to Match, so exclude in code. Brief 8.0-lite Fix #3a — resolve
+  // the key from the opportunity's CATEGORY (via resolveDismissKey), matching how
+  // the dismiss route now writes it and how the engine filters. The old
+  // (partyId=counterpartId) shortcut inverted ISO-triggered pairs.
   let matches = allMatches
   if (!includeDismissed && allMatches.length > 0) {
+    const keyFor = (m: (typeof allMatches)[number]) => resolveDismissKey({
+      opportunityId: m.opportunityId,
+      counterpartId: m.counterpartId,
+      opportunityCategory: m.opportunity.category,
+    })
     const dismissals = await prisma.matchDismissal.findMany({
-      where: {
-        OR: allMatches.map(m => ({ partyId: m.counterpartId, listingId: m.opportunityId })),
-      },
+      where: { OR: allMatches.map(keyFor) },
       select: { partyId: true, listingId: true },
     })
     const dismissedKeys = new Set(dismissals.map(d => `${d.partyId}::${d.listingId}`))
-    matches = allMatches.filter(m => !dismissedKeys.has(`${m.counterpartId}::${m.opportunityId}`))
+    matches = allMatches.filter(m => {
+      const k = keyFor(m)
+      return !dismissedKeys.has(`${k.partyId}::${k.listingId}`)
+    })
   }
 
   const oppCounterpartIds  = matches.filter(m => m.counterpartType === 'opportunity').map(m => m.counterpartId)

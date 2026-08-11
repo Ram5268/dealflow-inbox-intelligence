@@ -5,6 +5,8 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
+import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
+import { runCalendarConfirm } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
@@ -164,26 +166,31 @@ export async function POST(req: NextRequest) {
       && /\bconfirm\b|\byes\b|\bdo it\b|\blooks good\b|\bgo ahead\b|\badd it\b/.test(queryText)
 
     // ── Calendar confirm fast-path: create the pending event directly, skip LLM + all context fetches ──
+    // Brief 8.0-lite Fix #2 — the actual write + audit + guard moved into
+    // runCalendarConfirm (injectable, unit-tested). The two-step gate (regex +
+    // lastPendingEvent) stays inline above; only the side effects moved.
     if (isConfirmMessage && lastPendingEvent) {
       try {
-        const endISO = lastPendingEvent.endISO || (() => {
-          const d = new Date(lastPendingEvent.startISO)
-          d.setMinutes(d.getMinutes() + 30)
-          return d.toISOString()
-        })()
-        await createCalendarEvent({
-          subject:  lastPendingEvent.subject,
-          startISO: lastPendingEvent.startISO,
-          endISO,
-          location: lastPendingEvent.location,
-          notes:    lastPendingEvent.notes,
+        const result = await runCalendarConfirm({
+          organizationId,
+          sessionId: session.id,
+          userMessage,
+          pendingEvent: {
+            subject:  lastPendingEvent.subject,
+            startISO: lastPendingEvent.startISO,
+            endISO:   lastPendingEvent.endISO,
+            location: lastPendingEvent.location,
+            notes:    lastPendingEvent.notes,
+          },
+          deps: {
+            testModeOn:     isMatchingTestModeOnly(),
+            createEvent:    createCalendarEvent,
+            createMessage:  (data) => prisma.chatMessage.create({ data: data as never }),
+            createAuditLog: (data) => prisma.auditLog.create({ data: data as never }),
+            touchSession:   (id) => prisma.chatSession.update({ where: { id }, data: { updatedAt: new Date() } }),
+          },
         })
-        const confirmText = `Done — added to your Outlook: ${lastPendingEvent.subject} on ${new Date(lastPendingEvent.startISO).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })} at ${new Date(lastPendingEvent.startISO).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}.`
-        const storedUser = userMessage
-        await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'user', content: storedUser } })
-        await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'assistant', content: confirmText, dealsJson: [], suggestions: [] } })
-        await prisma.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
-        return NextResponse.json({ sessionId: session.id, response: confirmText, deals: [], suggestions: [] })
+        return NextResponse.json({ sessionId: session.id, response: result.text, deals: [], suggestions: [] })
       } catch (err) {
         // Fall through to normal AI if creation fails
         console.error('[DealFlow] Calendar confirm error:', err)
