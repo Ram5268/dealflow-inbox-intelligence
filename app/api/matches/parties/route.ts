@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { isTestModeOnly } from '@/lib/config/testMode'
-import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { resolveSourceBadge } from '@/lib/matching/engine'
 import { formatPriceRange } from '@/lib/utils'
 import { Category } from '@prisma/client'
@@ -67,15 +66,10 @@ export async function GET(req: NextRequest) {
   const scoreMin  = sp.get('scoreMin') ? parseInt(sp.get('scoreMin')!, 10) : null
   const onlyUnseen = sp.get('unseen') === '1'
 
-  // TEMPORARY test gate — remove post-Brief 7.2. When MATCHING_TEST_MODE_ONLY=true,
-  // show ONLY seed data. When off: no changes — normal behavior.
   const where: Record<string, unknown> = {
     organizationId,
-    counterpartType: isMatchingTestModeOnly()
-      ? { notIn: ['showing_confirmation', 'mojo'] }
-      : { not: 'showing_confirmation' },
+    counterpartType: { not: 'showing_confirmation' },
   }
-  if (isMatchingTestModeOnly()) where.opportunity = { isTestData: true }
   if (onlyUnseen) where.seen = false
   if (scoreMin !== null && !Number.isNaN(scoreMin)) where.score = { gte: scoreMin }
 

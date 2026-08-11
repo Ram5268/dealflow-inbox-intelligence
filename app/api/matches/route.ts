@@ -2,7 +2,6 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isTestModeOnly } from '@/lib/config/testMode'
-import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { resolveSourceBadge } from '@/lib/matching/engine'
 
 // GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1]
@@ -19,16 +18,8 @@ export async function GET(req: NextRequest) {
   const type        = typeRaw && typeRaw !== 'all' ? typeRaw : null
   const includeDismissed = sp.get('includeDismissed') === '1'
 
-  // TEMPORARY test gate — remove post-Brief 7.2. When MATCHING_TEST_MODE_ONLY=true,
-  // show ONLY seed data: isTestData=true opportunities, no Mojo counterparts (Mojo
-  // has no isTestData column yet). When off: no changes — normal behavior.
   const where: Record<string, unknown> = {}
-  if (isMatchingTestModeOnly()) {
-    where.opportunity = { isTestData: true }
-    where.counterpartType = { not: 'mojo' }
-  } else if (type) {
-    where.counterpartType = type
-  }
+  if (type) where.counterpartType = type
   if (onlyUnseen)                                    where.seen  = false
   if (scoreMin !== null && !Number.isNaN(scoreMin))  where.score = { gte: scoreMin }
 
