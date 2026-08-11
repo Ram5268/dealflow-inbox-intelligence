@@ -1,6 +1,11 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
+  // Prisma 7 uses the pg driver adapter (see lib/prisma.ts) — queries go
+  // through the JS `pg` driver, not the native Rust query engine, so the
+  // Vercel/RHEL binary target is not required at runtime. Declared anyway as
+  // harmless insurance in case the driver adapter is ever removed.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
