@@ -5,7 +5,6 @@ export interface ContextInput {
   userMessage:      string             // raw text — needed for address extraction (ACRIS/DOB)
   queryText:        string             // lowercased — for keyword/match-substring checks
   isConfirmMessage: boolean            // true when current message is "confirm" reply (calendar)
-  showMatches:      boolean            // explicit "show me matches" override from request body
 }
 
 export interface LiveSeListing {

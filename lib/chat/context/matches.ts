@@ -1,12 +1,11 @@
 import type { ContextFetcher } from './types'
 import { prisma } from '@/lib/prisma'
 
-// Triggered by 'match' keyword in the query OR explicit showMatches override from request body
-// (e.g., when user taps "See them →" from the check-in page).
+// Triggered by the 'match' keyword in the query.
 // Side effect: marks the surfaced matches as seen=true after rendering, so they don't
 // re-appear on the next request. Preserved verbatim from pre-PR5 inline behavior.
-export const matchesFetcher: ContextFetcher = async ({ queryText, showMatches }) => {
-  const isMatchQuery = queryText.includes('match') || showMatches
+export const matchesFetcher: ContextFetcher = async ({ queryText }) => {
+  const isMatchQuery = queryText.includes('match')
   if (!isMatchQuery) return { block: null }
 
   const unseenMatches = await prisma.match.findMany({

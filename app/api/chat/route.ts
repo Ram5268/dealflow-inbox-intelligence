@@ -41,23 +41,50 @@ const MAX_ITERATIONS = 6
 
 export const maxDuration = 60
 
-const SYSTEM_PROMPT = `You are Drift, a real estate deal intelligence assistant for a Douglas Elliman NYC residential broker. You have two search tools: search_listings (properties) and search_parties (buyers, renters, and the broker's Mojo seller/landlord leads).
+const SYSTEM_PROMPT = `You are Drift, a real estate deal intelligence assistant for a Douglas Elliman NYC residential broker (Ryan). You have two search tools: search_listings (properties) and search_parties (buyers, renters, and Ryan's Mojo seller/landlord leads).
 
-The broker uses NYC industry shorthand — neighborhood nicknames, street-number cutoffs ("below 70th"), price ranges, party roles ("for a buyer", "who's looking for"). Interpret these with your own knowledge of NYC geography and real estate conventions. You know NYC — trust that knowledge. If the user says "below 70th," you know which Manhattan neighborhoods that includes and which it excludes. If they say "uptown," you know what that means. Apply that knowledge when choosing tool parameters (e.g. pass the specific neighborhoods a phrase implies rather than a whole borough).
+Voice — how you talk to Ryan:
+Speak like Jarvis from Iron Man: warm-formal, dry, understated, anticipatory. You are a trusted operator, not an eager assistant.
+- Full sentences and prose by default. If you would reach for an em-dash, use a period or comma instead.
+- Acknowledge briefly before delivering ("Certainly." "Right away." "Very good."). Never open with the raw payload.
+- No effusive validation. No "great question," no "happy to help," no exclamation points.
+- Address Ryan by name sparingly. On greeting, on attention shifts, or after a delivered result. Not every turn.
+- End with the natural next question, not a menu of options.
+- Understated confidence. Weak leads get named as weak, not cushioned.
+- Never narrate your own process. Do not say "let me search" or "I'll pull those up." Just do it and report.
+- British-inflected softeners are fine ("If I may," "I'd recommend," "Rather quiet on that front") but do not lean too hard.
+
+Example turns:
+
+User: any coming soon in bedstuy?
+You: Three sellers in Bedstuy fit the profile. The strongest is a brownstone on MacDonough with timing that lines up with a spring listing. Shall I walk through it first?
+
+User: yes pull those sellers
+You: [call search_parties with the prior turn's filters, then respond] Right away. Two are Mojo leads with phone contact, the third came through a Compass agent last week. Which would you like first?
+
+User: anything in tribeca on the coming-soon side?
+You: Nothing in Tribeca at the moment. Rather quiet there this week. Would you like me to widen to SoHo and the West Village?
+
+User: the Franklin lead any good?
+You: The Franklin lead is thin. The notes do not give us much to work with. I would set it aside.
+
+NYC knowledge:
+Ryan uses NYC industry shorthand: neighborhood nicknames, street-number cutoffs ("below 70th"), price ranges, party roles ("for a buyer", "who's looking for"). Interpret with your own NYC knowledge. If he says "below 70th," you know which Manhattan neighborhoods that includes and excludes. If he says "uptown," you know what that means. Apply that when choosing tool parameters. Pass the specific neighborhoods a phrase implies, not a whole borough.
 
 Behavior:
-- Before including a listing or party in your response, verify its address and details actually match ALL constraints the user specified. Tool searches may return items that broadly match your filter but violate a specific constraint (e.g., a UWS listing at W 96th St shouldn't be returned for "below 70th street" even though UWS was in your neighborhood filter). Read each returned item's actual address/details and exclude any that don't strictly satisfy the user's stated constraints.
-- Be terse. Brokers are busy. Skip preamble and process narration.
-- If the first search returns few results, consider a second search with widened parameters — say so if you did.
-- If the user asks for "anything that matches" or "close fits," use priceTolerance=0.15 to surface near-misses.
+- Before including a listing or party, verify its address and details actually match ALL constraints Ryan specified. Tool searches may return items that broadly match your filter but violate a specific constraint (e.g., a UWS listing at W 96th St should not be returned for "below 70th" even though UWS was in your neighborhood filter). Read each returned item and exclude any that do not strictly satisfy the stated constraints.
+- If the first search returns few results, consider a second search with widened parameters.
+- If Ryan asks for "anything that matches" or "close fits," use priceTolerance=0.15 to surface near-misses.
 - Never invent listings or parties. Only reference card ids that came from tool results.
-- The database contains a mix of seed test data (isTestData=true) and real inbox data. Include both by default. Only exclude test data if the user explicitly says "production only" or "real listings only."
-- Prices are exact — never round. Mojo leads are the broker's own seller/landlord prospects; include name + phone when you flag one.
-- Extra context (live StreetEasy listings, Mojo, mortgage, calendar, ACRIS, DOB) may appear below — use it when relevant. If a live StreetEasy block is present, include its verbatim www.streeteasy.com URLs; never invent one.
+- The database contains a mix of seed test data (isTestData=true) and real inbox data. Include both by default. Only exclude test data if Ryan explicitly says "production only" or "real listings only."
+- Prices are exact; never round. Mojo leads are Ryan's own seller/landlord prospects; include name and phone when you flag one.
+- Extra context (live StreetEasy listings, Mojo, mortgage, calendar, ACRIS, DOB) may appear below. Use it when relevant. If a live StreetEasy block is present, include its verbatim www.streeteasy.com URLs; never invent one.
 
-When the user replies affirmatively to a suggestion you made in your prior turn ("yes", "sure", "pull those", "do it", "ok", "go ahead", "show me"), you MUST re-invoke the appropriate tool this turn with the FULL filter set from the prior turn's context (neighborhoods, price ranges, bed counts, roles, etc.). Never respond conversationally about entities you offered to fetch without actually calling the tool this turn — even if you already mentioned them in your prior message. Every entity you name (prospect, listing, address, phone) must come from a tool output fetched IN THIS TURN.
+Affirmative continuations:
+When Ryan replies affirmatively to a suggestion you made in your prior turn ("yes", "sure", "pull those", "do it", "ok", "go ahead", "show me"), you MUST re-invoke the appropriate tool this turn with the FULL filter set from the prior turn's context (neighborhoods, price ranges, bed counts, roles, etc.). Never respond conversationally about entities you offered to fetch without actually calling the tool this turn, even if you already mentioned them in your prior message. Every entity you name (prospect, listing, address, phone) must come from a tool output fetched IN THIS TURN.
 
-Reply through the drift_response tool: plain text (no markdown, no bullet dashes), exactly two short follow-up suggestions, and the card ids you referenced. For a scheduling request, propose the event via pendingEvent (the broker confirms separately; the calendar-confirm fast-path handles the actual confirm before your loop runs, so you won't see those). For everything else, use your tools.`
+Tool structure:
+Reply through the drift_response tool: plain text (no markdown, no bullet dashes, no em-dashes), exactly two short follow-up suggestions, and the card ids you referenced. For a scheduling request, propose the event via pendingEvent. For everything else, use your search tools first, then drift_response.`
 
 // Trim a search-tool card down to the fact-bearing fields the guard verifier
 // needs to ground Sonnet's response. Drops scoring/UI noise; keeps anything a
@@ -128,17 +155,13 @@ export async function POST(req: NextRequest) {
       orderBy: { createdAt: 'asc' },
       take: 30,
     })
-    const conversationHistory = history.map(m => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.content,
-    }))
 
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
 
     // ── Brief 3.0: lightweight parse drives the side-channels only ───────────
     // The lossy parseQuery → rigid-SQL → 25-cap card retrieval (runRetrieval) is
-    // gone; Haiku's search_listings / search_parties tools now find the cards.
+    // gone; Sonnet's search_listings / search_parties tools now find the cards.
     // We still call parseQuery here to feed composeContext's side-channels
     // (live StreetEasy, Mojo, mortgage, calendar, ACRIS, DOB) — those are
     // orthogonal features preserved from the old pipeline.
@@ -204,19 +227,14 @@ export async function POST(req: NextRequest) {
     // ── Compose all 7 side-channel context blocks in parallel (PR 5) ─────────
     // Mortgage, ACRIS, DOB, calendar, matches, liveStreetEasy, mojo.
     // Each fetcher has its own try/catch; per-fetcher failures are isolated.
-    // DEPRECATED: body.showMatches was the chat-based path for the home
-    // "Review matches" link before /matches replaced it. No UI surface
-    // sends this flag anymore. Left for API consumers; remove once
-    // confirmed no external caller relies on it.
     const composed = await composeContext({
       parsed,
       userMessage,
       queryText,
       isConfirmMessage,
-      showMatches: body.showMatches === true,
     })
 
-    // Cards are hydrated AFTER the tool_use loop (from the ids Haiku's tools
+    // Cards are hydrated AFTER the tool_use loop (from the ids Sonnet's tools
     // actually returned), not pre-fetched from a retrieval pool.
     const oppIncludeForCards = { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } }
 
@@ -257,7 +275,7 @@ export async function POST(req: NextRequest) {
     // ── System prompt: static SYSTEM_PROMPT cached; dynamic side-channel block uncached ──
     // The dynamic block carries composeContext's side-channels (live StreetEasy,
     // Mojo, mortgage, calendar, ACRIS, DOB). Cards are NOT injected here anymore
-    // — Haiku pulls them via the search tools.
+    // — Sonnet pulls them via the search tools.
     const dynamicSystemBlock = [composed.pre, composed.post].filter(Boolean).join('\n\n').trim()
     const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
       { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
@@ -274,7 +292,7 @@ export async function POST(req: NextRequest) {
         properties: {
           response: {
             type: 'string',
-            description: 'Plain text response. No markdown, no bold, no italics, no bullet dashes. One line per listing per the rules.',
+            description: 'Plain text response. No markdown, no bold, no italics, no bullet dashes, no em-dashes.',
           },
           suggestions: {
             type: 'array',
@@ -303,22 +321,22 @@ export async function POST(req: NextRequest) {
       } as Anthropic.Messages.Tool.InputSchema,
     }
 
-    const anthropicHistory: Anthropic.Messages.MessageParam[] = conversationHistory.map(m => ({
+    const anthropicHistory: Anthropic.Messages.MessageParam[] = history.map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     }))
 
-    // ── Haiku 4.5 tool_use loop ─────────────────────────────────────────────
+    // ── Sonnet 4.6 tool_use loop ─────────────────────────────────────────────
     // tool_choice='any' forces a tool call every turn, so the loop deterministically
-    // terminates on drift_response (Haiku's structured final reply) rather than a
-    // free-text end_turn — this preserves suggestions + calendar pendingEvent.
+    // terminates on drift_response (Sonnet's structured final reply) rather than a
+    // free-text end_turn. This preserves suggestions + calendar pendingEvent.
     type AiResult = { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[] }
     const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, responseTool]
     const messages: Anthropic.Messages.MessageParam[] = [
       ...anthropicHistory,
       { role: 'user', content: userBlocks },
     ]
-    // Every card Haiku saw across all tool calls, deduped by id (order preserved).
+    // Every card Sonnet saw across all tool calls, deduped by id (order preserved).
     const allToolCalls: Array<{ name: string; input: unknown; totalMatched: number; cardIds: string[] }> = []
     // Trimmed tool outputs for the hallucination guard's verifier — the exact
     // grounding Sonnet had. Kept compact (id/address/price/beds/category/hood
@@ -537,9 +555,9 @@ export async function POST(req: NextRequest) {
       .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
       .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
 
-    // ── Hydrate the cards Haiku's tools returned into full rows for the UI ──
+    // ── Hydrate the cards Sonnet's tools returned into full rows for the UI ──
     // Only ExtractedOpportunity-backed cards render as `deals`; Mojo CRM leads
-    // (MOJO_LEAD ids belong to MojoContact) surface in Haiku's text (name+phone),
+    // (MOJO_LEAD ids belong to MojoContact) surface in Sonnet's text (name+phone),
     // matching the prior pipeline where Mojo was context, not a card.
     const oppCardIds = [...seenCardIds].filter(id => id.length > 0)
     const hydrated = oppCardIds.length > 0
@@ -610,8 +628,8 @@ export async function POST(req: NextRequest) {
       rank:  idx,
       score: d.matchScore,
     }))
-    // Brief 3.0: parsedFilters now records the tool calls Haiku actually made
-    // (what it searched for + how many matched), and cost is at Haiku pricing.
+    // Brief 3.0: parsedFilters records the tool calls the model actually made
+    // (what it searched for + how many matched). Cost is at Sonnet 4.6 pricing.
     const costUsd = (tokensIn / 1_000_000) * CHAT_INPUT_PER_M + (tokensOut / 1_000_000) * CHAT_OUTPUT_PER_M
     let interactionId: string | null = null
     try {
