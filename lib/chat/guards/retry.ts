@@ -21,13 +21,13 @@ export const MAX_GUARD_RETRIES = 2
 // four variants. Order matters: the most specific/consequential intents
 // (public-records citations, then finance math) are matched before the softer
 // self-description and generic buckets.
-export const CANNED_PUBLIC_RECORDS = `I can't produce a verified answer for that. This system doesn't have access to public records, MLS/RLS/StreetEasy, or external property databases — only your inbox listings + parties (currently seed data in test mode). Try rephrasing to ask about a listing or party in the system.`
+export const CANNED_PUBLIC_RECORDS = `I'm afraid I can't give you a verified answer on that one. This system doesn't reach into public records, MLS, RLS, StreetEasy, or the external property databases; only your inbox listings and parties are in view. If you'd like, rephrase around a listing or party in the system and I'll pick it up.`
 
-export const CANNED_FINANCE = `I can't give a verified answer on that math — the data needed (sqft, maintenance, purchase price, tax figures) isn't in this system. If you can share the missing inputs I can run the calculation, or check the offering plan / managing agent directly.`
+export const CANNED_FINANCE = `I'm afraid the math isn't something I can verify from what's in the system. The figures I would need — square footage, maintenance, purchase price, tax details — are not in the data. Share the missing inputs and I'll run the calculation, or the offering plan and managing agent should have them on hand.`
 
-export const CANNED_SELF_DESCRIPTION = `Let me answer that directly: I search your listings and parties via two tools — search_listings and search_parties — against the database. I can find matches, compare, and draft outreach. I can't send email, and I don't have real-time public records access. Ask me about a listing, a buyer, or a match.`
+export const CANNED_SELF_DESCRIPTION = `A quick summary. I search your listings and your parties through two tools, search_listings and search_parties, against the database. I can find matches, compare them, and draft outreach. I can't send email, and I don't have live public-records access. Ask me about a listing, a buyer, or a match, and I'll pick it up.`
 
-export const CANNED_GENERIC = `I couldn't produce a verified answer for that. Try rephrasing to ask about a specific listing, party, or match in the system.`
+export const CANNED_GENERIC = `I'm afraid I couldn't verify that one. If you'd like, rephrase around a specific listing, party, or match in the system and I'll take another pass.`
 
 // Back-compat alias — the generic variant is the closest analogue to the old
 // single message. Retained so any external caller importing CANNED_FALLBACK
