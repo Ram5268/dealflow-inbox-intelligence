@@ -3,6 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { MicVAD } from '@ricky0123/vad-web'
+import { TextEffect } from '@/components/ui/text-effect'
+
+function splitSentences(text: string): string[] {
+  // Split on sentence-ending punctuation followed by whitespace. Keep the
+  // punctuation on the preceding sentence. Filter out empty results.
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+}
 
 // Code-split the orb — Three.js + R3F is ~500KB gz, only pay it when voice mode opens.
 const Orb = dynamic(() => import('@/components/ui/orb').then(m => m.Orb), { ssr: false })
@@ -29,6 +39,8 @@ const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/'
 export default function VoiceConversation({ open, sessionId, onClose, onNewSession }: Props) {
   const [agentState, setAgentState] = useState<AgentState>(null)
   const [error, setError] = useState<string | null>(null)
+  const [userTranscript, setUserTranscript] = useState<string>('')
+  const [assistantTranscript, setAssistantTranscript] = useState<string>('')
 
   // Refs for the audio pipeline — deliberately not state, to avoid re-renders on every frame.
   const streamRef = useRef<MediaStream | null>(null)
@@ -116,6 +128,9 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
       const trData = await trRes.json()
       const transcript = (trData.transcript ?? '').trim()
       if (!transcript) { setAgentState('listening'); return }
+      // Show the user's turn immediately; clear any prior assistant turn.
+      setAssistantTranscript('')
+      setUserTranscript(transcript)
 
       // 2. Chat (same endpoint as text mode, inherits Brief 12 persona + Brief 11 guard)
       const chatRes = await fetch('/api/chat', {
@@ -128,26 +143,54 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
       if (!sessionId && chatData.sessionId) onNewSession(chatData.sessionId)
       const responseText = (chatData.response ?? '').trim()
       if (!responseText) { setAgentState('listening'); return }
+      // Drift's turn replaces the user transcript with the per-word animation.
+      setAssistantTranscript(responseText)
 
-      // 3. TTS
+      // 3. TTS — sentence-chunked. Split the response, fire N parallel /api/tts
+      // POSTs, then play them in order. Later sentences generate while earlier
+      // ones play, so Drift starts speaking as soon as the FIRST mp3 arrives
+      // (~500ms) instead of after the whole-response mp3 (~1–1.5s).
       setAgentState('talking')
-      const ttsRes = await fetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: responseText }),
+
+      const sentences = splitSentences(responseText)
+      if (sentences.length === 0) { setAgentState('listening'); return }
+
+      const sentenceUrlPromises: Array<Promise<string>> = sentences.map(async (s) => {
+        const r = await fetch('/api/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: s }),
+        })
+        if (!r.ok) throw new Error(`tts sentence: ${r.status}`)
+        const b = await r.blob()
+        return URL.createObjectURL(b)
       })
-      if (!ttsRes.ok) throw new Error(`tts ${ttsRes.status}`)
-      const ttsBlob = await ttsRes.blob()
-      const ttsUrl = URL.createObjectURL(ttsBlob)
+
       const audioEl = ttsAudioRef.current
-      if (!audioEl) { URL.revokeObjectURL(ttsUrl); return }
-      audioEl.src = ttsUrl
-      audioEl.onended = () => {
-        URL.revokeObjectURL(ttsUrl)
-        setAgentState('listening')
-        lastSpeechAtRef.current = Date.now()
+      if (!audioEl) return
+
+      // Play each sentence in order. `await` inside the loop naturally waits for
+      // the current sentence to arrive AND finish before starting the next.
+      for (let i = 0; i < sentenceUrlPromises.length; i++) {
+        let url: string
+        try {
+          url = await sentenceUrlPromises[i]
+        } catch (e) {
+          console.warn('[VoiceConversation] sentence tts failed, skipping', i, e)
+          continue
+        }
+        audioEl.src = url
+        await new Promise<void>((resolve, reject) => {
+          audioEl.onended = () => { URL.revokeObjectURL(url); resolve() }
+          audioEl.onerror = () => { URL.revokeObjectURL(url); reject(new Error('audio error')) }
+          audioEl.play().catch(reject)
+        })
       }
-      await audioEl.play()
+
+      // All sentences played — return to listening.
+      setAgentState('listening')
+      lastSpeechAtRef.current = Date.now()
+      setUserTranscript('')
     } catch (e) {
       console.error('[VoiceConversation] utterance failed', e)
       setError(String((e as Error).message ?? e))
@@ -161,6 +204,8 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
     closedRef.current = false
     setError(null)
     setAgentState(null)
+    setUserTranscript('')
+    setAssistantTranscript('')
     lastSpeechAtRef.current = Date.now()
 
     let cancelled = false
@@ -275,10 +320,12 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
 
   return (
     <div
+      className="sr-bg"
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        background: 'radial-gradient(circle at center, rgba(20,25,40,0.98) 0%, rgba(5,8,15,1) 100%)',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
+        paddingTop: '12vh',
+        paddingBottom: '10vh',
         touchAction: 'none',
       }}
     >
@@ -294,7 +341,47 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >×</button>
-      <div style={{ width: 320, height: 320 }}>
+
+      {/* Transcript area — takes the upper reading position */}
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 520,
+          minHeight: 120,
+          padding: '0 24px',
+          textAlign: 'center',
+          color: 'rgba(255,255,255,0.92)',
+          fontSize: 17,
+          lineHeight: 1.45,
+          fontFamily: 'var(--font-ui)',
+          fontWeight: 300,
+          marginBottom: 40,
+        }}
+      >
+        {assistantTranscript ? (
+          <TextEffect
+            key={`assistant-${assistantTranscript.slice(0, 32)}`}
+            per="word"
+            preset="blur"
+            as="p"
+          >
+            {assistantTranscript}
+          </TextEffect>
+        ) : userTranscript ? (
+          <TextEffect
+            key={`user-${userTranscript.slice(0, 32)}`}
+            per="word"
+            preset="blur"
+            as="p"
+            className="italic opacity-70"
+          >
+            {userTranscript}
+          </TextEffect>
+        ) : null}
+      </div>
+
+      {/* Orb — shrunk from 320 to 180, sits below the transcript */}
+      <div style={{ width: 180, height: 180 }}>
         <Orb
           agentState={agentState}
           volumeMode="manual"
@@ -302,7 +389,18 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
           getOutputVolume={getOutputVolume}
         />
       </div>
-      <div style={{ marginTop: 32, color: 'rgba(255,255,255,0.6)', fontSize: 13, fontFamily: 'var(--font-ui)', fontWeight: 300, textAlign: 'center' }}>
+
+      {/* Status label — small, below orb */}
+      <div style={{
+        marginTop: 20,
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: 12,
+        fontFamily: 'var(--font-ui)',
+        fontWeight: 300,
+        textAlign: 'center',
+        letterSpacing: '0.04em',
+        textTransform: 'uppercase',
+      }}>
         {error
           ? <span style={{ color: 'rgba(255,120,120,0.85)' }}>{error}</span>
           : agentState === 'listening' ? 'Listening'
