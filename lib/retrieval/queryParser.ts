@@ -6,7 +6,7 @@
 // lib/retrieval/index.ts) when composeContext is refactored off ParsedQuery.
 import OpenAI from 'openai'
 import { classifyIntent } from './intentClassifier'
-import type { ParsedQuery, IntentBucket } from './types'
+import type { ParsedQuery } from './types'
 import { NEIGHBORHOODS, BOROUGHS } from '../domain/Neighborhood'
 
 // Pre-built variant→canonical index used by extractNeighborhoods. Built once

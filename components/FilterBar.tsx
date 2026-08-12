@@ -1,6 +1,5 @@
 'use client'
 
-import { Category, TransactionType } from '@prisma/client'
 import { CATEGORY_LABELS, TRANSACTION_LABELS } from '@/lib/utils'
 
 export interface Filters {

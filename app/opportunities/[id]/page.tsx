@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ExtractedOpportunity, RawEmail } from '@prisma/client'
-import { CATEGORY_LABELS, TRANSACTION_LABELS, formatPriceRange, timeAgo, confidenceLabel, confidenceColor } from '@/lib/utils'
+import { CATEGORY_LABELS, TRANSACTION_LABELS, formatPriceRange, timeAgo, confidenceLabel } from '@/lib/utils'
 import TopNav from '@/components/TopNav'
 
 type OppWithEmail = ExtractedOpportunity & { rawEmail: RawEmail }
