@@ -1112,7 +1112,25 @@ function ChatPageInner() {
       <VoiceConversation
         open={voiceOpen}
         sessionId={currentSessionId}
-        onClose={() => setVoiceOpen(false)}
+        onClose={async () => {
+          setVoiceOpen(false)
+          // Voice turns persist to the same ChatSession via /api/chat. Refetch on
+          // close so they appear as normal text messages in the thread (ChatGPT-style).
+          if (currentSessionId) {
+            try {
+              const res = await fetch(`/api/chat?sessionId=${currentSessionId}`)
+              if (res.ok) {
+                const d = await res.json()
+                const msgs: Message[] = (d.messages ?? []).map((m: Record<string, unknown>) => ({
+                  ...m,
+                  deals: (m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined) ?? [],
+                  suggestions: Array.isArray(m.suggestions) ? m.suggestions : [],
+                }))
+                setMessages(msgs)
+              }
+            } catch { /* non-fatal — thread just won't refresh */ }
+          }
+        }}
         onNewSession={(id) => setCurrentSessionId(id)}
       />
       <style>{`

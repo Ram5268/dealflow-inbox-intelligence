@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { MicVAD } from '@ricky0123/vad-web'
-import { TextEffect } from '@/components/ui/text-effect'
 
 function splitSentences(text: string): string[] {
   // Split on sentence-ending punctuation followed by whitespace. Keep the
@@ -39,8 +38,6 @@ const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/'
 export default function VoiceConversation({ open, sessionId, onClose, onNewSession }: Props) {
   const [agentState, setAgentState] = useState<AgentState>(null)
   const [error, setError] = useState<string | null>(null)
-  const [userTranscript, setUserTranscript] = useState<string>('')
-  const [assistantTranscript, setAssistantTranscript] = useState<string>('')
 
   // Refs for the audio pipeline — deliberately not state, to avoid re-renders on every frame.
   const streamRef = useRef<MediaStream | null>(null)
@@ -128,9 +125,6 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
       const trData = await trRes.json()
       const transcript = (trData.transcript ?? '').trim()
       if (!transcript) { setAgentState('listening'); return }
-      // Show the user's turn immediately; clear any prior assistant turn.
-      setAssistantTranscript('')
-      setUserTranscript(transcript)
 
       // 2. Chat (same endpoint as text mode, inherits Brief 12 persona + Brief 11 guard)
       const chatRes = await fetch('/api/chat', {
@@ -143,8 +137,6 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
       if (!sessionId && chatData.sessionId) onNewSession(chatData.sessionId)
       const responseText = (chatData.response ?? '').trim()
       if (!responseText) { setAgentState('listening'); return }
-      // Drift's turn replaces the user transcript with the per-word animation.
-      setAssistantTranscript(responseText)
 
       // 3. TTS — sentence-chunked. Split the response, fire N parallel /api/tts
       // POSTs, then play them in order. Later sentences generate while earlier
@@ -190,7 +182,6 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
       // All sentences played — return to listening.
       setAgentState('listening')
       lastSpeechAtRef.current = Date.now()
-      setUserTranscript('')
     } catch (e) {
       console.error('[VoiceConversation] utterance failed', e)
       setError(String((e as Error).message ?? e))
@@ -204,8 +195,6 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
     closedRef.current = false
     setError(null)
     setAgentState(null)
-    setUserTranscript('')
-    setAssistantTranscript('')
     lastSpeechAtRef.current = Date.now()
 
     let cancelled = false
@@ -323,9 +312,8 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
       className="sr-bg"
       style={{
         position: 'fixed', inset: 0, zIndex: 100,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
-        paddingTop: '12vh',
-        paddingBottom: '10vh',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        gap: 24,
         touchAction: 'none',
       }}
     >
@@ -342,45 +330,7 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
         }}
       >×</button>
 
-      {/* Transcript area — takes the upper reading position */}
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 520,
-          minHeight: 120,
-          padding: '0 24px',
-          textAlign: 'center',
-          color: 'rgba(255,255,255,0.92)',
-          fontSize: 17,
-          lineHeight: 1.45,
-          fontFamily: 'var(--font-ui)',
-          fontWeight: 300,
-          marginBottom: 40,
-        }}
-      >
-        {assistantTranscript ? (
-          <TextEffect
-            key={`assistant-${assistantTranscript.slice(0, 32)}`}
-            per="word"
-            preset="blur"
-            as="p"
-          >
-            {assistantTranscript}
-          </TextEffect>
-        ) : userTranscript ? (
-          <TextEffect
-            key={`user-${userTranscript.slice(0, 32)}`}
-            per="word"
-            preset="blur"
-            as="p"
-            className="italic opacity-70"
-          >
-            {userTranscript}
-          </TextEffect>
-        ) : null}
-      </div>
-
-      {/* Orb — shrunk from 320 to 180, sits below the transcript */}
+      {/* Orb — the sole visual focus during voice mode (180×180, centered) */}
       <div style={{ width: 180, height: 180 }}>
         <Orb
           agentState={agentState}
@@ -390,9 +340,8 @@ export default function VoiceConversation({ open, sessionId, onClose, onNewSessi
         />
       </div>
 
-      {/* Status label — small, below orb */}
+      {/* Status label — small, directly below orb (spacing owned by container gap) */}
       <div style={{
-        marginTop: 20,
         color: 'rgba(255,255,255,0.5)',
         fontSize: 12,
         fontFamily: 'var(--font-ui)',

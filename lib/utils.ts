@@ -1,10 +1,4 @@
 import { Category, TransactionType } from '@prisma/client'
-import { type ClassValue, clsx } from 'clsx'
-import { twMerge } from 'tailwind-merge'
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
 
 export const CATEGORY_LABELS: Record<Category, string> = {
   COMING_SOON_SALE: 'Coming Soon (Sale)',
