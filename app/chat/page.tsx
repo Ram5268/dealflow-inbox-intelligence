@@ -8,6 +8,7 @@ import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import MatchArc from '@/components/MatchArc'
 import ChatShaderBg from '@/components/ChatShaderBg'
 import MicButton from '@/components/MicButton'
+import VoiceConversation from '@/components/VoiceConversation'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
@@ -238,12 +239,12 @@ function SpeakButton({ text }: { text: string }) {
 // ─── Composer pill (matches design) ───────────────────────
 
 function Composer({
-  value, onChange, onSubmit, onTranscript, isLoading,
+  value, onChange, onSubmit, onOpenVoice, isLoading,
 }: {
   value: string
   onChange: (v: string) => void
   onSubmit: (files?: File[]) => void
-  onTranscript: (text: string) => void  // Brief 7.4 — voice transcript auto-submits
+  onOpenVoice: () => void  // Brief 13.0 — mic now opens the voice conversation orb
   isLoading: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -299,9 +300,9 @@ function Composer({
           }}
         />
 
-        {/* Brief 7.4 — hold-to-talk voice input; transcript auto-submits */}
+        {/* Brief 13.0 — mic opens the full-screen voice conversation orb */}
         {voiceEnabled && (
-          <MicButton onTranscript={onTranscript} disabled={isLoading} />
+          <MicButton onOpenVoice={onOpenVoice} disabled={isLoading} />
         )}
 
         {/* Attach */}
@@ -364,7 +365,7 @@ function Composer({
 
 function MemoryView({
   messages, loading, loadingHistory, fresh,
-  chips, greeting, sessionKey, input, setInput, onSend, onOpenThread,
+  chips, greeting, sessionKey, input, setInput, onSend, onOpenThread, onOpenVoice,
   bottomRef,
 }: {
   messages: Message[]
@@ -378,6 +379,7 @@ function MemoryView({
   setInput: (v: string) => void
   onSend: (text?: string, files?: File[]) => void
   onOpenThread: (msg: Message) => void
+  onOpenVoice: () => void
   bottomRef: React.RefObject<HTMLDivElement | null>
 }) {
   const opacityMap = buildOpacityMap(messages)
@@ -563,7 +565,7 @@ function MemoryView({
           value={input}
           onChange={setInput}
           onSubmit={(files) => onSend(undefined, files)}
-          onTranscript={(text) => onSend(text)}
+          onOpenVoice={onOpenVoice}
           isLoading={loading}
         />
       </div>
@@ -978,6 +980,7 @@ function ChatPageInner() {
   const [showShader, setShowShader] = useState(true)
   const [sessionKey, setSessionKey] = useState(0)
   const [input, setInput] = useState('')
+  const [voiceOpen, setVoiceOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -1082,6 +1085,7 @@ function ChatPageInner() {
           chips={chips} greeting={greeting} sessionKey={sessionKey}
           input={input} setInput={setInput} onSend={send}
           onOpenThread={msg => dispatch({ type: 'OPEN_THREAD', msg })}
+          onOpenVoice={() => setVoiceOpen(true)}
           bottomRef={bottomRef}
         />
       )}
@@ -1105,6 +1109,12 @@ function ChatPageInner() {
           onCardSeen={markCardSeen}
         />
       )}
+      <VoiceConversation
+        open={voiceOpen}
+        sessionId={currentSessionId}
+        onClose={() => setVoiceOpen(false)}
+        onNewSession={(id) => setCurrentSessionId(id)}
+      />
       <style>{`
         @keyframes sr-bounce { 0%,80%,100%{transform:translateY(0);opacity:0.35} 40%{transform:translateY(-5px);opacity:0.9} }
       `}</style>
