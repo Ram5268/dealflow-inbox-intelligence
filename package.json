@@ -22,7 +22,6 @@
     "@mozilla/readability": "^0.6.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@radix-ui/react-tooltip": "^1.2.8",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "@ricky0123/vad-web": "^0.0.30",
