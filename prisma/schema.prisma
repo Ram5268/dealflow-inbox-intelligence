@@ -833,3 +833,26 @@ model DriftInteractionFeedback {
 
   @@index([interactionId])
 }
+
+// Brief 11.0, Fix #2 — one row per guarded chat turn. Records what Drift tried
+// to say, the tools it called, the guard's verdict, and what actually reached
+// Ryan. Purpose: measure how often the hallucination guard fires and which
+// class of failure dominates, so future scope changes are data-driven rather
+// than anecdote-driven. Written best-effort — a logging failure never blocks
+// the chat response.
+model GuardFireEvent {
+  id                 String   @id @default(cuid())
+  createdAt          DateTime @default(now())
+  organizationId     String
+  sessionId          String
+  userTurn           String   @db.Text // the user message that triggered this response
+  priorAssistantTurn String?  @db.Text // the assistant's prior turn (for context)
+  assistantAttempt   String   @db.Text // what Sonnet first tried to say (pre-correction)
+  toolCallsAttempted Json               // [{ name, input, totalMatched, cardIds }] this turn
+  verifierVerdict    String             // 'pass' | 'retry' | 'refuse' | 'canned_fallback'
+  verifierReason     String?  @db.Text // flagged-claim text on the final attempt, if any
+  finalResponseSent  String?  @db.Text // what actually reached the user
+
+  @@index([organizationId, createdAt])
+  @@index([verifierVerdict])
+}

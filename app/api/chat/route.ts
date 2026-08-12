@@ -14,6 +14,8 @@ import { searchParties, type SearchPartiesInput } from '@/lib/chat/tools/searchP
 import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL } from '@/lib/chat/tools/schemas'
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
+import { buildGroundingCorpus, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
+import { logGuardFireEvent } from '@/lib/chat/guards/instrumentation'
 import {
   MAX_GUARD_RETRIES,
   selectCannedFallback,
@@ -52,6 +54,8 @@ Behavior:
 - The database contains a mix of seed test data (isTestData=true) and real inbox data. Include both by default. Only exclude test data if the user explicitly says "production only" or "real listings only."
 - Prices are exact — never round. Mojo leads are the broker's own seller/landlord prospects; include name + phone when you flag one.
 - Extra context (live StreetEasy listings, Mojo, mortgage, calendar, ACRIS, DOB) may appear below — use it when relevant. If a live StreetEasy block is present, include its verbatim www.streeteasy.com URLs; never invent one.
+
+When the user replies affirmatively to a suggestion you made in your prior turn ("yes", "sure", "pull those", "do it", "ok", "go ahead", "show me"), you MUST re-invoke the appropriate tool this turn with the FULL filter set from the prior turn's context (neighborhoods, price ranges, bed counts, roles, etc.). Never respond conversationally about entities you offered to fetch without actually calling the tool this turn — even if you already mentioned them in your prior message. Every entity you name (prospect, listing, address, phone) must come from a tool output fetched IN THIS TURN.
 
 Reply through the drift_response tool: plain text (no markdown, no bullet dashes), exactly two short follow-up suggestions, and the card ids you referenced. For a scheduling request, propose the event via pendingEvent (the broker confirms separately; the calendar-confirm fast-path handles the actual confirm before your loop runs, so you won't see those). For everything else, use your tools.`
 
@@ -422,16 +426,29 @@ export async function POST(req: NextRequest) {
     const guardEnabled = process.env.HALLUCINATION_GUARD_ENABLED !== 'false'
     const guardApplies = guardEnabled && !aiResult.pendingEvent
     let currentResponse = aiResult.response ?? ''
+    // Brief 11.0 Fix #2 — the first thing Sonnet tried to say, before any guard
+    // correction/fallback overwrites currentResponse. Logged for guard-fire audit.
+    const assistantAttempt = currentResponse
     const guardHistory: GuardAttempt[] = []
     let fellbackToCanned = false
     let guardFinalAttempt = 0
     let latestSuggestions: string[] | undefined
     let latestReferenced: string[] | undefined
 
+    // Brief 11.0 Fix #1 — grounding corpus for tool-output binding. A structural
+    // entity flag (LLC/owner name) that traces to THIS turn's tool output or the
+    // prior turn's DEAL CARDS is grounded, not a hallucination. Built once —
+    // tool results don't change across guard retries.
+    const priorDealCards = (lastAssistantMsg as { dealsJson?: unknown } | undefined)?.dealsJson ?? null
+    const groundingCorpus = buildGroundingCorpus(toolResultsForGuard, priorDealCards)
+
     if (guardApplies) {
       let attempt = 0
       while (attempt <= MAX_GUARD_RETRIES) {
-        const regexFlags = scanForStructuralHallucinations(currentResponse)
+        const regexFlags = filterToolBoundFlags(
+          scanForStructuralHallucinations(currentResponse),
+          groundingCorpus,
+        )
         const verifier = await verifyResponse(userMessage || queryText, toolResultsForGuard, currentResponse)
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
         if (regexFlags.length === 0 && verifier.isGrounded) break
@@ -495,6 +512,24 @@ export async function POST(req: NextRequest) {
       fellbackToCanned,
       history:              guardHistory,
       totalVerifierCostUsd: guardHistory.reduce((a, h) => a + h.verifierCost, 0),
+    }
+
+    // Brief 11.0 Fix #2 — one guard-fire row per guarded turn (pass / retry /
+    // canned_fallback). Fire-and-forget: logGuardFireEvent swallows its own
+    // errors, and we don't await it so instrumentation never adds latency or
+    // blocks the response. Skipped on turns the guard didn't run (calendar
+    // proposals, kill switch off).
+    if (guardApplies) {
+      void logGuardFireEvent({
+        organizationId,
+        sessionId:          session.id,
+        userTurn:           userMessage || queryText,
+        priorAssistantTurn: lastAssistantMsg?.content ?? null,
+        assistantAttempt,
+        toolCallsAttempted: allToolCalls,
+        telemetry:          guardTelemetry,
+        finalResponseSent:  currentResponse,
+      })
     }
 
     const cleanResponse = (aiResult.response ?? '')
