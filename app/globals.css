@@ -5,6 +5,14 @@ html, body {
   margin: 0;
 }
 
+/* Brief 22.0 — kill iOS Safari rubber-band overscroll on the root so pulling
+   past the top/bottom no longer reveals the browser chrome color. Complementary
+   to Brief 23's per-modal overscroll-behavior: contain. Do NOT add overflow:
+   hidden here — fallback pages (e.g. /debug/health) rely on natural body scroll. */
+html, body {
+  overscroll-behavior-y: none;
+}
+
 /* ─────────────────────────────────────────────────────────────
    SUNRISE DESIGN SYSTEM
    Tokens, glass, motion, themes — scoped to .sr-* classes.
