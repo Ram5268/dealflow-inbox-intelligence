@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: 'Real estate deal intelligence from your inbox',
     start_url: '/',
     display: 'standalone',
-    background_color: '#0a1f2a',
-    theme_color: '#0a1f2a',
+    background_color: '#3A1C0C',
+    theme_color: '#3A1C0C',
     orientation: 'portrait',
     launch_handler: { client_mode: 'navigate-existing' },
     icons: [
