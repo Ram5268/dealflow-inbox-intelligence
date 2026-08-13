@@ -31,6 +31,15 @@ export default function DismissReasonSheet({ matchId, open, onClose, onDismissed
   const [entered, setEntered] = useState(false)
   const submittingRef = useRef(false)
 
+  // Lock body scroll while open so the page behind the sheet can't scroll on
+  // iPhone PWA. Capture the previous value so a nested modal restores correctly.
+  useEffect(() => {
+    if (!open) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [open])
+
   // Mount-then-animate: schedule setEntered in a rAF (async, not a synchronous
   // effect-body setState) so the slide-up transition runs. The parent mounts this
   // only while open, so a fresh mount already starts with entered=false.

@@ -31,6 +31,15 @@ export default function DraftOutreachSheet({ matchId, partyName, channel, open, 
   const [to, setTo] = useState<DraftResponse['to'] | null>(null)
   const fetchedRef = useRef(false)
 
+  // Lock body scroll while open so the page behind the sheet can't scroll on
+  // iPhone PWA. Capture the previous value so a nested modal restores correctly.
+  useEffect(() => {
+    if (!open) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const raf = requestAnimationFrame(() => setEntered(true))
