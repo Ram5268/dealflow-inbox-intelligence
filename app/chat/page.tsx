@@ -229,12 +229,16 @@ function SpeakButton({ text }: { text: string }) {
       onClick={toggle}
       aria-label={speaking ? 'Stop reading' : 'Read aloud'}
       style={{
+        position: 'relative',
         marginTop: 6, marginLeft: 4, background: 'transparent', border: 'none', cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 0',
         fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.1em',
         color: speaking ? 'var(--sr-cream, #EAB308)' : 'rgba(255,255,255,0.4)',
       }}
     >
+      {/* Brief 20.0 — transparent hit-slop grows the tap target to ≥44px
+          without changing the icon's size or position (polish, not rework). */}
+      <span aria-hidden style={{ position: 'absolute', inset: '-14px -6px' }} />
       {speaking ? '⏹ STOP' : '🔊 LISTEN'}
     </button>
   )
