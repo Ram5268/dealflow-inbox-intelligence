@@ -213,6 +213,15 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
   const [animOpen, setAnimOpen] = useState(false)
   const drawerRef = useRef<HTMLDivElement>(null)
 
+  // Lock body scroll while open so the page behind the drawer can't scroll on
+  // iPhone PWA. Capture the previous value so a nested modal restores correctly.
+  useEffect(() => {
+    if (!isOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [isOpen])
+
   useEffect(() => {
     if (isOpen) {
       setShow(true)
