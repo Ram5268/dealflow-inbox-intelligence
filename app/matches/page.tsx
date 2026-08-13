@@ -413,7 +413,10 @@ export default function MatchesPage() {
 
       <div style={{
         flex: 1, overflowY: 'auto', scrollbarWidth: 'none',
-        padding: '14px 16px 80px',
+        // Brief 22.0 — contain overscroll + add safe-area clearance so the last
+        // card clears the iOS home indicator (no composer here, just the inset).
+        overscrollBehavior: 'contain',
+        padding: '14px 16px calc(80px + env(safe-area-inset-bottom))',
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
         {viewMode === 'matches' ? (

@@ -65,7 +65,7 @@ export default function OpportunityDetailPage() {
   const seLabel = seDirectUrl ? 'View Listing →' : 'Search StreetEasy →'
 
   return (
-    <div className="df-bg min-h-screen" style={{ minHeight: '100dvh' }}>
+    <div className="df-bg min-h-screen" style={{ minHeight: '100dvh', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
       <TopNav />
 
       {/* Back button */}
