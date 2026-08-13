@@ -58,6 +58,9 @@ export default function ChatSurfaceShell({ children, theme = 'sunrise', onNewCha
         height: '100dvh',
         display: 'flex',
         flexDirection: 'column',
+        // Brief 22.0 — contain child scroll so momentum can't bubble up to the
+        // fixed shell and rubber-band the whole surface.
+        overflow: 'hidden',
         zIndex: 10,
         borderLeft:  '1px solid rgba(255,255,255,0.09)',
         borderRight: '1px solid rgba(255,255,255,0.09)',
