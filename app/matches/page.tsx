@@ -8,6 +8,7 @@ import DismissReasonSheet from '@/components/DismissReasonSheet'
 import CalendarConfirmSheet from '@/components/CalendarConfirmSheet'
 import DraftOutreachSheet from '@/components/DraftOutreachSheet'
 import PartyCard from '@/components/PartyCard'
+import { showToast as showErrorToast } from '@/components/Toast'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
 
 interface PrimaryOpp {
@@ -213,6 +214,8 @@ export default function MatchesPage() {
       const r = await fetch(`/api/matches?${bandParams().toString()}`)
       const j = await r.json() as MatchesResponse
       setData(j)
+    } catch {
+      showErrorToast("Couldn't load matches")
     } finally {
       setLoading(false)
     }
@@ -225,6 +228,8 @@ export default function MatchesPage() {
       if (partyRole !== 'all') params.set('role', partyRole)
       const r = await fetch(`/api/matches/parties?${params.toString()}`)
       setParties(await r.json() as PartiesResponse)
+    } catch {
+      showErrorToast("Couldn't load parties")
     } finally {
       setPartiesLoading(false)
     }
@@ -307,7 +312,10 @@ export default function MatchesPage() {
       }
     })
     try { await fetch(`/api/matches/${match.id}/dismiss`, { method: 'DELETE' }) }
-    catch (e) { console.warn('[matches] undo failed', e) }
+    catch (e) {
+      console.warn('[matches] undo failed', e)
+      showErrorToast("Undo failed — refresh to retry")
+    }
   }
 
   // Brief 7.4 — single match-card renderer, shared by the Matches list and the

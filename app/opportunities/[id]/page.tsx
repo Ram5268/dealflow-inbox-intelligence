@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ExtractedOpportunity, RawEmail } from '@prisma/client'
 import { CATEGORY_LABELS, TRANSACTION_LABELS, formatPriceRange, timeAgo, confidenceLabel } from '@/lib/utils'
 import TopNav from '@/components/TopNav'
+import { showToast } from '@/components/Toast'
 
 type OppWithEmail = ExtractedOpportunity & { rawEmail: RawEmail }
 
@@ -15,7 +16,11 @@ export default function OpportunityDetailPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`/api/opportunities/${id}`).then(r => r.json()).then(setOpp).finally(() => setLoading(false))
+    fetch(`/api/opportunities/${id}`)
+      .then(r => r.json())
+      .then(setOpp)
+      .catch(() => showToast("Couldn't load opportunity"))
+      .finally(() => setLoading(false))
   }, [id])
 
   const Field = ({ label, value }: { label: string; value: string | number | null | undefined }) =>
