@@ -29,6 +29,9 @@ export default function DraftOutreachSheet({ matchId, partyName, channel, open, 
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [to, setTo] = useState<DraftResponse['to'] | null>(null)
+  const [dragOffsetY, setDragOffsetY] = useState(0)
+  const [dragging, setDragging] = useState(false)
+  const dragStartY = useRef(0)
   const fetchedRef = useRef(false)
 
   // Lock body scroll while open so the page behind the sheet can't scroll on
@@ -83,6 +86,23 @@ export default function DraftOutreachSheet({ matchId, partyName, channel, open, 
     })()
   }, [open, matchId, channel])
 
+  function onHandleTouchStart(e: React.TouchEvent) {
+    dragStartY.current = e.touches[0].clientY
+    setDragging(true)
+  }
+  function onHandleTouchMove(e: React.TouchEvent) {
+    const dy = e.touches[0].clientY - dragStartY.current
+    if (dy > 0) setDragOffsetY(dy)
+  }
+  function onHandleTouchEnd() {
+    setDragging(false)
+    const threshold = Math.min(80, window.innerHeight * 0.2)
+    if (dragOffsetY >= threshold) {
+      onClose()
+    }
+    setDragOffsetY(0)
+  }
+
   if (!open) return null
 
   const recipient = channel === 'email' ? to?.email : to?.phone
@@ -134,12 +154,26 @@ export default function DraftOutreachSheet({ matchId, partyName, channel, open, 
           borderTopLeftRadius: 22, borderTopRightRadius: 22,
           boxShadow: '0 -12px 40px rgba(0,0,0,0.4)',
           padding: '10px 18px calc(24px + env(safe-area-inset-bottom))',
-          transform: entered ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 300ms cubic-bezier(0.4, 0.2, 0.2, 1)',
+          transform: entered
+            ? `translateY(${dragOffsetY}px)`
+            : 'translateY(100%)',
+          transition: dragging
+            ? 'none'
+            : 'transform 300ms cubic-bezier(0.4, 0.2, 0.2, 1)',
           display: 'flex', flexDirection: 'column', gap: 12,
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 2 }}>
+        <div
+          onTouchStart={onHandleTouchStart}
+          onTouchMove={onHandleTouchMove}
+          onTouchEnd={onHandleTouchEnd}
+          style={{
+            display: 'flex', justifyContent: 'center',
+            paddingTop: 8, paddingBottom: 10,
+            touchAction: 'none',
+            cursor: 'grab',
+          }}
+        >
           <div style={{ width: 36, height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.3)' }} />
         </div>
 
