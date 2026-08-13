@@ -66,8 +66,12 @@ export default function GreetPage() {
     fetch('/api/user/greeting').then(r => r.json()).then(setData).catch(() => {})
     fetch('/api/calendar/today').then(r => r.json()).then(setCalData).catch(() => setCalData(null))
     fetch('/api/market/pulse').then(r => r.json()).then(setMarket).catch(() => {})
+  }, [])
 
-    // Register service worker + subscribe to push notifications
+  // Register service worker + subscribe to push notifications.
+  // Gated behind the Check In gesture so Safari accepts the permission
+  // request and we don't prompt users on cold-launch with no context.
+  async function subscribeToPushIfNeeded() {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.register('/sw.js').then(async reg => {
         const vapidRes = await fetch('/api/push/key')
@@ -91,13 +95,14 @@ export default function GreetPage() {
         })
       }).catch(() => {})
     }
-  }, [])
+  }
 
   async function handleCheckIn() {
     setSyncing(true)
     // Fire both syncs in background — don't block navigation
     fetch('/api/sync/run', { method: 'POST' }).catch(() => {})
     fetch('/api/mojo/process', { method: 'POST' }).catch(() => {})
+    subscribeToPushIfNeeded().catch(() => {})
     // Small delay so user sees the button respond, then navigate
     await new Promise(r => setTimeout(r, 320))
     router.push('/chat?new=1')
