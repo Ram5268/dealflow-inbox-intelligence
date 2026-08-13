@@ -393,11 +393,15 @@ export default function MatchesPage() {
           <button
             onClick={() => setUnseenOnly(v => !v)}
             style={{
+              position: 'relative',
               fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em',
               color: 'rgba(255,255,255,0.5)', background: 'transparent', border: 'none',
               padding: '4px 8px', cursor: 'pointer',
             }}
           >
+            {/* Brief 20.0 — transparent hit-slop grows the tap target to ≥44px
+                tall without changing the toggle's size or position (polish, not rework). */}
+            <span aria-hidden style={{ position: 'absolute', inset: '-12px 0' }} />
             {unseenOnly ? 'SHOW SEEN' : 'HIDE SEEN'}
           </button>
         }
