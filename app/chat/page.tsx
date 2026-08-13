@@ -48,7 +48,7 @@ function FeedbackRow({ interactionId }: { interactionId: string }) {
   }
   return (
     <div style={{ marginTop: 8, marginLeft: 4 }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)', marginBottom: 5 }}>
+      <div aria-label="Something wrong with this reply" style={{ fontFamily: 'var(--font-mono)', fontSize: 9.5, letterSpacing: '0.12em', color: 'rgba(255,255,255,0.35)', marginBottom: 5 }}>
         👎 SOMETHING WRONG?
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -57,6 +57,7 @@ function FeedbackRow({ interactionId }: { interactionId: string }) {
             key={o.vote}
             onClick={() => { postInteraction({ interactionId, event: 'feedback', vote: o.vote }); setSubmitted(true) }}
             style={{
+              position: 'relative',
               background: 'rgba(255,255,255,0.05)',
               border: '1px solid rgba(255,255,255,0.12)',
               color: 'rgba(255,255,255,0.6)', borderRadius: 999,
@@ -65,6 +66,9 @@ function FeedbackRow({ interactionId }: { interactionId: string }) {
               cursor: 'pointer',
             }}
           >
+            {/* Brief 20.0 — transparent hit-slop grows the tap target to ≥44px tall
+                without changing the pill's visible size (polish, not rework). */}
+            <span aria-hidden style={{ position: 'absolute', inset: '-11px 0' }} />
             {o.label}
           </button>
         ))}
