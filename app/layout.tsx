@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Playfair_Display, Fraunces, Inter, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
+import Toast from '@/components/Toast'
 
 // Existing — used outside the chat surface
 const geist = Geist({ variable: '--font-geist', subsets: ['latin'] })
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', maxWidth: '512px', width: '100%', margin: '0 auto' }}>
           {children}
         </main>
+        <Toast />
       </body>
     </html>
   )
