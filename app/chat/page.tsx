@@ -409,6 +409,9 @@ function MemoryView({
       <div style={{
         flex: 1, overflowY: 'auto', minHeight: 0,
         scrollbarWidth: 'none' as const,
+        // Brief 22.0 — contain overscroll so bouncing the message list can't
+        // rubber-band the surface behind it.
+        overscrollBehavior: 'contain',
       }}>
       <div style={{
         minHeight: '100%', display: 'flex', flexDirection: 'column',
