@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
+import { showToast } from '@/components/Toast'
 
 interface GreetData {
   overnightEmails: number
@@ -62,10 +63,10 @@ export default function GreetPage() {
   const [syncing, setSyncing] = useState(false)
 
   useEffect(() => {
-    fetch('/api/user/profile').then(r => r.json()).then(d => setGivenName(d.givenName ?? null)).catch(() => {})
-    fetch('/api/user/greeting').then(r => r.json()).then(setData).catch(() => {})
-    fetch('/api/calendar/today').then(r => r.json()).then(setCalData).catch(() => setCalData(null))
-    fetch('/api/market/pulse').then(r => r.json()).then(setMarket).catch(() => {})
+    fetch('/api/user/profile').then(r => r.json()).then(d => setGivenName(d.givenName ?? null)).catch(() => showToast("Couldn't load profile"))
+    fetch('/api/user/greeting').then(r => r.json()).then(setData).catch(() => showToast("Couldn't load overnight summary"))
+    fetch('/api/calendar/today').then(r => r.json()).then(setCalData).catch(() => { setCalData(null); showToast("Couldn't load calendar") })
+    fetch('/api/market/pulse').then(r => r.json()).then(setMarket).catch(() => showToast("Couldn't load market pulse"))
   }, [])
 
   // Register service worker + subscribe to push notifications.
