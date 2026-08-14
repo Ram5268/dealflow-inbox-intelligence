@@ -32,8 +32,22 @@ export default function OpportunityDetailPage() {
     ) : null
 
   if (loading) return (
-    <div className="df-bg min-h-screen flex items-center justify-center" style={{ minHeight: '100dvh' }}>
-      <div style={{ color: 'rgba(255,255,255,0.3)', fontSize: 14 }}>Loading...</div>
+    <div className="df-bg min-h-screen" style={{ minHeight: '100dvh', padding: 20 }}>
+      <div style={{
+        height: 24, width: '70%', borderRadius: 6, marginBottom: 24,
+        background: 'linear-gradient(100deg, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.04) 70%)',
+        backgroundSize: '200% 100%',
+        animation: 'sr-shimmer 1.4s linear infinite',
+      }} />
+      {[0,1,2,3,4,5].map(i => (
+        <div key={i} style={{
+          height: 16, width: `${60 + (i % 3) * 15}%`, borderRadius: 4, marginBottom: 14,
+          background: 'linear-gradient(100deg, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.04) 70%)',
+          backgroundSize: '200% 100%',
+          animation: 'sr-shimmer 1.4s linear infinite',
+        }} />
+      ))}
+      <style>{`@keyframes sr-shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
     </div>
   )
 
