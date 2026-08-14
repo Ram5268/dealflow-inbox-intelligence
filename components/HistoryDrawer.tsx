@@ -205,6 +205,7 @@ function ActionSheet({ onClose, onSettings, onSignOut }: { onClose: () => void; 
 export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }: Props) {
   const router = useRouter()
   const [sessions, setSessions] = useState<Session[]>([])
+  const [loading, setLoading] = useState(true)
   const [showArchived, setShowArchived] = useState(false)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
@@ -243,6 +244,7 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
   // Fetch sessions; backfill untitled ones in background
   useEffect(() => {
     if (!isOpen) return
+    setLoading(true)
     fetch(`/api/chat/sessions${showArchived ? '?archived=true' : ''}`)
       .then(r => r.json())
       .then(async d => {
@@ -258,6 +260,7 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
         }
       })
       .catch(() => {})
+      .finally(() => setLoading(false))
   }, [isOpen, showArchived])
 
   // Close on Escape
@@ -412,6 +415,36 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
 
         {/* Session list */}
         <div style={{ flex: 1, overflowY: 'auto', scrollbarWidth: 'none' }}>
+          {loading ? (
+            <div style={{ padding: '4px 0' }}>
+              {[0,1,2,3,4].map(i => (
+                <div key={i} style={{
+                  padding: '11px 20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'rgba(255,255,255,0.1)', flexShrink: 0 }} />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{
+                      height: 14, width: `${55 + (i % 3) * 12}%`, borderRadius: 3,
+                      background: 'linear-gradient(100deg, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.04) 70%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'sr-shimmer 1.4s linear infinite',
+                    }} />
+                    <div style={{
+                      height: 11, width: `${40 + (i % 4) * 10}%`, borderRadius: 3,
+                      background: 'linear-gradient(100deg, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.04) 70%)',
+                      backgroundSize: '200% 100%',
+                      animation: 'sr-shimmer 1.4s linear infinite',
+                    }} />
+                  </div>
+                </div>
+              ))}
+              <style>{`@keyframes sr-shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
+            </div>
+          ) : (
+          <>
           {groups.map(group => {
             const groupSessions = filtered.filter(s => {
               if (filter === 'Today' && group !== 'Today') return false
@@ -447,6 +480,8 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
             }}>
               {search ? 'No sessions match.' : 'No conversations yet.'}
             </div>
+          )}
+          </>
           )}
         </div>
 
