@@ -374,7 +374,7 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
               style={{
                 background: 'none', border: 'none', outline: 'none',
                 fontFamily: 'var(--font-ui)',
-                fontSize: 13, color: 'rgba(255,255,255,0.75)',
+                fontSize: 16, color: 'rgba(255,255,255,0.75)',
                 width: '100%',
               }}
             />

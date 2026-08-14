@@ -167,7 +167,7 @@ export default function CalendarConfirmSheet({ matchId, address, partyName, open
             style={{
               background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: 12, padding: '12px 14px', color: '#fff',
-              fontFamily: 'var(--font-ui)', fontSize: 14, colorScheme: 'dark',
+              fontFamily: 'var(--font-ui)', fontSize: 16, colorScheme: 'dark',
             }}
           />
         </label>
