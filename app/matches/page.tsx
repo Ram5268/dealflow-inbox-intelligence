@@ -11,6 +11,40 @@ import PartyCard from '@/components/PartyCard'
 import { showToast as showErrorToast } from '@/components/Toast'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
 
+function MatchCardSkeleton() {
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.04)',
+      border: '1px solid rgba(255,255,255,0.08)',
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 10,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 8,
+    }}>
+      <div style={{
+        height: 12, width: '40%', borderRadius: 4,
+        background: 'linear-gradient(100deg, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.04) 70%)',
+        backgroundSize: '200% 100%',
+        animation: 'sr-shimmer 1.4s linear infinite',
+      }} />
+      <div style={{
+        height: 18, width: '75%', borderRadius: 4,
+        background: 'linear-gradient(100deg, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.04) 70%)',
+        backgroundSize: '200% 100%',
+        animation: 'sr-shimmer 1.4s linear infinite',
+      }} />
+      <div style={{
+        height: 12, width: '60%', borderRadius: 4,
+        background: 'linear-gradient(100deg, rgba(255,255,255,0.04) 30%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.04) 70%)',
+        backgroundSize: '200% 100%',
+        animation: 'sr-shimmer 1.4s linear infinite',
+      }} />
+    </div>
+  )
+}
+
 interface PrimaryOpp {
   id: string
   category: string
@@ -438,8 +472,10 @@ export default function MatchesPage() {
               </div>
             )}
             {loading ? (
-              <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 40 }}>
-                Loading…
+              <div style={{ marginTop: 12 }}>
+                <MatchCardSkeleton />
+                <MatchCardSkeleton />
+                <MatchCardSkeleton />
               </div>
             ) : !data || data.matches.length === 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
@@ -452,8 +488,10 @@ export default function MatchesPage() {
           </>
         ) : (
           partiesLoading ? (
-            <div style={{ color: 'rgba(255,255,255,0.35)', fontSize: 12, fontFamily: 'var(--font-mono)', textAlign: 'center', marginTop: 40 }}>
-              Loading…
+            <div style={{ marginTop: 12 }}>
+              <MatchCardSkeleton />
+              <MatchCardSkeleton />
+              <MatchCardSkeleton />
             </div>
           ) : !parties || parties.parties.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
@@ -562,6 +600,8 @@ export default function MatchesPage() {
           </div>
         </div>
       )}
+
+      <style>{`@keyframes sr-shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
     </ChatSurfaceShell>
   )
 }
