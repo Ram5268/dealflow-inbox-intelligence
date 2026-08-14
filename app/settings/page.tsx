@@ -226,7 +226,7 @@ export default function SettingsPage() {
                   type="time"
                   value={notif.digestTime}
                   onChange={e => saveNotif({ digestTime: e.target.value })}
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 13, colorScheme: 'dark' }}
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 16, colorScheme: 'dark' }}
                 />
               </div>
               <div style={{ marginTop: 10 }}>
@@ -306,11 +306,11 @@ export default function SettingsPage() {
           </p>
           <textarea value={token} onChange={e => setToken(e.target.value)}
             placeholder="Access token..." rows={2}
-            style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', outline: 'none', resize: 'none', fontFamily: 'monospace', marginBottom: 8 }}
+            style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', fontSize: 16, color: 'rgba(255,255,255,0.8)', outline: 'none', resize: 'none', fontFamily: 'monospace', marginBottom: 8 }}
           />
           <textarea value={refreshToken} onChange={e => setRefreshToken(e.target.value)}
             placeholder="Refresh token (optional — enables auto-renewal)..." rows={2}
-            style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: 'rgba(255,255,255,0.8)', outline: 'none', resize: 'none', fontFamily: 'monospace', marginBottom: 10 }}
+            style={{ width: '100%', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: '10px 12px', fontSize: 16, color: 'rgba(255,255,255,0.8)', outline: 'none', resize: 'none', fontFamily: 'monospace', marginBottom: 10 }}
           />
           <Btn onClick={saveToken} disabled={tokenSaving || !token.trim()} variant="ghost">
             {tokenSaving ? 'Saving...' : 'Save Token'}

@@ -195,7 +195,7 @@ export default function DraftOutreachSheet({ matchId, partyName, channel, open, 
                   onChange={e => setSubject(e.target.value)}
                   style={{
                     background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-                    borderRadius: 12, padding: '11px 13px', color: '#fff', fontFamily: 'var(--font-ui)', fontSize: 14,
+                    borderRadius: 12, padding: '11px 13px', color: '#fff', fontFamily: 'var(--font-ui)', fontSize: 16,
                   }}
                 />
               </label>
@@ -210,7 +210,7 @@ export default function DraftOutreachSheet({ matchId, partyName, channel, open, 
                 style={{
                   background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
                   borderRadius: 12, padding: '11px 13px', color: '#fff', fontFamily: 'var(--font-ui)',
-                  fontSize: 14, lineHeight: 1.5, resize: 'vertical',
+                  fontSize: 16, lineHeight: 1.5, resize: 'vertical',
                 }}
               />
             </label>

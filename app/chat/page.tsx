@@ -303,7 +303,7 @@ function Composer({
           placeholder="Message Drift…"
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
-            fontFamily: 'var(--font-ui)', fontSize: 13.5, fontWeight: 300,
+            fontFamily: 'var(--font-ui)', fontSize: 16, fontWeight: 300,
             color: '#fff', padding: '4px 0',
           }}
         />

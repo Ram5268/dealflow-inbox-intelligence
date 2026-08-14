@@ -248,7 +248,7 @@ export default function ReviewPage() {
                         style={{
                           flex: 1, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.18)',
                           borderRadius: 8, padding: '6px 10px', color: '#fff',
-                          fontFamily: 'var(--font-ui)', fontSize: 12, outline: 'none',
+                          fontFamily: 'var(--font-ui)', fontSize: 16, outline: 'none',
                         }}
                       />
                     </div>
