@@ -4,13 +4,13 @@ import './globals.css'
 import Toast from '@/components/Toast'
 
 // Existing — used outside the chat surface
-const geist = Geist({ variable: '--font-geist', subsets: ['latin'] })
-const playfair = Playfair_Display({ variable: '--font-playfair', subsets: ['latin'], weight: ['400','500','600','700'] })
+const geist = Geist({ variable: '--font-geist', subsets: ['latin'], display: 'swap' })
+const playfair = Playfair_Display({ variable: '--font-playfair', subsets: ['latin'], weight: ['400','500','600','700'], display: 'swap' })
 
 // Sunrise design system fonts — scoped to chat surface via CSS vars
-const fraunces = Fraunces({ variable: '--font-fraunces', subsets: ['latin'], weight: ['300','400'] })
-const inter = Inter({ variable: '--font-inter', subsets: ['latin'], weight: ['300','400','500'] })
-const ibmPlexMono = IBM_Plex_Mono({ variable: '--font-plex-mono', subsets: ['latin'], weight: ['400'] })
+const fraunces = Fraunces({ variable: '--font-fraunces', subsets: ['latin'], weight: ['300','400'], display: 'swap' })
+const inter = Inter({ variable: '--font-inter', subsets: ['latin'], weight: ['300','400','500'], display: 'swap' })
+const ibmPlexMono = IBM_Plex_Mono({ variable: '--font-plex-mono', subsets: ['latin'], weight: ['400'], display: 'swap' })
 
 export const metadata: Metadata = {
   title: 'DealFlow',
