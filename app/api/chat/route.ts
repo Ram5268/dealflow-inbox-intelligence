@@ -11,7 +11,9 @@ import { composeContext } from '@/lib/chat/context/composeContext'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
 import { searchParties, type SearchPartiesInput } from '@/lib/chat/tools/searchParties'
-import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL } from '@/lib/chat/tools/schemas'
+import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL } from '@/lib/chat/tools/schemas'
+import { getTemplate } from '@/lib/reports/templates'
+import { getGenerator, type SectionResult } from '@/lib/reports/generators'
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
 import { buildGroundingCorpus, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
@@ -82,6 +84,21 @@ Behavior:
 
 Affirmative continuations:
 When Ryan replies affirmatively to a suggestion you made in your prior turn ("yes", "sure", "pull those", "do it", "ok", "go ahead", "show me"), you MUST re-invoke the appropriate tool this turn with the FULL filter set from the prior turn's context (neighborhoods, price ranges, bed counts, roles, etc.). Never respond conversationally about entities you offered to fetch without actually calling the tool this turn, even if you already mentioned them in your prior message. Every entity you name (prospect, listing, address, phone) must come from a tool output fetched IN THIS TURN.
+
+Reports:
+You can generate structured reports with two tools. Use them when Ryan asks for a report or a specific piece of one.
+- generate_report(templateId, params) — a FULL report. Use for "draft me a buyer match report for Sarah", "generate a buyer match report". It saves the report and returns a reportId. Currently the only unlocked template is "buyer-match" (id "buyer-match"); its params are { buyerId }.
+- generate_report_section(templateId, sectionKey, params) — a SINGLE section, for a quick inline answer. Use for "just the near-misses for Sarah", "budget check on this buyer", "curated matches for the Soho buyer". buyer-match sectionKeys: criteria, matching-inventory, curated-matches, near-misses, off-market, budget-reality, showing-schedule, recommended-adjustment.
+Routing: full-request phrasing ("draft me", "generate", "full report") to generate_report; fragment phrasing ("just the", "only the", "what are the", a single named section) to generate_report_section.
+
+Param inference for reports:
+- buyerId must be a BUYER_ISO or RENTER_INQUIRY opportunity id. If Ryan names a buyer ("Sarah", "the Soho buyer") but you do not already have an id, call search_parties FIRST to resolve the name to a party, then call the report tool with that id. Infer the buyer from the running conversation when it is clear (a buyer you just discussed, a last-referenced party).
+- If it is genuinely ambiguous (e.g. three different Sarahs in recent turns), ask Ryan inline which one — a single plain question. Never offer a menu or list options as suggestions. Only ask when you truly cannot tell.
+- If a template is locked or unknown, the tool returns an error; relay it plainly and do not retry.
+
+Presenting reports in your drift_response:
+- After generate_report: set attachedReport with the ids from the tool result, and write response EXACTLY in this shape: "Report generated — {templateName} for {subject}. Saved as {reportId}. UI to view coming in Phase 1b." Keep it to that one line plus your normal suggestions.
+- After generate_report_section: set attachedFragment, and write response as the section's content in full, readable prose — restate the actual addresses, prices, and reasons from the tool result so Ryan can read the section directly in the chat. Do not invent anything beyond what the tool returned.
 
 Tool structure:
 Reply through the drift_response tool: plain text (no markdown, no bullet dashes, no em-dashes), exactly two short follow-up suggestions, and the card ids you referenced. For a scheduling request, propose the event via pendingEvent. For everything else, use your search tools first, then drift_response.`
@@ -316,6 +333,33 @@ export async function POST(req: NextRequest) {
             items: { type: 'string' },
             description: 'Exact card ids you mentioned (e.g. SEED_SALE_06). Traceability only — does not gate which cards Ryan sees.',
           },
+          // Brief 27.0 — report attachments. Fill attachedReport ONLY on a turn you
+          // just called generate_report; fill attachedFragment ONLY on a turn you
+          // just called generate_report_section. The server also captures these
+          // server-side, so echo the ids you were given in the tool result.
+          attachedReport: {
+            type: 'object',
+            description: 'Set only when you just generated a FULL report this turn.',
+            properties: {
+              reportId:     { type: 'string' },
+              templateId:   { type: 'string' },
+              templateName: { type: 'string' },
+              subject:      { type: 'string' },
+              sectionCount: { type: 'number' },
+              matchCount:   { type: 'number' },
+            },
+            required: ['reportId', 'templateId'],
+          },
+          attachedFragment: {
+            type: 'object',
+            description: 'Set only when you just generated a single report SECTION this turn.',
+            properties: {
+              templateId: { type: 'string' },
+              sectionKey: { type: 'string' },
+              title:      { type: 'string' },
+            },
+            required: ['templateId', 'sectionKey'],
+          },
         },
         required: ['response', 'suggestions', 'referencedDeals'],
       } as Anthropic.Messages.Tool.InputSchema,
@@ -330,8 +374,18 @@ export async function POST(req: NextRequest) {
     // tool_choice='any' forces a tool call every turn, so the loop deterministically
     // terminates on drift_response (Sonnet's structured final reply) rather than a
     // free-text end_turn. This preserves suggestions + calendar pendingEvent.
-    type AiResult = { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[] }
-    const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, responseTool]
+    type AttachedReport = { reportId: string; templateId: string; templateName: string; subject: string; sectionCount: number; matchCount?: number }
+    type AttachedFragment = { templateId: string; sectionKey: string; title: string; content: SectionResult['content']; sources: SectionResult['sources'] }
+    type AiResult = { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[]; attachedReport?: AttachedReport; attachedFragment?: AttachedFragment }
+    const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, responseTool]
+    // Brief 27.0 — server-authoritative capture of the report/fragment produced
+    // this turn. We persist + return THESE (not whatever Sonnet echoes) so ids
+    // are always correct and the attachment survives guard rewrites.
+    let serverAttachedReport: AttachedReport | null = null
+    let serverAttachedFragment: AttachedFragment | null = null
+    // session is non-null here; capture the id so the report-tool closure below
+    // doesn't re-widen it to nullable.
+    const activeSessionId = session.id
     const messages: Anthropic.Messages.MessageParam[] = [
       ...anthropicHistory,
       { role: 'user', content: userBlocks },
@@ -355,6 +409,57 @@ export async function POST(req: NextRequest) {
       return { cards: [], totalMatched: 0 }
     }
 
+    // Brief 27.0 — report tool dispatch. generate_report saves a Report row and
+    // captures serverAttachedReport; generate_report_section returns the section
+    // content inline and captures serverAttachedFragment. Both push their output
+    // into toolResultsForGuard so the guard treats the restated content as
+    // grounded. Returns the JSON the model sees as the tool_result.
+    async function handleReportTool(tu: Anthropic.Messages.ToolUseBlock): Promise<unknown> {
+      const input = tu.input as { templateId?: string; sectionKey?: string; params?: Record<string, unknown> }
+      const templateId = input.templateId ?? ''
+      const params = input.params ?? {}
+      const template = getTemplate(templateId)
+      if (!template) return { error: `Unknown template: ${templateId}` }
+      if (!template.isUnlocked) return { error: `Report ${templateId} not yet available — waiting on: ${template.dataRequirements.join(', ')}` }
+      const generator = getGenerator(templateId)
+      if (!generator) return { error: `No generator registered for ${templateId}` }
+      const buyerId = typeof params.buyerId === 'string' ? params.buyerId : null
+
+      if (tu.name === 'generate_report') {
+        const generated = await generator.full({ ...params, prisma, anthropic })
+        const report = await prisma.report.create({
+          data: {
+            templateId,
+            params: params as object,
+            sections: generated.sections as unknown as object,
+            markdown: generated.markdown,
+            sources: generated.sources as unknown as object,
+            sessionId: activeSessionId,
+            buyerId,
+          },
+          select: { id: true },
+        })
+        serverAttachedReport = {
+          reportId: report.id, templateId, templateName: template.name,
+          subject: generated.subject, sectionCount: generated.sections.length, matchCount: generated.matchCount,
+        }
+        const result = {
+          reportId: report.id, templateName: template.name, subject: generated.subject,
+          sectionCount: generated.sections.length, matchCount: generated.matchCount, saved: true,
+        }
+        toolResultsForGuard.push({ name: tu.name, input: tu.input, output: result })
+        return result
+      }
+
+      // generate_report_section
+      const sectionKey = input.sectionKey ?? ''
+      const section = await generator.section({ ...params, sectionKey, prisma, anthropic })
+      serverAttachedFragment = { templateId, sectionKey, title: section.title, content: section.content, sources: section.sources }
+      const result = { templateId, sectionKey, title: section.title, content: section.content }
+      toolResultsForGuard.push({ name: tu.name, input: tu.input, output: result })
+      return result
+    }
+
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
       const completion = await anthropic.messages.create({
         model: CHAT_MODEL,
@@ -374,15 +479,29 @@ export async function POST(req: NextRequest) {
       )
       if (driftUse) { aiResult = driftUse.input as AiResult; break }
 
-      const searchUses = completion.content.filter(
+      const REPORT_TOOL_NAMES = new Set(['generate_report', 'generate_report_section'])
+      const toolUses = completion.content.filter(
         (b): b is Anthropic.Messages.ToolUseBlock =>
-          b.type === 'tool_use' && (b.name === 'search_listings' || b.name === 'search_parties'),
+          b.type === 'tool_use' &&
+          (b.name === 'search_listings' || b.name === 'search_parties' || REPORT_TOOL_NAMES.has(b.name)),
       )
-      if (searchUses.length === 0) break  // shouldn't happen under tool_choice='any'
+      if (toolUses.length === 0) break  // shouldn't happen under tool_choice='any'
 
       messages.push({ role: 'assistant', content: completion.content })
       const toolResults: Anthropic.Messages.ToolResultBlockParam[] = await Promise.all(
-        searchUses.map(async (tu) => {
+        toolUses.map(async (tu) => {
+          // Report tools (generate_report / generate_report_section) run + save here.
+          if (REPORT_TOOL_NAMES.has(tu.name)) {
+            try {
+              const output = await handleReportTool(tu)
+              allToolCalls.push({ name: tu.name, input: tu.input, totalMatched: 0, cardIds: [] })
+              return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify(output) }
+            } catch (e) {
+              console.error(`[chat] report tool ${tu.name} failed:`, e)
+              return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify({ error: String(e) }), is_error: true }
+            }
+          }
+
           let output: { cards: Array<{ id: string; priceOverlapScore?: number }>; totalMatched: number }
           try {
             output = await runSearchTool(tu.name, tu.input)
@@ -599,6 +718,10 @@ export async function POST(req: NextRequest) {
         role: 'assistant', content: storedAssistantContent,
         dealsJson: deals as unknown as object[],
         suggestions: (aiResult.suggestions ?? []) as unknown as string[],
+        // Brief 27.0 — server-captured report attachments (authoritative), so the
+        // chat page can rehydrate a preview card / inline fragment in Phase 1b.
+        attachedReport:   (serverAttachedReport ?? undefined) as unknown as object | undefined,
+        attachedFragment: (serverAttachedFragment ?? undefined) as unknown as object | undefined,
       },
     })
 
@@ -666,6 +789,10 @@ export async function POST(req: NextRequest) {
       suggestions:  aiResult.suggestions ?? [],
       seListings:   composed.liveSeListings,
       seFilterUrl:  composed.seFilterUrl,
+      // Brief 27.0 — report attachments (server-captured). null when the turn
+      // produced no report/fragment.
+      attachedReport:   serverAttachedReport,
+      attachedFragment: serverAttachedFragment,
     })
   } catch (err) {
     console.error('[DealFlow] Chat API error:', err)
