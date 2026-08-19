@@ -65,6 +65,48 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
   } as Anthropic.Messages.Tool.InputSchema,
 }
 
+// Brief 27.0 — Report Engine tools. generate_report builds + SAVES a full report
+// (preview card, Phase 1b); generate_report_section returns ONE section inline in
+// chat (cheaper, no save). Only unlocked templates are generatable (buyer-match in
+// Phase 1a). For buyer-match, params.buyerId is a BUYER_ISO / RENTER_INQUIRY id —
+// resolve it with search_parties first if you only have a name.
+export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
+  name: 'generate_report',
+  description:
+    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for Sarah", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for Sarah"), use generate_report_section instead. Only unlocked templates work (currently: buyer-match). For buyer-match, params must be { buyerId }, where buyerId is a BUYER_ISO or RENTER_INQUIRY opportunity id — call search_parties first to resolve a name to an id.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      templateId: { type: 'string', description: 'Template id, e.g. "buyer-match".' },
+      params: {
+        type: 'object',
+        description: 'Template-specific params, e.g. { buyerId: "abc123" } for buyer-match.',
+        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties).' } },
+      },
+    },
+    required: ['templateId', 'params'],
+  } as Anthropic.Messages.Tool.InputSchema,
+}
+
+export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
+  name: 'generate_report_section',
+  description:
+    'Generate a SINGLE SECTION of a report template, for inline chat display. Use when the user asks about a specific piece ("what are the near-misses for Sarah", "give me the budget check on this buyer", "curated matches for the Soho buyer"). Cheaper and faster than a full report and NOT saved. Returns structured section content that you should restate in full in your reply so the user sees it. For buyer-match, sectionKey is one of: criteria, matching-inventory, curated-matches, near-misses, off-market, budget-reality, showing-schedule, recommended-adjustment; params is { buyerId }.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      templateId: { type: 'string', description: 'Template id, e.g. "buyer-match".' },
+      sectionKey: { type: 'string', description: 'Section key, e.g. "near-misses" for buyer-match.' },
+      params: {
+        type: 'object',
+        description: 'Template-specific params, e.g. { buyerId: "abc123" }.',
+        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties).' } },
+      },
+    },
+    required: ['templateId', 'sectionKey', 'params'],
+  } as Anthropic.Messages.Tool.InputSchema,
+}
+
 export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
   name: 'search_parties',
   description:
