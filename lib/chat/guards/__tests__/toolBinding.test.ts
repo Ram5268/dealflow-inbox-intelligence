@@ -85,20 +85,55 @@ test('fabricated entity claim without tool backing still blocks', () => {
   )
 })
 
-// ── Non-bindable structural patterns are never exempted, even if a fragment ───
-// happens to appear in tool output. A URL / external-source citation is
-// un-sourceable by construction; tool-binding must not clear it.
-test('non-bindable patterns (URL, source citation) are never tool-exempted', () => {
+// ── external_url is NEVER exempted; a source citation IS grounded when the ─────
+// source actually appears in the corpus (Brief 26.0). A URL is un-sourceable by
+// construction — Drift has no URL-returning tool — so it survives even if the
+// string is echoed in the corpus. A source name (ACRIS/DOB) that the system
+// genuinely fetched this turn IS grounded.
+test('external_url never exempted; corpus-present source citation is grounded', () => {
   const flags: RegexFlag[] = [
     rx('external_url', 'https://streeteasy.com/building/x'),
     rx('real_estate_source_citation', 'ACRIS'),
     rx('corporate_entity', 'Tompkins Mazal Bh 101 LLC'),
   ]
-  // Corpus that (perversely) contains all three strings — only the entity clears.
+  // Corpus that contains all three strings — the URL still survives (hard-fail),
+  // but the source citation + entity are grounded and drop.
   const corpus = normalizeForTrace('https://streeteasy.com/building/x ACRIS Tompkins Mazal Bh 101 LLC')
   const scoped = filterToolBoundFlags(flags, corpus)
   const patterns = scoped.map(f => f.pattern).sort()
-  assert.deepEqual(patterns, ['external_url', 'real_estate_source_citation'], 'URL + source citation survive; entity is dropped')
+  assert.deepEqual(patterns, ['external_url'], 'only the URL survives; corpus-present source + entity are grounded')
+})
+
+// ── Brief 26.0 — a source citation with NO corpus backing STILL fires ──────────
+// The safety property is preserved: naming ACRIS/DOB/StreetEasy is only grounded
+// when that source was actually fetched into the corpus this turn. A fabricated
+// "per StreetEasy" with no StreetEasy side-channel is still a hallucination.
+test('source citation absent from the corpus still fires', () => {
+  const flags: RegexFlag[] = [rx('real_estate_source_citation', 'StreetEasy')]
+  // DOB side-channel was fetched, but nothing from StreetEasy.
+  const corpus = normalizeForTrace('DOB RECORDS — 111 West 57th Street permit filings')
+  const scoped = filterToolBoundFlags(flags, corpus)
+  assert.deepEqual(
+    scoped.map(f => f.pattern),
+    ['real_estate_source_citation'],
+    'a source that was not fetched into the corpus must still fire',
+  )
+})
+
+// ── Brief 26.0 — DOB permits regression: the exact harness failure ────────────
+// "any permits at 111 West 57th Street?" — Sonnet says "the DOB records show…".
+// The regex flags "DOB" as a source citation; pre-fix it was non-bindable and
+// forced CANNED_PUBLIC_RECORDS. With the DOB block in the side-channel corpus,
+// the citation is grounded and the flag drops → guard passes.
+test('DOB citation grounded by side-channel corpus (permits harness case)', () => {
+  const dobSideChannel =
+    'DOB RECORDS — 111 WEST 57TH STREET\nPERMIT ACTIVITY (10 recent):\n  Jun 2020 — A1\n  Jun 2017 — A3 EQ'
+  const response = 'The DOB records on file for 111 West 57th Street show five permit filings.'
+  const rawFlags = scanForStructuralHallucinations(response)
+  assert.ok(rawFlags.some(f => f.pattern === 'real_estate_source_citation'), 'raw regex flags the DOB citation')
+
+  const corpus = buildGroundingCorpus([], null, dobSideChannel)
+  assert.deepEqual(filterToolBoundFlags(rawFlags, corpus), [], 'DOB citation traces to side-channel → grounded')
 })
 
 // ── Prior-turn DEAL CARDS also ground an entity claim ─────────────────────────
@@ -125,9 +160,69 @@ test('semantic verifier still blocks a fabricated party not in tool output', asy
   const r = await verifyResponse(
     'yes pull those',
     MOJO_TOOL_RESULTS,
+    null,
     'Reach out to Sarah Chen at 917-555-0142 — she is looking in Fort Greene.',
     { client },
   )
   assert.equal(r.isGrounded, false)
   assert.equal(r.flags[0].claim, 'Sarah Chen at 917-555-0142')
+})
+
+// ── Brief 26.0 — side-channel context grounds a claim (was force-fallback) ────
+// The dynamic system block (ACRIS/DOB/FRED) is real evidence Sonnet was given,
+// it just lives in the system prompt, not a tool result. A response quoting it
+// must NOT be flagged as a hallucination. This pins BOTH guard paths: the regex
+// tool-binding corpus now includes side-channel text, and the semantic verifier
+// is handed that text as a second grounded-evidence section.
+const CPS_SIDE_CHANNEL =
+  'ACRIS PROPERTY RECORDS — 220 Central Park South\n' +
+  'Current owner: 220 CENTRAL PS, LLC\n' +
+  'Last sale: 2026-02-10 for $37,250,000\n' +
+  'BBL: Manhattan Block 1030 Lot 1038'
+
+test('side-channel entity is grounded by the regex tool-binding corpus', () => {
+  // A corporate_entity flag for the owner named in the ACRIS side-channel block.
+  const flag = rx('corporate_entity', '220 CENTRAL PS, LLC')
+
+  // With the side-channel folded into the corpus, the flag traces → dropped.
+  const withSide = buildGroundingCorpus([], null, CPS_SIDE_CHANNEL)
+  assert.deepEqual(
+    filterToolBoundFlags([flag], withSide),
+    [],
+    'owner entity present in side-channel context must be treated as grounded',
+  )
+
+  // Without the side-channel, the SAME entity has no backing → still fires.
+  // This proves the corpus extension is precisely what grounds it.
+  const noSide = buildGroundingCorpus([], null, null)
+  assert.equal(
+    filterToolBoundFlags([flag], noSide).length,
+    1,
+    'sanity: absent side-channel, the entity is not grounded',
+  )
+})
+
+test('side-channel-grounded response is not forced to fallback by the verifier', async () => {
+  // Capture what the verifier is actually handed as evidence.
+  let sentToVerifier = ''
+  const client = {
+    messages: {
+      create: async (args: { messages: Array<{ content: string }> }) => {
+        sentToVerifier = JSON.stringify(args.messages)
+        return {
+          content: [{ type: 'text', text: '{"isGrounded": true, "flags": []}' }],
+          usage: { input_tokens: 420, output_tokens: 12 },
+        }
+      },
+    },
+  } as unknown as VerifierClient
+
+  const response = 'The owner is 220 CENTRAL PS, LLC, purchased 2026-02-10 for $37.25M.'
+  const r = await verifyResponse('who owns 220 Central Park South?', [], CPS_SIDE_CHANNEL, response, { client })
+
+  // The side-channel text reaches the verifier as grounding evidence...
+  assert.ok(/220 CENTRAL PS/.test(sentToVerifier), 'side-channel context must be sent to the verifier')
+  // ...and the verifier passes the response — no fallback is forced.
+  assert.equal(r.isGrounded, true)
+  assert.deepEqual(r.flags, [])
 })

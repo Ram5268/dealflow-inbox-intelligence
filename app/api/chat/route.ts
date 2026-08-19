@@ -458,7 +458,14 @@ export async function POST(req: NextRequest) {
     // prior turn's DEAL CARDS is grounded, not a hallucination. Built once —
     // tool results don't change across guard retries.
     const priorDealCards = (lastAssistantMsg as { dealsJson?: unknown } | undefined)?.dealsJson ?? null
-    const groundingCorpus = buildGroundingCorpus(toolResultsForGuard, priorDealCards)
+    // Brief 26.0 — the dynamic system block (live ACRIS/DOB/FRED/Mojo/calendar
+    // side-channels) is grounded evidence too. Fold it into the guard's corpus
+    // AND hand it to the semantic verifier so a claim quoting side-channel data
+    // isn't flagged as a hallucination and forced to the canned fallback.
+    // Extracted once here so the same text is reused across both guard calls and
+    // every retry-loop iteration below.
+    const sideChannelText = dynamicSystemBlock || null
+    const groundingCorpus = buildGroundingCorpus(toolResultsForGuard, priorDealCards, sideChannelText)
 
     if (guardApplies) {
       let attempt = 0
@@ -467,7 +474,7 @@ export async function POST(req: NextRequest) {
           scanForStructuralHallucinations(currentResponse),
           groundingCorpus,
         )
-        const verifier = await verifyResponse(userMessage || queryText, toolResultsForGuard, currentResponse)
+        const verifier = await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
         if (regexFlags.length === 0 && verifier.isGrounded) break
 
