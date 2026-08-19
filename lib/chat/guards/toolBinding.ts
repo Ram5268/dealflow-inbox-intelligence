@@ -37,16 +37,27 @@ export function normalizeForTrace(s: string): string {
 }
 
 /**
- * Flatten this turn's tool outputs (+ optionally the prior turn's DEAL CARDS)
- * into one normalized string the trace check greps against. Built once per turn
- * — tool results don't change across guard retries.
+ * Flatten this turn's tool outputs (+ optionally the prior turn's DEAL CARDS +
+ * the turn's side-channel context block) into one normalized string the trace
+ * check greps against. Built once per turn — tool results don't change across
+ * guard retries.
+ *
+ * Brief 26.0 — sideChannelText carries the dynamic system block Sonnet was given
+ * (live ACRIS ownership, DOB permits, FRED mortgage rates, Mojo, calendar). That
+ * data is real, grounded evidence — it just lives in the system prompt rather
+ * than a tool result. Folding it into the corpus lets a corporate_entity /
+ * owner-name claim that traces to it count as grounded, same as a tool-backed
+ * one. This is a text-additive change: the structured tool-result data model is
+ * untouched; only the fuzzy-match corpus grows.
  */
 export function buildGroundingCorpus(
   toolResults: ToolResultForVerify[],
   priorDealCards?: unknown,
+  sideChannelText?: string | null,
 ): string {
   const parts = [JSON.stringify(toolResults ?? [])]
   if (priorDealCards != null) parts.push(JSON.stringify(priorDealCards))
+  if (sideChannelText) parts.push(sideChannelText)
   return normalizeForTrace(parts.join(' '))
 }
 

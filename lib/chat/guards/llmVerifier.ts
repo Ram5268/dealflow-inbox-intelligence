@@ -42,7 +42,9 @@ export function computeCostUsd(tokensIn: number, tokensOut: number): number {
   return (tokensIn / 1_000_000) * VERIFIER_INPUT_PER_M + (tokensOut / 1_000_000) * VERIFIER_OUTPUT_PER_M
 }
 
-export const VERIFIER_SYSTEM_PROMPT = `You are a fact-checker for a real-estate broker's AI chat assistant ("Drift"). Given a user query, tool results the assistant received, and the assistant's response, identify factual claims in the response that are NOT supported by the tool results AND are not allowed general/self-knowledge.
+export const VERIFIER_SYSTEM_PROMPT = `You are a fact-checker for a real-estate broker's AI chat assistant ("Drift"). Given a user query, tool results the assistant received, SIDE-CHANNEL CONTEXT the assistant was also given, and the assistant's response, identify factual claims in the response that are NOT supported by that evidence AND are not allowed general/self-knowledge.
+
+GROUNDED EVIDENCE = tool results OR side-channel context. Both are real, retrieved data. The side-channel context block carries live public-records and market data the system fetched for this turn (e.g. ACRIS ownership + sale history, DOB permits + violations, FRED mortgage rates, Mojo CRM leads, calendar). A fact that appears in the tool results OR in the side-channel context is grounded — do NOT flag it. Only flag a specific claim that appears in NEITHER. In particular, an owner name / LLC entity / sale price / permit / mortgage rate that is present in the side-channel context is grounded evidence, NOT a hallucination, even though it did not come from a tool call.
 
 The assistant is an experienced NYC broker. It is EXPECTED to layer its own NYC geography and neighborhood knowledge on top of the tool results. That layering is legitimate and must NOT be flagged. Only fabricated PROPERTY-SPECIFIC facts (numbers, ownership, history, external data) are hallucinations.
 
@@ -83,6 +85,7 @@ export interface VerifierClient {
 function buildUserMessage(
   userQuery: string,
   toolResults: ToolResultForVerify[],
+  sideChannelText: string | null,
   candidateResponse: string,
 ): string {
   return [
@@ -93,6 +96,13 @@ function buildUserMessage(
     '<tool_results>',
     JSON.stringify(toolResults),
     '</tool_results>',
+    '',
+    // Brief 26.0 — the side-channel context block Sonnet was given (ACRIS/DOB/
+    // FRED/Mojo/calendar). This is grounded evidence too: facts here must NOT be
+    // flagged as hallucinations just because they didn't arrive via a tool call.
+    '<side_channel_context grounded="true">',
+    sideChannelText ?? '(none)',
+    '</side_channel_context>',
     '',
     '<assistant_response>',
     candidateResponse,
@@ -144,6 +154,7 @@ function parseVerdict(text: string): { isGrounded: boolean; flags: VerifierFlag[
 export async function verifyResponse(
   userQuery: string,
   toolResults: ToolResultForVerify[],
+  sideChannelText: string | null,
   candidateResponse: string,
   opts?: { client?: VerifierClient },
 ): Promise<VerifierResult> {
@@ -162,7 +173,7 @@ export async function verifyResponse(
       max_tokens: 800,
       temperature: 0,
       system: VERIFIER_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: buildUserMessage(userQuery, toolResults, candidateResponse) }],
+      messages: [{ role: 'user', content: buildUserMessage(userQuery, toolResults, sideChannelText, candidateResponse) }],
     })
 
     const tokensIn = completion.usage?.input_tokens ?? 0

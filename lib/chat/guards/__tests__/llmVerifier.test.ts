@@ -46,6 +46,7 @@ test('grounded response passes', async () => {
   const r = await verifyResponse(
     'what do i have at 30 Park Pl?',
     SEED_TOOL_RESULTS,
+    null,
     'You have two at 30 Park Pl: a $15,000,000 sale and a $15,000/mo rental, both 3BR.',
     { client },
   )
@@ -67,6 +68,7 @@ test('ungrounded ACRIS invention is flagged', async () => {
   const r = await verifyResponse(
     'what do i have at 30 Park Pl?',
     SEED_TOOL_RESULTS,
+    null,
     'ACRIS shows last sale $6,750,000 on 2026-06-16 from CONDO 54 PARK PLACE LLC.',
     { client },
   )
@@ -78,7 +80,7 @@ test('ungrounded ACRIS invention is flagged', async () => {
 // ── Malformed verifier output → fail-safe to ungrounded ──────────────────────
 test('malformed verifier output fails safe to ungrounded', async () => {
   const client = fakeClient('I think this looks mostly fine, no JSON here.')
-  const r = await verifyResponse('q', SEED_TOOL_RESULTS, 'some response', { client })
+  const r = await verifyResponse('q', SEED_TOOL_RESULTS, null, 'some response', { client })
   assert.equal(r.isGrounded, false)
   assert.equal(r.flags[0].claim, 'verifier_parse_error')
 })
@@ -86,7 +88,7 @@ test('malformed verifier output fails safe to ungrounded', async () => {
 // ── isGrounded:true but flags present → treated as ungrounded (defensive) ─────
 test('verifier claiming grounded while listing flags is treated ungrounded', async () => {
   const client = fakeClient('{"isGrounded": true, "flags": [{"claim": "x", "reason": "y"}]}')
-  const r = await verifyResponse('q', SEED_TOOL_RESULTS, 'resp', { client })
+  const r = await verifyResponse('q', SEED_TOOL_RESULTS, null, 'resp', { client })
   assert.equal(r.isGrounded, false)
   assert.equal(r.flags.length, 1)
 })
@@ -97,7 +99,7 @@ test('empty response is trivially grounded', async () => {
   const client = {
     messages: { create: async () => { called = true; return {} as never } },
   } as unknown as VerifierClient
-  const r = await verifyResponse('q', [], '   ', { client })
+  const r = await verifyResponse('q', [], null, '   ', { client })
   assert.equal(r.isGrounded, true)
   assert.deepEqual(r.flags, [])
   assert.equal(called, false, 'should not call the model for an empty response')
@@ -106,7 +108,7 @@ test('empty response is trivially grounded', async () => {
 // ── API error → fail safe to ungrounded, no throw ────────────────────────────
 test('verifier API error fails safe', async () => {
   const client = fakeClient('', 0, 0, true)
-  const r = await verifyResponse('q', SEED_TOOL_RESULTS, 'resp', { client })
+  const r = await verifyResponse('q', SEED_TOOL_RESULTS, null, 'resp', { client })
   assert.equal(r.isGrounded, false)
   assert.equal(r.flags[0].claim, 'verifier_api_error')
 })
@@ -120,7 +122,7 @@ test('verifier API error fails safe', async () => {
 // 4a — verifier returns non-JSON prose → fail safe to ungrounded (parse_error).
 test('Gate3/4a: malformed non-JSON verifier output → fail-safe parse_error', async () => {
   const client = fakeClient('this is not JSON')
-  const r = await verifyResponse('q', SEED_TOOL_RESULTS, 'some candidate response', { client })
+  const r = await verifyResponse('q', SEED_TOOL_RESULTS, null, 'some candidate response', { client })
   assert.equal(r.isGrounded, false, 'must not pass an unverified response')
   assert.equal(r.flags.length, 1)
   assert.equal(r.flags[0].claim, 'verifier_parse_error')
@@ -129,7 +131,7 @@ test('Gate3/4a: malformed non-JSON verifier output → fail-safe parse_error', a
 // 4a(ii) — truncated/partial JSON is also unparseable → same fail-safe path.
 test('Gate3/4a: truncated JSON verifier output → fail-safe parse_error', async () => {
   const client = fakeClient('{"isGrounded": false, "flags": [')
-  const r = await verifyResponse('q', SEED_TOOL_RESULTS, 'resp', { client })
+  const r = await verifyResponse('q', SEED_TOOL_RESULTS, null, 'resp', { client })
   assert.equal(r.isGrounded, false)
   assert.equal(r.flags[0].claim, 'verifier_parse_error')
 })
@@ -142,7 +144,7 @@ test('Gate3/4b: verifier API error (rate_limit) → fail-safe, does not propagat
   let threw = false
   let r
   try {
-    r = await verifyResponse('q', SEED_TOOL_RESULTS, 'resp', { client: throwing })
+    r = await verifyResponse('q', SEED_TOOL_RESULTS, null, 'resp', { client: throwing })
   } catch {
     threw = true
   }

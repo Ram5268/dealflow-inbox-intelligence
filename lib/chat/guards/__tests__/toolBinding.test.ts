@@ -125,6 +125,7 @@ test('semantic verifier still blocks a fabricated party not in tool output', asy
   const r = await verifyResponse(
     'yes pull those',
     MOJO_TOOL_RESULTS,
+    null,
     'Reach out to Sarah Chen at 917-555-0142 — she is looking in Fort Greene.',
     { client },
   )
