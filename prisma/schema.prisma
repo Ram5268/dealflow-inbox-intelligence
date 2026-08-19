@@ -264,6 +264,7 @@ model ExtractedOpportunity {
   rawEmail  RawEmail  @relation(fields: [rawEmailId], references: [id])
   matches   Match[]
   property  Property? @relation(fields: [propertyId], references: [id])
+  reports   Report[]  // Brief 27.0 — reports whose subject is this opportunity
 
   @@index([organizationId])
   @@index([processingStatus])
@@ -309,6 +310,7 @@ model ChatSession {
   organization   Organization  @relation(fields: [organizationId], references: [id])
 
   messages  ChatMessage[]
+  reports   Report[]   // Brief 27.0 — reports generated within this session
 
   @@index([organizationId])
 }
@@ -321,12 +323,42 @@ model ChatMessage {
   content     String
   dealsJson   Json?
   suggestions Json?
+  // Brief 27.0 — report attachments, so the chat page can rehydrate them (Phase 1b).
+  // attachedReport = full-report preview card metadata; attachedFragment = inline section content.
+  attachedReport   Json?
+  attachedFragment Json?
   createdAt   DateTime    @default(now())
 
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+}
+
+// Brief 27.0 — a generated full report (Report Engine Phase 1a). Fragments are
+// NOT stored here (they attach to a ChatMessage). buyerId is a loose indexed
+// string, not an FK: for buyer-match it references a BUYER_ISO ExtractedOpportunity,
+// but future templates may key on a MojoContact or an address — polymorphic, so
+// no relation. opportunityId (the report's subject property, when applicable) IS
+// a nullable FK.
+model Report {
+  id             String    @id @default(cuid())
+  templateId     String    // e.g. "buyer-match"
+  params         Json      // input params, e.g. { buyerId: "abc" }
+  sections       Json      // filled section outputs (SectionResult[])
+  markdown       String    @db.Text // pre-rendered markdown for the Copy button
+  sources        Json      // provenance array: [{ type, id?, at }]
+  sessionId      String
+  session        ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  opportunityId  String?
+  opportunity    ExtractedOpportunity? @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  buyerId        String?   // loose reference (see model note) — indexed, no FK
+  createdAt      DateTime  @default(now())
+
+  @@index([sessionId])
+  @@index([templateId])
+  @@index([buyerId])
+  @@index([opportunityId])
 }
 
 model MojoRaw {
