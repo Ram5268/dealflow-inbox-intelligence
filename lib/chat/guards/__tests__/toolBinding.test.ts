@@ -132,3 +132,62 @@ test('semantic verifier still blocks a fabricated party not in tool output', asy
   assert.equal(r.isGrounded, false)
   assert.equal(r.flags[0].claim, 'Sarah Chen at 917-555-0142')
 })
+
+// ── Brief 26.0 — side-channel context grounds a claim (was force-fallback) ────
+// The dynamic system block (ACRIS/DOB/FRED) is real evidence Sonnet was given,
+// it just lives in the system prompt, not a tool result. A response quoting it
+// must NOT be flagged as a hallucination. This pins BOTH guard paths: the regex
+// tool-binding corpus now includes side-channel text, and the semantic verifier
+// is handed that text as a second grounded-evidence section.
+const CPS_SIDE_CHANNEL =
+  'ACRIS PROPERTY RECORDS — 220 Central Park South\n' +
+  'Current owner: 220 CENTRAL PS, LLC\n' +
+  'Last sale: 2026-02-10 for $37,250,000\n' +
+  'BBL: Manhattan Block 1030 Lot 1038'
+
+test('side-channel entity is grounded by the regex tool-binding corpus', () => {
+  // A corporate_entity flag for the owner named in the ACRIS side-channel block.
+  const flag = rx('corporate_entity', '220 CENTRAL PS, LLC')
+
+  // With the side-channel folded into the corpus, the flag traces → dropped.
+  const withSide = buildGroundingCorpus([], null, CPS_SIDE_CHANNEL)
+  assert.deepEqual(
+    filterToolBoundFlags([flag], withSide),
+    [],
+    'owner entity present in side-channel context must be treated as grounded',
+  )
+
+  // Without the side-channel, the SAME entity has no backing → still fires.
+  // This proves the corpus extension is precisely what grounds it.
+  const noSide = buildGroundingCorpus([], null, null)
+  assert.equal(
+    filterToolBoundFlags([flag], noSide).length,
+    1,
+    'sanity: absent side-channel, the entity is not grounded',
+  )
+})
+
+test('side-channel-grounded response is not forced to fallback by the verifier', async () => {
+  // Capture what the verifier is actually handed as evidence.
+  let sentToVerifier = ''
+  const client = {
+    messages: {
+      create: async (args: { messages: Array<{ content: string }> }) => {
+        sentToVerifier = JSON.stringify(args.messages)
+        return {
+          content: [{ type: 'text', text: '{"isGrounded": true, "flags": []}' }],
+          usage: { input_tokens: 420, output_tokens: 12 },
+        }
+      },
+    },
+  } as unknown as VerifierClient
+
+  const response = 'The owner is 220 CENTRAL PS, LLC, purchased 2026-02-10 for $37.25M.'
+  const r = await verifyResponse('who owns 220 Central Park South?', [], CPS_SIDE_CHANNEL, response, { client })
+
+  // The side-channel text reaches the verifier as grounding evidence...
+  assert.ok(/220 CENTRAL PS/.test(sentToVerifier), 'side-channel context must be sent to the verifier')
+  // ...and the verifier passes the response — no fallback is forced.
+  assert.equal(r.isGrounded, true)
+  assert.deepEqual(r.flags, [])
+})
