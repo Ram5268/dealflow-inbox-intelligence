@@ -85,20 +85,55 @@ test('fabricated entity claim without tool backing still blocks', () => {
   )
 })
 
-// ── Non-bindable structural patterns are never exempted, even if a fragment ───
-// happens to appear in tool output. A URL / external-source citation is
-// un-sourceable by construction; tool-binding must not clear it.
-test('non-bindable patterns (URL, source citation) are never tool-exempted', () => {
+// ── external_url is NEVER exempted; a source citation IS grounded when the ─────
+// source actually appears in the corpus (Brief 26.0). A URL is un-sourceable by
+// construction — Drift has no URL-returning tool — so it survives even if the
+// string is echoed in the corpus. A source name (ACRIS/DOB) that the system
+// genuinely fetched this turn IS grounded.
+test('external_url never exempted; corpus-present source citation is grounded', () => {
   const flags: RegexFlag[] = [
     rx('external_url', 'https://streeteasy.com/building/x'),
     rx('real_estate_source_citation', 'ACRIS'),
     rx('corporate_entity', 'Tompkins Mazal Bh 101 LLC'),
   ]
-  // Corpus that (perversely) contains all three strings — only the entity clears.
+  // Corpus that contains all three strings — the URL still survives (hard-fail),
+  // but the source citation + entity are grounded and drop.
   const corpus = normalizeForTrace('https://streeteasy.com/building/x ACRIS Tompkins Mazal Bh 101 LLC')
   const scoped = filterToolBoundFlags(flags, corpus)
   const patterns = scoped.map(f => f.pattern).sort()
-  assert.deepEqual(patterns, ['external_url', 'real_estate_source_citation'], 'URL + source citation survive; entity is dropped')
+  assert.deepEqual(patterns, ['external_url'], 'only the URL survives; corpus-present source + entity are grounded')
+})
+
+// ── Brief 26.0 — a source citation with NO corpus backing STILL fires ──────────
+// The safety property is preserved: naming ACRIS/DOB/StreetEasy is only grounded
+// when that source was actually fetched into the corpus this turn. A fabricated
+// "per StreetEasy" with no StreetEasy side-channel is still a hallucination.
+test('source citation absent from the corpus still fires', () => {
+  const flags: RegexFlag[] = [rx('real_estate_source_citation', 'StreetEasy')]
+  // DOB side-channel was fetched, but nothing from StreetEasy.
+  const corpus = normalizeForTrace('DOB RECORDS — 111 West 57th Street permit filings')
+  const scoped = filterToolBoundFlags(flags, corpus)
+  assert.deepEqual(
+    scoped.map(f => f.pattern),
+    ['real_estate_source_citation'],
+    'a source that was not fetched into the corpus must still fire',
+  )
+})
+
+// ── Brief 26.0 — DOB permits regression: the exact harness failure ────────────
+// "any permits at 111 West 57th Street?" — Sonnet says "the DOB records show…".
+// The regex flags "DOB" as a source citation; pre-fix it was non-bindable and
+// forced CANNED_PUBLIC_RECORDS. With the DOB block in the side-channel corpus,
+// the citation is grounded and the flag drops → guard passes.
+test('DOB citation grounded by side-channel corpus (permits harness case)', () => {
+  const dobSideChannel =
+    'DOB RECORDS — 111 WEST 57TH STREET\nPERMIT ACTIVITY (10 recent):\n  Jun 2020 — A1\n  Jun 2017 — A3 EQ'
+  const response = 'The DOB records on file for 111 West 57th Street show five permit filings.'
+  const rawFlags = scanForStructuralHallucinations(response)
+  assert.ok(rawFlags.some(f => f.pattern === 'real_estate_source_citation'), 'raw regex flags the DOB citation')
+
+  const corpus = buildGroundingCorpus([], null, dobSideChannel)
+  assert.deepEqual(filterToolBoundFlags(rawFlags, corpus), [], 'DOB citation traces to side-channel → grounded')
 })
 
 // ── Prior-turn DEAL CARDS also ground an entity claim ─────────────────────────

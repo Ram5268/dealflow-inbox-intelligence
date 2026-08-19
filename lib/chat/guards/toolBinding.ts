@@ -22,11 +22,23 @@
 import type { RegexFlag } from './regexGuard'
 import type { ToolResultForVerify } from './llmVerifier'
 
-// Structural patterns whose matches are "specific entity claims" that can
-// LEGITIMATELY appear in tool output (a party/owner name, incl. an LLC-held
-// Mojo seller lead). Only these are eligible for the tool-output exemption.
+// Structural patterns whose matches can LEGITIMATELY appear in the grounding
+// corpus (this turn's tool output, the prior turn's DEAL CARDS, or — Brief 26.0
+// — the side-channel context block). A match that traces to the corpus is
+// grounded and its flag is dropped; a match that does NOT trace still fires.
 // All other patterns stay hard fails.
-export const TOOL_BINDABLE_PATTERNS = new Set<string>(['corporate_entity'])
+//
+// - corporate_entity (Brief 11.0): party/owner names, incl. an LLC-held Mojo
+//   seller lead, are real when they came from search_parties or a card.
+// - real_estate_source_citation (Brief 26.0): "un-sourceable by construction"
+//   WAS true when Drift had no way to read ACRIS/DOB/etc. Now the system fetches
+//   those and injects them as side-channel context. When "DOB"/"ACRIS" actually
+//   appears in the corpus, the system genuinely read that source this turn, so
+//   Drift naming it is grounded — NOT a fabricated citation. A source name with
+//   no corpus backing (e.g. a fabricated "per StreetEasy" when no StreetEasy
+//   block was fetched) still fires. external_url stays hard-fail: Drift has no
+//   URL-returning tool, so any URL is fabricated regardless of the corpus.
+export const TOOL_BINDABLE_PATTERNS = new Set<string>(['corporate_entity', 'real_estate_source_citation'])
 
 // Normalize for a forgiving substring trace: lowercase, non-alphanumerics → a
 // single space. So "Tompkins Mazal Bh 101 LLC" in the response matches
