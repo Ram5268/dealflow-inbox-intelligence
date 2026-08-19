@@ -25,14 +25,29 @@ export interface PlutoRecord {
 // vs pluto_unreachable — per the rail "5xx/network must NOT be treated as no-data".
 export interface PlutoLookup { record: PlutoRecord | null; unreachable: boolean }
 
+async function queryPluto(numericBbl: string): Promise<PlutoLookup> {
+  const url = `${PLUTO_URL}?bbl=${numericBbl}&$select=${encodeURIComponent(SELECT)}`
+  const rows = await getJson<PlutoRecord[]>(url, { isSocrata: true })
+  if (rows === null) return { record: null, unreachable: true } // network error — not "no record"
+  return { record: rows[0] ?? null, unreachable: false }
+}
+
 /** Look up a parcel in PLUTO by BBL. */
 export async function lookupPluto(bbl: string): Promise<PlutoLookup> {
   // BBL is numeric in PLUTO — strip any leading zeros (boro digit is 1-5 so this
   // is a no-op in practice, but guards against a zero-padded input).
   const numericBbl = String(parseInt(bbl, 10))
   if (numericBbl === 'NaN') return { record: null, unreachable: false }
-  const url = `${PLUTO_URL}?bbl=${numericBbl}&$select=${encodeURIComponent(SELECT)}`
-  const rows = await getJson<PlutoRecord[]>(url, { isSocrata: true })
-  if (rows === null) return { record: null, unreachable: true } // network error — not "no record"
-  return { record: rows[0] ?? null, unreachable: false }
+
+  const first = await queryPluto(numericBbl)
+  if (first.unreachable || first.record) return first
+
+  // condos: PLUTO indexes on master lot 7501, ACRIS returns per-unit lot — retry.
+  const padded = numericBbl.padStart(10, '0')
+  if (padded.slice(6) !== '7501') {
+    const masterBbl = String(parseInt(padded.slice(0, 6) + '7501', 10))
+    console.log(`[PLUTO] no record for BBL ${numericBbl}; retrying condo master lot ${masterBbl}`)
+    return queryPluto(masterBbl)
+  }
+  return first
 }

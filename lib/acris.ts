@@ -138,10 +138,13 @@ export function parseAddress(input: string): ParsedAddress | null {
 
 // Extract the first street address found in a block of text
 export function extractAddressFromText(text: string): string | null {
-  const pattern = /\b(\d+(?:-\d+)?)\s+((?:(?:East|West|North|South)\s+)?\d*\s*[A-Za-z]+(?:\s+[A-Za-z]+){0,3}?)\s+(Street|Avenue|Place|Drive|Road|Boulevard|Lane|Court|Terrace|Way|Blvd|Ave\.?|St\.?|Dr\.?|Pl\.?|Pkwy|Broadway)\b/i
+  // Compass words appear two ways: as the street type itself ("Central Park South",
+  // "Broadway West" — group 3), or as a trailing suffix after a normal street type
+  // ("Park Avenue South" — group 4). Handle both so these named streets match.
+  const pattern = /\b(\d+(?:-\d+)?)\s+((?:(?:East|West|North|South)\s+)?\d*\s*[A-Za-z]+(?:\s+[A-Za-z]+){0,3}?)\s+(Street|Avenue|Place|Drive|Road|Boulevard|Lane|Court|Terrace|Way|Blvd|Ave\.?|St\.?|Dr\.?|Pl\.?|Pkwy|Broadway|South|North|East|West)(?:\s+(South|North|East|West))?\b/i
   const m = text.match(pattern)
   if (!m) return null
-  return `${m[1]} ${m[2]} ${m[3]}`
+  return `${m[1]} ${m[2]} ${m[3]}${m[4] ? ` ${m[4]}` : ''}`
 }
 
 // ─── Socrata API helpers ──────────────────────────────────────────────────────

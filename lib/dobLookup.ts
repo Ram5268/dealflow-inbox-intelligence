@@ -53,18 +53,32 @@ export async function lookupDOB(address: string): Promise<DobResult | null> {
 
   const { houseNo, streetName, boro } = parsed
 
+  const streetPrefix = streetName.split(' ')[0]
+
   try {
+    // Socrata rejects raw spaces in the $where clause with HTTP 400, so the entire
+    // clause value must be URL-encoded. URLSearchParams encodes each value exactly
+    // once ($where and $order), avoiding both the 400 and any double-encoding.
+    // Permits (ipu4-2q9a) use house__/street_name; violations (3h2n-5cm9) use
+    // house_number/street — different column names per dataset.
+    const permitParams = new URLSearchParams({
+      $where: `house__='${houseNo}' AND street_name like '${streetPrefix}%'`,
+      $limit: '10',
+      $order: 'filing_date DESC',
+    })
+    const violationParams = new URLSearchParams({
+      $where: `house_number='${houseNo}' AND street like '${streetPrefix}%'`,
+      $limit: '5',
+      $order: 'issue_date DESC',
+    })
+
     const [permitsRes, violationsRes] = await Promise.all([
       fetch(
-        `https://data.cityofnewyork.us/resource/ipu4-2q9a.json?` +
-        `$where=house__=${encodeURIComponent(`'${houseNo}'`)} AND street_name like '${encodeURIComponent(streetName.split(' ')[0])}%'` +
-        `&$limit=10&$order=filing_date DESC`,
+        `https://data.cityofnewyork.us/resource/ipu4-2q9a.json?${permitParams}`,
         { headers: { 'X-App-Token': process.env.SOCRATA_APP_TOKEN ?? '' } }
       ).catch(() => null),
       fetch(
-        `https://data.cityofnewyork.us/resource/3h2n-5cm9.json?` +
-        `$where=house_no=${encodeURIComponent(`'${houseNo}'`)} AND street_name like '${encodeURIComponent(streetName.split(' ')[0])}%'` +
-        `&$limit=5&$order=issue_date DESC`,
+        `https://data.cityofnewyork.us/resource/3h2n-5cm9.json?${violationParams}`,
         { headers: { 'X-App-Token': process.env.SOCRATA_APP_TOKEN ?? '' } }
       ).catch(() => null),
     ])
