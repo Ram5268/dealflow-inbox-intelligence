@@ -11,6 +11,13 @@ import MicButton from '@/components/MicButton'
 import VoiceConversation from '@/components/VoiceConversation'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
+import ReportPickerSheet from '@/components/ReportPickerSheet'
+import BuyerPickerSheet from '@/components/BuyerPickerSheet'
+import ReportModal from '@/components/ReportModal'
+import ReportPreviewCard from '@/components/ReportPreviewCard'
+import FragmentBlock from '@/components/FragmentBlock'
+import { showToast } from '@/components/Toast'
+import type { AttachedReport, AttachedFragment } from '@/lib/reports/uiTypes'
 
 // ─── Brief 2.5 — Drift interaction logging ────────────────
 // Fire-and-forget POST to /api/chat/interaction. Never awaited, never surfaces
@@ -94,6 +101,9 @@ interface Message {
   seListings?: SEListing[]
   seFilterUrl?: string | null
   interactionId?: string
+  // Brief 28.0 — report attachments (carried through from the DB row via ...m).
+  attachedReport?: AttachedReport | null
+  attachedFragment?: AttachedFragment | null
   createdAt: string
 }
 
@@ -247,12 +257,13 @@ function SpeakButton({ text }: { text: string }) {
 // ─── Composer pill (matches design) ───────────────────────
 
 function Composer({
-  value, onChange, onSubmit, onOpenVoice, isLoading,
+  value, onChange, onSubmit, onOpenVoice, onOpenReports, isLoading,
 }: {
   value: string
   onChange: (v: string) => void
   onSubmit: (files?: File[]) => void
   onOpenVoice: () => void  // Brief 13.0 — mic now opens the voice conversation orb
+  onOpenReports: () => void // Brief 28.0 — + opens the report picker sheet
   isLoading: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -296,6 +307,24 @@ function Composer({
         padding: '8px 8px 8px 16px',
         backdropFilter: 'blur(20px)',
       }}>
+        {/* Brief 28.0 — + opens the report picker. Mirrors the mic/send controls;
+            transparent hit-slop (Brief 20) grows the tap target to ≥44px. */}
+        <button
+          onClick={onOpenReports}
+          disabled={isLoading}
+          aria-label="Generate a report"
+          style={{
+            position: 'relative', width: 28, height: 28, borderRadius: '50%',
+            background: 'transparent', border: 'none', cursor: isLoading ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, flexShrink: 0, opacity: 0.75,
+          }}
+        >
+          <span aria-hidden style={{ position: 'absolute', inset: '-9px' }} />
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+        </button>
+
         <input
           value={value}
           onChange={e => onChange(e.target.value)}
@@ -374,7 +403,7 @@ function Composer({
 function MemoryView({
   messages, loading, loadingHistory, fresh,
   chips, greeting, sessionKey, input, setInput, onSend, onOpenThread, onOpenVoice,
-  bottomRef,
+  onOpenReports, onOpenReport, bottomRef,
 }: {
   messages: Message[]
   loading: boolean
@@ -388,6 +417,8 @@ function MemoryView({
   onSend: (text?: string, files?: File[]) => void
   onOpenThread: (msg: Message) => void
   onOpenVoice: () => void
+  onOpenReports: () => void
+  onOpenReport: (reportId: string) => void
   bottomRef: React.RefObject<HTMLDivElement | null>
 }) {
   const opacityMap = buildOpacityMap(messages)
@@ -500,6 +531,14 @@ function MemoryView({
                         {m.content}
                       </div>
 
+                      {/* Brief 28.0 — inline fragment (single report section) */}
+                      {m.attachedFragment && <FragmentBlock fragment={m.attachedFragment} />}
+
+                      {/* Brief 28.0 — full-report preview card → opens the modal */}
+                      {m.attachedReport && (
+                        <ReportPreviewCard attachedReport={m.attachedReport} onTap={() => onOpenReport(m.attachedReport!.reportId)} />
+                      )}
+
                       {/* Brief 7.4 — optional TTS: read the reply aloud */}
                       <SpeakButton text={m.content} />
 
@@ -577,6 +616,7 @@ function MemoryView({
           onChange={setInput}
           onSubmit={(files) => onSend(undefined, files)}
           onOpenVoice={onOpenVoice}
+          onOpenReports={onOpenReports}
           isLoading={loading}
         />
       </div>
@@ -994,6 +1034,12 @@ function ChatPageInner() {
   const [voiceOpen, setVoiceOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
+  // Brief 28.0 — report engine UI state.
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [buyerPickerOpen, setBuyerPickerOpen] = useState(false)
+  const [pendingTemplateId, setPendingTemplateId] = useState<string | null>(null)
+  const [modalReportId, setModalReportId] = useState<string | null>(null)
+  const [generatingReport, setGeneratingReport] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -1074,10 +1120,50 @@ function ChatPageInner() {
       })
       const data = await res.json()
       if (data.sessionId) setCurrentSessionId(data.sessionId)
-      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, createdAt: new Date().toISOString() }])
+      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, attachedReport: data.attachedReport ?? null, attachedFragment: data.attachedFragment ?? null, createdAt: new Date().toISOString() }])
     } catch {
       setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: 'Something went wrong. Try again.', createdAt: new Date().toISOString() }])
     } finally { setLoading(false) }
+  }
+
+  // Brief 28.0 — reload a session's messages (rehydrates report attachments via
+  // ...m). Shared by the report-generation flow and the voice-close refetch.
+  const refetchMessages = useCallback(async (sid: string) => {
+    try {
+      const res = await fetch(`/api/chat?sessionId=${sid}`)
+      if (!res.ok) return
+      const d = await res.json()
+      const msgs: Message[] = (d.messages ?? []).map((m: Record<string, unknown>) => ({
+        ...m,
+        deals: (m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined) ?? [],
+        suggestions: Array.isArray(m.suggestions) ? m.suggestions : [],
+      }))
+      setMessages(msgs)
+    } catch { /* non-fatal */ }
+  }, [])
+
+  // Brief 28.0 — + button flow: buyer picked → generate a full report, save it,
+  // write the preview-card message, then refetch so the card appears in-thread.
+  async function generateReport(templateId: string, buyerId: string) {
+    setBuyerPickerOpen(false)
+    setPendingTemplateId(null)
+    if (cs.view === 'memory_new') dispatch({ type: 'GO', to: 'memory' })
+    setGeneratingReport(true)
+    try {
+      const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId, params: { buyerId }, sessionId: currentSessionId, writeToChat: true }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) { showToast(data.error ?? 'Report generation failed.'); return }
+      const sid: string | null = data.sessionId ?? currentSessionId
+      if (sid) { setCurrentSessionId(sid); await refetchMessages(sid) }
+    } catch {
+      showToast('Report generation failed.')
+    } finally {
+      setGeneratingReport(false)
+    }
   }
 
   function userQuestionFor(msg: Message): string {
@@ -1097,6 +1183,8 @@ function ChatPageInner() {
           input={input} setInput={setInput} onSend={send}
           onOpenThread={msg => dispatch({ type: 'OPEN_THREAD', msg })}
           onOpenVoice={() => setVoiceOpen(true)}
+          onOpenReports={() => setPickerOpen(true)}
+          onOpenReport={(reportId) => setModalReportId(reportId)}
           bottomRef={bottomRef}
         />
       )}
@@ -1144,6 +1232,40 @@ function ChatPageInner() {
         }}
         onNewSession={(id) => setCurrentSessionId(id)}
       />
+
+      {/* Brief 28.0 — Report engine UI: picker → detail → buyer picker → generate;
+          preview-card taps open the modal. */}
+      <ReportPickerSheet
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onGenerate={(templateId) => { setPendingTemplateId(templateId); setPickerOpen(false); setBuyerPickerOpen(true) }}
+      />
+      <BuyerPickerSheet
+        open={buyerPickerOpen}
+        onClose={() => { setBuyerPickerOpen(false); setPendingTemplateId(null) }}
+        onBack={() => { setBuyerPickerOpen(false); setPickerOpen(true) }}
+        onPick={(buyerId) => { if (pendingTemplateId) generateReport(pendingTemplateId, buyerId) }}
+      />
+      <ReportModal reportId={modalReportId} onClose={() => setModalReportId(null)} />
+
+      {generatingReport && (
+        <div style={{
+          position: 'fixed', left: '50%', transform: 'translateX(-50%)',
+          bottom: 'calc(96px + env(safe-area-inset-bottom))', zIndex: 190,
+          display: 'flex', alignItems: 'center', gap: 9,
+          background: 'rgba(20,24,30,0.92)', border: '1px solid rgba(255,255,255,0.15)',
+          borderRadius: 999, padding: '10px 18px', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+        }}>
+          <span style={{ display: 'flex', gap: 4 }}>
+            {[0, 150, 300].map(d => (
+              <span key={d} style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--sr-cream, #EAB308)', animation: 'sr-bounce 1.2s infinite', animationDelay: `${d}ms` }} />
+            ))}
+          </span>
+          <span style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.85)' }}>Generating report…</span>
+        </div>
+      )}
+
       <style>{`
         @keyframes sr-bounce { 0%,80%,100%{transform:translateY(0);opacity:0.35} 40%{transform:translateY(-5px);opacity:0.9} }
       `}</style>
