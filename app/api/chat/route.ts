@@ -18,6 +18,7 @@ import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
 import { buildGroundingCorpus, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
 import { logGuardFireEvent } from '@/lib/chat/guards/instrumentation'
+import { buildSystemBlocks, RYAN_MD } from '@/lib/chat/systemBlocks'
 import {
   MAX_GUARD_RETRIES,
   selectCannedFallback,
@@ -289,15 +290,13 @@ export async function POST(req: NextRequest) {
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
     const userBlocks: AUserPart[] = [{ type: 'text', text: textContent }, ...imageParts]
 
-    // ── System prompt: static SYSTEM_PROMPT cached; dynamic side-channel block uncached ──
+    // ── System prompt: SYSTEM_PROMPT + RYAN_MD cached; dynamic side-channel block uncached ──
     // The dynamic block carries composeContext's side-channels (live StreetEasy,
     // Mojo, mortgage, calendar, ACRIS, DOB). Cards are NOT injected here anymore
-    // — Sonnet pulls them via the search tools.
+    // — Sonnet pulls them via the search tools. RYAN_MD (Brief 29.0) is a static
+    // personal glossary added as a second cached block by buildSystemBlocks.
     const dynamicSystemBlock = [composed.pre, composed.post].filter(Boolean).join('\n\n').trim()
-    const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
-      { type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } },
-    ]
-    if (dynamicSystemBlock) systemBlocks.push({ type: 'text', text: dynamicSystemBlock })
+    const systemBlocks = buildSystemBlocks(SYSTEM_PROMPT, dynamicSystemBlock)
 
     // ── Tool definition for the final structured reply ──
     const RESPONSE_TOOL_NAME = 'drift_response'
@@ -583,7 +582,11 @@ export async function POST(req: NextRequest) {
     // isn't flagged as a hallucination and forced to the canned fallback.
     // Extracted once here so the same text is reused across both guard calls and
     // every retry-loop iteration below.
-    const sideChannelText = dynamicSystemBlock || null
+    // Brief 29.0 — RYAN_MD is always-on grounded evidence too (same principle):
+    // vocabulary Sonnet draws from the personal glossary ("hot matches",
+    // "off-market", neighborhood shorthand) must not be flagged as hallucinated.
+    // Fold it in ahead of the per-turn dynamic block.
+    const sideChannelText = [RYAN_MD, dynamicSystemBlock].filter(Boolean).join('\n\n') || null
     const groundingCorpus = buildGroundingCorpus(toolResultsForGuard, priorDealCards, sideChannelText)
 
     if (guardApplies) {
