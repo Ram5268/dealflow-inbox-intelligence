@@ -5,6 +5,14 @@ import 'dotenv/config'
 // runner script starts it). This harness verifies each prompt's ACRIS / DOB /
 // FRED / search_listings / search_parties tool routing.
 // Run: npx tsx scripts/tests/chat-harness.ts
+//
+// Brief 29.0 — added a "real-Ryan" section seeded from actual ChatMessage rows
+// (NOT synthetic phrasings; see project_ryan_md_pattern). The /api/chat response
+// carries no tool-call telemetry, so tool routing is asserted indirectly via
+// response substrings + report/fragment attachments — the same idiom the
+// original prompts use. Multi-turn prompts run in their own isolated session so
+// ordinal ("the first one") / continuation ("yes do that") references resolve
+// against the intended prior turn, not an unrelated earlier prompt.
 
 interface ChatResponse {
   sessionId?: string
@@ -49,13 +57,23 @@ async function ask(sessionId: string | undefined, message: string) {
 
 type Prompt = {
   label: string
-  msg: string
+  // Single-turn prompts use `msg`; multi-turn use `turns` (run in one fresh
+  // session). Checks below apply to the LAST turn's response.
+  msg?: string
+  turns?: string[]
   expect: string[]
-  expectReport?: boolean     // response must attach a saved full report
-  expectFragment?: boolean   // response must attach an inline section fragment (NOT saved)
+  // Session sharing: prompts with the same sessionKey share one sessionId across
+  // the run. Default 'main' preserves the original sequential flow (the report
+  // fragment prompt references "that Soho buyer" from the prior report prompt).
+  // A unique key gives a prompt its own isolated session.
+  sessionKey?: string
+  expectReport?: boolean         // response must attach a saved full report
+  expectFragment?: boolean       // response must attach an inline section fragment (NOT saved)
+  expectClarification?: boolean  // if false, the final response must NOT be a bare clarifying question
 }
 
 const PROMPTS: Prompt[] = [
+  // ── Original tool-routing coverage (shared 'main' session, sequential) ──
   { label: 'ACRIS: owner lookup',      msg: 'who owns 220 Central Park South?',                        expect: ['owner', 'sale', 'acris', 'central park'] },
   { label: 'DOB: permits',             msg: 'any permits at 111 West 57th Street?',                    expect: ['permit', '111'] },
   { label: 'search_listings tool',     msg: 'coming soon 2BR sales in west village under $3M',        expect: ['west village', 'listing', '2'] },
@@ -65,7 +83,35 @@ const PROMPTS: Prompt[] = [
   // generates. The Soho 2BR ~$4.5M buyer is a seed [TEST_10] BUYER_ISO with matches.
   { label: 'generate_report full',     msg: 'draft me a buyer match report for the Soho 2BR buyer with a budget around $4.5M', expect: ['report generated', 'buyer match', 'saved as'], expectReport: true },
   { label: 'generate_report_section',  msg: 'now give me just the near-misses for that Soho buyer',    expect: ['near', '$'], expectFragment: true },
+
+  // ── Brief 29.0 — real-Ryan phrasings from the 30-day chat log (isolated sessions) ──
+  // Neighborhood shorthand: "WV" must resolve to West Village via RYAN_MD.
+  { label: 'real: neighborhood shorthand (WV)', sessionKey: 'r-wv',
+    msg: 'show me my WV inventory', expect: ['west village'] },
+  // Client-name lookup routes to search_parties; response should echo the name
+  // (whether or not a match exists in seed data).
+  { label: 'real: client name lookup', sessionKey: 'r-client',
+    msg: 'sarah chen — got anything for her?', expect: ['sarah'] },
+  // Address-first prompt; response should reference the address.
+  { label: 'real: address-first', sessionKey: 'r-addr',
+    msg: "what's the sale price on 30 Park Pl PH?", expect: ['30 park'] },
+  // Ordinal follow-up over two turns → fragment on the second turn.
+  { label: 'real: ordinal follow-up (multi-turn)', sessionKey: 'r-ordinal',
+    turns: ['find buyers looking for a 2BR in Soho', 'give me the near-misses for the first one'],
+    expect: ['near'], expectFragment: true },
+  // Casual affirmative continuation must EXECUTE, not ask a clarifying question.
+  { label: 'real: casual continuation (multi-turn)', sessionKey: 'r-cont',
+    turns: ['find sellers in bedstuy', 'yes do that'],
+    expect: [], expectClarification: false },
 ]
+
+// Heuristic: a bare clarifying question is short and ends with '?'. Good enough
+// to catch "Which buyer did you mean?" style non-execution without flaking on
+// substantive answers that happen to include a trailing question.
+function looksLikeClarification(text: string): boolean {
+  const t = text.trim()
+  return /\?\s*$/.test(t) && t.length < 160
+}
 
 async function main() {
   console.log('=== Chat framework harness ===')
@@ -78,21 +124,28 @@ async function main() {
   }
   console.log('✓ server reachable')
 
-  let sessionId: string | undefined
+  const sessions: Record<string, string | undefined> = {}
   const results: Array<{ label: string; status: number; ms: number; pass: boolean; note: string }> = []
 
   for (const p of PROMPTS) {
-    console.log(`\n[${p.label}] ⇒ "${p.msg}"`)
+    const turns = p.turns ?? [p.msg as string]
+    const sessionKey = p.sessionKey ?? 'main'
+    console.log(`\n[${p.label}] (session: ${sessionKey})`)
     try {
-      const r = await ask(sessionId, p.msg)
+      let r!: Awaited<ReturnType<typeof ask>>
+      for (const [i, msg] of turns.entries()) {
+        console.log(`  turn ${i + 1} ⇒ "${msg}"`)
+        r = await ask(sessions[sessionKey], msg)
+        const tb = r.body as ChatResponse
+        sessions[sessionKey] = sessions[sessionKey] ?? tb.sessionId
+      }
       const b = r.body as ChatResponse
-      sessionId = sessionId ?? b.sessionId
       const text = (b.response ?? JSON.stringify(b)).toString()
       const short = text.length > 500 ? text.slice(0, 500) + '…' : text
       console.log(`  status=${r.status} ${r.ms}ms`)
       console.log(`  response: ${short}`)
       const matched = p.expect.filter(k => text.toLowerCase().includes(k.toLowerCase()))
-      console.log(`  expected substrings matched: ${matched.length}/${p.expect.length} (${matched.join(',')})`)
+      if (p.expect.length) console.log(`  expected substrings matched: ${matched.length}/${p.expect.length} (${matched.join(',')})`)
       if (b.attachedReport) console.log(`  attachedReport: ${JSON.stringify(b.attachedReport)}`)
       if (b.attachedFragment) console.log(`  attachedFragment: ${JSON.stringify({ ...b.attachedFragment, content: '…' })}`)
       if (b.suggestions?.length) console.log(`  suggestions: ${JSON.stringify(b.suggestions)}`)
@@ -108,7 +161,13 @@ async function main() {
         const ok = !!b.attachedFragment?.sectionKey && !b.attachedReport && matched.length >= 1
         pass = pass && ok
         note = ok ? `fragment ${b.attachedFragment?.sectionKey} (not saved)` : 'MISSING attachedFragment or unexpectedly saved a report'
+      } else if (p.expectClarification === false) {
+        const clarified = looksLikeClarification(text)
+        pass = pass && !clarified
+        note = clarified ? 'UNEXPECTED clarifying question (should have executed)' : 'executed (no bare clarification)'
       } else {
+        const ok = p.expect.length === 0 || matched.length >= 1
+        pass = pass && ok
         note = `${matched.length}/${p.expect.length} substrings`
       }
       results.push({ label: p.label, status: r.status, ms: r.ms, pass, note })
