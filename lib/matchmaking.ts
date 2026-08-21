@@ -44,11 +44,19 @@ const PRICE_WEIGHT = 30
 function pricePart(
   listingPrice: number | null | undefined,
   isoMinPrice: number | null | undefined,
-  isoMaxPrice: number | null | undefined
+  isoMaxPrice: number | null | undefined,
+  listingMinPrice?: number | null,
+  listingMaxPrice?: number | null,
 ): { points: number; overlap: number; gated: boolean } {
-  const hasPrice = listingPrice != null && (isoMinPrice != null || isoMaxPrice != null)
+  // Brief 30.2 — effective listing price: prefer scalar, else the midpoint of the
+  // listing's own range (new development / sponsor units store "starting from
+  // $X to $Y" as minPrice/maxPrice with scalar price null).
+  const effectivePrice = listingPrice ??
+    (listingMinPrice != null && listingMaxPrice != null ? (listingMinPrice + listingMaxPrice) / 2 :
+     listingMaxPrice ?? listingMinPrice ?? null)
+  const hasPrice = effectivePrice != null && (isoMinPrice != null || isoMaxPrice != null)
   if (!hasPrice) return { points: 5, overlap: NaN, gated: false }
-  const overlap = priceOverlapScore(listingPrice, isoMinPrice ?? null, isoMaxPrice ?? null)
+  const overlap = priceOverlapScore(effectivePrice, isoMinPrice ?? null, isoMaxPrice ?? null)
   return { points: overlap * PRICE_WEIGHT, overlap, gated: overlap === 0 }
 }
 
@@ -59,14 +67,14 @@ export interface MatchScore {
 }
 
 export function scoreMatch(
-  listing: { neighborhood?: string | null; price?: number | null; beds?: number | null },
-  demand: { neighborhood?: string | null; minPrice?: number | null; maxPrice?: number | null; beds?: number | null }
+  listing: { neighborhood?: string | null; price?: number | null; minPrice?: number | null; maxPrice?: number | null; beds?: number | null },
+  demand: { neighborhood?: string | null; minPrice?: number | null; maxPrice?: number | null; beds?: number | null; minBeds?: number | null; maxBeds?: number | null }
 ): MatchScore {
-  const price = pricePart(listing.price, demand.minPrice, demand.maxPrice)
+  const price = pricePart(listing.price, demand.minPrice, demand.maxPrice, listing.minPrice, listing.maxPrice)
   const score =
     neighborhoodScore(listing.neighborhood, demand.neighborhood) +
     price.points +
-    bedsScore(listing.beds, demand.beds)
+    bedsScore(listing.beds, demand.beds, demand.minBeds, demand.maxBeds)
   return { score, priceOverlap: price.overlap, priceGated: price.gated }
 }
 
@@ -112,6 +120,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
     where: { id: { in: newOppIds }, isDuplicate: false, ...provenanceGate },
     select: { id: true, category: true, neighborhood: true, borough: true,
               price: true, minPrice: true, maxPrice: true, beds: true,
+              minBeds: true, maxBeds: true,
               propertyType: true, extractedTitle: true },
   })
 
@@ -126,7 +135,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   if (newSaleListings.length > 0) {
     const allISOs = await prisma.extractedOpportunity.findMany({
       where: { category: Category.BUYER_ISO, isDuplicate: false, ...testGate, ...provenanceGate },
-      select: { id: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true, extractedTitle: true },
+      select: { id: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true, minBeds: true, maxBeds: true, extractedTitle: true },
     })
     for (const listing of newSaleListings) {
       for (const iso of allISOs) {
@@ -145,7 +154,7 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   if (newRentalListings.length > 0) {
     const allInquiries = await prisma.extractedOpportunity.findMany({
       where: { category: Category.RENTER_INQUIRY, isDuplicate: false, ...testGate, ...provenanceGate },
-      select: { id: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true, extractedTitle: true },
+      select: { id: true, neighborhood: true, minPrice: true, maxPrice: true, beds: true, minBeds: true, maxBeds: true, extractedTitle: true },
     })
     for (const listing of newRentalListings) {
       for (const inq of allInquiries) {
@@ -164,11 +173,11 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   if (newBuyerISOs.length > 0) {
     const allListings = await prisma.extractedOpportunity.findMany({
       where: { category: { in: SALE_CATEGORIES }, isDuplicate: false, ...testGate, ...provenanceGate },
-      select: { id: true, neighborhood: true, price: true, beds: true, extractedTitle: true },
+      select: { id: true, neighborhood: true, price: true, minPrice: true, maxPrice: true, beds: true, extractedTitle: true },
     })
     for (const iso of newBuyerISOs) {
       for (const listing of allListings) {
-        const m = scoreMatch(listing, { neighborhood: iso.neighborhood, minPrice: iso.minPrice, maxPrice: iso.maxPrice, beds: iso.beds })
+        const m = scoreMatch(listing, { neighborhood: iso.neighborhood, minPrice: iso.minPrice, maxPrice: iso.maxPrice, beds: iso.beds, minBeds: iso.minBeds, maxBeds: iso.maxBeds })
         const score = Math.round(m.score)
         if (qualifiesAsMatch(m)) {
           const reason = `ISO: ${iso.extractedTitle} may match ${listing.extractedTitle} (score ${score})`
@@ -205,11 +214,11 @@ export async function runMatchmaking(newOppIds: string[]): Promise<MatchResult> 
   if (newRenterInquiries.length > 0) {
     const allRentals = await prisma.extractedOpportunity.findMany({
       where: { category: { in: RENTAL_CATEGORIES }, isDuplicate: false, ...testGate, ...provenanceGate },
-      select: { id: true, neighborhood: true, price: true, beds: true, extractedTitle: true },
+      select: { id: true, neighborhood: true, price: true, minPrice: true, maxPrice: true, beds: true, extractedTitle: true },
     })
     for (const inq of newRenterInquiries) {
       for (const rental of allRentals) {
-        const m = scoreMatch(rental, { neighborhood: inq.neighborhood, minPrice: inq.minPrice, maxPrice: inq.maxPrice, beds: inq.beds })
+        const m = scoreMatch(rental, { neighborhood: inq.neighborhood, minPrice: inq.minPrice, maxPrice: inq.maxPrice, beds: inq.beds, minBeds: inq.minBeds, maxBeds: inq.maxBeds })
         const score = Math.round(m.score)
         if (qualifiesAsMatch(m)) {
           const reason = `Renter inquiry may match ${rental.extractedTitle} (score ${score})`

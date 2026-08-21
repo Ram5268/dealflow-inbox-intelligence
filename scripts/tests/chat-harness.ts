@@ -67,6 +67,7 @@ type Prompt = {
   // fragment prompt references "that Soho buyer" from the prior report prompt).
   // A unique key gives a prompt its own isolated session.
   sessionKey?: string
+  notExpect?: string[]           // final response must NOT contain any of these substrings (case-insensitive)
   expectReport?: boolean         // response must attach a saved full report
   expectFragment?: boolean       // response must attach an inline section fragment (NOT saved)
   expectClarification?: boolean  // if false, the final response must NOT be a bare clarifying question
@@ -95,14 +96,81 @@ const PROMPTS: Prompt[] = [
   // Address-first prompt; response should reference the address.
   { label: 'real: address-first', sessionKey: 'r-addr',
     msg: "what's the sale price on 30 Park Pl PH?", expect: ['30 park'] },
-  // Ordinal follow-up over two turns → fragment on the second turn.
+  // Ordinal follow-up over two turns. Brief 30.1 fixed the search_parties beds-recall
+  // bug, so turn-1 now returns the SoHo buyer and "the first one" RESOLVES (rather
+  // than the Brief 30.0 clarification when the search returned zero). We assert
+  // "resolved, not a bare clarification" — robust to Sonnet occasionally answering
+  // the section in prose vs the fragment tool. Deterministic fragment-tool routing is
+  // covered by the fragment matrix D-category (56/56).
   { label: 'real: ordinal follow-up (multi-turn)', sessionKey: 'r-ordinal',
     turns: ['find buyers looking for a 2BR in Soho', 'give me the near-misses for the first one'],
-    expect: ['near'], expectFragment: true },
+    expect: [], expectClarification: false },
   // Casual affirmative continuation must EXECUTE, not ask a clarifying question.
   { label: 'real: casual continuation (multi-turn)', sessionKey: 'r-cont',
     turns: ['find sellers in bedstuy', 'yes do that'],
     expect: [], expectClarification: false },
+
+  // ── Brief 30.0 — RYAN.md v2 routing proof (isolated sessions) ──
+  // Block A — the 8 previously-failing prompts from the 56-prompt fragment matrix.
+  // Question-shape phrasings that Rules A+B (Section 2) should now route to a fragment.
+  { label: 'B30/C21 whats out there', sessionKey: 'b30-c21',
+    msg: "what's out there for them for buyer cmsp7l5he001qloo89haui4u2", expect: ['matching', 'listings'] },
+  // Routing proof is the matching-inventory fragment attachment (RULE B), not the
+  // prose — Sonnet often summarizes tiers without echoing "matching"/"inventory".
+  { label: 'B30/C22 market look like', sessionKey: 'b30-c22',
+    msg: "what's the market look like for buyer cmsp7l5he001qloo89haui4u2", expect: ['listing', 'tier', 'fit', 'match'], expectFragment: true },
+  { label: 'B30/C29 pocket listings', sessionKey: 'b30-c29',
+    msg: 'any pocket listings for buyer cmsp7l5he001qloo89haui4u2', expect: ['off-market', 'pocket'] },
+  { label: 'B30/B9 criteria for buyer looking for', sessionKey: 'b30-b9',
+    msg: 'give me the criteria for the buyer looking for 2BR Soho around $4.5M', expect: ['criteria', 'soho'] },
+  // Ordinal resolution — Section 3. Turn-1 "find buyers looking for 2BR Soho ~$4.5M"
+  // now returns BUYER_A (Brief 30.1 fixed the beds-recall bug that made it return zero
+  // during Brief 30.0). Turn-2 resolves "the first one" and answers substantively
+  // (fragment or prose) rather than clarifying. We assert "resolved, not a bare
+  // clarification" — robust to fragment-vs-prose tool-choice non-determinism; the
+  // deterministic fragment-tool routing is covered by the fragment matrix D-category.
+  { label: 'B30/D42 first one near-misses', sessionKey: 'b30-d42',
+    turns: ['find buyers looking for 2BR Soho around $4.5M', 'give me the near misses for the first one'],
+    expect: [], expectClarification: false },
+  { label: 'B30/D44 first one budget', sessionKey: 'b30-d44',
+    turns: ['find buyers looking for 2BR Soho around $4.5M', 'give me the budget reality for the first one'],
+    expect: [], expectClarification: false },
+  { label: 'B30/D46 first one curated', sessionKey: 'b30-d46',
+    turns: ['find buyers looking for 2BR Soho around $4.5M', 'give me the curated matches for the first one'],
+    expect: [], expectClarification: false },
+  // Clarification fallback — Section 3 STEP 3: fresh session, no prior turn.
+  { label: 'B30/F53 that buyer we were talking about (fresh)', sessionKey: 'b30-f53',
+    msg: 'what about that buyer we were talking about', expect: ['which buyer', '?'] },
+
+  // Block B — Phase 2 locked-template routing (Section 6b must respond, not fabricate).
+  { label: 'B30/P01 CMA locked', sessionKey: 'b30-p01',
+    msg: 'run a CMA on 30 Park Place', expect: ['not', 'unlocked', 'roadmap'] },
+  { label: 'B30/P02 price adjustment locked', sessionKey: 'b30-p02',
+    msg: 'should we drop the price on 40 Bond', expect: ['not', 'unlocked'] },
+  { label: 'B30/U01 acquisition screening locked', sessionKey: 'b30-u01',
+    msg: 'should I buy 400 W 15th', expect: ['not', 'unlocked'] },
+  { label: 'B30/O02 market snapshot locked', sessionKey: 'b30-o02',
+    msg: "how's the market in tribeca", expect: ['not', 'unlocked'] },
+  { label: 'B30/M01 seller activity locked', sessionKey: 'b30-m01',
+    msg: 'seller update for 30 Park Place', expect: ['not', 'unlocked'] },
+
+  // Block C — non-report workflow patterns (Section 7 + 8).
+  { label: 'B30/inbox review recent', sessionKey: 'b30-inbox',
+    msg: 'anything hot in the inbox from the last 24 hours', expect: ['listings', 'buyers', 'coming soon'] },
+  { label: 'B30/ACRIS prior sale (multi-turn)', sessionKey: 'b30-acris',
+    turns: ['pull 30 Park Place', 'who owned it before that'], expect: ['prior', 'acris'] },
+  { label: 'B30/compare two properties', sessionKey: 'b30-compare',
+    msg: 'stack 30 Park Place against 40 Bond', expect: ['30 park', '40 bond'] },
+  // notExpect targets false CLAIMS of sending (there is no send tool), not the bare
+  // word "send" — a legitimate draft routinely says things like "ready to send".
+  { label: 'B30/draft outreach — no send', sessionKey: 'b30-draft',
+    msg: 'draft a follow-up note to the McCoy family about the 3BR Chelsea',
+    expect: ['dear', 'mccoy', 'draft'], notExpect: ['has been sent', "i've sent", 'email sent', 'sent it', 'sent the email'] },
+  // Deferral vocabulary varies ("coming soon" / "not yet implemented" / "roadmap"); accept any.
+  { label: 'B30/farm add — deferred', sessionKey: 'b30-farm',
+    msg: 'add 123 5th ave to my farm list', expect: ['coming', 'soon', 'not yet', 'roadmap', 'implemented', 'noted'] },
+  { label: 'B30/correction — no I meant (multi-turn)', sessionKey: 'b30-correction',
+    turns: ['coming soon in chelsea', 'no I meant soho not chelsea'], expect: ['soho'] },
 ]
 
 // Heuristic: a bare clarifying question is short and ends with '?'. Good enough
@@ -165,10 +233,24 @@ async function main() {
         const clarified = looksLikeClarification(text)
         pass = pass && !clarified
         note = clarified ? 'UNEXPECTED clarifying question (should have executed)' : 'executed (no bare clarification)'
+      } else if (p.expectClarification === true) {
+        // Section 3 STEP 3 — when the referent can't be resolved, v2 must NOT
+        // fabricate a fragment/report; it clarifies. Assert no fabrication.
+        const ok = !b.attachedFragment && !b.attachedReport
+        pass = pass && ok
+        note = ok ? 'clarified (no fabricated fragment/report)' : 'FABRICATED a fragment/report instead of clarifying'
       } else {
         const ok = p.expect.length === 0 || matched.length >= 1
         pass = pass && ok
         note = `${matched.length}/${p.expect.length} substrings`
+      }
+      // Brief 30.0 — universal negative gate (e.g. a draft must never mention "send"/"sent").
+      if (p.notExpect?.length) {
+        const violated = p.notExpect.filter(k => text.toLowerCase().includes(k.toLowerCase()))
+        if (violated.length) {
+          pass = false
+          note += ` | FORBIDDEN substrings present: ${violated.join(',')}`
+        }
       }
       results.push({ label: p.label, status: r.status, ms: r.ms, pass, note })
     } catch (e) {
