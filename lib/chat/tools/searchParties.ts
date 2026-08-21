@@ -93,6 +93,40 @@ function geoMatches(
   return true
 }
 
+// Bed-count overlap between a query (exact OR min/max range) and a row that
+// may store its beds as either a scalar (`beds`) or a range (`minBeds`/`maxBeds`).
+// ISO buyers routinely store as range with scalar null; treating scalar-only would
+// drop the majority of legitimate buyer ISOs. Exported for unit testing.
+export function bedsMatches(
+  wantExact: number | null,
+  wantMin: number | null,
+  wantMax: number | null,
+  rowBeds: number | null,
+  rowMinBeds: number | null,
+  rowMaxBeds: number | null,
+): boolean {
+  // Nothing wanted → don't gate.
+  if (wantExact == null && wantMin == null && wantMax == null) return true
+
+  // Row effective range: prefer scalar when set, else fall back to min/max.
+  const rLoRaw = rowBeds ?? rowMinBeds
+  const rHiRaw = rowBeds ?? rowMaxBeds
+
+  // Row is fully unknown → neutral, don't exclude (mirrors geoMatches: a null
+  // dimension doesn't gate out a partially-extracted row).
+  if (rLoRaw == null && rHiRaw == null) return true
+
+  const rLo = rLoRaw ?? rHiRaw ?? 0
+  const rHi = rHiRaw ?? rLoRaw ?? Number.POSITIVE_INFINITY
+
+  if (wantExact != null) {
+    return rLo <= wantExact && wantExact <= rHi
+  }
+  const qLo = wantMin ?? 0
+  const qHi = wantMax ?? Number.POSITIVE_INFINITY
+  return rLo <= qHi && qLo <= rHi
+}
+
 export async function searchParties(rawInput: SearchPartiesInput): Promise<SearchPartiesResult> {
   const input = searchPartiesInputSchema.parse(rawInput)
   const organizationId = await getCurrentOrgId()
@@ -134,13 +168,11 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
     if (!includeTestData) where.isTestData = false
     // TEST_MODE_ONLY hard gate: force seed data on the demand side.
     if (isTestModeOnly()) where.isTestData = true
-    if (input.beds != null) where.beds = input.beds
-    else if (input.bedsMin != null || input.bedsMax != null) {
-      where.beds = {
-        ...(input.bedsMin != null ? { gte: input.bedsMin } : {}),
-        ...(input.bedsMax != null ? { lte: input.bedsMax } : {}),
-      }
-    }
+    // Beds are NOT gated at the Prisma layer: buyer ISOs store their bed criteria
+    // as minBeds/maxBeds with the scalar `beds` column null (~90% of rows — this is
+    // correct extractor behavior: ISOs are ranges, not scalars). A `where.beds`
+    // filter against the scalar column drops all of them. Filtered in-memory below
+    // via bedsMatches, which reads both the scalar and the range. (Brief 30.1)
 
     const parties = await prisma.extractedOpportunity.findMany({
       where,
@@ -148,13 +180,14 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
       orderBy: { createdAt: 'desc' },
       select: {
         id: true, category: true, extractedTitle: true, neighborhood: true,
-        neighborhoods: true, borough: true, beds: true, minPrice: true,
-        maxPrice: true, isTestData: true,
+        neighborhoods: true, borough: true, beds: true, minBeds: true,
+        maxBeds: true, minPrice: true, maxPrice: true, isTestData: true,
       },
     })
 
     for (const p of parties) {
       if (!geoMatches(wantBorough, wantHoods, p.borough, [p.neighborhood, ...(p.neighborhoods ?? [])])) continue
+      if (!bedsMatches(input.beds ?? null, input.bedsMin ?? null, input.bedsMax ?? null, p.beds, p.minBeds, p.maxBeds)) continue
 
       let overlap: number | undefined
       if (range) {
