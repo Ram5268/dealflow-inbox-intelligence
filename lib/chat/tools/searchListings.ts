@@ -22,6 +22,7 @@ import { Category, Prisma } from '@prisma/client'
 import { fromRaw, getBorough } from '@/lib/domain/Neighborhood'
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
 import { isTestModeOnly } from '@/lib/config/testMode'
+import { bedsMatches } from './searchParties'
 
 // Listing categories this tool exposes (sale + rental supply the chat surfaces).
 const SALE_CATS = ['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'ACTIVE_SALE_LISTING'] as const
@@ -110,15 +111,12 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
   // Lets Haiku answer direct-address queries ("anything at 88 Greenwich Ave?")
   // instead of falling back to a broad search + mental filter.
   if (input.address) where.address = { contains: input.address, mode: 'insensitive' }
-  if (input.beds != null) where.beds = input.beds
-  else if (input.bedsMin != null || input.bedsMax != null) {
-    where.beds = {
-      ...(input.bedsMin != null ? { gte: input.bedsMin } : {}),
-      ...(input.bedsMax != null ? { lte: input.bedsMax } : {}),
-    }
-  }
+  // Beds are NOT gated at the Prisma layer (Brief 30.2, mirroring the search_parties
+  // fix): listings can store beds as a range (minBeds/maxBeds with scalar beds null
+  // — new development / sponsor units, partial extractions). A scalar `where.beds`
+  // gate drops those. Filtered in-memory via bedsMatches below.
 
-  // Fetch a generous candidate pool; borough/neighborhood/price are refined in
+  // Fetch a generous candidate pool; borough/neighborhood/price/beds are refined in
   // JS below, so we over-fetch relative to `limit` and truncate after.
   const candidates = await prisma.extractedOpportunity.findMany({
     where,
@@ -127,7 +125,8 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
     select: {
       id: true, category: true, extractedTitle: true, address: true,
       neighborhood: true, neighborhoods: true, borough: true,
-      beds: true, price: true, minPrice: true, maxPrice: true, isTestData: true,
+      beds: true, minBeds: true, maxBeds: true,
+      price: true, minPrice: true, maxPrice: true, isTestData: true,
     },
   })
 
@@ -159,10 +158,19 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
       if (!hit) continue
     }
 
+    // Beds gate — range-aware (Brief 30.2); a listing storing beds as minBeds/maxBeds
+    // with scalar null is matched via its effective range, not dropped.
+    if (!bedsMatches(input.beds ?? null, input.bedsMin ?? null, input.bedsMax ?? null, o.beds, o.minBeds, o.maxBeds)) continue
+
     // Price gate — fractional overlap; drop only true 0-overlap when a budget was given.
     let overlap: number | undefined
     if (hasPriceFilter) {
-      overlap = priceOverlapScore(o.price, input.priceMin ?? null, input.priceMax ?? null, tolerance)
+      // Effective listing price: prefer scalar, else the midpoint of the listing's own
+      // range (new dev / sponsor units store "from $X to $Y" as minPrice/maxPrice).
+      const effectivePrice = o.price ??
+        (o.minPrice != null && o.maxPrice != null ? (o.minPrice + o.maxPrice) / 2 :
+         o.maxPrice ?? o.minPrice ?? null)
+      overlap = priceOverlapScore(effectivePrice, input.priceMin ?? null, input.priceMax ?? null, tolerance)
       if (overlap === 0) continue
     }
 
