@@ -239,6 +239,18 @@ model ExtractedOpportunity {
   timeline        String?
   criteriaActive  Boolean   @default(true)
 
+  // Brief 32 — buyer archetype (BUYER_ISO only) + property intelligence (listing side).
+  buyerArchetype       String?   // CASH_BUYER | EXCHANGE_1031 | TRADITIONAL_FINANCING |
+                                 // INVESTOR_LANDLORD | FIRST_TIME_FHA | LUXURY_ALL_CASH |
+                                 // LUXURY_FINANCED
+  monthlyMaintenance   Float?    // co-op
+  monthlyCommonCharges Float?    // condo
+  monthlyTaxes         Float?    // monthly (annual/12), all types
+  yearBuilt            Int?
+  lotSizeSqft          Float?
+  zoningCode           String?
+  // NOTE: buildingSqft → use existing squareFeet; unitCount → use existing units.
+
   extractedTitle       String
   extractedSummary     String
   classificationReason String
@@ -262,7 +274,8 @@ model ExtractedOpportunity {
   organization   Organization  @relation(fields: [organizationId], references: [id])
 
   rawEmail  RawEmail  @relation(fields: [rawEmailId], references: [id])
-  matches   Match[]
+  // Brief 32 — the Match.opportunityId FK was dropped (supply may now be a MojoContact),
+  // so the reverse relation is gone. Match rows are resolved by opportunityId+opportunityType.
   property  Property? @relation(fields: [propertyId], references: [id])
   reports   Report[]  // Brief 27.0 — reports whose subject is this opportunity
 
@@ -422,6 +435,40 @@ model MojoContact {
   currentLTV          Float?
   totalLoanBalance    Float?
   loanInterestRate    Float?
+
+  // Brief 32 — SELLER property + motivation intelligence (all additive/nullable).
+  // Property beds/baths (SELLER intent — the property has N beds/baths).
+  propertyBeds            Float?
+  propertyBaths           Float?
+  // Distress / motivation signals.
+  preForeclosureStatus    String?    // NONE | LIS_PENDENS | NOTICE_OF_DEFAULT | AUCTION_SCHEDULED | null
+  foreclosureAuctionDate  DateTime?
+  isVacant                Boolean?
+  ownerOccupied           Boolean?
+  alternateAddress        String?    // owner mailing addr if != property addr
+  coOwnerFullName         String?
+  // Property intelligence.
+  lastSaleDate            DateTime?
+  lastSalePrice           Float?
+  yearBuilt               Int?
+  unitCount               Int?
+  buildingSqft            Float?
+  lotSizeSqft             Float?
+  zoningCode              String?
+  propertyTypeDetail      String?    // Duplex | SFH | Coop | Condo | Townhouse | ...
+  // Listing history.
+  priorListingStatus      String?    // EXPIRED | WITHDRAWN | ACTIVE | SOLD | NEVER_LISTED | null
+  priorListingDom         Int?
+  priorListingBrokerage   String?
+  priorListingPrice       Float?
+  // Contact quality / compliance (arrays aligned: [primary, ...additional]).
+  additionalPhones        String[]   @default([])
+  additionalEmails        String[]   @default([])
+  phoneDncFlags           Boolean[]  @default([])
+  phoneTypes              String[]   @default([])   // 'mobile' | 'landline'
+  // 3rd-party scoring.
+  batchRankCategory       String?    // Low | Medium | High
+
   embedding           Unsupported("vector(1536)")?
   instantlyStatus     String?
   instantlyCampaignId String?
@@ -472,6 +519,13 @@ model InstantlyEvent {
 model Match {
   id              String   @id @default(cuid())
   opportunityId   String
+  // Brief 32 — the supply/listing side is no longer always an ExtractedOpportunity.
+  // 'opportunity' → opportunityId references ExtractedOpportunity.id (default; every
+  // pre-Brief-32 row is retroactively tagged this by the default). 'contact' →
+  // opportunityId references MojoContact.id (a SELLER contact acting as the supply).
+  // The FK to ExtractedOpportunity was dropped so a MojoContact id can live here;
+  // consumers branch on opportunityType to resolve the supply record.
+  opportunityType String   @default("opportunity")
   counterpartId   String
   counterpartType String
   score           Int
@@ -480,10 +534,15 @@ model Match {
   seen            Boolean  @default(false)
   createdAt       DateTime @default(now())
 
+  // Brief 32 — new scorer outputs (additive). captureProbability + expectedGross
+  // are agent-facing economics kept SEPARATE from client-facing MatchFit (score).
+  captureProbability        Float?
+  expectedGrossCompensation Float?
+  contributions             Json?
+  unknownFactors            String[]  @default([])
+
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])
-
-  opportunity ExtractedOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
 
   @@unique([opportunityId, counterpartId, counterpartType])
   @@index([organizationId])

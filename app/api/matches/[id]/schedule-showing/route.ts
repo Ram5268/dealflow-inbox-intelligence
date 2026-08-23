@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
+import { resolveSupply } from '@/lib/matching/supplyResolver'
 
 // POST /api/matches/[id]/schedule-showing
 // Body: { start: string (naive local "YYYY-MM-DDTHH:mm[:ss]"), durationMinutes: number }
@@ -65,15 +66,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const match = await prisma.match.findUnique({
     where: { id },
-    include: {
-      opportunity: {
-        select: { id: true, address: true, neighborhood: true, extractedTitle: true, extractedSummary: true },
-      },
+    select: {
+      id: true, organizationId: true, counterpartType: true, counterpartId: true,
+      reason: true, opportunityId: true, opportunityType: true,
     },
   })
   if (!match) return NextResponse.json({ error: 'match not found' }, { status: 404 })
 
-  const opp = match.opportunity
+  // Brief 32 — supply may be an ExtractedOpportunity or a MojoContact seller.
+  const opp = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
+  if (!opp) return NextResponse.json({ error: 'listing side not found' }, { status: 404 })
+  // extractedSummary is opportunity-only (not on ResolvedSupply); fetch for the
+  // event notes when the supply is an ExtractedOpportunity, else null.
+  const extractedSummary = match.opportunityType !== 'contact'
+    ? (await prisma.extractedOpportunity.findUnique({ where: { id: match.opportunityId }, select: { extractedSummary: true } }))?.extractedSummary ?? null
+    : null
   const partyName = await counterpartName(match.counterpartType, match.counterpartId)
 
   const listingLabel = opp.address ?? opp.extractedTitle
@@ -82,7 +89,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const base = process.env.BASE_URL?.replace(/\/$/, '') ?? ''
   const link = `${base}/opportunities/${opp.id}`
   const notes = [
-    opp.extractedSummary,
+    extractedSummary,
     partyName ? `Party: ${partyName}` : null,
     match.reason ? `Match: ${match.reason}` : null,
     `DealFlow: ${link}`,

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { sendPushToOrg } from '@/lib/push/send'
 import { formatPriceRange } from '@/lib/utils'
+import { resolveSupply } from '@/lib/matching/supplyResolver'
 
 // Brief 7.4 (A.1) — morning digest. Triggered by external cron (daily 8am ET =
 // 12:00 UTC during EDT). Deployment-agnostic: prod DB is on Railway, so this is
@@ -42,8 +43,9 @@ async function buildAndSend(organizationId: string): Promise<DigestResult> {
   const todays = await prisma.match.findMany({
     where: { organizationId, createdAt: { gte: since }, counterpartType: { not: 'showing_confirmation' } },
     orderBy: [{ tier: 'asc' }, { score: 'desc' }],  // tier asc puts HOT first (enum order HOT<WARM<POSSIBLE)
-    include: {
-      opportunity: { select: { address: true, neighborhood: true, extractedTitle: true, price: true, minPrice: true, maxPrice: true } },
+    select: {
+      id: true, tier: true, score: true, counterpartType: true, counterpartId: true,
+      opportunityId: true, opportunityType: true,
     },
   })
 
@@ -78,9 +80,12 @@ async function buildAndSend(organizationId: string): Promise<DigestResult> {
   const possible = matches.length - hot - warm
 
   const partyName = await counterpartName(top.counterpartType, top.counterpartId)
-  const opp = top.opportunity
-  const priceBit = formatPriceRange(opp.minPrice, opp.maxPrice, opp.price)
-  const listingLabel = [opp.address ?? opp.extractedTitle, priceBit, opp.neighborhood].filter(Boolean).join(' ').trim()
+  // Brief 32 — supply may be an ExtractedOpportunity or a MojoContact seller.
+  const opp = await resolveSupply(prisma, top.opportunityId, top.opportunityType)
+  const priceBit = opp ? formatPriceRange(opp.minPrice, opp.maxPrice, opp.price) : ''
+  const listingLabel = opp
+    ? [opp.address ?? opp.extractedTitle, priceBit, opp.neighborhood].filter(Boolean).join(' ').trim()
+    : ''
   const extras: string[] = []
   if (warm > 0) extras.push(`${warm} Warm`)
   if (possible > 0) extras.push(`${possible} Possible`)

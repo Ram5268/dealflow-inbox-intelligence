@@ -7,6 +7,7 @@ import { queueItem as queueReviewItem } from './ingestion/reviewQueueManager'
 import { parseAttachment } from './attachmentParser'
 import { buildOpportunityText, upsertOpportunityEmbedding } from './embeddings'
 import { findMatchesForListing, findMatchesForParty } from './matching/engine'
+import { resolveSupply } from './matching/supplyResolver'
 import { isMatchingTestModeOnly } from './config/matchingTestMode'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
 import { sendPushToAll } from './pushNotifications'
@@ -444,10 +445,12 @@ export async function runIncrementalSync(): Promise<{
         OR: [{ opportunityId: { in: newOppIds } }, { counterpartId: { in: newOppIds } }],
       },
       orderBy: { score: 'desc' },
-      include: { opportunity: { select: { address: true, neighborhood: true, extractedTitle: true, price: true, minPrice: true, maxPrice: true } } },
+      select: { id: true, counterpartType: true, counterpartId: true, opportunityId: true, opportunityType: true },
     }) : null
-    if (topHot) {
-      const opp = topHot.opportunity
+    // Brief 32 — resolve the supply (listing) side through the shared helper; it
+    // may be an ExtractedOpportunity or a MojoContact seller.
+    const opp = topHot ? await resolveSupply(prisma, topHot.opportunityId, topHot.opportunityType) : null
+    if (topHot && opp) {
       const partyName = await hotPartyName(topHot.counterpartType, topHot.counterpartId)
       const listingLabel = [opp.address ?? opp.extractedTitle, formatPriceRange(opp.minPrice, opp.maxPrice, opp.price), opp.neighborhood].filter(Boolean).join(' ').trim()
       await maybeFireHotAlert({ organizationId, matchId: topHot.id, partyName: partyName ?? 'New match', listingLabel }).catch(() => {})

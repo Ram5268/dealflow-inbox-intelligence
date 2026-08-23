@@ -1,9 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
+import { Category } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import { resolveSourceBadge } from '@/lib/matching/engine'
 import { resolveDismissKey } from '@/lib/matching/dismissKey'
+import { resolveSupplies } from '@/lib/matching/supplyResolver'
 
 // GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1]
 // List with both sides hydrated. Sort: unseen first, then highest-scoring,
@@ -28,17 +30,27 @@ export async function GET(req: NextRequest) {
     where,
     orderBy: [{ seen: 'asc' }, { score: 'desc' }, { createdAt: 'desc' }],
     take: 200,
-    include: {
-      opportunity: {
-        select: {
-          id: true, category: true, address: true, neighborhood: true,
-          price: true, minPrice: true, maxPrice: true, beds: true,
-          propertyType: true, units: true, sourceAgentName: true,
-          sourceBrokerage: true, extractedTitle: true, extractedSummary: true,
-        },
-      },
+    select: {
+      id: true, score: true, reason: true, tier: true, counterpartType: true,
+      counterpartId: true, seen: true, createdAt: true,
+      opportunityId: true, opportunityType: true,
     },
   })
+
+  // Brief 32 — the supply (listing) side may be an ExtractedOpportunity OR a
+  // MojoContact seller; resolve both through the shared helper. `primary` below
+  // is the uniform ResolvedSupply. ResolvedSupply omits three opportunity-only UI
+  // columns (propertyType / units / extractedSummary) that the matches page still
+  // renders, so hydrate those separately for opportunity-type rows and merge.
+  const supplies = await resolveSupplies(prisma, allMatches)
+  const oppSupplyIds = allMatches.filter(m => m.opportunityType !== 'contact').map(m => m.opportunityId)
+  const oppExtras = oppSupplyIds.length > 0
+    ? await prisma.extractedOpportunity.findMany({
+        where: { id: { in: oppSupplyIds } },
+        select: { id: true, propertyType: true, units: true, extractedSummary: true },
+      })
+    : []
+  const oppExtrasMap = Object.fromEntries(oppExtras.map(o => [o.id, o]))
 
   // Brief 7.1 — hide dismissed pairs. MatchDismissal keys on (partyId, listingId);
   // there's no FK to Match, so exclude in code. Brief 8.0-lite Fix #3a — resolve
@@ -50,7 +62,9 @@ export async function GET(req: NextRequest) {
     const keyFor = (m: (typeof allMatches)[number]) => resolveDismissKey({
       opportunityId: m.opportunityId,
       counterpartId: m.counterpartId,
-      opportunityCategory: m.opportunity.category,
+      // Brief 32 — dismissKey only needs supply-vs-demand direction; a contact
+      // supply (category=null) is off-market listing side, so coalesce.
+      opportunityCategory: supplies.get(m.opportunityId)?.category ?? Category.OFF_MARKET_SALE,
     })
     const dismissals = await prisma.matchDismissal.findMany({
       where: { OR: allMatches.map(keyFor) },
@@ -108,7 +122,15 @@ export async function GET(req: NextRequest) {
     return null
   }
 
-  const enriched = matches.map(m => ({
+  const enriched = matches.map(m => {
+    // Brief 32 — `primary` is the ResolvedSupply, merged with the opportunity-only
+    // UI columns for opportunity-type rows (null for contact-type supplies).
+    const supply = supplies.get(m.opportunityId) ?? null
+    const extras = oppExtrasMap[m.opportunityId]
+    const primary = supply
+      ? { ...supply, propertyType: extras?.propertyType ?? null, units: extras?.units ?? null, extractedSummary: extras?.extractedSummary ?? '' }
+      : null
+    return {
     id:              m.id,
     score:           m.score,
     reason:          m.reason,
@@ -117,12 +139,13 @@ export async function GET(req: NextRequest) {
     counterpartType: m.counterpartType,
     seen:            m.seen,
     createdAt:       m.createdAt,
-    primary:         m.opportunity,
+    primary,
     counterpart:
       m.counterpartType === 'opportunity' ? (oppMap[m.counterpartId]  ?? null) :
       m.counterpartType === 'mojo'        ? (mojoMap[m.counterpartId] ?? null) :
       null,
-  }))
+    }
+  })
 
   const counts = {
     total:    matches.length,

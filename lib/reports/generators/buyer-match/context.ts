@@ -8,6 +8,7 @@
 import { Category } from '@prisma/client'
 import type { PrismaClient } from '@prisma/client'
 import type { GenContext, BuyerRecord, MatchedListing } from '../types'
+import { resolveSupplies } from '../../../matching/supplyResolver'
 
 const BUYER_SELECT = {
   id: true, category: true, extractedTitle: true, neighborhoods: true, neighborhood: true,
@@ -63,36 +64,39 @@ export async function gatherContext({
     const rows = await prisma.match.findMany({
       where: { counterpartId: buyerId, counterpartType: 'opportunity' },
       orderBy: [{ score: 'desc' }, { createdAt: 'desc' }],
-      include: {
-        opportunity: {
-          select: {
-            id: true, category: true, address: true, neighborhood: true, borough: true,
-            price: true, beds: true, squareFeet: true, extractedTitle: true,
-            sourceBrokerage: true, sourceAgentName: true, availabilityDate: true,
-          },
-        },
+      select: {
+        id: true, tier: true, score: true, reason: true,
+        opportunityId: true, opportunityType: true,
       },
     })
-    cache = rows.map(m => ({
-      matchId: m.id,
-      tier: m.tier,
-      score: m.score,
-      reason: m.reason,
-      listing: {
-        id: m.opportunity.id,
-        category: m.opportunity.category,
-        address: m.opportunity.address,
-        neighborhood: m.opportunity.neighborhood,
-        borough: m.opportunity.borough,
-        price: m.opportunity.price,
-        beds: m.opportunity.beds,
-        squareFeet: m.opportunity.squareFeet,
-        extractedTitle: m.opportunity.extractedTitle,
-        sourceBrokerage: m.opportunity.sourceBrokerage,
-        sourceAgentName: m.opportunity.sourceAgentName,
-        availabilityDate: m.opportunity.availabilityDate,
-      },
-    }))
+    // Brief 32 — the supply (listing) side may be an ExtractedOpportunity or a
+    // MojoContact seller; resolve both via the shared helper. Rows whose supply
+    // record is missing (deleted opp/contact) are dropped.
+    const supplies = await resolveSupplies(prisma, rows)
+    cache = rows.flatMap(m => {
+      const s = supplies.get(m.opportunityId)
+      if (!s) return []
+      return [{
+        matchId: m.id,
+        tier: m.tier,
+        score: m.score,
+        reason: m.reason,
+        listing: {
+          id: s.id,
+          category: s.category,
+          address: s.address,
+          neighborhood: s.neighborhood,
+          borough: s.borough,
+          price: s.price,
+          beds: s.beds,
+          squareFeet: s.squareFeet,
+          extractedTitle: s.extractedTitle,
+          sourceBrokerage: s.sourceBrokerage,
+          sourceAgentName: s.sourceAgentName,
+          availabilityDate: s.availabilityDate,
+        },
+      }]
+    })
     return cache
   }
 

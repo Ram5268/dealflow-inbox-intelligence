@@ -66,7 +66,7 @@ export type MatchedListing = {
   reason: string | null
   listing: {
     id: string
-    category: Category
+    category: Category | null // Brief 32 — null when the supply is a MojoContact seller (no email classification)
     address: string | null
     neighborhood: string | null
     borough: string | null
