@@ -234,6 +234,9 @@ model ExtractedOpportunity {
   propertyTypes   String[]  @default([])
   minBeds         Int?
   maxBeds         Int?
+  // Brief 32.A.1 — buyer-side baths preference (unblocks the baths feature).
+  bathsMin        Int?
+  bathsMax        Int?
   mustHaves       String?
   dealbreakers    String?
   timeline        String?
@@ -534,12 +537,14 @@ model Match {
   seen            Boolean  @default(false)
   createdAt       DateTime @default(now())
 
-  // Brief 32 — new scorer outputs (additive). captureProbability + expectedGross
-  // are agent-facing economics kept SEPARATE from client-facing MatchFit (score).
-  captureProbability        Float?
-  expectedGrossCompensation Float?
-  contributions             Json?
-  unknownFactors            String[]  @default([])
+  // Brief 32 scorer outputs. Brief 32.A.1 honesty pass: the fabricated numeric
+  // capture-probability was replaced by an honest categorical capture status, the
+  // always-null gross-compensation stub was dropped, and a matchFit confidence
+  // meta-signal (derived from the unknownFactors count) was added.
+  captureStatus       String?   // OWN_BOTH_SIDES | OWN_LISTING_ONLY | OWN_BUYER_ONLY | EXTERNAL_BOTH
+  matchFitConfidence  String?   // HIGH | MEDIUM | LOW
+  contributions       Json?
+  unknownFactors      String[]  @default([])
 
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])

@@ -26,10 +26,12 @@ const cashBuyer = makeBuyer({
   priceMin: 1_300_000, priceMax: 1_800_000, bedsMin: 2, bedsMax: 3, propertyTypes: ['condo'],
 })
 
-test('pre-foreclosure + cash-buyer + matching nbhd/price → matchFit >= 85', () => {
+test('pre-foreclosure + cash-buyer + matching nbhd/price → still HOT tier (>= 80)', () => {
+  // Post Brief 32.A.1 retune (lower motivation weights + -0.5 bias) this drops from
+  // the high-90s but must remain HOT — the signal stack is genuinely strong.
   const r = scorePair(distressedSeller(), cashBuyer, ctx)
   assert.equal(r.eligibility.eligible, true)
-  assert.ok(r.matchFit.matchFit >= 85, `matchFit was ${r.matchFit.matchFit}`)
+  assert.ok(r.matchFit.matchFit >= 80, `matchFit was ${r.matchFit.matchFit}`)
 })
 
 test('same seller × TRADITIONAL_FINANCING buyer → lower matchFit than cash', () => {
@@ -60,9 +62,8 @@ test('golden-handcuff owner scores meaningfully lower than an unlocked twin', ()
   assert.ok(unlocked - handcuffed >= 2, `unlocked ${unlocked} vs handcuffed ${handcuffed}`)
 })
 
-test('capture probability reflects representation posture', () => {
+test('captureStatus reflects representation posture (categorical, not a number)', () => {
   const owned = makeContext({ now: NOW, ryanOwnedListingIds: new Set(['seller-1']), ryanRepresentedBuyerIds: new Set(['cash']) })
-  const r = scorePair(distressedSeller(), cashBuyer, owned)
-  assert.equal(r.captureProbability, 1.0)
-  assert.equal(r.expectedGrossCompensation, null) // stubbed — never fabricated
+  assert.equal(scorePair(distressedSeller(), cashBuyer, owned).captureStatus, 'OWN_BOTH_SIDES')
+  assert.equal(scorePair(distressedSeller(), cashBuyer, ctx).captureStatus, 'EXTERNAL_BOTH')
 })

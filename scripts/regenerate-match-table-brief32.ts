@@ -117,8 +117,8 @@ async function main() {
         score: mf,
         tier: tierOf(mf),
         reason: reasonOf(res.matchFit.contributions),
-        captureProbability: res.captureProbability,
-        expectedGrossCompensation: res.expectedGrossCompensation,
+        captureStatus: res.captureStatus,
+        matchFitConfidence: res.matchFit.matchFitConfidence,
         contributions: res.matchFit.contributions as Prisma.InputJsonValue,
         unknownFactors: res.matchFit.unknownFactors,
       })
@@ -134,21 +134,31 @@ async function main() {
 
   // ── Report ──────────────────────────────────────────────────────────────────
   const tierCounts = { HOT: 0, WARM: 0, POSSIBLE: 0 }
-  let mfSum = 0, ukSum = 0
-  for (const r of rows) { tierCounts[r.tier as 'HOT' | 'WARM' | 'POSSIBLE']++; mfSum += r.score; ukSum += (r.unknownFactors as string[]).length }
+  const capCounts: Record<string, number> = {}
+  const mfcCounts: Record<string, number> = {}
+  let mfSum = 0, ukSum = 0, bathsContribSum = 0, bathsContribN = 0
+  for (const r of rows) {
+    tierCounts[r.tier as 'HOT' | 'WARM' | 'POSSIBLE']++
+    mfSum += r.score
+    ukSum += (r.unknownFactors as string[]).length
+    capCounts[r.captureStatus as string] = (capCounts[r.captureStatus as string] ?? 0) + 1
+    mfcCounts[r.matchFitConfidence as string] = (mfcCounts[r.matchFitConfidence as string] ?? 0) + 1
+    const bc = (r.contributions as Record<string, number>)?.baths
+    if (bc != null) { bathsContribSum += bc; bathsContribN++ }
+  }
+  const total = rows.length || 1
+  const pct = (n: number) => `${((n / total) * 100).toFixed(1)}%`
   const opportunityTypeContact = rows.filter(r => r.opportunityType === 'contact').length
 
-  console.log('\n════════ Brief 32 regen report ════════')
-  console.log(`Pairs evaluated:     ${pairs}`)
-  console.log(`  eligible:          ${eligible}`)
-  console.log(`  scored (mf>=30):   ${scored}`)
-  console.log(`  filtered (<30):    ${filtered}`)
-  console.log(`Match rows written:  ${inserted}`)
-  console.log(`  opportunityType=contact (seller-supply): ${opportunityTypeContact}`)
-  console.log(`  opportunityType=opportunity (EO-supply): ${inserted - opportunityTypeContact}`)
-  console.log(`Tier distribution:   HOT ${tierCounts.HOT} / WARM ${tierCounts.WARM} / POSSIBLE ${tierCounts.POSSIBLE}`)
-  console.log(`Average matchFit:    ${(mfSum / (rows.length || 1)).toFixed(1)}`)
-  console.log(`Avg unknownFactors:  ${(ukSum / (rows.length || 1)).toFixed(2)}`)
+  console.log('\n════════ Brief 32.A.1 regen report ════════')
+  console.log(`Pairs evaluated:     ${pairs}  (eligible ${eligible} / scored ${scored} / filtered<30 ${filtered})`)
+  console.log(`Match rows written:  ${inserted}  (contact-supply ${opportunityTypeContact} / EO-supply ${inserted - opportunityTypeContact})`)
+  console.log(`Tier distribution:   HOT ${tierCounts.HOT} (${pct(tierCounts.HOT)}) / WARM ${tierCounts.WARM} (${pct(tierCounts.WARM)}) / POSSIBLE ${tierCounts.POSSIBLE} (${pct(tierCounts.POSSIBLE)})`)
+  console.log(`captureStatus:       ${Object.entries(capCounts).map(([k, v]) => `${k} ${v} (${pct(v)})`).join(' / ')}`)
+  console.log(`matchFitConfidence:  ${Object.entries(mfcCounts).map(([k, v]) => `${k} ${v} (${pct(v)})`).join(' / ')}`)
+  console.log(`Average matchFit:    ${(mfSum / total).toFixed(1)}`)
+  console.log(`Avg unknownFactors:  ${(ukSum / total).toFixed(2)}`)
+  console.log(`Baths contribution:  avg ${(bathsContribSum / (bathsContribN || 1)).toFixed(2)}% across ${bathsContribN} matches where baths voted`)
   console.log(`Elapsed:             ${((Date.now() - t0) / 1000).toFixed(1)}s`)
   await prisma.$disconnect()
 }

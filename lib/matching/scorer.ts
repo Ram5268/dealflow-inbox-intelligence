@@ -12,6 +12,7 @@ import { logit, sigmoid } from './mathHelpers'
 import { getWeight } from './weights'
 import { isEligible } from './eligibility'
 import type {
+  Confidence,
   FeatureResult,
   MatchFitResult,
   ListingData,
@@ -39,11 +40,22 @@ import { computeSourceListMotivation } from './features/sourceListMotivation'
 import { computeSubstitutionScarcity } from './features/substitutionScarcity'
 import { computeBuyerArchetypeSituation } from './features/buyerArchetypeSituation'
 import { computeRecency } from './features/recency'
-import { computeCaptureProbability } from './features/captureProbability'
-import { computeExpectedGrossCompensation } from './features/expectedCompensation'
+import { computeCaptureStatus, type CaptureStatus } from './features/captureStatus'
 
 // Re-export the brief's stated scorer.ts type surface.
 export type { Confidence, FeatureResult, MatchFitResult, ScoringContext } from './scorerTypes'
+export type { CaptureStatus } from './features/captureStatus'
+
+// Brief 32.A.1 — global pessimism prior applied AFTER normalization (see below).
+// It shifts a neutral pair (normalized 0) to sigmoid(-0.5) ≈ 0.38 → matchFit 38,
+// pulling the whole distribution down so HOT is earned, not default. Folding it
+// into weightedRaw (pre-division) would divide it by the total weight and erase it.
+const BIAS_LOGIT = -0.5
+
+// Brief 32.A.1 — matchFit confidence from how much of the feature suite abstained.
+function confidenceFromAbstentions(n: number): Confidence {
+  return n <= 4 ? 'HIGH' : n <= 8 ? 'MEDIUM' : 'LOW'
+}
 
 export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
   let weightedRaw = 0
@@ -68,12 +80,15 @@ export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
     perFeatureAbs[f.key] = abs
   }
 
+  const matchFitConfidence = confidenceFromAbstentions(unknownFactors.length)
+
   if (weightedTotalConf === 0) {
     // All features abstained. Neutral is the honest default.
-    return { matchFit: 50, contributions: {}, unknownFactors }
+    return { matchFit: 50, matchFitConfidence: 'LOW', contributions: {}, unknownFactors }
   }
 
-  const normalized = weightedRaw / weightedTotalConf
+  // NORMALIZE FIRST, THEN APPLY BIAS (critical — see BIAS_LOGIT note above).
+  const normalized = weightedRaw / weightedTotalConf + BIAS_LOGIT
   const matchFit = Math.round(sigmoid(normalized) * 100)
 
   const contributions: Record<string, number> = {}
@@ -83,7 +98,7 @@ export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
     }
   }
 
-  return { matchFit, contributions, unknownFactors }
+  return { matchFit, matchFitConfidence, contributions, unknownFactors }
 }
 
 export function scorePair(
@@ -92,16 +107,14 @@ export function scorePair(
   context: ScoringContext,
 ): {
   matchFit: MatchFitResult
-  captureProbability: number | null
-  expectedGrossCompensation: number | null
+  captureStatus: CaptureStatus
   eligibility: { eligible: boolean; reason?: string }
 } {
   const eligibility = isEligible(listing, buyer)
   if (!eligibility.eligible) {
     return {
-      matchFit: { matchFit: 0, contributions: {}, unknownFactors: [] },
-      captureProbability: 0,
-      expectedGrossCompensation: null,
+      matchFit: { matchFit: 0, matchFitConfidence: 'LOW', contributions: {}, unknownFactors: [] },
+      captureStatus: computeCaptureStatus(listing, buyer, context),
       eligibility,
     }
   }
@@ -130,8 +143,7 @@ export function scorePair(
   ]
 
   const matchFit = composeMatchFit(features)
-  const captureProbability = computeCaptureProbability(listing, buyer, context)
-  const expectedGrossCompensation = computeExpectedGrossCompensation(listing, buyer, context)
+  const captureStatus = computeCaptureStatus(listing, buyer, context)
 
-  return { matchFit, captureProbability, expectedGrossCompensation, eligibility }
+  return { matchFit, captureStatus, eligibility }
 }

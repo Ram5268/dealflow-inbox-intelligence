@@ -56,6 +56,8 @@ export function makeBuyer(over: Partial<BuyerData> = {}): BuyerData {
     priceMax: null,
     bedsMin: null,
     bedsMax: null,
+    bathsMin: null,
+    bathsMax: null,
     propertyTypes: [],
     mustHaves: null,
     dealbreakers: null,

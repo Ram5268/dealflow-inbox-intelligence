@@ -17,13 +17,13 @@ export const WEIGHTS: Record<string, number> = {
   freeAndClear:            0.6,
   goldenHandcuff:          0.9,
   absenteeOwner:           0.9,
-  vacancy:                 1.2,
-  preForeclosure:          3.0, // largest motivation signal
-  foreclosureUrgency:      2.0,
+  vacancy:                 0.8, // Brief 32.A.1: was 1.2 — reduce compounding w/ absenteeOwner
+  preForeclosure:          2.0, // Brief 32.A.1: was 3.0 — still highest motivation, less dominant
+  foreclosureUrgency:      1.3, // Brief 32.A.1: was 2.0 — reduce compounding w/ preForeclosure
   tenure:                  0.5,
   sourceListMotivation:    1.0,
   substitutionScarcity:    0.6,
-  buyerArchetypeSituation: 1.5,
+  buyerArchetypeSituation: 1.0, // Brief 32.A.1: was 1.5 — archetype complements, does not dominate
   recency:                 0.4,
 }
 

@@ -18,7 +18,7 @@ function opp(over: Record<string, unknown>): ExtractedOpportunity {
     beds: null, baths: null, units: null, squareFeet: null, address: null,
     monthlyMaintenance: null, monthlyCommonCharges: null, monthlyTaxes: null,
     yearBuilt: null, lotSizeSqft: null, zoningCode: null, buyerArchetype: null,
-    neighborhoods: [], propertyTypes: [], minBeds: null, maxBeds: null,
+    neighborhoods: [], propertyTypes: [], minBeds: null, maxBeds: null, bathsMin: null, bathsMax: null,
     mustHaves: null, dealbreakers: null, timeline: null,
     extractedTitle: 'T', extractedSummary: 'S', createdAt: CREATED,
     ...over,
@@ -73,7 +73,7 @@ test('mojoContactToListingData maps propertyBeds → beds and estimatedValue →
 test('opportunityToBuyerData handles BUYER_ISO shape', () => {
   const b = opportunityToBuyerData(opp({
     category: 'BUYER_ISO', transactionType: 'BUYER_NEED', neighborhoods: ['Chelsea', 'West Village'],
-    minPrice: 1_000_000, maxPrice: 2_000_000, minBeds: 2, maxBeds: 3,
+    minPrice: 1_000_000, maxPrice: 2_000_000, minBeds: 2, maxBeds: 3, bathsMin: 2, bathsMax: null,
     propertyTypes: ['condo'], buyerArchetype: 'CASH_BUYER',
   }))
   assert.equal(b.sourceType, 'opportunity')
@@ -81,6 +81,7 @@ test('opportunityToBuyerData handles BUYER_ISO shape', () => {
   assert.deepEqual(b.neighborhoods, ['Chelsea', 'West Village'])
   assert.equal(b.priceMin, 1_000_000)
   assert.equal(b.bedsMax, 3)
+  assert.equal(b.bathsMin, 2) // Brief 32.A.1 baths wired through
   assert.equal(b.buyerArchetype, 'CASH_BUYER')
 })
 

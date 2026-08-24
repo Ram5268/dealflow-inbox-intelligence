@@ -148,6 +148,8 @@ export function opportunityToBuyerData(opp: ExtractedOpportunity): BuyerData {
     priceMax: opp.maxPrice ?? opp.price,
     bedsMin: opp.minBeds ?? opp.beds,
     bedsMax: opp.maxBeds ?? opp.beds,
+    bathsMin: opp.bathsMin,
+    bathsMax: opp.bathsMax,
     propertyTypes: opp.propertyTypes,
     mustHaves: opp.mustHaves,
     dealbreakers: opp.dealbreakers,
@@ -172,6 +174,9 @@ export function mojoContactToBuyerData(mc: MojoContact): BuyerData {
     priceMax: mc.budgetMax,
     bedsMin: mc.bedsMin,
     bedsMax: mc.bedsMax,
+    // MojoContact has no baths criteria columns → no preference (feature neutral-passes).
+    bathsMin: null,
+    bathsMax: null,
     propertyTypes: [],
     mustHaves: mc.notes,
     dealbreakers: null,

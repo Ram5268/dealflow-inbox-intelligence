@@ -16,6 +16,7 @@ export interface FeatureResult {
 
 export interface MatchFitResult {
   matchFit: number // 0-100
+  matchFitConfidence: Confidence // Brief 32.A.1: derived from unknownFactors count
   contributions: Record<string, number> // per-feature % of |total signal|
   unknownFactors: string[] // features with LOW confidence (abstained)
 }
@@ -82,6 +83,8 @@ export interface BuyerData {
   priceMax: number | null
   bedsMin: number | null
   bedsMax: number | null
+  bathsMin: number | null
+  bathsMax: number | null
   propertyTypes: string[]
   mustHaves: string | null
   dealbreakers: string | null
