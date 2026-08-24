@@ -106,6 +106,8 @@ model Organization {
   nycParcelCache   NycParcelCache[]
   notificationPrefs NotificationPreferences?
   zapierIngestLogs ZapierIngestLog[]
+  callQueueEntries CallQueueEntry[]
+  callLogs         CallLog[]
 }
 
 model User {
@@ -479,6 +481,8 @@ model MojoContact {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   instantlyEvents     InstantlyEvent[]
+  callQueueEntries    CallQueueEntry[]   // Brief 33 — ranked call-queue snapshots
+  callLogs            CallLog[]          // Brief 33 — schema only (Brief 34 populates)
 
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])
@@ -951,4 +955,47 @@ model GuardFireEvent {
 
   @@index([organizationId, createdAt])
   @@index([verifierVerdict])
+}
+
+// Brief 33 — persisted ranked call-queue snapshot. One row per contact per
+// generation run. The nightly cron rewrites the queue; the viewer reads the
+// latest generationRunId.
+model CallQueueEntry {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  contactId             String                       // MojoContact.id
+  rank                  Int                          // 1..N ordering
+  priorityScore         Int                          // 0-100
+  reason                String                       // short human "why"
+  primaryMatchId        String?                      // driving match
+  contributingMatchIds  String[]  @default([])       // other matches in the aggregate
+  contributions         Json?                        // per-feature breakdown
+  generationRunId       String                       // groups entries by regen batch
+  generatedAt           DateTime  @default(now())
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  contact       MojoContact   @relation(fields: [contactId], references: [id])
+
+  @@index([organizationId, generationRunId])
+  @@index([organizationId, rank])
+  @@index([generatedAt])
+}
+
+// Brief 33 — SCHEMA ONLY. Do NOT populate in Brief 33; Brief 34 handles inserts.
+model CallLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String                             // MojoContact.id
+  queueEntryId   String?                            // queue entry that surfaced the call
+  disposition    String                             // Brief 34 enum-as-string
+  notes          String?
+  durationSec    Int?
+  initiatedAt    DateTime  @default(now())
+  completedAt    DateTime?
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  contact       MojoContact   @relation(fields: [contactId], references: [id])
+
+  @@index([organizationId, initiatedAt])
+  @@index([contactId, initiatedAt])
 }
