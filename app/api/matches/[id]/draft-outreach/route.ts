@@ -4,6 +4,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/prisma'
 import { formatPriceRange } from '@/lib/utils'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
+import { resolveSupply } from '@/lib/matching/supplyResolver'
 
 // POST /api/matches/[id]/draft-outreach
 // Body: { channel: 'email' | 'text' }
@@ -117,13 +118,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   const match = await prisma.match.findUnique({
     where: { id },
-    include: {
-      opportunity: {
-        select: {
-          id: true, address: true, neighborhood: true, price: true, minPrice: true,
-          maxPrice: true, beds: true, extractedTitle: true,
-        },
-      },
+    select: {
+      id: true, organizationId: true, counterpartType: true, counterpartId: true,
+      reason: true, opportunityId: true, opportunityType: true,
     },
   })
   if (!match) return NextResponse.json({ error: 'match not found' }, { status: 404 })
@@ -152,7 +149,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const party = await resolveParty(match.counterpartType, match.counterpartId)
   if (!party) return NextResponse.json({ error: 'no counterpart party to draft to' }, { status: 400 })
 
-  const opp = match.opportunity
+  // Brief 32 — supply may be an ExtractedOpportunity or a MojoContact seller.
+  const opp = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
+  if (!opp) return NextResponse.json({ error: 'listing side not found' }, { status: 404 })
   const listingAddress = opp.address ?? opp.extractedTitle
   const listingPrice = formatPriceRange(opp.minPrice, opp.maxPrice, opp.price) || 'price on request'
   const listingBeds = opp.beds ? `${opp.beds}BR` : 'beds n/a'

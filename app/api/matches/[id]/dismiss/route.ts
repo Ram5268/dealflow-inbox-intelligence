@@ -1,8 +1,9 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { DismissalReason, Prisma } from '@prisma/client'
+import { Category, DismissalReason, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveDismissKey } from '@/lib/matching/dismissKey'
+import { resolveSupply } from '@/lib/matching/supplyResolver'
 
 // POST /api/matches/[id]/dismiss
 // Body: { reason?: DismissalReason }  — reason is nullable (Skip reason = null).
@@ -29,8 +30,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const match = await prisma.match.findUnique({
     where:  { id },
     select: {
-      opportunityId: true, counterpartId: true, organizationId: true,
-      opportunity: { select: { category: true } },
+      opportunityId: true, counterpartId: true, organizationId: true, opportunityType: true,
     },
   })
   if (!match) return NextResponse.json({ error: 'match not found' }, { status: 404 })
@@ -38,10 +38,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // Brief 8.0-lite Fix #3a — resolve (partyId, listingId) from the opportunity's
   // CATEGORY, not the field name: an ISO-triggered match stores the party in
   // opportunityId, so the old partyId=counterpartId assumption inverted the keys.
+  // Brief 32 — supply may be a MojoContact seller (category=null); a contact supply
+  // IS the off-market listing side, and dismissKey only needs supply-vs-demand
+  // direction, so coalesce null → OFF_MARKET_SALE.
+  const supply = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
   const { partyId, listingId } = resolveDismissKey({
     opportunityId: match.opportunityId,
     counterpartId: match.counterpartId,
-    opportunityCategory: match.opportunity.category,
+    opportunityCategory: supply?.category ?? Category.OFF_MARKET_SALE,
   })
 
   const existing = await prisma.matchDismissal.findUnique({
@@ -89,17 +93,18 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   const match = await prisma.match.findUnique({
     where:  { id },
     select: {
-      opportunityId: true, counterpartId: true, organizationId: true,
-      opportunity: { select: { category: true } },
+      opportunityId: true, counterpartId: true, organizationId: true, opportunityType: true,
     },
   })
   if (!match) return NextResponse.json({ error: 'match not found' }, { status: 404 })
 
   // Same category-aware key as POST (Fix #3a) so an undo targets the row we wrote.
+  // Brief 32 — contact supply (category=null) → OFF_MARKET_SALE (off-market side).
+  const supply = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
   const { partyId, listingId } = resolveDismissKey({
     opportunityId: match.opportunityId,
     counterpartId: match.counterpartId,
-    opportunityCategory: match.opportunity.category,
+    opportunityCategory: supply?.category ?? Category.OFF_MARKET_SALE,
   })
 
   const { count } = await prisma.matchDismissal.deleteMany({ where: { partyId, listingId } })

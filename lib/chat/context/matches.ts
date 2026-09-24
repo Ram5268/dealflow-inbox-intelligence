@@ -8,12 +8,16 @@ export const matchesFetcher: ContextFetcher = async ({ queryText }) => {
   const isMatchQuery = queryText.includes('match')
   if (!isMatchQuery) return { block: null }
 
+  // Brief 32 — the surfaced lines below only read reason/score/counterpartType, so
+  // the supply side no longer needs hydrating here (the dropped opportunity include
+  // was already unused). Select opportunityId/opportunityType for shape parity.
   const unseenMatches = await prisma.match.findMany({
     where: { seen: false, score: { gte: 50 } },
     orderBy: [{ score: 'desc' }, { createdAt: 'desc' }],
     take: 20,
-    include: {
-      opportunity: { select: { extractedTitle: true, category: true, neighborhood: true, price: true } },
+    select: {
+      id: true, reason: true, score: true, counterpartType: true,
+      opportunityId: true, opportunityType: true,
     },
   })
 

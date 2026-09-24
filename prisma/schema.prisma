@@ -106,6 +106,8 @@ model Organization {
   nycParcelCache   NycParcelCache[]
   notificationPrefs NotificationPreferences?
   zapierIngestLogs ZapierIngestLog[]
+  callQueueEntries CallQueueEntry[]
+  callLogs         CallLog[]
 }
 
 model User {
@@ -234,10 +236,25 @@ model ExtractedOpportunity {
   propertyTypes   String[]  @default([])
   minBeds         Int?
   maxBeds         Int?
+  // Brief 32.A.1 — buyer-side baths preference (unblocks the baths feature).
+  bathsMin        Int?
+  bathsMax        Int?
   mustHaves       String?
   dealbreakers    String?
   timeline        String?
   criteriaActive  Boolean   @default(true)
+
+  // Brief 32 — buyer archetype (BUYER_ISO only) + property intelligence (listing side).
+  buyerArchetype       String?   // CASH_BUYER | EXCHANGE_1031 | TRADITIONAL_FINANCING |
+                                 // INVESTOR_LANDLORD | FIRST_TIME_FHA | LUXURY_ALL_CASH |
+                                 // LUXURY_FINANCED
+  monthlyMaintenance   Float?    // co-op
+  monthlyCommonCharges Float?    // condo
+  monthlyTaxes         Float?    // monthly (annual/12), all types
+  yearBuilt            Int?
+  lotSizeSqft          Float?
+  zoningCode           String?
+  // NOTE: buildingSqft → use existing squareFeet; unitCount → use existing units.
 
   extractedTitle       String
   extractedSummary     String
@@ -262,7 +279,8 @@ model ExtractedOpportunity {
   organization   Organization  @relation(fields: [organizationId], references: [id])
 
   rawEmail  RawEmail  @relation(fields: [rawEmailId], references: [id])
-  matches   Match[]
+  // Brief 32 — the Match.opportunityId FK was dropped (supply may now be a MojoContact),
+  // so the reverse relation is gone. Match rows are resolved by opportunityId+opportunityType.
   property  Property? @relation(fields: [propertyId], references: [id])
   reports   Report[]  // Brief 27.0 — reports whose subject is this opportunity
 
@@ -422,6 +440,40 @@ model MojoContact {
   currentLTV          Float?
   totalLoanBalance    Float?
   loanInterestRate    Float?
+
+  // Brief 32 — SELLER property + motivation intelligence (all additive/nullable).
+  // Property beds/baths (SELLER intent — the property has N beds/baths).
+  propertyBeds            Float?
+  propertyBaths           Float?
+  // Distress / motivation signals.
+  preForeclosureStatus    String?    // NONE | LIS_PENDENS | NOTICE_OF_DEFAULT | AUCTION_SCHEDULED | null
+  foreclosureAuctionDate  DateTime?
+  isVacant                Boolean?
+  ownerOccupied           Boolean?
+  alternateAddress        String?    // owner mailing addr if != property addr
+  coOwnerFullName         String?
+  // Property intelligence.
+  lastSaleDate            DateTime?
+  lastSalePrice           Float?
+  yearBuilt               Int?
+  unitCount               Int?
+  buildingSqft            Float?
+  lotSizeSqft             Float?
+  zoningCode              String?
+  propertyTypeDetail      String?    // Duplex | SFH | Coop | Condo | Townhouse | ...
+  // Listing history.
+  priorListingStatus      String?    // EXPIRED | WITHDRAWN | ACTIVE | SOLD | NEVER_LISTED | null
+  priorListingDom         Int?
+  priorListingBrokerage   String?
+  priorListingPrice       Float?
+  // Contact quality / compliance (arrays aligned: [primary, ...additional]).
+  additionalPhones        String[]   @default([])
+  additionalEmails        String[]   @default([])
+  phoneDncFlags           Boolean[]  @default([])
+  phoneTypes              String[]   @default([])   // 'mobile' | 'landline'
+  // 3rd-party scoring.
+  batchRankCategory       String?    // Low | Medium | High
+
   embedding           Unsupported("vector(1536)")?
   instantlyStatus     String?
   instantlyCampaignId String?
@@ -429,6 +481,8 @@ model MojoContact {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   instantlyEvents     InstantlyEvent[]
+  callQueueEntries    CallQueueEntry[]   // Brief 33 — ranked call-queue snapshots
+  callLogs            CallLog[]          // Brief 33 — schema only (Brief 34 populates)
 
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])
@@ -472,6 +526,13 @@ model InstantlyEvent {
 model Match {
   id              String   @id @default(cuid())
   opportunityId   String
+  // Brief 32 — the supply/listing side is no longer always an ExtractedOpportunity.
+  // 'opportunity' → opportunityId references ExtractedOpportunity.id (default; every
+  // pre-Brief-32 row is retroactively tagged this by the default). 'contact' →
+  // opportunityId references MojoContact.id (a SELLER contact acting as the supply).
+  // The FK to ExtractedOpportunity was dropped so a MojoContact id can live here;
+  // consumers branch on opportunityType to resolve the supply record.
+  opportunityType String   @default("opportunity")
   counterpartId   String
   counterpartType String
   score           Int
@@ -480,10 +541,17 @@ model Match {
   seen            Boolean  @default(false)
   createdAt       DateTime @default(now())
 
+  // Brief 32 scorer outputs. Brief 32.A.1 honesty pass: the fabricated numeric
+  // capture-probability was replaced by an honest categorical capture status, the
+  // always-null gross-compensation stub was dropped, and a matchFit confidence
+  // meta-signal (derived from the unknownFactors count) was added.
+  captureStatus       String?   // OWN_BOTH_SIDES | OWN_LISTING_ONLY | OWN_BUYER_ONLY | EXTERNAL_BOTH
+  matchFitConfidence  String?   // HIGH | MEDIUM | LOW
+  contributions       Json?
+  unknownFactors      String[]  @default([])
+
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])
-
-  opportunity ExtractedOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
 
   @@unique([opportunityId, counterpartId, counterpartType])
   @@index([organizationId])
@@ -887,4 +955,47 @@ model GuardFireEvent {
 
   @@index([organizationId, createdAt])
   @@index([verifierVerdict])
+}
+
+// Brief 33 — persisted ranked call-queue snapshot. One row per contact per
+// generation run. The nightly cron rewrites the queue; the viewer reads the
+// latest generationRunId.
+model CallQueueEntry {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  contactId             String                       // MojoContact.id
+  rank                  Int                          // 1..N ordering
+  priorityScore         Int                          // 0-100
+  reason                String                       // short human "why"
+  primaryMatchId        String?                      // driving match
+  contributingMatchIds  String[]  @default([])       // other matches in the aggregate
+  contributions         Json?                        // per-feature breakdown
+  generationRunId       String                       // groups entries by regen batch
+  generatedAt           DateTime  @default(now())
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  contact       MojoContact   @relation(fields: [contactId], references: [id])
+
+  @@index([organizationId, generationRunId])
+  @@index([organizationId, rank])
+  @@index([generatedAt])
+}
+
+// Brief 33 — SCHEMA ONLY. Do NOT populate in Brief 33; Brief 34 handles inserts.
+model CallLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  contactId      String                             // MojoContact.id
+  queueEntryId   String?                            // queue entry that surfaced the call
+  disposition    String                             // Brief 34 enum-as-string
+  notes          String?
+  durationSec    Int?
+  initiatedAt    DateTime  @default(now())
+  completedAt    DateTime?
+
+  organization  Organization  @relation(fields: [organizationId], references: [id])
+  contact       MojoContact   @relation(fields: [contactId], references: [id])
+
+  @@index([organizationId, initiatedAt])
+  @@index([contactId, initiatedAt])
 }
