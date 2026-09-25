@@ -100,9 +100,9 @@ export default function GreetPage() {
 
   async function handleCheckIn() {
     setSyncing(true)
-    // Fire both syncs in background — don't block navigation
+    // Fire the inbox sync in background — don't block navigation. (Seller leads
+    // sync nightly from the CRM; see /api/cron/nightly-pipeline.)
     fetch('/api/sync/run', { method: 'POST' }).catch(() => {})
-    fetch('/api/mojo/process', { method: 'POST' }).catch(() => {})
     subscribeToPushIfNeeded().catch(() => {})
     // Small delay so user sees the button respond, then navigate
     await new Promise(r => setTimeout(r, 320))

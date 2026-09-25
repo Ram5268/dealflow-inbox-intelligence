@@ -70,9 +70,6 @@ export default function SettingsPage() {
   const [devicePolling, setDevicePolling] = useState(false)
   const [mojoCount, setMojoCount] = useState<number | null>(null)
   const [mojoLastSync, setMojoLastSync] = useState<string | null>(null)
-  const [mojoImporting, setMojoImporting] = useState(false)
-  const [mojoImportResult, setMojoImportResult] = useState<{ ok: boolean; upserted?: number; error?: string } | null>(null)
-  const [mojoWebhookUrl, setMojoWebhookUrl] = useState<string>('/api/mojo/webhook')
   // Brief 7.4 — notification preferences
   const [notif, setNotif] = useState<{ digestEnabled: boolean; realtimeEnabled: boolean; digestTime: string } | null>(null)
   const [notifSaving, setNotifSaving] = useState(false)
@@ -108,12 +105,6 @@ export default function SettingsPage() {
       setMojoCount(d.count ?? 0)
       setMojoLastSync(d.lastSync)
     }).catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setMojoWebhookUrl(`${window.location.origin}/api/mojo/webhook`)
-    }
   }, [])
 
   async function testConn() {
@@ -322,45 +313,17 @@ export default function SettingsPage() {
           )}
         </Section>
 
-        {/* Mojo CRM */}
-        <Section title="Mojo Seller Leads">
+        {/* CRM seller leads (Brief 34): synced nightly from the CRM, read-only */}
+        <Section title="CRM Seller Leads">
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginBottom: 12, lineHeight: 1.5 }}>
-            Import your NYC Leads contacts from Mojo. Export as CSV from Mojo → Groups → NYC Leads → Export, then upload here.
+            Seller leads sync nightly from the CRM, which is their source of truth. DealFlow only reads them.
           </p>
           {mojoCount !== null && (
             <div style={{ marginBottom: 12, padding: '8px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: 10, fontSize: 12, color: 'rgba(255,255,255,0.55)', display: 'flex', justifyContent: 'space-between' }}>
               <span>{mojoCount.toLocaleString()} contacts synced</span>
-              {mojoLastSync && <span>{new Date(mojoLastSync).toLocaleDateString()}</span>}
+              {mojoLastSync && <span>last run {new Date(mojoLastSync).toLocaleString()}</span>}
             </div>
           )}
-          <label style={{ display: 'block', cursor: 'pointer' }}>
-            <input type="file" accept=".csv" style={{ display: 'none' }} onChange={async e => {
-              const file = e.target.files?.[0]
-              if (!file) return
-              setMojoImporting(true); setMojoImportResult(null)
-              const text = await file.text()
-              const r = await fetch('/api/mojo/import', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text })
-              const result = await r.json()
-              setMojoImportResult(result)
-              if (result.ok) {
-                fetch('/api/mojo/status').then(r => r.json()).then((d: { count: number; lastSync: string | null }) => {
-                  setMojoCount(d.count); setMojoLastSync(d.lastSync)
-                }).catch(() => {})
-              }
-              setMojoImporting(false)
-            }} />
-            <div className="df-btn-ghost" style={{ width: '100%', padding: '13px', fontSize: 14, fontWeight: 600, textAlign: 'center', cursor: 'pointer' }}>
-              {mojoImporting ? 'Importing...' : 'Upload Mojo CSV'}
-            </div>
-          </label>
-          {mojoImportResult && (
-            <p style={{ marginTop: 8, fontSize: 12, color: mojoImportResult.ok ? 'rgba(150,255,180,0.8)' : 'rgba(255,150,150,0.8)' }}>
-              {mojoImportResult.ok ? `✅ ${mojoImportResult.upserted} contacts imported` : `❌ ${mojoImportResult.error}`}
-            </p>
-          )}
-          <p style={{ marginTop: 10, fontSize: 11, color: 'rgba(255,255,255,0.2)', lineHeight: 1.5 }}>
-            For real-time sync: set up API Nation → Mojo → Webhook to {mojoWebhookUrl}
-          </p>
         </Section>
 
         <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'center', paddingTop: 8 }}>

@@ -123,20 +123,15 @@ export async function GET() {
   }, [] as Array<Record<string, unknown>>)
 
   const subsystemLastSuccess = await safe('subsystemLastSuccess', async () => {
-    const [matcher, ingest, extraction] = await Promise.all([
+    const [matcher, extraction] = await Promise.all([
       prisma.match.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
-      prisma.zapierIngestLog.findFirst({
-        where: { resultStatus: 'upserted' },
-        orderBy: { receivedAt: 'desc' }, select: { receivedAt: true },
-      }),
       prisma.extractedOpportunity.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
     ])
     return {
       matcher:    iso(matcher?.createdAt),
-      ingest:     iso(ingest?.receivedAt),
       extraction: iso(extraction?.createdAt),
     }
-  }, { matcher: null, ingest: null, extraction: null })
+  }, { matcher: null, extraction: null })
 
   return NextResponse.json({
     orgId: orgId || null,

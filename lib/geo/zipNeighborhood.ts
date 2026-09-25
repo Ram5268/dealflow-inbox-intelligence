@@ -1,9 +1,9 @@
 import { fromRaw } from '../domain/Neighborhood'
 
-// Brief 34: NYC ZIP → neighborhood, shared by the CRM lead sync and (until
-// PR B deletes them) app/api/mojo/{process,webhook}. Values are raw lowercase
-// names; zipToNeighborhood canonicalizes them with fromRaw. ZIPs that span
-// several neighborhoods (11207, 11232, 11218) are deliberately unmapped.
+// Brief 34: NYC ZIP → neighborhood for the CRM lead sync (new records only).
+// Values are raw lowercase names; zipToNeighborhood canonicalizes them with
+// fromRaw. ZIPs that span several neighborhoods (11207, 11232, 11218) are
+// deliberately unmapped.
 export const NYC_ZIP_NEIGHBORHOODS: Record<string, string> = {
   '10013': 'tribeca', '10007': 'tribeca', '10012': 'soho', '10014': 'west village',
   '10011': 'chelsea', '10001': 'chelsea', '10010': 'gramercy', '10003': 'east village',

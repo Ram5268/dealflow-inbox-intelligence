@@ -40,6 +40,11 @@ async function addLeadsToInstantly(campaignId: string, leads: InstantlyLead[]) {
 // Bulk-enrolls eligible contacts from a Mojo calling list into an Instantly campaign.
 // Contacts in NYC lead groups are marked suppressed and skipped.
 export async function POST(req: NextRequest) {
+  // Brief 34 kill switch: this route has no auth and can email real homeowners,
+  // so it's refused unless INSTANTLY_ENROLL_ENABLED is exactly 'true'.
+  if (process.env.INSTANTLY_ENROLL_ENABLED !== 'true') {
+    return NextResponse.json({ ok: false, reason: 'Instantly enrollment is disabled (INSTANTLY_ENROLL_ENABLED)' }, { status: 403 })
+  }
   if (isTestModeOnly()) return NextResponse.json({ ok: false, reason: 'TEST_MODE_ONLY is on' })
   let body: { campaignId?: string; mojoList?: string }
   try { body = await req.json() } catch {

@@ -13,7 +13,7 @@ interface Health {
   recentDismissals: Array<{ partyId: string; listingId: string; reason: string | null; createdAt: string }>
   recentPush: Array<{ title: string; body: string; deliveredAt: string; success: boolean | null }>
   recentIngest: Array<{ receivedAt: string; resultStatus: string; resultReason: string | null }>
-  subsystemLastSuccess: { matcher: string | null; ingest: string | null; extraction: string | null }
+  subsystemLastSuccess: { matcher: string | null; extraction: string | null }
 }
 
 function Dot({ ok }: { ok: boolean | null }) {
@@ -80,10 +80,6 @@ export default function HealthPage() {
             <tr className="border-b border-gray-100">
               <td className="py-1"><Dot ok={fresh(data.subsystemLastSuccess.matcher)} /> Matcher</td>
               <td className="py-1 text-right">{fmt(data.subsystemLastSuccess.matcher)}</td>
-            </tr>
-            <tr className="border-b border-gray-100">
-              <td className="py-1"><Dot ok={fresh(data.subsystemLastSuccess.ingest)} /> Ingest</td>
-              <td className="py-1 text-right">{fmt(data.subsystemLastSuccess.ingest)}</td>
             </tr>
             <tr className="border-b border-gray-100">
               <td className="py-1"><Dot ok={fresh(data.subsystemLastSuccess.extraction)} /> Extraction</td>
