@@ -1,0 +1,91 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { appendNew, planSync, type ExistingRow } from '../plan'
+import { phoneKey, type CrmContact } from '../mapLead'
+
+const contact = (mojoId: string, fullName: string, address: string): CrmContact => ({
+  mojoId, fullName, address, coOwnerFullName: null, phones: [], emails: [], city: 'Brooklyn', state: 'NY', zipCode: '11221',
+  neighborhood: null, propertyTypeDetail: null, unitCount: null, propertyBeds: null, propertyBaths: null,
+  buildingSqft: null, yearBuilt: null, lastSaleDate: null, alternateAddress: null, ownerOccupied: null,
+  lastDialDate: null, lastCalled: null, mojoList: null, status: null, notes: null,
+  metadata: { source: 'crm', crmLeadId: `lead_${mojoId}`, crmUpdatedAt: '2026-09-10', callAttempts: 0, lastCallResult: null, syncVersion: 1 },
+})
+const row = (id: string, mojoId: string, fullName: string, address: string, intact = true): ExistingRow => ({
+  id, mojoId, fullName, address, state: intact ? 'NY' : address, zipCode: intact ? '11221-1230' : address,
+  phone: null, additionalPhones: [], email: null, additionalEmails: [],
+})
+
+test('exact mojoId row is the keeper; its csv twin becomes a duplicate', () => {
+  const plan = planSync([contact('13628', 'Shawn Martin', '194 33rd St')], [
+    row('num', '13628', 'Shawn Martin', '194 33rd St'),
+    row('csv', 'csv_shawn_martin_9139', 'SHAWN MARTIN', '194 33rd Street', false),
+  ])
+  assert.equal(plan.upserts[0].keeper?.id, 'num')
+  assert.deepEqual(plan.duplicates, [{ id: 'csv', keeper_id: 'num' }])
+  assert.deepEqual([plan.rekeys, plan.skipped], [[], []])
+})
+
+test('csv-only person: the intact copy is re-keyed to the CRM mojoId, the scrambled copy is a duplicate', () => {
+  const plan = planSync([contact('14592', 'Arnold Championsmith', '824 Jefferson Ave')], [
+    row('scrambled', 'csv_arnold_championsmith_1919', 'Arnold Championsmith', '824 Jefferson Ave', false),
+    row('intact', 'csv_arnold_championsmith_0274', 'Arnold Championsmith', '824 Jefferson Ave'),
+  ])
+  assert.equal(plan.upserts[0].keeper?.id, 'intact')
+  assert.deepEqual(plan.rekeys, [{ id: 'intact', old_id: 'csv_arnold_championsmith_0274', new_id: '14592' }])
+  assert.deepEqual(plan.duplicates, [{ id: 'scrambled', keeper_id: 'intact' }])
+})
+
+test('csv-only person with no single intact copy is skipped, never inserted', () => {
+  for (const rows of [
+    [row('a', 'csv_a', 'Ben Vardi', '546 Chauncey St', false), row('b', 'csv_b', 'Ben Vardi', '546 Chauncey St', false)],
+    [row('a', 'csv_a', 'Ben Vardi', '546 Chauncey St'), row('b', 'csv_b', 'Ben Vardi', '546 Chauncey St')],
+  ]) {
+    const plan = planSync([contact('14428', 'Ben Vardi', '546 Chauncey St')], rows)
+    assert.deepEqual([plan.upserts, plan.rekeys, plan.duplicates], [[], [], []])
+    assert.equal(plan.skipped.length, 1)
+    assert.deepEqual(plan.skipped[0].rowIds, ['a', 'b'])
+  }
+})
+
+test('a csv row matching more than one CRM lead is skipped and reported, not marked', () => {
+  const plan = planSync(
+    [contact('1', 'Jo Lee', '1 Main St'), contact('2', 'Jo Lee', '1 Main Street')],
+    [row('num1', '1', 'Jo Lee', '1 Main St'), row('csv', 'csv_jo_lee', 'Jo Lee', '1 Main St')],
+  )
+  assert.deepEqual(plan.duplicates, [])
+  assert.deepEqual(plan.upserts.map(u => u.keeper?.id ?? null), ['num1']) // lead 2 has no safe keeper
+  assert.ok(plan.skipped.every(s => s.rowIds.includes('csv')))
+  assert.equal(plan.skipped.length, 2)
+})
+
+test('a genuinely new lead is an insert; numeric rows are never grouped by name', () => {
+  const plan = planSync([contact('14999', 'New Person', '9 New St')], [row('other', '1234', 'New Person', '9 New St')])
+  assert.equal(plan.upserts[0].keeper, null)
+  assert.deepEqual([plan.duplicates, plan.rekeys, plan.skipped], [[], [], []])
+})
+
+test('second run after re-key: same keeper, no re-key, same duplicates', () => {
+  const plan = planSync([contact('14592', 'Arnold Championsmith', '824 Jefferson Ave')], [
+    row('scrambled', 'csv_arnold_championsmith_1919', 'Arnold Championsmith', '824 Jefferson Ave', false),
+    row('intact', '14592', 'Arnold Championsmith', '824 Jefferson Ave'),
+  ])
+  assert.equal(plan.upserts[0].keeper?.id, 'intact')
+  assert.deepEqual(plan.rekeys, [])
+  assert.deepEqual(plan.duplicates, [{ id: 'scrambled', keeper_id: 'intact' }])
+})
+
+test('appendNew: existing phones keep their order, new ones append (last 10 digits)', () => {
+  assert.deepEqual(appendNew('9173312047', ['7185550100'], ['3302342085', '9173312047', '17185550100'], phoneKey),
+    { first: '9173312047', rest: ['7185550100', '3302342085'] })
+  assert.deepEqual(appendNew(null, [], ['3302342085', '9173312047'], phoneKey),
+    { first: '3302342085', rest: ['9173312047'] })
+  assert.deepEqual(appendNew(null, ['7185550100'], ['7185550100', '3302342085'], phoneKey),
+    { first: '3302342085', rest: ['7185550100'] })
+  assert.deepEqual(appendNew('9173312047', null, [], phoneKey), { first: '9173312047', rest: [] })
+})
+
+test('appendNew: emails compare case-insensitively', () => {
+  const lower = (s: string) => s.toLowerCase()
+  assert.deepEqual(appendNew('Mike@Gmail.com', [], ['mike@gmail.com', 'new@x.com'], lower),
+    { first: 'Mike@Gmail.com', rest: ['new@x.com'] })
+})
