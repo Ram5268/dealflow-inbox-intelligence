@@ -2,26 +2,13 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import OpenAI from 'openai'
 import { isTestModeOnly } from '@/lib/config/testMode'
+import { NYC_ZIP_NEIGHBORHOODS } from '@/lib/geo/zipNeighborhood'
 
 export const dynamic = 'force-dynamic'
 
 function deriveNeighborhood(city: string, address: string, zip: string): string | null {
   const combined = `${city} ${address} ${zip}`.toLowerCase()
-  const NYC_ZIPS: Record<string, string> = {
-    '10013': 'tribeca', '10007': 'tribeca', '10012': 'soho', '10014': 'west village',
-    '10011': 'chelsea', '10001': 'chelsea', '10010': 'gramercy', '10003': 'east village',
-    '10002': 'lower east side', '10004': 'financial district', '10006': 'financial district',
-    '10005': 'financial district', '10280': 'battery park city', '10023': 'upper west side',
-    '10024': 'upper west side', '10025': 'upper west side', '10021': 'upper east side',
-    '10022': 'upper east side', '10065': 'upper east side', '10075': 'upper east side',
-    '10128': 'upper east side', '10029': 'east harlem', '10035': 'east harlem',
-    '11201': 'brooklyn heights', '11231': 'carroll gardens', '11217': 'park slope',
-    '11215': 'park slope', '11238': 'prospect heights', '11216': 'crown heights',
-    '11221': 'bushwick', '11206': 'williamsburg', '11211': 'williamsburg',
-    '11222': 'greenpoint', '11205': 'fort greene', '11233': 'bed-stuy',
-    '11213': 'crown heights', '11225': 'flatbush',
-  }
-  const matchedZip = Object.entries(NYC_ZIPS).find(([z]) => combined.includes(z))
+  const matchedZip = Object.entries(NYC_ZIP_NEIGHBORHOODS).find(([z]) => combined.includes(z))
   if (matchedZip) return matchedZip[1]
   if (combined.includes('brooklyn')) return 'brooklyn'
   if (combined.includes('queens')) return 'queens'
