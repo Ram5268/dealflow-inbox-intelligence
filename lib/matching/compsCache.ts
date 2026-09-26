@@ -88,7 +88,7 @@ export function precomputeSubstitutionCounts(
     let count = 0
     for (const l of listings) {
       if (
-        isNeighborhoodEligible(l.neighborhood, b.neighborhoods) &&
+        isNeighborhoodEligible(l.neighborhood, b.neighborhoods, l.borough) &&
         isBedsEligible(l.beds, b.bedsMin, b.bedsMax) &&
         isPriceEligible(l.price, b.priceMin, b.priceMax)
       ) {

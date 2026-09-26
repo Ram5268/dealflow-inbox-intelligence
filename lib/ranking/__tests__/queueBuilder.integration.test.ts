@@ -44,7 +44,7 @@ test('buildCallQueue ranks, filters, and reports stats correctly', async () => {
   })
 
   try {
-    const { entries, stats } = await buildCallQueue(orgId, 1000, false)
+    const { entries, stats } = await buildCallQueue(orgId, 1000, false, { scope: 'all' })
 
     // Ordering: globally sorted desc.
     for (let i = 1; i < entries.length; i++) {
