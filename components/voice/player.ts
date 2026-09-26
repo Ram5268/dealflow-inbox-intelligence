@@ -17,20 +17,37 @@ function trim(ctx: AudioContext, buf: AudioBuffer): AudioBuffer {
   return out
 }
 
+// One sentence of speech: /api/tts → decoded, silence-trimmed AudioBuffer.
+export async function loadClip(ctx: AudioContext, text: string, choice: VoiceChoice): Promise<AudioBuffer> {
+  const res = await fetch('/api/tts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: stripMarkdown(text), ...choice }),
+  })
+  if (!res.ok) throw new Error(`tts ${res.status}`)
+  return trim(ctx, await ctx.decodeAudioData(await res.arrayBuffer()))
+}
+
+// Settings-sheet voice previews, cached in memory for the page session.
+const PREVIEW_LINE = 'Hi Ryan. This is how I’ll sound when we talk.'
+const previews = new Map<string, Promise<AudioBuffer>>()
+export function previewClip(ctx: AudioContext, choice: VoiceChoice): Promise<AudioBuffer> {
+  const key = `${choice.voice}@${choice.speed}`
+  let clip = previews.get(key)
+  if (!clip) {
+    clip = loadClip(ctx, PREVIEW_LINE, choice)
+    clip.catch(() => previews.delete(key)) // retry next time
+    previews.set(key, clip)
+  }
+  return clip
+}
+
 export function speakSentences(ctx: AudioContext, out: AudioNode, sentences: string[], choice: VoiceChoice, gapS: number): Speech {
   let stopped = false
   let wake: () => void = () => {}
   const sources: AudioBufferSourceNode[] = []
   const starts: number[] = []
-  const clips = sentences.map(async text => {
-    const res = await fetch('/api/tts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: stripMarkdown(text), ...choice }),
-    })
-    if (!res.ok) throw new Error(`tts ${res.status}`)
-    return trim(ctx, await ctx.decodeAudioData(await res.arrayBuffer()))
-  })
+  const clips = sentences.map(text => loadClip(ctx, text, choice))
   clips.forEach(p => p.catch(() => {})) // a failed sentence is skipped, not fatal
 
   const done = (async () => {

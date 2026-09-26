@@ -3,27 +3,21 @@
 import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import type { MicVAD } from '@ricky0123/vad-web'
-import { Mic, MicOff, Settings, X } from 'lucide-react'
+import { Mic, MicOff, Settings, ThumbsDown, ThumbsUp, X } from 'lucide-react'
 import Glow, { type GlowTone } from '@/components/voice/Glow'
+import SettingsSheet from '@/components/voice/SettingsSheet'
 import styles from '@/components/voice/voice.module.css'
 import { voiceItalic, voiceSerif } from '@/components/voice/fonts'
 import { initialVoiceState, voiceReducer, type Phase, type Turn, type VoiceEvent } from '@/components/voice/state'
-import { VOICE_TIMING as T, shouldCommit } from '@/components/voice/config'
+import { ORT_BASE, VAD_BASE, VOICE_TIMING as T, shouldCommit } from '@/components/voice/config'
 import { levelOf, spokenCount } from '@/components/voice/text'
 import { openTranscriptLink, VoiceSessionError, type TranscriptLink } from '@/components/voice/realtime'
-import { speakSentences, type Speech } from '@/components/voice/player'
+import { previewClip, speakSentences, type Speech } from '@/components/voice/player'
 import { sendVoiceTurn } from '@/components/voice/chat'
-import { DEFAULT_VOICE, SPEEDS } from '@/lib/voice/voices'
+import { readSettings, writeSettings, type VoiceSettings } from '@/components/voice/settings'
+import { sendThumb, type Thumb } from '@/components/voice/feedback'
+import { SPEEDS } from '@/lib/voice/voices'
 
-// VAD assets (silero model + audio worklet) and the onnxruntime-web wasm are
-// served from jsDelivr rather than committed to the repo (the wasm alone is
-// ~100MB). Version-pinned so the fetched wasm matches the onnxruntime loader
-// bundled via @ricky0123/vad-web. Voice mode is online-only anyway (chat / TTS
-// / transcription all hit the network), so a CDN asset dependency is consistent.
-const VAD_BASE = 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/'
-const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/'
-
-const VOICE_CHOICE = { voice: DEFAULT_VOICE, speed: SPEEDS.normal }
 const MIC_OPEN: Phase[] = ['listening', 'hearing', 'finalizing']
 const BLOCKED_TEXT = {
   mic: 'Drift needs the microphone for voice mode. Allow it in your browser settings, then try again.',
@@ -43,11 +37,13 @@ interface Props {
 interface Rig {
   stream?: MediaStream; ctx?: AudioContext; vad?: MicVAD; link?: TranscriptLink; speech?: Speech
   mic?: AnalyserNode; out?: AnalyserNode; bytes?: Uint8Array<ArrayBuffer> // glow levels
+  preview?: AudioBufferSourceNode // settings-sheet voice sample
 }
 
 // Stop everything: audio, transcription link, VAD and the mic itself.
 function release(r: Rig) {
   r.speech?.stop()
+  try { r.preview?.stop() } catch { /* not started */ }
   r.vad?.destroy().catch(() => {})
   r.link?.close()
   r.stream?.getTracks().forEach(t => t.stop())
@@ -60,6 +56,7 @@ function release(r: Rig) {
 // reducer (voice/state.ts) owns the rules; the effects below do the I/O when
 // the phase changes.
 const noSubscribe = () => () => {}
+const localStore = () => { try { return window.localStorage } catch { return undefined } }
 
 export default function VoiceConversation(props: Props) {
   // Portal to <body>: the chat shell is transformed, which would pin a fixed
@@ -71,6 +68,9 @@ export default function VoiceConversation(props: Props) {
 function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
   const [s, dispatch] = useReducer(voiceReducer, initialVoiceState)
   const [attempt, setAttempt] = useState(0)
+  const [settings, setSettings] = useState<VoiceSettings>(() => readSettings(localStore()))
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const choice = useRef({ voice: settings.voice, speed: SPEEDS[settings.speed] })
   const rig = useRef<Rig>({})
   const session = useRef(sessionId) // latest session id; every turn reuses it
   const phase = useRef<Phase>(s.phase)
@@ -82,6 +82,7 @@ function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
 
   useEffect(() => { phase.current = s.phase }, [s.phase])
   useEffect(() => { callbacks.current = { onClose, onNewSession } }, [onClose, onNewSession])
+  useEffect(() => { choice.current = { voice: settings.voice, speed: SPEEDS[settings.speed] } }, [settings])
 
   const close = useCallback(() => {
     if (phase.current === 'closing') return
@@ -147,18 +148,18 @@ function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
   }, [attempt, demo])
 
   // The mic reaches the transcriber only while Ryan has the floor and isn't
-  // muted (Drift's own voice is never transcribed). A fresh floor starts clean,
+  // muted or in settings (Drift's voice is never transcribed). A fresh floor starts clean,
   // and is cleared again once any tail caught as the mic reopened has passed
   // (cancelled if Ryan starts talking first).
   useEffect(() => {
     const r = rig.current
-    r.stream?.getAudioTracks().forEach(t => { t.enabled = !s.muted && MIC_OPEN.includes(s.phase) })
+    r.stream?.getAudioTracks().forEach(t => { t.enabled = !s.muted && !sheetOpen && MIC_OPEN.includes(s.phase) })
     if (s.phase === 'blocked') release(r) // never leave the mic open after an error
     if (s.phase !== 'listening') return
     r.link?.clear()
     const settle = window.setTimeout(() => r.link?.clear(), T.listenSettleMs)
     return () => clearTimeout(settle)
-  }, [s.phase, s.muted])
+  }, [s.phase, s.muted, sheetOpen])
 
   // End of Ryan's turn: commit once the live text settles, then wait (bounded)
   // for the final transcript.
@@ -197,7 +198,7 @@ function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
     const r = rig.current
     const { ctx, out } = r
     if (!reply || !ctx || !out) return
-    const speech = (r.speech = speakSentences(ctx, out, reply.sentences, VOICE_CHOICE, T.sentenceGapS))
+    const speech = (r.speech = speakSentences(ctx, out, reply.sentences, choice.current, T.sentenceGapS))
     let raf = 0
     let shown = 0
     const tick = () => {
@@ -221,19 +222,23 @@ function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
     if (spoken) scroller.current?.querySelector(`[data-last] [data-si="${spoken - 1}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [spoken])
 
-  // Escape closes; 5 idle minutes close; the screen stays awake while open.
+  // Escape closes the settings sheet, then voice mode.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (sheetOpen) setSheetOpen(false); else close() } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [close, sheetOpen])
+
+  // 5 idle minutes close; the screen stays awake while open.
   useEffect(() => {
     if (demo) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
     const idle = setInterval(() => { if (phase.current === 'listening' && Date.now() - lastActivity.current > T.idleCloseMs) close() }, 15_000)
     let lock: WakeLockSentinel | null = null
     const wake = () => { if (document.visibilityState === 'visible') navigator.wakeLock?.request('screen').then(l => { lock = l }).catch(() => {}) }
     wake()
-    window.addEventListener('keydown', onKey)
     document.addEventListener('visibilitychange', wake)
     return () => {
       clearInterval(idle)
-      window.removeEventListener('keydown', onKey)
       document.removeEventListener('visibilitychange', wake)
       lock?.release().catch(() => {})
     }
@@ -252,6 +257,20 @@ function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
     })
     return () => { off = true; timers.forEach(clearTimeout) }
   }, [demo])
+
+  const updateSettings = (next: VoiceSettings) => { setSettings(next); writeSettings(localStore(), next) }
+  const preview = useCallback((voice: string) => {
+    const r = rig.current
+    const { ctx, out } = r
+    if (!ctx || !out) return
+    previewClip(ctx, { voice, speed: choice.current.speed }).then(buf => {
+      try { r.preview?.stop() } catch { /* not started */ }
+      const src = (r.preview = ctx.createBufferSource())
+      src.buffer = buf
+      src.connect(out)
+      src.start()
+    }).catch(() => {})
+  }, [])
 
   const getLevel = useCallback(() => {
     const p = phase.current
@@ -279,7 +298,9 @@ function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
 
       {/* Tapping the conversation while Drift speaks interrupts it. */}
       <div ref={scroller} className={styles.scroll} onClick={() => dispatch({ type: 'interrupt' })}>
-        {s.turns.map((t, i) => <TurnView key={t.id} turn={t} last={i === s.turns.length - 1} />)}
+        {s.turns.map((t, i) => (
+          <TurnView key={t.id} turn={t} last={i === s.turns.length - 1} speaking={i === s.turns.length - 1 && s.phase === 'speaking'} />
+        ))}
       </div>
 
       {s.phase === 'blocked' && s.blocked ? (
@@ -300,8 +321,12 @@ function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
       ) : null}
 
       <div className={styles.controls}>
-        {/* Voice + speed settings sheet arrives in Brief 36 PR B. */}
-        <button className={`${styles.btn} ${styles.settings}`} aria-label="Voice settings" aria-disabled="true"><Settings {...icon} /></button>
+        <button
+          className={`${styles.btn} ${styles.settings}`} aria-label="Voice settings"
+          onClick={() => { dispatch({ type: 'interrupt' }); setSheetOpen(true) }}
+        >
+          <Settings {...icon} />
+        </button>
         <button
           className={`${styles.btn} ${styles.mic}`} aria-pressed={s.muted} onClick={() => dispatch({ type: 'toggleMute' })}
           aria-label={s.muted ? 'Unmute microphone' : 'Mute microphone'}
@@ -310,11 +335,15 @@ function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
         </button>
         <button className={`${styles.btn} ${styles.close}`} aria-label="Close voice mode" onClick={close}><X {...icon} /></button>
       </div>
+
+      {sheetOpen && (
+        <SettingsSheet settings={settings} onChange={updateSettings} onPreview={preview} onClose={() => setSheetOpen(false)} />
+      )}
     </div>
   )
 }
 
-function TurnView({ turn, last }: { turn: Turn; last: boolean }) {
+function TurnView({ turn, last, speaking }: { turn: Turn; last: boolean; speaking: boolean }) {
   const { reply } = turn
   return (
     <section className={styles.turn} data-last={last || undefined}>
@@ -336,6 +365,26 @@ function TurnView({ turn, last }: { turn: Turn; last: boolean }) {
           ))}
         </div>
       )}
+      {reply && turn.interactionId && !speaking && <Thumbs interactionId={turn.interactionId} />}
     </section>
+  )
+}
+
+// Thumbs reuse the chat's feedback (up → helpful, down → wrong_result). One
+// vote per reply; the picked thumb stays filled. Taps don't interrupt Drift.
+function Thumbs({ interactionId }: { interactionId: string }) {
+  const [picked, setPicked] = useState<Thumb | null>(null)
+  const pick = (thumb: Thumb) => (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (picked) return
+    setPicked(thumb)
+    sendThumb(interactionId, thumb)
+  }
+  const glyph = (thumb: Thumb) => ({ size: 18, strokeWidth: 1.8, fill: picked === thumb ? 'currentColor' : 'none' })
+  return (
+    <div className={styles.thumbs}>
+      <button aria-label="Good reply" aria-pressed={picked === 'up'} onClick={pick('up')}><ThumbsUp {...glyph('up')} /></button>
+      <button aria-label="Bad reply" aria-pressed={picked === 'down'} onClick={pick('down')}><ThumbsDown {...glyph('down')} /></button>
+    </div>
   )
 }

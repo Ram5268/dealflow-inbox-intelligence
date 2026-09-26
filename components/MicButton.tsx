@@ -1,39 +1,101 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
+import type { MicVAD } from '@ricky0123/vad-web'
+import { Mic, Square } from 'lucide-react'
+import { showToast } from '@/components/Toast'
+import { ORT_BASE, VAD_BASE, VOICE_TIMING } from '@/components/voice/config'
+
 interface Props {
-  onOpenVoice: () => void
+  onText: (text: string) => void
   disabled?: boolean
 }
 
-export default function MicButton({ onOpenVoice, disabled }: Props) {
-  const open = () => { if (!disabled) onOpenVoice() }
+interface Take { stream: MediaStream; recorder: MediaRecorder; vad?: MicVAD }
 
+const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
+  const reader = new FileReader()
+  reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '')
+  reader.onerror = reject
+  reader.readAsDataURL(blob)
+})
+
+// Brief 36 PR B — composer dictation: tap to record, tap again (or just pause)
+// to stop. The audio goes through /api/transcribe and the text lands in the
+// input box, unsent.
+export default function MicButton({ onText, disabled }: Props) {
+  const [state, setState] = useState<'idle' | 'recording' | 'transcribing'>('idle')
+  const take = useRef<Take | null>(null)
+
+  const stop = () => { if (take.current?.recorder.state === 'recording') take.current.recorder.stop() }
+  useEffect(() => () => { take.current?.vad?.destroy().catch(() => {}); take.current?.stream.getTracks().forEach(t => t.stop()) }, [])
+
+  async function start() {
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      showToast('Microphone access is off for DealFlow.')
+      return
+    }
+    const mimeType = ['audio/webm', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t))
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    const chunks: Blob[] = []
+    recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data) }
+    recorder.onstop = async () => {
+      take.current?.vad?.destroy().catch(() => {})
+      take.current = null
+      stream.getTracks().forEach(t => t.stop())
+      setState('transcribing')
+      try {
+        const type = recorder.mimeType || mimeType || 'audio/webm'
+        const res = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio: { mimeType: type, content: await toBase64(new Blob(chunks, { type })) } }),
+        })
+        const text = res.ok ? String((await res.json()).transcript ?? '').trim() : ''
+        if (text) onText(text)
+        else if (!res.ok) showToast('Couldn’t transcribe that. Try again.')
+      } catch {
+        showToast('Couldn’t transcribe that. Try again.')
+      } finally {
+        setState('idle')
+      }
+    }
+    take.current = { stream, recorder }
+    recorder.start()
+    setState('recording')
+    // A pause ends the take, like voice mode (the VAD loads in the background).
+    const { MicVAD } = await import('@ricky0123/vad-web')
+    MicVAD.new({
+      getStream: async () => stream, pauseStream: async () => {}, resumeStream: async () => stream,
+      baseAssetPath: VAD_BASE, onnxWASMBasePath: ORT_BASE,
+      redemptionMs: VOICE_TIMING.dictationRedemptionMs, onSpeechEnd: stop,
+    }).then(vad => {
+      if (take.current?.stream === stream) { take.current.vad = vad; vad.start() } else vad.destroy().catch(() => {})
+    }).catch(() => { /* tap-to-stop still works */ })
+  }
+
+  const recording = state === 'recording'
   return (
     <button
       type="button"
-      disabled={disabled}
-      onMouseDown={open}
-      onTouchStart={e => { e.preventDefault(); open() }}
-      onContextMenu={e => e.preventDefault()}
-      aria-label="Open voice conversation"
+      disabled={disabled || state === 'transcribing'}
+      onClick={() => (recording ? stop() : state === 'idle' && start())}
+      aria-label={recording ? 'Stop dictation' : 'Dictate a message'}
+      aria-pressed={recording}
       style={{
-        width: 32, height: 32, borderRadius: '50%',
-        background: 'rgba(255,255,255,0.08)',
-        border: '1px solid rgba(255,255,255,0.22)',
+        width: 32, height: 32, borderRadius: '50%', flexShrink: 0, padding: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: recording ? '#fff' : 'rgba(255,255,255,0.08)',
+        border: `1px solid ${recording ? '#fff' : 'rgba(255,255,255,0.22)'}`,
         cursor: disabled ? 'default' : 'pointer',
-        padding: 0,
-        opacity: disabled ? 0.5 : 1,
-        touchAction: 'none',
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTouchCallout: 'none',
+        opacity: disabled || state === 'transcribing' ? 0.5 : 1,
+        transition: 'background 0.15s',
       }}
     >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round">
-        <rect x="9" y="3" width="6" height="12" rx="3" />
-        <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-      </svg>
+      {recording ? <Square size={11} fill="#0a1f2a" color="#0a1f2a" /> : <Mic size={15} color="#fff" strokeWidth={1.8} />}
     </button>
   )
 }
