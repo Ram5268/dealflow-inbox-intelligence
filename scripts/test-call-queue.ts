@@ -11,7 +11,7 @@ async function main() {
   const orgId = await getCurrentOrgId()
   console.log(`\n=== buildCallQueue for org ${orgId} ===\n`)
 
-  const { entries, stats } = await buildCallQueue(orgId, 50, false)
+  const { entries, stats } = await buildCallQueue(orgId, 50, false, { scope: 'all' })
 
   console.log(`Total contacts considered: ${stats.totalContactsConsidered}`)
   console.log(`Exclusions by reason:`)

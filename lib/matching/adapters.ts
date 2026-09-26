@@ -8,6 +8,7 @@
 import type { ExtractedOpportunity, MojoContact } from '@prisma/client'
 import type { ListingData, BuyerData } from './scorerTypes'
 import { fromRaw, getBorough } from '../domain/Neighborhood'
+import { listingBorough } from './borough'
 
 // Re-export so the brief's stated import surface (types from adapters) resolves.
 export type { ListingData, BuyerData } from './scorerTypes'
@@ -89,16 +90,22 @@ export function opportunityToListingData(opp: ExtractedOpportunity): ListingData
 }
 
 export function mojoContactToListingData(mc: MojoContact): ListingData {
+  // Brief 35: Mojo beds/baths are building totals. 2-4 unit buildings are scored
+  // per unit; a "5+ units" total can't be split, and under 1 bed per unit is
+  // implausible, so both count as unknown.
+  const units = mc.unitCount ?? 1
+  const perUnit = (v: number | null) => (units >= 5 ? null : v != null && units >= 2 ? Math.round((v / units) * 10) / 10 : v)
+  const bedsPerUnit = perUnit(mc.propertyBeds)
   return {
     id: mc.id,
     sourceType: 'contact', // regen writes opportunityType='contact' off this
     transactionType: 'SALE', // a SELLER contact is sale-side supply
     priorListingStatus: mc.priorListingStatus,
     neighborhood: mc.neighborhood,
-    borough: boroughOf(mc.neighborhood),
+    borough: listingBorough(mc.neighborhood, mc.zipCode), // Brief 35: ZIP/label fallback
     price: mc.estimatedValue, // seller has no explicit list price — estimatedValue proxy
-    beds: mc.propertyBeds,
-    baths: mc.propertyBaths,
+    beds: units >= 2 && bedsPerUnit != null && bedsPerUnit < 1 ? null : bedsPerUnit,
+    baths: perUnit(mc.propertyBaths),
     propertyType: mc.propertyTypeDetail,
     propertyTypeDetail: mc.propertyTypeDetail,
     monthlyMaintenance: null,

@@ -6,7 +6,9 @@
 // 'contact' OR counterpartType 'mojo'). EO×EO inbox pairs are excluded by the
 // query — Ryan can't cold-call them (Brief 33 scope-out).
 import { randomUUID } from 'crypto'
+import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../prisma'
+import { resolveDismissKey } from '../matching/dismissKey'
 import type { AggregatedContact, AggregatedMatch, Confidence, RankingContext } from './types'
 import { applyHardFilters } from './hardFilters'
 import { composeCallPriority } from './callPriority'
@@ -50,6 +52,35 @@ export interface QueueStats {
     rank50Score: number
     spread: number
   }
+}
+
+// Brief 35: whose calls get ranked. 'crm' (the nightly list) = real CRM sellers
+// only; 'all' = every MojoContact in the org (Brief 33 test + script).
+export type QueueScope = 'crm' | 'all'
+export function contactScopeWhere(orgId: string, scope: QueueScope): Prisma.MojoContactWhereInput {
+  return scope === 'crm'
+    ? { organizationId: orgId, isTestData: false, metadata: { path: ['source'], equals: 'crm' } }
+    : { organizationId: orgId }
+}
+
+// Brief 35: the persist transaction always replaces the org's list, even with
+// 0 entries (so a stale list can't survive), and records the run in AuditLog.
+export function persistBatch(
+  db: Pick<PrismaClient, 'callQueueEntry' | 'auditLog'>,
+  orgId: string, entries: QueueEntry[], generationRunId: string, stats: QueueStats,
+) {
+  return [
+    db.callQueueEntry.deleteMany({ where: { organizationId: orgId } }),
+    ...(entries.length > 0 ? [db.callQueueEntry.createMany({
+      data: entries.map(e => ({
+        organizationId: orgId, contactId: e.contactId, rank: e.rank, priorityScore: e.priorityScore,
+        reason: e.reason, primaryMatchId: e.primaryMatchId, contributingMatchIds: e.contributingMatchIds,
+        contributions: e.contributions, generationRunId,
+      })),
+      skipDuplicates: true,
+    })] : []),
+    db.auditLog.create({ data: { organizationId: orgId, action: 'CALL_QUEUE_BUILD', detailsJson: { generationRunId, ...stats } } }),
+  ]
 }
 
 const CONFIDENCES: Confidence[] = ['HIGH', 'MEDIUM', 'LOW']
@@ -103,12 +134,13 @@ export async function buildCallQueue(
   orgId: string,
   limit = 50,
   persist = true,
+  { scope = 'crm' }: { scope?: QueueScope } = {},
 ): Promise<{ entries: QueueEntry[]; stats: QueueStats; generationRunId: string }> {
   const now = new Date()
   const ctx: RankingContext = { now }
 
   const contacts = await prisma.mojoContact.findMany({
-    where: { organizationId: orgId },
+    where: contactScopeWhere(orgId, scope),
     select: {
       id: true, fullName: true, phone: true, additionalPhones: true, phoneDncFlags: true,
       phoneTypes: true, lastCalled: true, lastDialDate: true, status: true,
@@ -125,6 +157,18 @@ export async function buildCallQueue(
     },
   })
 
+  // Brief 35: skip dismissed pairs, keyed exactly as /matches keys them.
+  const dismissed = new Set((await prisma.matchDismissal.findMany({ select: { partyId: true, listingId: true } }))
+    .map(d => `${d.partyId}|${d.listingId}`))
+  const oppIds = dismissed.size > 0 ? matches.filter(m => m.opportunityType !== 'contact').map(m => m.opportunityId) : []
+  const categories = new Map((oppIds.length > 0
+    ? await prisma.extractedOpportunity.findMany({ where: { id: { in: oppIds } }, select: { id: true, category: true } })
+    : []).map(o => [o.id, o.category]))
+  const isDismissed = (m: (typeof matches)[number]) => {
+    const k = resolveDismissKey({ ...m, opportunityCategory: categories.get(m.opportunityId) ?? null })
+    return dismissed.has(`${k.partyId}|${k.listingId}`)
+  }
+
   const buckets = new Map<string, RawMatch[]>()
   const push = (cid: string, m: RawMatch) => {
     const arr = buckets.get(cid) ?? []
@@ -132,6 +176,7 @@ export async function buildCallQueue(
     buckets.set(cid, arr)
   }
   for (const m of matches) {
+    if (isDismissed(m)) continue
     const rm: RawMatch = {
       id: m.id, matchFit: m.score, matchFitConfidence: coerceConfidence(m.matchFitConfidence),
       captureStatus: m.captureStatus ?? 'EXTERNAL_BOTH', createdAt: m.createdAt,
@@ -218,35 +263,12 @@ export async function buildCallQueue(
   const rank50Score = scores.length >= 1 ? scores[Math.min(scores.length, 50) - 1] : 0
 
   const generationRunId = randomUUID()
-
-  if (persist && entries.length > 0) {
-    await prisma.$transaction([
-      prisma.callQueueEntry.deleteMany({ where: { organizationId: orgId } }),
-      prisma.callQueueEntry.createMany({
-        data: entries.map(e => ({
-          organizationId: orgId,
-          contactId: e.contactId,
-          rank: e.rank,
-          priorityScore: e.priorityScore,
-          reason: e.reason,
-          primaryMatchId: e.primaryMatchId,
-          contributingMatchIds: e.contributingMatchIds,
-          contributions: e.contributions,
-          generationRunId,
-        })),
-        skipDuplicates: true,
-      }),
-    ])
+  const stats: QueueStats = {
+    totalContactsConsidered: contacts.length,
+    exclusionCounts,
+    queueLength: entries.length,
+    priorityDistribution: { top10Avg, top50Avg, rank1Score, rank50Score, spread: rank1Score - rank50Score },
   }
-
-  return {
-    entries,
-    generationRunId,
-    stats: {
-      totalContactsConsidered: contacts.length,
-      exclusionCounts,
-      queueLength: entries.length,
-      priorityDistribution: { top10Avg, top50Avg, rank1Score, rank50Score, spread: rank1Score - rank50Score },
-    },
-  }
+  if (persist) await prisma.$transaction(persistBatch(prisma, orgId, entries, generationRunId, stats))
+  return { entries, generationRunId, stats }
 }

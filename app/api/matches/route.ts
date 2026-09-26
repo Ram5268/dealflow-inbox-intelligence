@@ -62,8 +62,7 @@ export async function GET(req: NextRequest) {
     const keyFor = (m: (typeof allMatches)[number]) => resolveDismissKey({
       opportunityId: m.opportunityId,
       counterpartId: m.counterpartId,
-      // Brief 32 — dismissKey only needs supply-vs-demand direction; a contact
-      // supply (category=null) is off-market listing side, so coalesce.
+      opportunityType: m.opportunityType, // Brief 35: 'contact' supply keys as the listing side
       opportunityCategory: supplies.get(m.opportunityId)?.category ?? Category.OFF_MARKET_SALE,
     })
     const dismissals = await prisma.matchDismissal.findMany({

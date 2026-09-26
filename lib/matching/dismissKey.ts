@@ -25,12 +25,18 @@ const SUPPLY_SET = new Set<Category>([...SUPPLY_SALE, ...SUPPLY_RENTAL])
 // listing → SUPPLY branch). The non-supply branch future-proofs a Mojo listing.
 // showing_confirmation self-matches have opportunityId === counterpartId, so the
 // key is the same pair either way.
+//
+// Brief 35: opportunityType 'contact' means opportunityId is a seller MojoContact,
+// i.e. always the supply side, whatever its (null) category.
 export function resolveDismissKey(match: {
   opportunityId: string
   counterpartId: string
-  opportunityCategory: Category
+  opportunityType: string
+  opportunityCategory: Category | null
 }): { partyId: string; listingId: string } {
-  return SUPPLY_SET.has(match.opportunityCategory)
+  const supplyIsOpportunity = match.opportunityType === 'contact' ||
+    (match.opportunityCategory != null && SUPPLY_SET.has(match.opportunityCategory))
+  return supplyIsOpportunity
     ? { partyId: match.counterpartId, listingId: match.opportunityId }
     : { partyId: match.opportunityId, listingId: match.counterpartId }
 }

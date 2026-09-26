@@ -5,6 +5,7 @@
 // price) so the scorer only sees plausible pairs.
 import type { ListingData, BuyerData } from './scorerTypes'
 import { fromRaw, getAdjacent, getBorough } from '../domain/Neighborhood'
+import { boroughLabels } from './borough'
 
 export function isEligible(
   listing: ListingData,
@@ -22,7 +23,7 @@ export function isEligible(
   if (listing.priorListingStatus === 'ACTIVE') return { eligible: false, reason: 'currently_listed' }
 
   // 4. Neighborhood — in buyer's list, adjacent, or same borough.
-  if (!isNeighborhoodEligible(listing.neighborhood, buyer.neighborhoods)) {
+  if (!isNeighborhoodEligible(listing.neighborhood, buyer.neighborhoods, listing.borough)) {
     return { eligible: false, reason: 'wrong_neighborhood' }
   }
 
@@ -40,18 +41,26 @@ export function isEligible(
 }
 
 // Exported for unit tests + reuse by substitution-scarcity pre-compute.
-export function isNeighborhoodEligible(listingNbhd: string | null, buyerNbhds: string[]): boolean {
-  if (!listingNbhd || buyerNbhds.length === 0) return true // unknown side → keep
+//
+// Brief 35: borough-level areas on either side. A listing whose label isn't a
+// known neighborhood falls back to its borough (listingBorough), and a buyer
+// area that is a borough name ("Brooklyn") means the whole borough.
+export function isNeighborhoodEligible(
+  listingNbhd: string | null,
+  buyerNbhds: string[],
+  listingBorough: string | null = null,
+): boolean {
   const lc = fromRaw(listingNbhd)
-  if (!lc) return true // listing nbhd not recognized → keep (feature will differentiate)
   const buyerCanon = buyerNbhds.map(n => fromRaw(n)).filter((n): n is string => n !== null)
-  if (buyerCanon.length === 0) return true // buyer nbhds unrecognized → keep
+  const buyerBoroughs = boroughLabels(buyerNbhds)
+  if (buyerCanon.length === 0 && buyerBoroughs.length === 0) return true // no usable buyer area → keep
+  const borough = lc ? getBorough(lc) : listingBorough
+  if (borough && buyerBoroughs.includes(borough)) return true
+  if (!lc) return borough ? buyerCanon.some(n => getBorough(n) === borough) : true // unknown listing area → keep
   if (buyerCanon.includes(lc)) return true
   const adjacents = getAdjacent(lc)
   if (buyerCanon.some(n => adjacents.includes(n))) return true
-  const listingBorough = getBorough(lc)
-  if (listingBorough && buyerCanon.some(n => getBorough(n) === listingBorough)) return true
-  return false
+  return buyerCanon.some(n => getBorough(n) === borough)
 }
 
 export function isBedsEligible(

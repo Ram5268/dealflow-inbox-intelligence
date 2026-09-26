@@ -21,6 +21,7 @@ test('ISO-triggered match → partyId=iso, listingId=listing (NOT inverted)', ()
   const key = resolveDismissKey({
     opportunityId: ISO_ID,
     counterpartId: LISTING_ID,
+    opportunityType: 'opportunity',
     opportunityCategory: Category.BUYER_ISO,
   })
   assert.equal(key.partyId, ISO_ID)
@@ -31,6 +32,7 @@ test('RENTER_INQUIRY-triggered match resolves the same way', () => {
   const key = resolveDismissKey({
     opportunityId: ISO_ID,
     counterpartId: LISTING_ID,
+    opportunityType: 'opportunity',
     opportunityCategory: Category.RENTER_INQUIRY,
   })
   assert.deepEqual(key, { partyId: ISO_ID, listingId: LISTING_ID })
@@ -41,6 +43,7 @@ test('listing-triggered match → partyId=counterpart, listingId=opportunity', (
   const key = resolveDismissKey({
     opportunityId: LISTING_ID,
     counterpartId: ISO_ID,
+    opportunityType: 'opportunity',
     opportunityCategory: Category.ACTIVE_SALE_LISTING,
   })
   assert.equal(key.partyId, ISO_ID)
@@ -51,6 +54,7 @@ test('rental supply listing resolves correctly too', () => {
   const key = resolveDismissKey({
     opportunityId: LISTING_ID,
     counterpartId: ISO_ID,
+    opportunityType: 'opportunity',
     opportunityCategory: Category.RENTAL_LISTING,
   })
   assert.deepEqual(key, { partyId: ISO_ID, listingId: LISTING_ID })
@@ -61,6 +65,7 @@ test('mojo counterpart → listing in opportunityId, mojo id as party', () => {
   const key = resolveDismissKey({
     opportunityId: LISTING_ID,
     counterpartId: MOJO_ID,
+    opportunityType: 'opportunity',
     opportunityCategory: Category.COMING_SOON_SALE,
   })
   assert.equal(key.partyId, MOJO_ID)
@@ -74,7 +79,7 @@ test('dismiss-write key === GET-exclusion key for the same match', () => {
   // Model the same match from both perspectives is unnecessary — both routes call
   // resolveDismissKey with the same (opportunityId, counterpartId, category), so
   // equality is structural. Assert it explicitly for the ISO case that regressed.
-  const match = { opportunityId: ISO_ID, counterpartId: LISTING_ID, opportunityCategory: Category.BUYER_ISO }
+  const match = { opportunityId: ISO_ID, counterpartId: LISTING_ID, opportunityType: 'opportunity', opportunityCategory: Category.BUYER_ISO }
   const writeKey   = resolveDismissKey(match)
   const excludeKey = resolveDismissKey(match)
   assert.deepEqual(writeKey, excludeKey)
@@ -85,8 +90,22 @@ test('showing_confirmation self-match keys to the same id on both sides', () => 
   const key = resolveDismissKey({
     opportunityId: 'sc-1',
     counterpartId: 'sc-1',
+    opportunityType: 'opportunity',
     opportunityCategory: Category.SHOWING_CONFIRMATION,
   })
   assert.equal(key.partyId, 'sc-1')
   assert.equal(key.listingId, 'sc-1')
+})
+
+// ── Brief 35: contact supply (a seller MojoContact in opportunityId) ─────────
+test('contact supply → partyId=buyer, listingId=seller contact, whatever the category', () => {
+  for (const opportunityCategory of [null, Category.BUYER_ISO] as const) {
+    const key = resolveDismissKey({ opportunityId: 'seller-1', counterpartId: MOJO_ID, opportunityType: 'contact', opportunityCategory })
+    assert.deepEqual(key, { partyId: MOJO_ID, listingId: 'seller-1' })
+  }
+})
+
+test('an opportunity row with an unknown (null) category keys as demand-first', () => {
+  const key = resolveDismissKey({ opportunityId: ISO_ID, counterpartId: LISTING_ID, opportunityType: 'opportunity', opportunityCategory: null })
+  assert.deepEqual(key, { partyId: ISO_ID, listingId: LISTING_ID })
 })

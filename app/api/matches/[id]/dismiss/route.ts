@@ -45,6 +45,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { partyId, listingId } = resolveDismissKey({
     opportunityId: match.opportunityId,
     counterpartId: match.counterpartId,
+    opportunityType: match.opportunityType,
     opportunityCategory: supply?.category ?? Category.OFF_MARKET_SALE,
   })
 
@@ -104,6 +105,7 @@ export async function DELETE(_req: NextRequest, ctx: { params: Promise<{ id: str
   const { partyId, listingId } = resolveDismissKey({
     opportunityId: match.opportunityId,
     counterpartId: match.counterpartId,
+    opportunityType: match.opportunityType,
     opportunityCategory: supply?.category ?? Category.OFF_MARKET_SALE,
   })
 
