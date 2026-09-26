@@ -1,0 +1,103 @@
+/* Brief 36 — voice mode. CSS px at a 393px-wide iPhone (reference: Mobbin
+   "voice chat" 01–04). --sat/--sab are the safe-area insets (the dev demo pins
+   them to an iPhone's 59/34 for the parity screenshots). */
+
+.overlay {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --controls-top: calc(var(--sab) + 24px + 44px);
+  position: fixed; inset: 0; z-index: 100; overflow: hidden;
+  background: #F9FAF7; color: #030401;
+  font: 17px var(--font-inter), system-ui, sans-serif;
+  letter-spacing: -0.015em; /* Inter runs ~3% wider than the reference face */
+  -webkit-font-smoothing: antialiased; touch-action: manipulation;
+  animation: fadeIn 250ms ease-out both; transition: opacity 200ms ease;
+}
+.overlay[data-closing='true'] { opacity: 0; }
+
+/* Glow: sunk 90px below the screen so the 60px blur has color under the edge. */
+.glow {
+  position: absolute; left: -12%; right: -12%; bottom: -90px; height: 520px; pointer-events: none;
+  animation: rise 600ms cubic-bezier(0.22, 1, 0.36, 1) both; transition: opacity 700ms ease;
+}
+.glow[data-dim='true'] { opacity: 0.4; }
+.breathe { position: absolute; inset: 0; transform-origin: 50% 100%; animation: breathe 4s ease-in-out infinite alternate; }
+.glow[data-tone='thinking'] .breathe { animation-duration: 1.6s; }
+.level { position: absolute; inset: 0; transform-origin: 50% 100%; will-change: transform; }
+.blue, .coral { position: absolute; inset: 0; filter: blur(60px); transition: opacity 700ms ease; }
+/* Ellipses fitted to the reference screens' color profiles (rms ≈ 4 and 3 of 255). */
+.blue {
+  background:
+    radial-gradient(65% 340px at 22% 100%, rgb(174, 199, 222) 45%, rgba(174, 199, 222, 0)),
+    radial-gradient(37% 220px at 63% 100%, rgb(174, 199, 222) 40%, rgba(174, 199, 222, 0)),
+    radial-gradient(38% 240px at 76% 100%, rgba(174, 199, 222, 0.5) 10%, rgba(174, 199, 222, 0));
+}
+.coral {
+  opacity: 0;
+  background:
+    radial-gradient(62% 390px at 20% 100%, rgb(224, 142, 118) 55%, rgba(224, 142, 118, 0)),
+    radial-gradient(48% 380px at 67% 100%, rgb(224, 142, 118) 40%, rgba(224, 142, 118, 0)),
+    radial-gradient(45% 360px at 98% 100%, rgb(224, 142, 118) 40%, rgba(224, 142, 118, 0));
+}
+.glow[data-tone='coral'] .coral { opacity: 1; }
+.glow[data-tone='coral'] .blue { opacity: 0; }
+.glow[data-tone='thinking'] .coral { opacity: 0.45; }
+
+/* Conversation: scrolls and fades into the glow; the newest turn scrolls to the top. */
+.scroll {
+  position: absolute; inset: 0 0 calc(var(--controls-top) + 12px) 0; padding: calc(var(--sat) + 62px) 16px 48px;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 72px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 72px), transparent);
+}
+.scroll::-webkit-scrollbar { display: none; }
+.turn { display: flex; flex-direction: column; scroll-margin-top: calc(var(--sat) + 62px); }
+.turn:last-child { min-height: 100%; }
+.bubble {
+  align-self: flex-end; max-width: calc(100% - 32px); margin-bottom: 24px; padding: 15.5px 14px 12.5px;
+  border-radius: 24px; background: #F3F1EF; line-height: 21px;
+  animation: riseIn 350ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.reply { font: 17px/27.33px var(--voice-serif), Georgia, serif; letter-spacing: normal; color: #6B6C69; }
+.reply p { margin: 0 0 17px; animation: fadeIn 300ms ease both; }
+.reply b { font-weight: 600; }
+.sentence { transition: color 300ms ease; scroll-margin-bottom: 96px; }
+.spoken { color: #030401; }
+
+/* Status text: "Start talking" / "Muted", live transcript, gray notices. */
+.center {
+  position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%); margin: 0;
+  text-align: center; line-height: 22px; color: #70706E;
+  animation: fadeIn 300ms ease 200ms both; transition: opacity 300ms ease;
+}
+.center[data-hide='true'] { opacity: 0; }
+.live, .notice { position: absolute; left: 16px; right: 16px; bottom: calc(var(--controls-top) + 60px); margin: 0; line-height: 22px; }
+.live { font-family: var(--voice-italic), var(--font-inter), sans-serif; font-style: italic; color: #282826; }
+.word { animation: fadeIn 150ms ease both; }
+.notice { text-align: center; font-size: 15px; color: #70706E; }
+.retry {
+  display: block; margin: 16px auto 0; padding: 11px 22px; border: none; border-radius: 22px;
+  background: #272B2E; color: #fff; font: inherit; font-size: 15px; cursor: pointer;
+}
+
+/* Controls: 44px circles, row centered 46px above the bottom safe area. */
+.controls { position: absolute; left: 20px; right: 20px; bottom: calc(var(--sab) + 24px); display: flex; gap: 8px; }
+.btn {
+  flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0;
+  border: none; border-radius: 50%; color: #17191B; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 2px 10px rgba(35, 40, 45, 0.08); transition: background-color 700ms ease, color 700ms ease;
+}
+.settings { margin-right: auto; background: #E9F5FE; }
+.mic { background: #F2FAFE; }
+.close { background: #272B2E; color: #fff; }
+.overlay[data-tone='coral'] .settings { background: #FFDDCD; }
+.overlay[data-tone='coral'] .mic { background: #FEDCCC; }
+.overlay[data-tone='coral'] .close { background: #472010; }
+
+@keyframes fadeIn { from { opacity: 0; } }
+@keyframes riseIn { from { opacity: 0; transform: translateY(28px) scale(0.96); } }
+@keyframes rise { from { transform: translateY(40%); } }
+@keyframes breathe { to { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) {
+  .glow, .breathe, .bubble, .reply p, .word, .center { animation: none; }
+}
