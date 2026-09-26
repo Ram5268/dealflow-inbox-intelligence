@@ -8,6 +8,7 @@ import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import MatchArc from '@/components/MatchArc'
 import ChatShaderBg from '@/components/ChatShaderBg'
 import MicButton from '@/components/MicButton'
+import { AudioLines } from 'lucide-react'
 import VoiceConversation from '@/components/VoiceConversation'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
@@ -262,7 +263,7 @@ function Composer({
   value: string
   onChange: (v: string) => void
   onSubmit: (files?: File[]) => void
-  onOpenVoice: () => void  // Brief 13.0 — mic now opens the voice conversation orb
+  onOpenVoice: () => void  // Brief 36 — the waveform button opens voice mode
   onOpenReports: () => void // Brief 28.0 — + opens the report picker sheet
   isLoading: boolean
 }) {
@@ -278,6 +279,7 @@ function Composer({
   }
 
   const canSend = value.trim().length > 0 || files.length > 0
+  const showVoice = voiceEnabled && !canSend && !isLoading
 
   return (
     <div>
@@ -337,9 +339,9 @@ function Composer({
           }}
         />
 
-        {/* Brief 13.0 — mic opens the full-screen voice conversation orb */}
+        {/* Brief 36 — dictation: the transcript lands in the box, unsent */}
         {voiceEnabled && (
-          <MicButton onOpenVoice={onOpenVoice} disabled={isLoading} />
+          <MicButton onText={t => onChange(value.trim() ? `${value.trimEnd()} ${t}` : t)} disabled={isLoading} />
         )}
 
         {/* Attach */}
@@ -356,6 +358,20 @@ function Composer({
           </svg>
         </label>
 
+        {/* Brief 36 — with nothing to send, the voice-mode button takes the send slot */}
+        {showVoice && (
+          <button
+            onClick={onOpenVoice}
+            aria-label="Start voice mode"
+            style={{
+              width: 32, height: 32, borderRadius: '50%', background: '#fff', border: 'none', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
+            }}
+          >
+            <AudioLines size={16} color="#0a1f2a" strokeWidth={2} />
+          </button>
+        )}
+
         {/* Send */}
         <button
           onClick={submit}
@@ -364,7 +380,7 @@ function Composer({
             width: 32, height: 32, borderRadius: '50%',
             background: canSend || isLoading ? '#fff' : 'rgba(255,255,255,0.18)',
             border: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            display: showVoice ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: canSend || isLoading ? 'pointer' : 'default',
             padding: 0, transition: 'background 0.15s',
           }}
@@ -392,7 +408,7 @@ function Composer({
         color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginTop: 6,
         letterSpacing: '0.02em',
       }}>
-        type or hold the mic to speak
+        type, dictate with the mic, or tap the waveform to talk
       </div>
     </div>
   )

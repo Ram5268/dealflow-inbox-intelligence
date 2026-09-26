@@ -61,7 +61,7 @@
 .reply { font: 17px/27.33px var(--voice-serif), Georgia, serif; letter-spacing: normal; color: #6B6C69; }
 .reply p { margin: 0 0 17px; animation: fadeIn 300ms ease both; }
 .reply b { font-weight: 600; }
-.sentence { transition: color 300ms ease; scroll-margin-bottom: 96px; }
+.sentence { transition: color 300ms ease; scroll-margin-bottom: 80px; }
 .spoken { color: #030401; }
 
 /* Status text: "Start talking" / "Muted", live transcript, gray notices. */
@@ -94,10 +94,37 @@
 .overlay[data-tone='coral'] .mic { background: #FEDCCC; }
 .overlay[data-tone='coral'] .close { background: #472010; }
 
+/* Thumbs under a finished reply: 16px outline glyphs, 18px apart. */
+.thumbs { display: flex; gap: 16px; margin: 3px 0 0 3px; color: #73716F; animation: fadeIn 200ms ease both; }
+.thumbs button { position: relative; display: grid; place-items: center; padding: 0; border: none; background: none; color: inherit; cursor: pointer; }
+.thumbs button::after { content: ''; position: absolute; inset: -14px; } /* ≥44px tap target */
+
+/* Settings sheet: same light surface, rounded top, grabber. */
+.sheetBackdrop { position: absolute; inset: 0; z-index: 2; background: rgba(20, 22, 24, 0.14); animation: fadeIn 200ms ease both; }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: 82%; overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px 20px calc(var(--sab) + 16px); border-radius: 24px 24px 0 0; background: #F9FAF7;
+  box-shadow: 0 -8px 30px rgba(35, 40, 45, 0.12); animation: sheetUp 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.grabber { width: 36px; height: 5px; margin: 0 auto 12px; border-radius: 3px; background: #D9D8D4; }
+.sheetLabel { margin: 18px 0 6px; font-size: 13px; font-weight: 500; color: #70706E; }
+.voiceRow { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #ECEBE7; }
+.voicePick {
+  flex: 1; display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0;
+  border: none; background: none; font: inherit; color: #030401; text-align: left; cursor: pointer;
+}
+.hint { margin-right: auto; padding-left: 4px; color: #70706E; }
+.preview { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border: none; border-radius: 50%; background: #F3F1EF; color: #17191B; cursor: pointer; }
+.speeds { display: flex; gap: 4px; padding: 4px; border-radius: 22px; background: #F3F1EF; }
+.speeds button { flex: 1; height: 36px; border: none; border-radius: 18px; background: none; font: inherit; font-size: 15px; color: #3B3B39; cursor: pointer; }
+.speeds button[aria-checked='true'] { background: #fff; color: #030401; box-shadow: 0 1px 4px rgba(35, 40, 45, 0.1); }
+.done { display: block; width: 100%; height: 48px; margin-top: 20px; border: none; border-radius: 24px; background: #272B2E; color: #fff; font: inherit; cursor: pointer; }
+
 @keyframes fadeIn { from { opacity: 0; } }
 @keyframes riseIn { from { opacity: 0; transform: translateY(28px) scale(0.96); } }
 @keyframes rise { from { transform: translateY(40%); } }
 @keyframes breathe { to { transform: scale(1.06); } }
+@keyframes sheetUp { from { transform: translateY(100%); } }
 @media (prefers-reduced-motion: reduce) {
-  .glow, .breathe, .bubble, .reply p, .word, .center { animation: none; }
+  .glow, .breathe, .bubble, .reply p, .word, .center, .sheet { animation: none; }
 }
