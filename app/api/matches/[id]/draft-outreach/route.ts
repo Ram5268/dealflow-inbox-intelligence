@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { formatPriceRange } from '@/lib/utils'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
+import { MIXED_TEST_PAIR, isMixedTestPair, matchSides } from '@/lib/matching/pairSafety'
 
 // POST /api/matches/[id]/draft-outreach
 // Body: { channel: 'email' | 'text' }
@@ -124,6 +125,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     },
   })
   if (!match) return NextResponse.json({ error: 'match not found' }, { status: 404 })
+  // Brief 35: never draft across test data and a real homeowner.
+  if (isMixedTestPair(...await matchSides(prisma, match))) return NextResponse.json(MIXED_TEST_PAIR, { status: 409 })
 
   // Test-mode isolation: MojoContact has no isTestData column yet (Brief 7.2 will
   // add it), so every Mojo row is real production data. Block drafts against Mojo

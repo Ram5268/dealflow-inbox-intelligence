@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { sendPushToOrg } from '@/lib/push/send'
 import { formatPriceRange } from '@/lib/utils'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
+import { loadDismissedPairs } from '@/lib/matching/dismissals'
+import { tierCounts } from '@/lib/push/digestCounts'
 
 // Brief 7.4 (A.1) — morning digest. Triggered by external cron (daily 8am ET =
 // 12:00 UTC during EDT). Deployment-agnostic: prod DB is on Railway, so this is
@@ -37,8 +39,7 @@ async function buildAndSend(organizationId: string): Promise<DigestResult> {
   })
   if (prefs && !prefs.digestEnabled) return { organizationId, sent: false, delivered: 0, reason: 'digest disabled' }
 
-  // Today's un-dismissed matches. MatchDismissal keys on (partyId, listingId) =
-  // (counterpartId, opportunityId) — mirror /api/matches and exclude in code.
+  // Today's un-dismissed matches (dismissal lookup chunked, Brief 35).
   const since = startOfTodayUtc()
   const todays = await prisma.match.findMany({
     where: { organizationId, createdAt: { gte: since }, counterpartType: { not: 'showing_confirmation' } },
@@ -51,12 +52,8 @@ async function buildAndSend(organizationId: string): Promise<DigestResult> {
 
   let matches = todays
   if (todays.length > 0) {
-    const dismissals = await prisma.matchDismissal.findMany({
-      where: { OR: todays.map(m => ({ partyId: m.counterpartId, listingId: m.opportunityId })) },
-      select: { partyId: true, listingId: true },
-    })
-    const dismissed = new Set(dismissals.map(d => `${d.partyId}::${d.listingId}`))
-    matches = todays.filter(m => !dismissed.has(`${m.counterpartId}::${m.opportunityId}`))
+    const isDismissed = await loadDismissedPairs(prisma, todays)
+    matches = todays.filter(m => !isDismissed(m))
   }
 
   if (matches.length === 0) {
@@ -75,9 +72,7 @@ async function buildAndSend(organizationId: string): Promise<DigestResult> {
 
   // Best match: list is already ordered HOT-first then score desc.
   const top = matches[0]
-  const hot = matches.filter(m => m.tier === 'HOT' || m.score >= 90).length
-  const warm = matches.filter(m => m.tier === 'WARM' || (m.score >= 70 && m.score < 90)).length
-  const possible = matches.length - hot - warm
+  const { warm, possible } = tierCounts(matches) // Brief 35: one tier per match, never negative
 
   const partyName = await counterpartName(top.counterpartType, top.counterpartId)
   // Brief 32 — supply may be an ExtractedOpportunity or a MojoContact seller.

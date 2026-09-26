@@ -95,7 +95,7 @@ export default function CalendarConfirmSheet({ matchId, address, partyName, open
         return
       }
       const j = await res.json().catch(() => ({})) as { error?: string }
-      setError(res.status === 409 ? 'Calendar writes are off in test mode.' : (j.error ?? 'Could not add to calendar.'))
+      setError(j.error ?? (res.status === 409 ? 'Calendar writes are off in test mode.' : 'Could not add to calendar.'))
     } catch {
       setError('Could not add to calendar.')
     } finally {
