@@ -104,6 +104,11 @@ Presenting reports in your drift_response:
 Tool structure:
 Reply through the drift_response tool: plain text (no markdown, no bullet dashes, no em-dashes), exactly two short follow-up suggestions, and the card ids you referenced. For a scheduling request, propose the event via pendingEvent. For everything else, use your search tools first, then drift_response.`
 
+// Brief 36 — voice mode sends `voice: true`. Appended as its own uncached system
+// block after the side-channels, so the cached prefix, the guard's grounding
+// corpus and the stored messages are unchanged.
+const VOICE_INSTRUCTION = "You're speaking aloud. Answer in one to three short conversational paragraphs; no tables, bullet lists or headings; a short lead-in phrase ending in a colon is fine; offer to go deeper."
+
 // Trim a search-tool card down to the fact-bearing fields the guard verifier
 // needs to ground Sonnet's response. Drops scoring/UI noise; keeps anything a
 // claim could reference (address, price, beds, category, neighborhood, and for
@@ -296,7 +301,8 @@ export async function POST(req: NextRequest) {
     // — Sonnet pulls them via the search tools. RYAN_MD (Brief 29.0) is a static
     // personal glossary added as a second cached block by buildSystemBlocks.
     const dynamicSystemBlock = [composed.pre, composed.post].filter(Boolean).join('\n\n').trim()
-    const systemBlocks = buildSystemBlocks(SYSTEM_PROMPT, dynamicSystemBlock)
+    const voiceBlock = body.voice === true ? VOICE_INSTRUCTION : ''
+    const systemBlocks = buildSystemBlocks(SYSTEM_PROMPT, [dynamicSystemBlock, voiceBlock].filter(Boolean).join('\n\n'))
 
     // ── Tool definition for the final structured reply ──
     const RESPONSE_TOOL_NAME = 'drift_response'

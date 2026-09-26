@@ -1032,6 +1032,10 @@ function ChatPageInner() {
   const [sessionKey, setSessionKey] = useState(0)
   const [input, setInput] = useState('')
   const [voiceOpen, setVoiceOpen] = useState(false)
+  // Brief 36 — dev-only voice-mode parity demo: /chat?voiceDemo=1[&state=01…04].
+  const voiceDemo = process.env.NODE_ENV !== 'production' && searchParams.get('voiceDemo') !== null
+    ? searchParams.get('state') ?? 'play'
+    : null
   const [loading, setLoading] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   // Brief 28.0 — report engine UI state.
@@ -1209,7 +1213,8 @@ function ChatPageInner() {
         />
       )}
       <VoiceConversation
-        open={voiceOpen}
+        open={voiceOpen || voiceDemo !== null}
+        demo={voiceDemo}
         sessionId={currentSessionId}
         onClose={async () => {
           setVoiceOpen(false)

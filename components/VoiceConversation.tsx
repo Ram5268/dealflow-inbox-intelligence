@@ -1,362 +1,341 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import type { MicVAD } from '@ricky0123/vad-web'
+import { Mic, MicOff, Settings, X } from 'lucide-react'
+import Glow, { type GlowTone } from '@/components/voice/Glow'
+import styles from '@/components/voice/voice.module.css'
+import { voiceItalic, voiceSerif } from '@/components/voice/fonts'
+import { initialVoiceState, voiceReducer, type Phase, type Turn, type VoiceEvent } from '@/components/voice/state'
+import { VOICE_TIMING as T, shouldCommit } from '@/components/voice/config'
+import { levelOf, spokenCount } from '@/components/voice/text'
+import { openTranscriptLink, VoiceSessionError, type TranscriptLink } from '@/components/voice/realtime'
+import { speakSentences, type Speech } from '@/components/voice/player'
+import { sendVoiceTurn } from '@/components/voice/chat'
+import { DEFAULT_VOICE, SPEEDS } from '@/lib/voice/voices'
 
-function splitSentences(text: string): string[] {
-  // Split on sentence-ending punctuation followed by whitespace. Keep the
-  // punctuation on the preceding sentence. Filter out empty results.
-  return text
-    .split(/(?<=[.!?])\s+/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0)
+// VAD assets (silero model + audio worklet) and the onnxruntime-web wasm are
+// served from jsDelivr rather than committed to the repo (the wasm alone is
+// ~100MB). Version-pinned so the fetched wasm matches the onnxruntime loader
+// bundled via @ricky0123/vad-web. Voice mode is online-only anyway (chat / TTS
+// / transcription all hit the network), so a CDN asset dependency is consistent.
+const VAD_BASE = 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/'
+const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/'
+
+const VOICE_CHOICE = { voice: DEFAULT_VOICE, speed: SPEEDS.normal }
+const MIC_OPEN: Phase[] = ['listening', 'hearing', 'finalizing']
+const BLOCKED_TEXT = {
+  mic: 'Drift needs the microphone for voice mode. Allow it in your browser settings, then try again.',
+  connect: 'Couldn’t start voice mode. Check your connection and try again.',
+  limit: 'Voice mode has hit its hourly limit. Try again in a bit.',
 }
-
-// Code-split the orb — Three.js + R3F is ~500KB gz, only pay it when voice mode opens.
-const Orb = dynamic(() => import('@/components/ui/orb').then(m => m.Orb), { ssr: false })
-
-type AgentState = null | 'thinking' | 'listening' | 'talking'
 
 interface Props {
   open: boolean
   sessionId: string | null
   onClose: () => void
   onNewSession: (sessionId: string) => void
+  demo?: string | null // dev-only parity demo, see components/voice/demo.ts
 }
 
-const IDLE_TIMEOUT_MS = 5 * 60 * 1000 // 5 min of no speech → auto-close
+// Live device/network handles: refs, not state, so audio frames never re-render.
+interface Rig {
+  stream?: MediaStream; ctx?: AudioContext; vad?: MicVAD; link?: TranscriptLink; speech?: Speech
+  mic?: AnalyserNode; out?: AnalyserNode; bytes?: Uint8Array<ArrayBuffer> // glow levels
+}
 
-// VAD assets (silero model + audio worklet) and the onnxruntime-web wasm are
-// served from jsDelivr rather than committed to the repo (the wasm alone is
-// ~100MB). Version-pinned so the fetched wasm matches the onnxruntime loader
-// bundled via @ricky0123/vad-web. Voice mode is online-only anyway (chat / TTS
-// / transcribe all hit the network), so a CDN asset dependency is consistent.
-const VAD_BASE = 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/'
-const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.27.0/dist/'
+// Stop everything: audio, transcription link, VAD and the mic itself.
+function release(r: Rig) {
+  r.speech?.stop()
+  r.vad?.destroy().catch(() => {})
+  r.link?.close()
+  r.stream?.getTracks().forEach(t => t.stop())
+  if (r.ctx && r.ctx.state !== 'closed') r.ctx.close().catch(() => {})
+  for (const k of Object.keys(r) as Array<keyof Rig>) delete r[k]
+}
 
-export default function VoiceConversation({ open, sessionId, onClose, onNewSession }: Props) {
-  const [agentState, setAgentState] = useState<AgentState>(null)
-  const [error, setError] = useState<string | null>(null)
+// Brief 36 — voice mode: listening → Ryan talks (live transcript) → thinking →
+// Drift speaks (text darkens with the audio) → listening, until closed. The
+// reducer (voice/state.ts) owns the rules; the effects below do the I/O when
+// the phase changes.
+const noSubscribe = () => () => {}
 
-  // Refs for the audio pipeline — deliberately not state, to avoid re-renders on every frame.
-  const streamRef = useRef<MediaStream | null>(null)
-  const audioCtxRef = useRef<AudioContext | null>(null)
-  const inputAnalyserRef = useRef<AnalyserNode | null>(null)
-  const outputAnalyserRef = useRef<AnalyserNode | null>(null)
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<BlobPart[]>([])
-  const mimeRef = useRef<string>('audio/webm')
-  const vadRef = useRef<MicVAD | null>(null)
-  const ttsAudioRef = useRef<HTMLAudioElement | null>(null)
-  const lastSpeechAtRef = useRef<number>(Date.now())
-  const idleTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const closedRef = useRef<boolean>(false)
+export default function VoiceConversation(props: Props) {
+  // Portal to <body>: the chat shell is transformed, which would pin a fixed
+  // overlay to the shell instead of the screen. Client-only (no document on SSR).
+  const isClient = useSyncExternalStore(noSubscribe, () => true, () => false)
+  return props.open && isClient ? createPortal(<VoiceMode {...props} />, document.body) : null
+}
 
-  // Keep a ref of agentState so VAD callbacks (non-reactive) can read the latest.
-  const agentStateRef = useRef<AgentState>(null)
-  useEffect(() => { agentStateRef.current = agentState }, [agentState])
+function VoiceMode({ sessionId, onClose, onNewSession, demo = null }: Props) {
+  const [s, dispatch] = useReducer(voiceReducer, initialVoiceState)
+  const [attempt, setAttempt] = useState(0)
+  const rig = useRef<Rig>({})
+  const session = useRef(sessionId) // latest session id; every turn reuses it
+  const phase = useRef<Phase>(s.phase)
+  const lastDeltaAt = useRef(0)
+  const lastActivity = useRef(0)
+  const fakeLevel = useRef<((t: number) => number) | null>(null)
+  const callbacks = useRef({ onClose, onNewSession })
+  const scroller = useRef<HTMLDivElement>(null)
 
-  // Read helpers passed to the orb as functions (called from its render loop).
-  const getInputVolume = useCallback(() => {
-    const an = inputAnalyserRef.current
-    if (!an) return 0
-    const data = new Uint8Array(an.frequencyBinCount)
-    an.getByteFrequencyData(data)
-    let sum = 0
-    for (let i = 0; i < data.length; i++) sum += data[i] * data[i]
-    const rms = Math.sqrt(sum / data.length) / 255
-    return Math.min(1, rms * 2)
-  }, [])
-
-  const getOutputVolume = useCallback(() => {
-    const an = outputAnalyserRef.current
-    if (!an) return 0
-    const data = new Uint8Array(an.frequencyBinCount)
-    an.getByteFrequencyData(data)
-    let sum = 0
-    for (let i = 0; i < data.length; i++) sum += data[i] * data[i]
-    const rms = Math.sqrt(sum / data.length) / 255
-    return Math.min(1, rms * 2)
-  }, [])
+  useEffect(() => { phase.current = s.phase }, [s.phase])
+  useEffect(() => { callbacks.current = { onClose, onNewSession } }, [onClose, onNewSession])
 
   const close = useCallback(() => {
-    if (closedRef.current) return
-    closedRef.current = true
-    try { vadRef.current?.destroy() } catch { /* noop */ }
-    vadRef.current = null
-    try { if (recorderRef.current?.state === 'recording') recorderRef.current.stop() } catch { /* noop */ }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
-    if (ttsAudioRef.current) {
-      ttsAudioRef.current.pause()
-      ttsAudioRef.current.src = ''
-      ttsAudioRef.current = null
-    }
-    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
-      audioCtxRef.current.close().catch(() => {})
-      audioCtxRef.current = null
-    }
-    if (idleTimerRef.current) {
-      clearInterval(idleTimerRef.current)
-      idleTimerRef.current = null
-    }
-    onClose()
-  }, [onClose])
+    if (phase.current === 'closing') return
+    phase.current = 'closing'
+    release(rig.current)
+    dispatch({ type: 'close' })
+    setTimeout(() => callbacks.current.onClose(), T.closeFadeMs)
+  }, [])
 
-  // The full voice→transcribe→chat→tts pipeline for a single utterance.
-  const handleUtterance = useCallback(async (blob: Blob, mimeType: string) => {
-    try {
-      // 1. Transcribe
-      const buf = await blob.arrayBuffer()
-      const bytes = new Uint8Array(buf)
-      let bin = ''
-      const chunk = 0x8000
-      for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk))
-      const audioB64 = btoa(bin)
-      const trRes = await fetch('/api/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio: { mimeType, content: audioB64 } }),
-      })
-      if (!trRes.ok) throw new Error(`transcribe ${trRes.status}`)
-      const trData = await trRes.json()
-      const transcript = (trData.transcript ?? '').trim()
-      if (!transcript) { setAgentState('listening'); return }
-
-      // 2. Chat (same endpoint as text mode, inherits Brief 12 persona + Brief 11 guard)
-      const chatRes = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: transcript, sessionId }),
-      })
-      if (!chatRes.ok) throw new Error(`chat ${chatRes.status}`)
-      const chatData = await chatRes.json()
-      if (!sessionId && chatData.sessionId) onNewSession(chatData.sessionId)
-      const responseText = (chatData.response ?? '').trim()
-      if (!responseText) { setAgentState('listening'); return }
-
-      // 3. TTS — sentence-chunked. Split the response, fire N parallel /api/tts
-      // POSTs, then play them in order. Later sentences generate while earlier
-      // ones play, so Drift starts speaking as soon as the FIRST mp3 arrives
-      // (~500ms) instead of after the whole-response mp3 (~1–1.5s).
-      setAgentState('talking')
-
-      const sentences = splitSentences(responseText)
-      if (sentences.length === 0) { setAgentState('listening'); return }
-
-      const sentenceUrlPromises: Array<Promise<string>> = sentences.map(async (s) => {
-        const r = await fetch('/api/tts', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: s }),
-        })
-        if (!r.ok) throw new Error(`tts sentence: ${r.status}`)
-        const b = await r.blob()
-        return URL.createObjectURL(b)
-      })
-
-      const audioEl = ttsAudioRef.current
-      if (!audioEl) return
-
-      // Play each sentence in order. `await` inside the loop naturally waits for
-      // the current sentence to arrive AND finish before starting the next.
-      for (let i = 0; i < sentenceUrlPromises.length; i++) {
-        let url: string
-        try {
-          url = await sentenceUrlPromises[i]
-        } catch (e) {
-          console.warn('[VoiceConversation] sentence tts failed, skipping', i, e)
-          continue
-        }
-        audioEl.src = url
-        await new Promise<void>((resolve, reject) => {
-          audioEl.onended = () => { URL.revokeObjectURL(url); resolve() }
-          audioEl.onerror = () => { URL.revokeObjectURL(url); reject(new Error('audio error')) }
-          audioEl.play().catch(reject)
-        })
-      }
-
-      // All sentences played — return to listening.
-      setAgentState('listening')
-      lastSpeechAtRef.current = Date.now()
-    } catch (e) {
-      console.error('[VoiceConversation] utterance failed', e)
-      setError(String((e as Error).message ?? e))
-      setAgentState('listening')
-    }
-  }, [sessionId, onNewSession])
-
-  // Main setup effect — runs when the modal opens.
+  // Open: mic first (Safari hides ICE candidates until it has mic permission),
+  // then the audio graph, the transcription link and the VAD.
   useEffect(() => {
-    if (!open) return
-    closedRef.current = false
-    setError(null)
-    setAgentState(null)
-    lastSpeechAtRef.current = Date.now()
-
+    if (demo) return
+    const r: Rig = {} // this run's handles; a stale run can't touch the next one's
+    rig.current = r
     let cancelled = false
-
     ;(async () => {
+      let stream: MediaStream
       try {
-        // Mic stream — one stream shared by the VAD, the input analyser, and the recorder.
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
-        streamRef.current = stream
-
-        // Audio context + input analyser
-        const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-        const ctx = new AudioCtx()
-        audioCtxRef.current = ctx
-        // iOS starts the context suspended; the opening tap is our user gesture.
-        if (ctx.state === 'suspended') { try { await ctx.resume() } catch { /* noop */ } }
-        const source = ctx.createMediaStreamSource(stream)
-        const inAn = ctx.createAnalyser()
-        inAn.fftSize = 256
-        source.connect(inAn)
-        inputAnalyserRef.current = inAn
-
-        // TTS audio element + output analyser
-        const audioEl = new Audio()
-        audioEl.crossOrigin = 'anonymous'
-        ttsAudioRef.current = audioEl
-        const ttsSource = ctx.createMediaElementSource(audioEl)
-        const outAn = ctx.createAnalyser()
-        outAn.fftSize = 256
-        ttsSource.connect(outAn)
-        outAn.connect(ctx.destination)
-        outputAnalyserRef.current = outAn
-
-        // MediaRecorder — starts/stops on VAD boundaries. webm/mp4 keeps the
-        // /api/transcribe payload identical to the old push-to-talk path.
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm')
-          ? 'audio/webm'
-          : MediaRecorder.isTypeSupported('audio/mp4')
-          ? 'audio/mp4'
-          : ''
-        if (!mimeType) throw new Error('No supported audio MIME type')
-        mimeRef.current = mimeType
-        const recorder = new MediaRecorder(stream, { mimeType })
-        recorderRef.current = recorder
-        recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data) }
-        recorder.onstop = async () => {
-          const parts = chunksRef.current
-          chunksRef.current = []
-          if (parts.length === 0) { setAgentState('listening'); return }
-          const blob = new Blob(parts, { type: mimeRef.current })
-          await handleUtterance(blob, mimeRef.current)
-        }
-
-        // VAD — v0.0.30 has no external-stream option; feed it our shared
-        // stream via getStream and let onSpeechStart/End gate the recorder.
+        stream = r.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      } catch {
+        if (!cancelled) dispatch({ type: 'blocked', reason: 'mic' })
+        return
+      }
+      try {
+        if (cancelled) throw new Error('closed')
+        const ctx = (r.ctx = new AudioContext())
+        // iOS starts the context suspended; the opening tap + live mic let it run.
+        if (ctx.state === 'suspended') await ctx.resume().catch(() => {})
+        r.mic = Object.assign(ctx.createAnalyser(), { fftSize: 256 })
+        r.out = Object.assign(ctx.createAnalyser(), { fftSize: 256 })
+        ctx.createMediaStreamSource(stream).connect(r.mic)
+        r.out.connect(ctx.destination)
         const { MicVAD } = await import('@ricky0123/vad-web')
-        if (cancelled) return
-        const vad = await MicVAD.new({
-          getStream: async () => streamRef.current ?? stream,
-          startOnLoad: false,
-          baseAssetPath: VAD_BASE,
-          onnxWASMBasePath: ORT_BASE,
-          onSpeechStart: () => {
-            lastSpeechAtRef.current = Date.now()
-            // Only capture while listening — ignores Drift's own voice bleeding
-            // back into the mic while it's talking/thinking (barge-in guard).
-            if (agentStateRef.current === 'listening' && recorderRef.current?.state !== 'recording') {
-              try { chunksRef.current = []; recorderRef.current?.start() } catch { /* noop */ }
-            }
-          },
-          onSpeechEnd: () => {
-            lastSpeechAtRef.current = Date.now()
-            if (recorderRef.current?.state === 'recording') {
-              try { recorderRef.current.stop() } catch { /* noop */ }
-              setAgentState('thinking')
-            }
-          },
-        })
-        if (cancelled) { try { vad.destroy() } catch { /* noop */ }; return }
-        vadRef.current = vad
-        await vad.start()
-        setAgentState('listening')
-
-        // Idle timer
-        idleTimerRef.current = setInterval(() => {
-          if (Date.now() - lastSpeechAtRef.current > IDLE_TIMEOUT_MS) close()
-        }, 15_000)
-      } catch (e) {
-        console.error('[VoiceConversation] setup failed', e)
-        setError(String((e as Error).message ?? e))
-        setAgentState(null)
+        const settled = await Promise.allSettled([
+          openTranscriptLink(stream, {
+            delta: text => { lastDeltaAt.current = performance.now(); dispatch({ type: 'delta', text }) },
+            final: text => dispatch({ type: 'final', text }),
+            lost: () => dispatch({ type: 'blocked', reason: 'connect' }),
+          }).then(link => { r.link = link }),
+          MicVAD.new({
+            // The VAD's default pause stops the tracks; this mic is shared.
+            getStream: async () => stream, pauseStream: async () => {}, resumeStream: async () => stream,
+            audioContext: ctx, baseAssetPath: VAD_BASE, onnxWASMBasePath: ORT_BASE,
+            redemptionMs: T.vadRedemptionMs, minSpeechMs: T.vadMinSpeechMs,
+            onSpeechStart: () => { lastActivity.current = Date.now(); dispatch({ type: 'speechStart' }) },
+            onSpeechEnd: () => { lastActivity.current = Date.now(); dispatch({ type: 'speechEnd' }) },
+            onVADMisfire: () => dispatch({ type: 'misfire' }),
+          }).then(vad => { r.vad = vad }),
+        ])
+        const failure = settled.find(x => x.status === 'rejected')
+        if (failure) throw failure.reason
+        if (cancelled) throw new Error('closed')
+        await r.vad?.start()
+        lastActivity.current = Date.now()
+        dispatch({ type: 'ready' })
+      } catch (err) {
+        release(r)
+        if (!cancelled) dispatch({ type: 'blocked', reason: err instanceof VoiceSessionError && err.status === 429 ? 'limit' : 'connect' })
       }
     })()
+    return () => { cancelled = true; release(r) }
+  }, [attempt, demo])
 
-    return () => {
-      cancelled = true
-      close()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
-
-  // Close on Escape
+  // The mic reaches the transcriber only while Ryan has the floor and isn't
+  // muted (Drift's own voice is never transcribed). A fresh floor starts clean,
+  // and is cleared again once any tail caught as the mic reopened has passed
+  // (cancelled if Ryan starts talking first).
   useEffect(() => {
-    if (!open) return
-    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
-  }, [open, close])
+    const r = rig.current
+    r.stream?.getAudioTracks().forEach(t => { t.enabled = !s.muted && MIC_OPEN.includes(s.phase) })
+    if (s.phase === 'blocked') release(r) // never leave the mic open after an error
+    if (s.phase !== 'listening') return
+    r.link?.clear()
+    const settle = window.setTimeout(() => r.link?.clear(), T.listenSettleMs)
+    return () => clearTimeout(settle)
+  }, [s.phase, s.muted])
 
-  if (!open) return null
+  // End of Ryan's turn: commit once the live text settles, then wait (bounded)
+  // for the final transcript.
+  useEffect(() => {
+    if (s.phase !== 'finalizing') return
+    const endAt = performance.now()
+    let timer = 0
+    const poll = () => {
+      if (!shouldCommit(performance.now(), endAt, lastDeltaAt.current)) { timer = window.setTimeout(poll, 50); return }
+      rig.current.link?.commit()
+      timer = window.setTimeout(() => dispatch({ type: 'finalTimeout' }), T.finalTimeoutMs)
+    }
+    poll()
+    return () => clearTimeout(timer)
+  }, [s.phase])
+
+  // Thinking: ask Drift. Deals/suggestions are ignored here; they show up in
+  // the thread when voice mode closes and the chat page refetches it.
+  const pending = s.phase === 'thinking' ? s.turns[s.turns.length - 1] : undefined
+  useEffect(() => {
+    if (!pending || demo) return
+    let current = true
+    const before = session.current
+    sendVoiceTurn(pending.user, session).then(result => {
+      if (session.current && session.current !== before) callbacks.current.onNewSession(session.current)
+      if (!current) return
+      dispatch(result.ok ? { type: 'reply', text: result.text, interactionId: result.interactionId } : { type: 'failed', message: result.error })
+    })
+    return () => { current = false }
+  }, [pending, demo])
+
+  // Speaking: play the reply; each sentence darkens as its audio starts.
+  // Leaving the phase (tap to interrupt, close) stops the audio at once.
+  const reply = s.phase === 'speaking' ? s.turns[s.turns.length - 1]?.reply : null
+  useEffect(() => {
+    const r = rig.current
+    const { ctx, out } = r
+    if (!reply || !ctx || !out) return
+    const speech = (r.speech = speakSentences(ctx, out, reply.sentences, VOICE_CHOICE, T.sentenceGapS))
+    let raf = 0
+    let shown = 0
+    const tick = () => {
+      const n = spokenCount(speech.starts, ctx.currentTime)
+      if (n !== shown) dispatch({ type: 'spoken', count: (shown = n) })
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    speech.done.then(finished => { lastActivity.current = Date.now(); if (finished) dispatch({ type: 'doneSpeaking' }) })
+    return () => { cancelAnimationFrame(raf); speech.stop() }
+  }, [reply])
+
+  // A new turn scrolls its bubble to the top; while Drift speaks, the current
+  // sentence stays in view.
+  const turnCount = s.turns.length
+  const spoken = s.turns[s.turns.length - 1]?.spoken ?? 0
+  useEffect(() => {
+    scroller.current?.lastElementChild?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }, [turnCount])
+  useEffect(() => {
+    if (spoken) scroller.current?.querySelector(`[data-last] [data-si="${spoken - 1}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [spoken])
+
+  // Escape closes; 5 idle minutes close; the screen stays awake while open.
+  useEffect(() => {
+    if (demo) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    const idle = setInterval(() => { if (phase.current === 'listening' && Date.now() - lastActivity.current > T.idleCloseMs) close() }, 15_000)
+    let lock: WakeLockSentinel | null = null
+    const wake = () => { if (document.visibilityState === 'visible') navigator.wakeLock?.request('screen').then(l => { lock = l }).catch(() => {}) }
+    wake()
+    window.addEventListener('keydown', onKey)
+    document.addEventListener('visibilitychange', wake)
+    return () => {
+      clearInterval(idle)
+      window.removeEventListener('keydown', onKey)
+      document.removeEventListener('visibilitychange', wake)
+      lock?.release().catch(() => {})
+    }
+  }, [close, demo])
+
+  // Dev-only parity demo: canned events + a fake audio level.
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production' || !demo) return
+    const timers: number[] = []
+    let off = false
+    import('@/components/voice/demo').then(({ DEMO_STATES, demoTimeline, demoLevel }) => {
+      if (off) return
+      fakeLevel.current = demoLevel
+      const steps = DEMO_STATES[demo]?.map((e): [number, VoiceEvent] => [0, e]) ?? demoTimeline()
+      for (const [ms, e] of steps) timers.push(window.setTimeout(() => dispatch(e), ms))
+    })
+    return () => { off = true; timers.forEach(clearTimeout) }
+  }, [demo])
+
+  const getLevel = useCallback(() => {
+    const p = phase.current
+    if (fakeLevel.current) return p === 'hearing' || p === 'speaking' ? fakeLevel.current(performance.now()) : 0
+    const r = rig.current
+    const an = p === 'speaking' ? r.out : MIC_OPEN.includes(p) ? r.mic : undefined
+    if (!an) return 0
+    const bytes = (r.bytes ??= new Uint8Array(an.fftSize))
+    an.getByteTimeDomainData(bytes)
+    return levelOf(bytes)
+  }, [])
+
+  const tone: GlowTone = s.phase === 'speaking' ? 'coral' : s.phase === 'thinking' ? 'thinking' : 'blue'
+  const idleText = s.muted ? 'Muted' : MIC_OPEN.includes(s.phase) ? 'Start talking' : null
+  const icon = { size: 21, strokeWidth: 1.75 }
 
   return (
     <div
-      className="sr-bg"
-      style={{
-        position: 'fixed', inset: 0, zIndex: 100,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        gap: 24,
-        touchAction: 'none',
-      }}
+      role="dialog" aria-modal="true" aria-label="Voice conversation with Drift"
+      className={`${styles.overlay} ${voiceSerif.variable} ${voiceItalic.variable}`}
+      data-tone={tone} data-closing={s.phase === 'closing'}
+      style={demo ? ({ '--sat': '59px', '--sab': '34px' } as CSSProperties) : undefined}
     >
-      <button
-        onClick={close}
-        aria-label="Close voice conversation"
-        style={{
-          position: 'absolute', top: 20, right: 20, zIndex: 101,
-          width: 40, height: 40, borderRadius: '50%',
-          background: 'rgba(255,255,255,0.08)',
-          border: '1px solid rgba(255,255,255,0.15)',
-          color: '#fff', fontSize: 20, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >×</button>
+      <Glow tone={tone} dim={s.muted} getLevel={getLevel} />
 
-      {/* Orb — the sole visual focus during voice mode (180×180, centered) */}
-      <div style={{ width: 180, height: 180 }}>
-        <Orb
-          agentState={agentState}
-          volumeMode="manual"
-          getInputVolume={getInputVolume}
-          getOutputVolume={getOutputVolume}
-        />
+      {/* Tapping the conversation while Drift speaks interrupts it. */}
+      <div ref={scroller} className={styles.scroll} onClick={() => dispatch({ type: 'interrupt' })}>
+        {s.turns.map((t, i) => <TurnView key={t.id} turn={t} last={i === s.turns.length - 1} />)}
       </div>
 
-      {/* Status label — small, directly below orb (spacing owned by container gap) */}
-      <div style={{
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 12,
-        fontFamily: 'var(--font-ui)',
-        fontWeight: 300,
-        textAlign: 'center',
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase',
-      }}>
-        {error
-          ? <span style={{ color: 'rgba(255,120,120,0.85)' }}>{error}</span>
-          : agentState === 'listening' ? 'Listening'
-          : agentState === 'thinking'  ? 'Thinking'
-          : agentState === 'talking'   ? 'Speaking'
-          : 'Connecting'}
+      {s.phase === 'blocked' && s.blocked ? (
+        <div className={styles.center} role="alert">
+          {BLOCKED_TEXT[s.blocked]}
+          <button className={styles.retry} onClick={() => { dispatch({ type: 'retry' }); setAttempt(a => a + 1) }}>Try again</button>
+        </div>
+      ) : !s.turns.length && idleText ? (
+        <p className={styles.center} data-hide={!!s.live}>{idleText}</p>
+      ) : null}
+
+      {s.live ? (
+        <p className={styles.live}>
+          {s.live.trimStart().split(/(\s+)/).map((w, i) => <span key={i} className={styles.word}>{w}</span>)}
+        </p>
+      ) : s.notice ? (
+        <p className={styles.notice} role="status">{s.notice}</p>
+      ) : null}
+
+      <div className={styles.controls}>
+        {/* Voice + speed settings sheet arrives in Brief 36 PR B. */}
+        <button className={`${styles.btn} ${styles.settings}`} aria-label="Voice settings" aria-disabled="true"><Settings {...icon} /></button>
+        <button
+          className={`${styles.btn} ${styles.mic}`} aria-pressed={s.muted} onClick={() => dispatch({ type: 'toggleMute' })}
+          aria-label={s.muted ? 'Unmute microphone' : 'Mute microphone'}
+        >
+          {s.muted ? <MicOff {...icon} /> : <Mic {...icon} />}
+        </button>
+        <button className={`${styles.btn} ${styles.close}`} aria-label="Close voice mode" onClick={close}><X {...icon} /></button>
       </div>
     </div>
+  )
+}
+
+function TurnView({ turn, last }: { turn: Turn; last: boolean }) {
+  const { reply } = turn
+  return (
+    <section className={styles.turn} data-last={last || undefined}>
+      <div className={styles.bubble}>{turn.user}</div>
+      {reply && (
+        <div className={styles.reply}>
+          {reply.paragraphs.map((p, pi) => (
+            <p key={pi} style={{ animationDelay: `${pi * 80}ms` }}>
+              {p.sentences.map((si, k) => {
+                const text = reply.sentences[si]
+                const lead = k === 0 && p.lead && text.startsWith(p.lead) ? p.lead : ''
+                return (
+                  <span key={si} data-si={si} className={`${styles.sentence} ${si < turn.spoken ? styles.spoken : ''}`}>
+                    {lead && <b>{lead}</b>}{text.slice(lead.length)}{' '}
+                  </span>
+                )
+              })}
+            </p>
+          ))}
+        </div>
+      )}
+    </section>
   )
 }
