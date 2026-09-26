@@ -60,6 +60,11 @@ interface PrimaryOpp {
   sourceBrokerage: string | null
   extractedTitle: string
   extractedSummary: string
+  // Brief 35: contact supply (a CRM seller) carries its seller-side fields.
+  opportunityType?: string
+  mojoList?: string | null
+  phone?: string | null
+  crmUrl?: string | null
 }
 
 interface CounterpartOpp {
@@ -80,6 +85,7 @@ interface CounterpartOpp {
 interface CounterpartMojo {
   id: string
   fullName: string
+  intent: string | null
   address: string | null
   city: string | null
   neighborhood: string | null
@@ -143,6 +149,7 @@ function tierChip(tier: Match['tier']): { text: string; tone: string } | null {
 }
 
 function typeBadge(m: Match): { text: string; tone: string } {
+  if (m.primary?.opportunityType === 'contact')     return { text: 'SELLER ↔ BUYER',   tone: 'rgba(230,140,80,0.95)' }
   if (m.counterpartType === 'mojo')                 return { text: '🔥 MOJO ↔ BUYER', tone: 'rgba(230,140,80,0.95)' }
   if (m.counterpartType === 'showing_confirmation') return { text: '🗓 SHOWING',       tone: 'rgba(130,200,230,0.9)' }
   return { text: 'LISTING ↔ BUYER', tone: 'rgba(255,255,255,0.55)' }
@@ -208,6 +215,7 @@ export default function MatchesPage() {
   const [partyRole, setPartyRole] = useState<PartyRole>('all')
   const [parties, setParties] = useState<PartiesResponse | null>(null)
   const [partiesLoading, setPartiesLoading] = useState(false)
+  const [partiesError, setPartiesError] = useState<string | null>(null)
   const [expandedPartyId, setExpandedPartyId] = useState<string | null>(null)
 
   // Restore persisted view once on mount. A ?m=<id> deep-link (from a push
@@ -261,8 +269,12 @@ export default function MatchesPage() {
       const params = bandParams()
       if (partyRole !== 'all') params.set('role', partyRole)
       const r = await fetch(`/api/matches/parties?${params.toString()}`)
+      if (!r.ok) throw new Error(`parties ${r.status}`)
       setParties(await r.json() as PartiesResponse)
+      setPartiesError(null)
     } catch {
+      setParties(null) // never leave the previous tab's parties on screen
+      setPartiesError("Couldn't load parties. Try again.")
       showErrorToast("Couldn't load parties")
     } finally {
       setPartiesLoading(false)
@@ -493,6 +505,8 @@ export default function MatchesPage() {
               <MatchCardSkeleton />
               <MatchCardSkeleton />
             </div>
+          ) : partiesError ? (
+            <div style={{ marginTop: 40, textAlign: 'center', fontFamily: 'var(--font-ui)', fontSize: 14, color: 'rgba(255,150,150,0.8)' }}>{partiesError}</div>
           ) : !parties || parties.parties.length === 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
               <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>No parties in this tier.</div>
@@ -736,7 +750,9 @@ function ExpandedDetail({ m, router, onDismiss, onCalendar, onDraft }: {
         </div>
       )}
 
-      {m.primary && (
+      {m.primary?.opportunityType === 'contact' ? (
+        <SellerSide p={m.primary} />
+      ) : m.primary && (
         <Side
           label="LISTING"
           title={m.primary.extractedTitle}
@@ -983,10 +999,33 @@ function Side({
   )
 }
 
+// Brief 35: contact supply is a CRM seller, so link to the CRM lead, not
+// /opportunities. The phone is shown as text only; dialing happens in the CRM.
+function SellerSide({ p }: { p: PrimaryOpp }) {
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '10px 12px' }}>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.45)' }}>SELLER</div>
+      <div style={{ marginTop: 4, fontSize: 13, color: '#fff', fontWeight: 500 }}>{p.extractedTitle}</div>
+      {p.address && <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{p.address}</div>}
+      <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+        {[p.neighborhood, p.units ? `${p.units}-unit` : null, p.beds ? `${p.beds} beds` : null, p.mojoList].filter(Boolean).join(' · ')}
+      </div>
+      {p.phone && <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>📞 {p.phone}</div>}
+      {p.crmUrl && (
+        <a href={p.crmUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+          style={{ display: 'inline-block', marginTop: 8, fontSize: 11, fontFamily: 'var(--font-mono)', letterSpacing: '0.1em', color: 'var(--sr-cream)' }}>
+          Open in CRM →
+        </a>
+      )}
+    </div>
+  )
+}
+
 function MojoSide({ c }: { c: CounterpartMojo }) {
+  const label = c.intent === 'BUYER' ? '🔥 MOJO BUYER' : c.intent === 'RENTER' ? '🔥 MOJO RENTER' : '🔥 MOJO SELLER LEAD'
   return (
     <div style={{ background: 'rgba(230,140,80,0.08)', borderRadius: 12, padding: '10px 12px', border: '1px solid rgba(230,140,80,0.18)' }}>
-      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', color: 'rgba(230,140,80,0.95)' }}>🔥 MOJO SELLER LEAD</div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', color: 'rgba(230,140,80,0.95)' }}>{label}</div>
       <div style={{ marginTop: 4, fontSize: 13, color: '#fff', fontWeight: 500 }}>{c.fullName}</div>
       {c.address && <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{c.address}{c.city ? `, ${c.city}` : ''}</div>}
       {c.neighborhood && !c.address && <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{c.neighborhood}</div>}

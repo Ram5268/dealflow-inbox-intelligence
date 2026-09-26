@@ -6,6 +6,8 @@ import { isTestModeOnly } from '@/lib/config/testMode'
 import { resolveSourceBadge } from '@/lib/matching/engine'
 import { resolveDismissKey } from '@/lib/matching/dismissKey'
 import { resolveSupplies } from '@/lib/matching/supplyResolver'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
+import { crmLeadUrl } from '@/lib/crmLink'
 
 // GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1]
 // List with both sides hydrated. Sort: unseen first, then highest-scoring,
@@ -21,7 +23,7 @@ export async function GET(req: NextRequest) {
   const type        = typeRaw && typeRaw !== 'all' ? typeRaw : null
   const includeDismissed = sp.get('includeDismissed') === '1'
 
-  const where: Record<string, unknown> = {}
+  const where: Record<string, unknown> = { organizationId: await getCurrentOrgId() }
   if (type) where.counterpartType = type
   if (onlyUnseen)                                    where.seen  = false
   if (scoreMin !== null && !Number.isNaN(scoreMin))  where.score = { gte: scoreMin }
@@ -51,6 +53,16 @@ export async function GET(req: NextRequest) {
       })
     : []
   const oppExtrasMap = Object.fromEntries(oppExtras.map(o => [o.id, o]))
+  // Brief 35: the SELLER side of contact supply (units, list, phone, CRM link).
+  // Real Mojo contacts stay hidden in test mode, like Mojo counterparts below.
+  const sellerIds = isTestModeOnly() ? [] : allMatches.filter(m => m.opportunityType === 'contact').map(m => m.opportunityId)
+  const sellers = sellerIds.length > 0
+    ? await prisma.mojoContact.findMany({
+        where: { id: { in: sellerIds } },
+        select: { id: true, unitCount: true, mojoList: true, phone: true, metadata: true },
+      })
+    : []
+  const sellerMap = Object.fromEntries(sellers.map(s => [s.id, s]))
 
   // Brief 7.1 — hide dismissed pairs. MatchDismissal keys on (partyId, listingId);
   // there's no FK to Match, so exclude in code. Brief 8.0-lite Fix #3a — resolve
@@ -97,7 +109,7 @@ export async function GET(req: NextRequest) {
       ? prisma.mojoContact.findMany({
           where:  { id: { in: mojoCounterpartIds } },
           select: {
-            id: true, fullName: true, address: true, city: true, neighborhood: true,
+            id: true, fullName: true, intent: true, address: true, city: true, neighborhood: true,
             phone: true, email: true, status: true, notes: true,
           },
         })
@@ -126,8 +138,13 @@ export async function GET(req: NextRequest) {
     // UI columns for opportunity-type rows (null for contact-type supplies).
     const supply = supplies.get(m.opportunityId) ?? null
     const extras = oppExtrasMap[m.opportunityId]
+    const seller = sellerMap[m.opportunityId]
     const primary = supply
-      ? { ...supply, propertyType: extras?.propertyType ?? null, units: extras?.units ?? null, extractedSummary: extras?.extractedSummary ?? '' }
+      ? {
+          ...supply, propertyType: extras?.propertyType ?? null, units: extras?.units ?? seller?.unitCount ?? null,
+          extractedSummary: extras?.extractedSummary ?? '',
+          mojoList: seller?.mojoList ?? null, phone: seller?.phone ?? null, crmUrl: crmLeadUrl(seller?.metadata),
+        }
       : null
     return {
     id:              m.id,

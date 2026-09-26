@@ -6,6 +6,7 @@ import { isTestModeOnly } from '@/lib/config/testMode'
 import { resolveSourceBadge } from '@/lib/matching/engine'
 import { formatPriceRange } from '@/lib/utils'
 import { Category } from '@prisma/client'
+import { inChunks, loadDismissedPairs } from '@/lib/matching/dismissals'
 
 // Brief 7.4 (Section B) — party-grouped view of /matches. Instead of one card per
 // match, aggregate matches by the DEMAND/LEAD party they involve, so Ryan sees
@@ -45,11 +46,9 @@ function bandOf(score: number): 'hot' | 'warm' | 'possible' {
   return 'possible'
 }
 
-function mojoRole(mojoList: string | null): Role {
-  const s = (mojoList ?? '').toLowerCase()
-  if (s.includes('buyer')) return 'BUYER'
-  if (s.includes('renter')) return 'RENTER'
-  return 'SELLER'
+// Brief 35: a Mojo contact's role is its intent, not its list name.
+function mojoRole(intent: string | null): Role {
+  return intent === 'BUYER' ? 'BUYER' : intent === 'RENTER' ? 'RENTER' : 'SELLER'
 }
 
 function oppRole(category: string): Role | null {
@@ -75,42 +74,40 @@ export async function GET(req: NextRequest) {
 
   const matches = await prisma.match.findMany({
     where,
-    select: { id: true, opportunityId: true, counterpartId: true, counterpartType: true, score: true, tier: true },
+    select: { id: true, opportunityId: true, opportunityType: true, counterpartId: true, counterpartType: true, score: true, tier: true },
   })
   if (matches.length === 0) {
     return NextResponse.json({ parties: [], counts: { total: 0, buyers: 0, renters: 0, sellers: 0 } })
   }
 
-  // Exclude dismissed pairs (same rule as /api/matches).
-  const dismissals = await prisma.matchDismissal.findMany({
-    where: { OR: matches.map(m => ({ partyId: m.counterpartId, listingId: m.opportunityId })) },
-    select: { partyId: true, listingId: true },
-  })
-  const dismissed = new Set(dismissals.map(d => `${d.partyId}::${d.listingId}`))
-  const live = matches.filter(m => !dismissed.has(`${m.counterpartId}::${m.opportunityId}`))
+  // Exclude dismissed pairs; lookups are chunked (Brief 35: the per-match OR hit P2029).
+  const isDismissed = await loadDismissedPairs(prisma, matches)
+  const live = matches.filter(m => !isDismissed(m))
 
-  // Resolve which referenced ids are party ENTITIES.
+  // Resolve which referenced ids are party ENTITIES. Contact supply (Brief 35) is
+  // a seller MojoContact in opportunityId.
   const oppIds  = new Set<string>()
   const mojoIds = new Set<string>()
   for (const m of live) {
-    oppIds.add(m.opportunityId)
+    if (m.opportunityType === 'contact') mojoIds.add(m.opportunityId)
+    else oppIds.add(m.opportunityId)
     if (m.counterpartType === 'mojo') mojoIds.add(m.counterpartId)
     else oppIds.add(m.counterpartId)
   }
 
   const testMode = isTestModeOnly()
   const [oppEntities, mojoEntities] = await Promise.all([
-    prisma.extractedOpportunity.findMany({
-      where: { id: { in: [...oppIds] }, category: { in: [...BUYER_CATS, ...RENTER_CATS, ...SELLER_CATS] as Category[] } },
+    inChunks([...oppIds], chunk => prisma.extractedOpportunity.findMany({
+      where: { id: { in: chunk }, category: { in: [...BUYER_CATS, ...RENTER_CATS, ...SELLER_CATS] as Category[] } },
       select: {
         id: true, category: true, extractedTitle: true, sourceAgentName: true, sourceBrokerage: true,
         neighborhood: true, price: true, minPrice: true, maxPrice: true, beds: true,
       },
-    }),
-    testMode || mojoIds.size === 0 ? Promise.resolve([]) : prisma.mojoContact.findMany({
-      where: { id: { in: [...mojoIds] } },
-      select: { id: true, fullName: true, mojoList: true, neighborhood: true, city: true },
-    }),
+    })),
+    testMode ? Promise.resolve([]) : inChunks([...mojoIds], chunk => prisma.mojoContact.findMany({
+      where: { id: { in: chunk } },
+      select: { id: true, fullName: true, intent: true, mojoList: true, neighborhood: true, city: true },
+    })),
   ])
 
   const oppMap  = new Map(oppEntities.map(o => [o.id, o]))
@@ -125,9 +122,19 @@ export async function GET(req: NextRequest) {
     if (score > a.topScore) { a.topScore = score; a.topMatchId = matchId }
   }
 
+  const mojoParty = (mojo: (typeof mojoEntities)[number], m: (typeof live)[number], role: Role): PartyAgg => ({
+    id: mojo.id, name: mojo.fullName, role, source: 'mojo', isSEExpert: false,
+    criteria: [mojo.neighborhood ?? mojo.city, role === 'SELLER' ? mojo.mojoList : null].filter(Boolean).join(' · '),
+    matchCount: 0, tierBreakdown: { hot: 0, warm: 0, possible: 0 }, topMatchId: m.id, topScore: -1,
+  })
+
   for (const m of live) {
+    // Brief 35: a contact-supply seller is a SELLER party.
+    const seller = m.opportunityType === 'contact' ? mojoMap.get(m.opportunityId) : undefined
+    if (seller) bump(seller.id, () => mojoParty(seller, m, 'SELLER'), m.id, m.score)
     // Opportunity-side party (buyer/renter/seller-lead as opportunityId or counterpartId).
-    for (const eid of m.counterpartType === 'mojo' ? [m.opportunityId] : [m.opportunityId, m.counterpartId]) {
+    const eids = m.opportunityType === 'contact' ? [] : [m.opportunityId]
+    for (const eid of m.counterpartType === 'mojo' ? eids : [...eids, m.counterpartId]) {
       const opp = oppMap.get(eid)
       if (!opp) continue
       const role = oppRole(opp.category)
@@ -145,17 +152,7 @@ export async function GET(req: NextRequest) {
     // Mojo-side party.
     if (m.counterpartType === 'mojo') {
       const mojo = mojoMap.get(m.counterpartId)
-      if (mojo) {
-        bump(m.counterpartId, () => ({
-          id: mojo.id,
-          name: mojo.fullName,
-          role: mojoRole(mojo.mojoList),
-          source: 'mojo',
-          isSEExpert: false,
-          criteria: [mojo.neighborhood ?? mojo.city].filter(Boolean).join(' · '),
-          matchCount: 0, tierBreakdown: { hot: 0, warm: 0, possible: 0 }, topMatchId: m.id, topScore: -1,
-        }), m.id, m.score)
-      }
+      if (mojo) bump(m.counterpartId, () => mojoParty(mojo, m, mojoRole(mojo.intent)), m.id, m.score)
     }
   }
 

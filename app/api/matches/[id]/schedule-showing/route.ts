@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
+import { MIXED_TEST_PAIR, isMixedTestPair, matchSides } from '@/lib/matching/pairSafety'
+import { crmLeadUrl } from '@/lib/crmLink'
 
 // POST /api/matches/[id]/schedule-showing
 // Body: { start: string (naive local "YYYY-MM-DDTHH:mm[:ss]"), durationMinutes: number }
@@ -72,6 +74,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     },
   })
   if (!match) return NextResponse.json({ error: 'match not found' }, { status: 404 })
+  // Brief 35: never schedule across test data and a real homeowner.
+  if (isMixedTestPair(...await matchSides(prisma, match))) return NextResponse.json(MIXED_TEST_PAIR, { status: 409 })
 
   // Brief 32 — supply may be an ExtractedOpportunity or a MojoContact seller.
   const opp = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
@@ -86,13 +90,17 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const listingLabel = opp.address ?? opp.extractedTitle
   const subject = partyName ? `Showing: ${listingLabel} w/ ${partyName}` : `Showing: ${listingLabel}`
 
+  // Brief 35: contact supply links to the CRM lead (or nowhere), never to
+  // /opportunities/<MojoContact id>, which only resolves ExtractedOpportunity ids.
   const base = process.env.BASE_URL?.replace(/\/$/, '') ?? ''
-  const link = `${base}/opportunities/${opp.id}`
+  const link = match.opportunityType === 'contact'
+    ? crmLeadUrl((await prisma.mojoContact.findUnique({ where: { id: opp.id }, select: { metadata: true } }))?.metadata)
+    : `${base}/opportunities/${opp.id}`
   const notes = [
     extractedSummary,
     partyName ? `Party: ${partyName}` : null,
     match.reason ? `Match: ${match.reason}` : null,
-    `DealFlow: ${link}`,
+    link ? `${match.opportunityType === 'contact' ? 'CRM' : 'DealFlow'}: ${link}` : null,
   ].filter(Boolean).join('\n')
 
   let endISO: string
