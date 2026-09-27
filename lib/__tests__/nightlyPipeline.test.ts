@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runSteps } from '../nightlyPipeline'
+import { CALL_LIST_LIMIT, runSteps } from '../nightlyPipeline'
 
 // Brief 35: each pipeline step runs in its own try/catch.
 
@@ -20,4 +20,10 @@ test('a failing step does not stop later steps; ok is false', async () => {
 test('all steps succeed → ok', async () => {
   const r = await runSteps({ a: async () => 1, b: async () => 2 })
   assert.deepEqual(r, { ok: true, steps: { a: { ok: true, result: 1 }, b: { ok: true, result: 2 } } })
+})
+
+test('Brief 37: step 3 keeps the whole ranked list, not the top 50', () => {
+  const ranked = Array.from({ length: 1478 }, (_, i) => i + 1)
+  assert.equal(CALL_LIST_LIMIT, Infinity)
+  assert.equal(ranked.slice(0, CALL_LIST_LIMIT).length, 1478)
 })

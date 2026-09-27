@@ -1,12 +1,11 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { Home, MessageCircle, Phone, TrendingUp, User } from 'lucide-react'
+import { Home, MessageCircle, TrendingUp, User } from 'lucide-react'
 
 const ITEMS = [
   { icon: Home,          href: '/',         match: (p: string) => p === '/' },
   { icon: MessageCircle, href: '/chat',      match: (p: string) => p.startsWith('/chat') || p.startsWith('/opportunities') },
-  { icon: Phone,         href: '/queue',     match: (p: string) => p.startsWith('/queue') }, // Brief 33 — call queue
   { icon: TrendingUp,    href: '/trends',    match: (p: string) => p.startsWith('/trends') },
   { icon: User,          href: '/settings',  match: (p: string) => p.startsWith('/settings') },
 ]
