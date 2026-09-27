@@ -25,6 +25,10 @@ export async function runSteps(steps: Record<string, () => Promise<unknown>>) {
 }
 
 export const STEP_NAMES = ['crmLeadSync', 'scoring', 'callQueue'] as const
+
+// Brief 37: step 3 persists every ranked CRM seller (ranks 1..N), not the top 50.
+// The CRM pulls the whole list each morning and shows it in its own queue.
+export const CALL_LIST_LIMIT = Infinity
 export type StepName = (typeof STEP_NAMES)[number]
 
 // dryRun: steps 1-2 run their SQL and roll back; step 3 ranks without saving.
@@ -33,7 +37,7 @@ export function runNightlyPipeline({ dryRun = false, only }: { dryRun?: boolean;
     crmLeadSync: () => runCrmLeadSync({ dryRun }),
     scoring: () => runNightlyScoring({ dryRun }),
     callQueue: async () => {
-      const { stats, generationRunId } = await buildCallQueue(await getCurrentOrgId(), 50, !dryRun, { scope: 'crm' })
+      const { stats, generationRunId } = await buildCallQueue(await getCurrentOrgId(), CALL_LIST_LIMIT, !dryRun, { scope: 'crm' })
       return { generationRunId, persisted: !dryRun, ...stats }
     },
   }
