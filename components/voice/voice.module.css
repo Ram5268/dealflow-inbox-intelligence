@@ -64,6 +64,21 @@
 .sentence { transition: color 300ms ease; scroll-margin-bottom: 80px; }
 .spoken { color: #030401; }
 
+/* Status-bar scrim. In the home-screen app the status bar is white
+   (black-translucent) and sits over this light screen; a soft dark scrim behind
+   it keeps the clock and battery readable. It covers the top safe area plus a
+   soft feather (24% of it), holding at least 0.45 behind the glyphs (white
+   text ≥ 3:1). Standalone mode keeps at least the status bar's height, because
+   the inset reads 0 without viewport-fit=cover. In a browser tab it's 0px tall. */
+.overlay::after {
+  content: ''; position: absolute; inset: 0 0 auto 0; z-index: 1; height: calc(var(--sat) * 1.24); pointer-events: none;
+  background: linear-gradient(to bottom, rgba(26, 28, 30, 0.5), rgba(26, 28, 30, 0.45) 55%,
+    rgba(26, 28, 30, 0.25) 68%, rgba(26, 28, 30, 0.08) 82%, rgba(26, 28, 30, 0));
+}
+@media (display-mode: standalone) {
+  .overlay::after { height: calc(max(var(--sat), 54px) * 1.24); }
+}
+
 /* Status text: "Start talking" / "Muted", live transcript, gray notices. */
 .center {
   position: absolute; left: 24px; right: 24px; top: 50%; transform: translateY(-50%); margin: 0;
