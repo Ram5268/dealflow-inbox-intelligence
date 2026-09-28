@@ -14,16 +14,21 @@ import { crmLeadUrl } from '@/lib/crmLink'
 // then newest. seen rows are returned but visually de-emphasized client-side.
 // Brief 7.1: dismissed matches (a MatchDismissal row on the party↔listing pair)
 // are excluded by default; ?includeDismissed=1 shows them (debug only, not in UI).
+// Brief 38: GET /api/matches?id=<matchId> returns just that match, org-scoped and
+// in the same shape, ignoring the filters, dismissals and the 200 cap, so a
+// /matches?m=<id> link opens the exact match wherever it sits in the list.
 export async function GET(req: NextRequest) {
   const sp          = req.nextUrl.searchParams
-  const onlyUnseen  = sp.get('unseen') === '1'
-  const scoreMinRaw = sp.get('scoreMin')
+  const id          = sp.get('id')
+  const onlyUnseen  = !id && sp.get('unseen') === '1'
+  const scoreMinRaw = id ? null : sp.get('scoreMin')
   const scoreMin    = scoreMinRaw ? parseInt(scoreMinRaw, 10) : null
-  const typeRaw     = sp.get('type')
+  const typeRaw     = id ? null : sp.get('type')
   const type        = typeRaw && typeRaw !== 'all' ? typeRaw : null
-  const includeDismissed = sp.get('includeDismissed') === '1'
+  const includeDismissed = !!id || sp.get('includeDismissed') === '1'
 
   const where: Record<string, unknown> = { organizationId: await getCurrentOrgId() }
+  if (id) where.id = id
   if (type) where.counterpartType = type
   if (onlyUnseen)                                    where.seen  = false
   if (scoreMin !== null && !Number.isNaN(scoreMin))  where.score = { gte: scoreMin }

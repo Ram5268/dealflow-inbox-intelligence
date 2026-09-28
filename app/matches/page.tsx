@@ -188,6 +188,14 @@ function contextLine(m: Match): string {
   return `${pBit} ↔ ${cBit}`
 }
 
+// Brief 38 — once the pinned match closes, drop ?m= so a refresh shows the plain list.
+function dropDeepLink() {
+  const url = new URL(window.location.href)
+  if (!url.searchParams.has('m')) return
+  url.searchParams.delete('m')
+  window.history.replaceState(null, '', url.pathname + url.search)
+}
+
 export default function MatchesPage() {
   const router = useRouter()
   const [data, setData] = useState<MatchesResponse | null>(null)
@@ -217,15 +225,28 @@ export default function MatchesPage() {
   const [partiesLoading, setPartiesLoading] = useState(false)
   const [partiesError, setPartiesError] = useState<string | null>(null)
   const [expandedPartyId, setExpandedPartyId] = useState<string | null>(null)
+  // Brief 38 — the ?m=<id> match, fetched by id and pinned above the list.
+  const [pinned, setPinned] = useState<Match | null>(null)
+  const [pinLoading, setPinLoading] = useState(false)
 
-  // Restore persisted view once on mount. A ?m=<id> deep-link (from a push
-  // notification tap) forces the Matches view and pre-expands that match.
+  // Restore persisted view once on mount. A ?m=<id> deep-link (a push
+  // notification tap, or "Open" in the CRM) forces the Matches view and pins that
+  // match at the top, expanded, whatever the tab, the unseen filter or the cap.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const deepLink = new URLSearchParams(window.location.search).get('m')
     if (deepLink) {
       setViewMode('matches')
       setExpandedId(deepLink)
+      setPinLoading(true)
+      fetch(`/api/matches?id=${encodeURIComponent(deepLink)}`)
+        .then(async r => {
+          const m = r.ok ? (await r.json() as MatchesResponse).matches[0] : undefined
+          if (!m) throw new Error(`match ${r.status}`)
+          setPinned(m)
+        })
+        .catch(() => { dropDeepLink(); showErrorToast("Couldn't open that match") })
+        .finally(() => setPinLoading(false))
       return
     }
     const v = window.localStorage.getItem('matchesViewMode')
@@ -281,6 +302,12 @@ export default function MatchesPage() {
     }
   }
 
+  // Closing the pinned match returns to the normal list.
+  function unpin() {
+    setPinned(null)
+    dropDeepLink()
+  }
+
   // Matches load for both views (party expansion reuses the loaded match cards).
   useEffect(() => { void fetchMatches() }, [scoreBand, unseenOnly])
   useEffect(() => { if (viewMode === 'parties') void fetchParties() }, [viewMode, partyRole, scoreBand, unseenOnly])
@@ -288,6 +315,7 @@ export default function MatchesPage() {
   function toggleExpand(m: Match) {
     if (expandedId === m.id) {
       setExpandedId(null)
+      if (pinned?.id === m.id) unpin()
       return
     }
     setExpandedId(m.id)
@@ -297,6 +325,7 @@ export default function MatchesPage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ id: m.id }),
       })
+      setPinned(p => p?.id === m.id ? { ...p, seen: true } : p)
       setData(d => d ? {
         ...d,
         matches: d.matches.map(x => x.id === m.id ? { ...x, seen: true } : x),
@@ -310,11 +339,12 @@ export default function MatchesPage() {
   function handleDismissed(matchId: string) {
     setDismissSheetFor(null)
     const idx = data?.matches.findIndex(x => x.id === matchId) ?? -1
-    const match = idx >= 0 ? data!.matches[idx] : null
+    const match = idx >= 0 ? data!.matches[idx] : pinned?.id === matchId ? pinned : null
     setRemovingId(matchId)
     window.setTimeout(() => {
+      if (pinned?.id === matchId) unpin()
       setData(d => {
-        if (!d) return d
+        if (!d || !d.matches.some(x => x.id === matchId)) return d
         const removed = d.matches.find(x => x.id === matchId)
         return {
           ...d,
@@ -327,7 +357,7 @@ export default function MatchesPage() {
         }
       })
       setRemovingId(null)
-      if (match) showToast(match, idx)
+      if (match) showToast(match, Math.max(idx, 0))
     }, 200)
   }
 
@@ -475,6 +505,14 @@ export default function MatchesPage() {
       }}>
         {viewMode === 'matches' ? (
           <>
+            {pinned ? (
+              <>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.35)' }}>
+                  OPENED FROM A LINK
+                </div>
+                {renderMatchCard(pinned)}
+              </>
+            ) : pinLoading && <MatchCardSkeleton />}
             {data && (
               <div style={{
                 fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.14em',
@@ -495,7 +533,7 @@ export default function MatchesPage() {
                 <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Try another tab — or run a Check In to pull fresh matches.</div>
               </div>
             ) : (
-              data.matches.map(m => renderMatchCard(m))
+              data.matches.filter(m => m.id !== pinned?.id).map(m => renderMatchCard(m))
             )}
           </>
         ) : (
