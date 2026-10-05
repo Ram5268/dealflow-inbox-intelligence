@@ -6,7 +6,7 @@
 //   • Any other seller contact only has our estimated value (the estimatedValue
 //     proxy in adapters.ts), matched as a ±25% range. In the 2025-26 back-test of
 //     Brooklyn/Queens 2-4 family sales, ±25% around the estimate held the real sale
-//     price for about 3 in 4 homes; ±15% (the old point gate) held only 56%.
+//     price for about 3 in 4 homes (75%); ±15% (the old point gate) held only 55%.
 // Pure, so eligibility, the price feature and the scarcity pre-compute share it.
 import type { ListingData } from './scorerTypes'
 
