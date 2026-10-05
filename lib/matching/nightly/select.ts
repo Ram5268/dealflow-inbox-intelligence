@@ -13,7 +13,9 @@ export interface Candidate {
   captureStatus: string
 }
 
-export const tierOf = (mf: number): 'HOT' | 'WARM' | 'POSSIBLE' => (mf >= 80 ? 'HOT' : mf >= 65 ? 'WARM' : 'POSSIBLE')
+export const HOT_MIN_FIT = 80
+export const WARM_MIN_FIT = 65
+export const tierOf = (mf: number): 'HOT' | 'WARM' | 'POSSIBLE' => (mf >= HOT_MIN_FIT ? 'HOT' : mf >= WARM_MIN_FIT ? 'WARM' : 'POSSIBLE')
 
 // Top-3 contribution keys, strongest first (same as the Brief 32 regen script).
 export const reasonOf = (contributions: Record<string, number>): string =>

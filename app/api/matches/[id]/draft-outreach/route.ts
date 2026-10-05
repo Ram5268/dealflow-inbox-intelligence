@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { formatPriceRange } from '@/lib/utils'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
+import { outreachPriceText } from '@/lib/matching/outreachPrice'
 import { MIXED_TEST_PAIR, isMixedTestPair, matchSides } from '@/lib/matching/pairSafety'
 
 // POST /api/matches/[id]/draft-outreach
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const opp = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
   if (!opp) return NextResponse.json({ error: 'listing side not found' }, { status: 404 })
   const listingAddress = opp.address ?? opp.extractedTitle
-  const listingPrice = formatPriceRange(opp.minPrice, opp.maxPrice, opp.price) || 'price on request'
+  const listingPrice = outreachPriceText(opp) // never our estimate for a seller contact
   const listingBeds = opp.beds ? `${opp.beds}BR` : 'beds n/a'
 
   const system = `You are drafting a brief outreach ${channel} from a NYC real estate broker (Ryan Martin, Douglas Elliman) to a prospect. Match context:

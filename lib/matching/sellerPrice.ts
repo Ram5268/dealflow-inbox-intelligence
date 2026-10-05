@@ -19,16 +19,17 @@ type PricedListing = Pick<ListingData, 'sourceType' | 'price' | 'priorListingSta
 
 const OFF_MARKET_PRIOR = new Set(['EXPIRED', 'WITHDRAWN'])
 
+const usable = (v: number | null): v is number => v != null && Number.isFinite(v) && v > 0
+
 export function sellerPrice(listing: PricedListing): SellerPrice | null {
   if (listing.sourceType !== 'contact') {
     return listing.price != null ? { price: listing.price, basis: 'asking' } : null
   }
-  const ask = listing.priorListingPrice
-  if (listing.priorListingStatus != null && OFF_MARKET_PRIOR.has(listing.priorListingStatus) && ask != null && ask > 0) {
-    return { price: ask, basis: 'last_asking' }
+  const status = listing.priorListingStatus?.trim().toUpperCase() ?? null
+  if (status != null && OFF_MARKET_PRIOR.has(status) && usable(listing.priorListingPrice)) {
+    return { price: listing.priorListingPrice, basis: 'last_asking' }
   }
-  const est = listing.price
-  return est != null && est > 0 ? { price: est, basis: 'estimate' } : null // no estimate → price unknown
+  return usable(listing.price) ? { price: listing.price, basis: 'estimate' } : null // no usable estimate → price unknown
 }
 
 // How real sale prices spread around our estimates: quantiles of ln(sale price / estimate)
@@ -51,8 +52,12 @@ function spreadCdf(v: number): number {
 }
 
 // Chance that the real price of a home we estimate at `estimate` lands inside the buyer's
-// budget with the usual 15% stretch on each side.
+// budget with the usual 15% stretch on each side. Unusable inputs (a zero, negative or
+// non-numeric max or estimate, a non-numeric min) give 0, like the point gate rejects them.
 export function fitProbability(estimate: number, priceMin: number | null, priceMax: number | null): number {
+  if (!(Number.isFinite(estimate) && estimate > 0)) return 0
+  if (priceMax != null && !(priceMax > 0)) return 0
+  if (priceMin != null && Number.isNaN(priceMin)) return 0
   const upper = priceMax != null ? spreadCdf(Math.log((priceMax * 1.15) / estimate)) : 1
   const lower = priceMin != null && priceMin > 0 ? spreadCdf(Math.log((priceMin * 0.85) / estimate)) : 0
   return Math.max(0, upper - lower)

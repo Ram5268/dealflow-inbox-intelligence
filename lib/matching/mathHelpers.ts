@@ -14,3 +14,10 @@ export function logit(score: number): number {
 export function sigmoid(x: number): number {
   return 1 / (1 + Math.exp(-x))
 }
+
+// Inverse of logit(): the score whose logit is x, clamped to [0,1] (so
+// fromLogit(logit(1)) = 1 and fromLogit(logit(0)) = 0).
+export function fromLogit(x: number): number {
+  const e = Math.exp(x)
+  return Math.min(1, Math.max(0, ((1 + EPS) * e - EPS) / (1 + e)))
+}

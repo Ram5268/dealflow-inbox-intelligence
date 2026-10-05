@@ -34,7 +34,7 @@ function contact(over: Record<string, unknown>): MojoContact {
     preForeclosureStatus: null, foreclosureAuctionDate: null, isVacant: null, ownerOccupied: null,
     alternateAddress: null, lastSaleDate: null, yearBuilt: null, unitCount: null,
     buildingSqft: null, lotSizeSqft: null, zoningCode: null, batchRankCategory: null,
-    priorListingStatus: null, budgetMin: null, budgetMax: null, bedsMin: null, bedsMax: null,
+    priorListingStatus: null, priorListingPrice: null, budgetMin: null, budgetMax: null, bedsMin: null, bedsMax: null,
     cashOnly: null, timing: null, notes: null, createdAt: CREATED,
     ...over,
   } as unknown as MojoContact
@@ -68,6 +68,14 @@ test('mojoContactToListingData maps propertyBeds → beds and estimatedValue →
   assert.equal(l.propertyType, 'Townhouse')
   assert.equal(l.preForeclosureStatus, 'LIS_PENDENS')
   assert.equal(l.mojoList, 'NYC Pre-Foreclosure')
+})
+
+test('last asking price: mapped for seller contacts, null for email listings', () => {
+  const l = mojoContactToListingData(contact({ estimatedValue: 1_500_000, priorListingStatus: 'EXPIRED', priorListingPrice: 1_795_000 }))
+  assert.equal(l.priorListingStatus, 'EXPIRED')
+  assert.equal(l.priorListingPrice, 1_795_000)
+  assert.equal(mojoContactToListingData(contact({})).priorListingPrice, null)
+  assert.equal(opportunityToListingData(opp({ price: 1_500_000 })).priorListingPrice, null)
 })
 
 test('opportunityToBuyerData handles BUYER_ISO shape', () => {

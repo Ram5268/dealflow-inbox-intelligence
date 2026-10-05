@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { sellerPrice, fitProbability, MIN_FIT_PROBABILITY } from '../sellerPrice'
 import { isEligible, isSellerPriceEligible } from '../eligibility'
-import { computePrice } from '../features/price'
+import { computePrice, estimateScore } from '../features/price'
 import { precomputeSubstitutionCounts } from '../compsCache'
 import { makeListing, makeBuyer } from './fixtures'
 
@@ -96,11 +96,12 @@ test('listing opportunities keep the old ±15% gate', () => {
   assert.equal(isEligible(makeListing({ neighborhood: 'Park Slope', price: 1_800_000 }), buyer({ priceMax: 1_600_000 })).eligible, true)
 })
 
-test('price feature: an estimate scores its chance of fitting, at MEDIUM confidence', () => {
+test('price feature: an estimate scores the evidence its chance carries, same confidence rule as known prices', () => {
   const b = buyer({ priceMin: 1_200_000, priceMax: 1_600_000 })
-  const s = computePrice(seller({ price: 1_400_000 }), b)
-  assert.equal(s.confidence, 'MEDIUM')
-  near(s.score, 0.786)
+  const s = computePrice(seller({ price: 1_400_000 }), b) // 78.6% chance
+  assert.equal(s.confidence, 'HIGH')
+  near(s.score, 0.942, 0.001)
+  assert.equal(computePrice(seller({ price: 1_400_000 }), buyer({ priceMax: 1_600_000 })).confidence, 'MEDIUM') // one bound
   assert.deepEqual(computePrice(makeListing({ price: 1_500_000 }), b), { key: 'price', score: 1, confidence: 'HIGH' })
   const lastAsk = seller({ price: 2_200_000, priorListingStatus: 'EXPIRED', priorListingPrice: 1_500_000 })
   assert.deepEqual(computePrice(lastAsk, b), { key: 'price', score: 1, confidence: 'HIGH' })
@@ -113,6 +114,49 @@ test('price feature ranks the closer estimate higher (a flat range would tie the
   const high = computePrice(seller({ price: 1_800_000 }), b).score
   const higher = computePrice(seller({ price: 2_200_000 }), b).score
   assert.ok(close > high && high > higher, `${close} > ${high} > ${higher}`)
+})
+
+test('estimateScore: no chance → 0, even → 0.5, certain → 1, rising in between', () => {
+  near(estimateScore(0), 0, 1e-9)
+  near(estimateScore(0.5), 0.5, 1e-9)
+  near(estimateScore(1), 1, 1e-9)
+  let prev = -1
+  for (let i = 0; i <= 20; i++) {
+    const s = estimateScore(i / 20)
+    assert.ok(s >= prev, `not rising at ${i / 20}`)
+    prev = s
+  }
+})
+
+test('single-price budget (min = max): the best chance is about even', () => {
+  near(fitProbability(1_500_000, 1_600_000, 1_600_000), 0.527, 0.001)
+  assert.equal(isEligible(seller({ price: 1_500_000 }), buyer({ priceMin: 1_600_000, priceMax: 1_600_000 })).eligible, true)
+})
+
+test('status spelled "Expired" or " withdrawn " still uses the last asking price', () => {
+  for (const status of ['Expired', ' withdrawn ']) {
+    assert.equal(sellerPrice(seller({ price: 1_500_000, priorListingStatus: status, priorListingPrice: 1_795_000 }))?.basis, 'last_asking')
+  }
+})
+
+test('EXPIRED with no usable last asking price falls back to the estimate', () => {
+  for (const ask of [0, -1, NaN, Infinity]) {
+    assert.equal(sellerPrice(seller({ price: 1_500_000, priorListingStatus: 'EXPIRED', priorListingPrice: ask }))?.basis, 'estimate')
+  }
+})
+
+test('unusable estimates count as no price', () => {
+  for (const est of [NaN, Infinity, -1]) assert.equal(sellerPrice(seller({ price: est })), null)
+})
+
+test('unusable budgets give a 0% chance and never a NaN score', () => {
+  const bad: Array<[number | null, number | null]> = [[null, -5], [null, 0], [null, NaN], [NaN, 1_600_000], [2_000_000, 1_000_000]]
+  for (const [min, max] of bad) {
+    assert.equal(fitProbability(1_500_000, min, max), 0, `chance for ${min}-${max}`)
+    assert.equal(isSellerPriceEligible(seller({ price: 1_500_000 }), min, max), false, `eligible for ${min}-${max}`)
+    const s = computePrice(seller({ price: 1_500_000 }), buyer({ priceMin: min, priceMax: max }))
+    assert.ok(Number.isFinite(s.score), `score for ${min}-${max}: ${s.score}`)
+  }
 })
 
 test('scarcity counts use the same rule', () => {
