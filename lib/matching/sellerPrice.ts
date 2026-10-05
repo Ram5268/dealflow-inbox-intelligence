@@ -59,7 +59,8 @@ export function fitProbability(estimate: number, priceMin: number | null, priceM
 }
 
 // A seller known only by our estimate stays matched with a buyer when there is at least a
-// 10% chance the buyer can afford the real price. In the 2025-26 back-test this kept as many
-// real matches as a ±25% range around the estimate (95-99%, depending on how buyers state
-// budgets) with fewer wrong-budget pairs, and ranked sellers better.
+// 10% chance the buyer can afford the real price. In the 2025-26 back-test this found about
+// as many real matches as a ±25% range around the estimate (95-99%, depending on how buyers
+// state budgets) with about the same share of wrong-budget pairs, and ranked sellers much
+// better, because a flat range gives every seller inside it the same price score.
 export const MIN_FIT_PROBABILITY = 0.1
