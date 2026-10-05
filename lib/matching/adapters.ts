@@ -155,8 +155,10 @@ export function opportunityToBuyerData(opp: ExtractedOpportunity): BuyerData {
     category: opp.category, // BUYER_ISO for the sales scorer
     neighborhoods: hoods,
     // Scalar price/beds collapse to a point range so range-aware features still fire.
-    priceMin: opp.minPrice ?? opp.price,
-    priceMax: opp.maxPrice ?? opp.price,
+    // A one-sided budget stays open: mapISO fills `price` from a lone max or min, which
+    // used to turn "up to $1.6M" (or "$1.6M+") into exactly $1.6M.
+    priceMin: opp.minPrice ?? (opp.maxPrice == null ? opp.price : null),
+    priceMax: opp.maxPrice ?? (opp.minPrice == null ? opp.price : null),
     bedsMin: opp.minBeds ?? opp.beds,
     bedsMax: opp.maxBeds ?? opp.beds,
     bathsMin: opp.bathsMin,

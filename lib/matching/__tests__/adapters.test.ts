@@ -8,6 +8,7 @@ import {
   mojoContactToBuyerData,
 } from '../adapters'
 import { isEligible } from '../eligibility'
+import { fitProbability } from '../sellerPrice'
 
 const CREATED = new Date('2026-08-01T00:00:00Z')
 
@@ -86,6 +87,32 @@ test('prior-listing status is upper-cased so "Active" is still excluded as curre
   const l = mojoContactToListingData(contact({ priorListingStatus: 'Active', neighborhood: 'Chelsea' }))
   const b = opportunityToBuyerData(opp({ category: 'BUYER_ISO', transactionType: 'BUYER_NEED', neighborhoods: ['Chelsea'] }))
   assert.deepEqual(isEligible(l, b), { eligible: false, reason: 'currently_listed' })
+})
+
+const iso = (over: Record<string, unknown>) =>
+  opportunityToBuyerData(opp({ category: 'BUYER_ISO', transactionType: 'BUYER_NEED', neighborhoods: ['Chelsea'], ...over }))
+
+test('one-sided email budgets stay open: "up to $1.6M" and "$1.6M+" are not exact prices', () => {
+  // mapISO fills price from a lone max or min, as in these rows
+  const upTo = iso({ minPrice: null, maxPrice: 1_600_000, price: 1_600_000 })
+  assert.deepEqual([upTo.priceMin, upTo.priceMax], [null, 1_600_000])
+  const atLeast = iso({ minPrice: 1_600_000, maxPrice: null, price: 1_600_000 })
+  assert.deepEqual([atLeast.priceMin, atLeast.priceMax], [1_600_000, null])
+  const range = iso({ minPrice: 1_200_000, maxPrice: 1_600_000, price: 1_400_000 })
+  assert.deepEqual([range.priceMin, range.priceMax], [1_200_000, 1_600_000])
+  const single = iso({ minPrice: null, maxPrice: null, price: 1_500_000 }) // one stated number → point, as before
+  assert.deepEqual([single.priceMin, single.priceMax], [1_500_000, 1_500_000])
+  const none = iso({ minPrice: null, maxPrice: null, price: null })
+  assert.deepEqual([none.priceMin, none.priceMax], [null, null])
+})
+
+test('an "up to $1.6M" email buyer now matches a $1.0M listing and a seller we value at $1.2M', () => {
+  const b = iso({ minPrice: null, maxPrice: 1_600_000, price: 1_600_000 })
+  const listing = opportunityToListingData(opp({ neighborhood: 'Chelsea', price: 1_000_000 }))
+  assert.equal(isEligible(listing, b).eligible, true) // was out: $1.0M is under 0.85 × $1.6M
+  const seller = mojoContactToListingData(contact({ neighborhood: 'Chelsea', estimatedValue: 1_200_000 }))
+  assert.equal(isEligible(seller, b).eligible, true)
+  assert.ok(fitProbability(1_200_000, b.priceMin, b.priceMax) > 0.9)
 })
 
 test('opportunityToBuyerData handles BUYER_ISO shape', () => {
