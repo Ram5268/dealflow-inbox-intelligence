@@ -9,6 +9,7 @@ export function makeListing(over: Partial<ListingData> = {}): ListingData {
     sourceType: 'opportunity',
     transactionType: 'SALE',
     priorListingStatus: null,
+    priorListingPrice: null,
     neighborhood: null,
     borough: null,
     price: null,

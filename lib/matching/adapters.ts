@@ -53,6 +53,7 @@ export function opportunityToListingData(opp: ExtractedOpportunity): ListingData
     sourceType: 'opportunity',
     transactionType: opp.transactionType,
     priorListingStatus: null, // EO has no prior-listing history
+    priorListingPrice: null,
     neighborhood: opp.neighborhood,
     borough: opp.borough ?? boroughOf(opp.neighborhood),
     price: opp.price,
@@ -100,7 +101,10 @@ export function mojoContactToListingData(mc: MojoContact): ListingData {
     id: mc.id,
     sourceType: 'contact', // regen writes opportunityType='contact' off this
     transactionType: 'SALE', // a SELLER contact is sale-side supply
-    priorListingStatus: mc.priorListingStatus,
+    // Upper-cased once here so every check agrees, including the REBNY "currently
+    // listed" exclusion (eligibility.ts step 3), whatever the source's spelling.
+    priorListingStatus: mc.priorListingStatus?.trim().toUpperCase() || null,
+    priorListingPrice: mc.priorListingPrice,
     neighborhood: mc.neighborhood,
     borough: listingBorough(mc.neighborhood, mc.zipCode), // Brief 35: ZIP/label fallback
     price: mc.estimatedValue, // seller has no explicit list price — estimatedValue proxy
@@ -151,8 +155,10 @@ export function opportunityToBuyerData(opp: ExtractedOpportunity): BuyerData {
     category: opp.category, // BUYER_ISO for the sales scorer
     neighborhoods: hoods,
     // Scalar price/beds collapse to a point range so range-aware features still fire.
-    priceMin: opp.minPrice ?? opp.price,
-    priceMax: opp.maxPrice ?? opp.price,
+    // A one-sided budget stays open: mapISO fills `price` from a lone max or min, which
+    // used to turn "up to $1.6M" (or "$1.6M+") into exactly $1.6M.
+    priceMin: opp.minPrice ?? (opp.maxPrice == null ? opp.price : null),
+    priceMax: opp.maxPrice ?? (opp.minPrice == null ? opp.price : null),
     bedsMin: opp.minBeds ?? opp.beds,
     bedsMax: opp.maxBeds ?? opp.beds,
     bathsMin: opp.bathsMin,

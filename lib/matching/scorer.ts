@@ -11,6 +11,8 @@
 import { logit, sigmoid } from './mathHelpers'
 import { getWeight } from './weights'
 import { isEligible } from './eligibility'
+import { sellerPrice, fitProbability } from './sellerPrice'
+import { HOT_MIN_FIT, WARM_MIN_FIT } from './tiers'
 import type {
   Confidence,
   FeatureResult,
@@ -142,8 +144,23 @@ export function scorePair(
     computeRecency(listing, context.now),
   ]
 
-  const matchFit = composeMatchFit(features)
+  const matchFit = capForPriceChance(composeMatchFit(features), listing, buyer)
   const captureStatus = computeCaptureStatus(listing, buyer, context)
 
   return { matchFit, captureStatus, eligibility }
+}
+
+// A seller known only by our estimated value can't look like a strong match for a
+// buyer who probably can't afford it: HOT needs at least an even chance that the real
+// price fits the budget, WARM at least a 25% chance (sellerPrice.ts). Known prices are
+// untouched.
+export const HOT_MIN_PRICE_CHANCE = 0.5
+export const WARM_MIN_PRICE_CHANCE = 0.25
+
+export function capForPriceChance(mf: MatchFitResult, listing: ListingData, buyer: BuyerData): MatchFitResult {
+  const sp = sellerPrice(listing)
+  if (sp?.basis !== 'estimate' || (buyer.priceMin == null && buyer.priceMax == null)) return mf
+  const chance = fitProbability(sp.price, buyer.priceMin, buyer.priceMax)
+  const cap = chance < WARM_MIN_PRICE_CHANCE ? WARM_MIN_FIT - 1 : chance < HOT_MIN_PRICE_CHANCE ? HOT_MIN_FIT - 1 : 100
+  return mf.matchFit > cap ? { ...mf, matchFit: cap } : mf
 }

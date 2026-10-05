@@ -36,6 +36,7 @@ export interface ListingData {
   sourceType: 'opportunity' | 'contact'
   transactionType: TransactionType
   priorListingStatus: string | null
+  priorListingPrice: number | null // last asking price of an EXPIRED/WITHDRAWN listing (contacts only)
   neighborhood: string | null
   borough: string | null
   price: number | null
