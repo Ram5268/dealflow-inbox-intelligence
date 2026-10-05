@@ -7,6 +7,7 @@ import {
   opportunityToBuyerData,
   mojoContactToBuyerData,
 } from '../adapters'
+import { isEligible } from '../eligibility'
 
 const CREATED = new Date('2026-08-01T00:00:00Z')
 
@@ -76,6 +77,15 @@ test('last asking price: mapped for seller contacts, null for email listings', (
   assert.equal(l.priorListingPrice, 1_795_000)
   assert.equal(mojoContactToListingData(contact({})).priorListingPrice, null)
   assert.equal(opportunityToListingData(opp({ price: 1_500_000 })).priorListingPrice, null)
+})
+
+test('prior-listing status is upper-cased so "Active" is still excluded as currently listed', () => {
+  assert.equal(mojoContactToListingData(contact({ priorListingStatus: ' Active ' })).priorListingStatus, 'ACTIVE')
+  assert.equal(mojoContactToListingData(contact({ priorListingStatus: 'expired' })).priorListingStatus, 'EXPIRED')
+  assert.equal(mojoContactToListingData(contact({ priorListingStatus: '  ' })).priorListingStatus, null)
+  const l = mojoContactToListingData(contact({ priorListingStatus: 'Active', neighborhood: 'Chelsea' }))
+  const b = opportunityToBuyerData(opp({ category: 'BUYER_ISO', transactionType: 'BUYER_NEED', neighborhoods: ['Chelsea'] }))
+  assert.deepEqual(isEligible(l, b), { eligible: false, reason: 'currently_listed' })
 })
 
 test('opportunityToBuyerData handles BUYER_ISO shape', () => {

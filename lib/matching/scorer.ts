@@ -12,7 +12,7 @@ import { logit, sigmoid } from './mathHelpers'
 import { getWeight } from './weights'
 import { isEligible } from './eligibility'
 import { sellerPrice, fitProbability } from './sellerPrice'
-import { HOT_MIN_FIT, WARM_MIN_FIT } from './nightly/select'
+import { HOT_MIN_FIT, WARM_MIN_FIT } from './tiers'
 import type {
   Confidence,
   FeatureResult,

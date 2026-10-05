@@ -101,7 +101,9 @@ export function mojoContactToListingData(mc: MojoContact): ListingData {
     id: mc.id,
     sourceType: 'contact', // regen writes opportunityType='contact' off this
     transactionType: 'SALE', // a SELLER contact is sale-side supply
-    priorListingStatus: mc.priorListingStatus,
+    // Upper-cased once here so every check agrees, including the REBNY "currently
+    // listed" exclusion (eligibility.ts step 3), whatever the source's spelling.
+    priorListingStatus: mc.priorListingStatus?.trim().toUpperCase() || null,
     priorListingPrice: mc.priorListingPrice,
     neighborhood: mc.neighborhood,
     borough: listingBorough(mc.neighborhood, mc.zipCode), // Brief 35: ZIP/label fallback

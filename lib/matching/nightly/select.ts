@@ -1,4 +1,5 @@
 import type { MatchFitResult } from '../scorerTypes'
+import { HOT_MIN_FIT, WARM_MIN_FIT } from '../tiers'
 
 // Brief 35: which scored (seller, buyer) pairs the nightly job keeps, and the
 // Match row each kept pair becomes. Pure, so it's unit-tested without a DB.
@@ -13,8 +14,7 @@ export interface Candidate {
   captureStatus: string
 }
 
-export const HOT_MIN_FIT = 80
-export const WARM_MIN_FIT = 65
+export { HOT_MIN_FIT, WARM_MIN_FIT }
 export const tierOf = (mf: number): 'HOT' | 'WARM' | 'POSSIBLE' => (mf >= HOT_MIN_FIT ? 'HOT' : mf >= WARM_MIN_FIT ? 'WARM' : 'POSSIBLE')
 
 // Top-3 contribution keys, strongest first (same as the Brief 32 regen script).
