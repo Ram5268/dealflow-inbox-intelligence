@@ -10,6 +10,7 @@ import type { PrismaClient } from '@prisma/client'
 import type { ListingData, BuyerData } from './scorerTypes'
 import { carryingBucketKey } from './compsKey'
 import { isNeighborhoodEligible, isBedsEligible, isPriceEligible } from './eligibility'
+import { priceForBuyer } from './sellerPrice'
 
 export interface CompsMedianContext {
   medians: Map<string, number> // key: `${nbhd}|${band}|${propType}` → median monthly carrying $
@@ -90,7 +91,7 @@ export function precomputeSubstitutionCounts(
       if (
         isNeighborhoodEligible(l.neighborhood, b.neighborhoods, l.borough) &&
         isBedsEligible(l.beds, b.bedsMin, b.bedsMax) &&
-        isPriceEligible(l.price, b.priceMin, b.priceMax)
+        isPriceEligible(priceForBuyer(l, b.priceMin, b.priceMax), b.priceMin, b.priceMax)
       ) {
         count++
       }

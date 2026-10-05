@@ -53,6 +53,7 @@ export function opportunityToListingData(opp: ExtractedOpportunity): ListingData
     sourceType: 'opportunity',
     transactionType: opp.transactionType,
     priorListingStatus: null, // EO has no prior-listing history
+    priorListingPrice: null,
     neighborhood: opp.neighborhood,
     borough: opp.borough ?? boroughOf(opp.neighborhood),
     price: opp.price,
@@ -101,6 +102,7 @@ export function mojoContactToListingData(mc: MojoContact): ListingData {
     sourceType: 'contact', // regen writes opportunityType='contact' off this
     transactionType: 'SALE', // a SELLER contact is sale-side supply
     priorListingStatus: mc.priorListingStatus,
+    priorListingPrice: mc.priorListingPrice,
     neighborhood: mc.neighborhood,
     borough: listingBorough(mc.neighborhood, mc.zipCode), // Brief 35: ZIP/label fallback
     price: mc.estimatedValue, // seller has no explicit list price — estimatedValue proxy

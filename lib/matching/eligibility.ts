@@ -6,6 +6,7 @@
 import type { ListingData, BuyerData } from './scorerTypes'
 import { fromRaw, getAdjacent, getBorough } from '../domain/Neighborhood'
 import { boroughLabels } from './borough'
+import { priceForBuyer } from './sellerPrice'
 
 export function isEligible(
   listing: ListingData,
@@ -32,8 +33,10 @@ export function isEligible(
     return { eligible: false, reason: 'wrong_beds' }
   }
 
-  // 6. Price — within ±15% of the buyer's stated range.
-  if (!isPriceEligible(listing.price, buyer.priceMin, buyer.priceMax)) {
+  // 6. Price — within ±15% of the buyer's stated range. A seller known only by our
+  //    estimated value counts as a ±25% range; an expired/withdrawn one uses its
+  //    last asking price (sellerPrice.ts).
+  if (!isPriceEligible(priceForBuyer(listing, buyer.priceMin, buyer.priceMax), buyer.priceMin, buyer.priceMax)) {
     return { eligible: false, reason: 'wrong_price' }
   }
 
