@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { maintenanceEnabled, adminSecretOk } from '../config/maintenance'
 import { mapStatus, statusUpdateFor, SE_CHECKABLE_CATEGORIES } from '../streetEasyStatusUpdate'
+import { planMissRepair } from '../streetEasyMissRepair'
 
 const ROOT = join(__dirname, '..', '..')
 const src = (f: string) => readFileSync(join(ROOT, f), 'utf8')
@@ -152,4 +153,23 @@ test('listings StreetEasy never found are re-checked every 30 days, not 7 (quota
   assert.match(sweep, /\{ streetEasyId: \{ not: null \}, streetEasyCheckedAt: \{ lt: sevenDaysAgo \} \}/)
   assert.match(sweep, /\{ streetEasyId: null, streetEasyCheckedAt: \{ lt: thirtyDaysAgo \} \}/)
   assert.match(sweep, /const thirtyDaysAgo = new Date\(Date\.now\(\) - 30 \* 86_400_000\)/)
+})
+
+test('restoring listings delisted by a miss respects what Ryan decided in review', () => {
+  const row = (id: string, processingStatus = 'stale', isDuplicate = false) => ({ id, processingStatus, isDuplicate })
+  const plan = planMissRepair(
+    [row('plain'), row('pending'), row('rejected'), row('dup', 'stale', true), row('approved', 'active'), row('markedStale')],
+    [
+      { opportunityId: 'pending', status: 'pending' },
+      { opportunityId: 'rejected', status: 'rejected' },
+      { opportunityId: 'approved', status: 'approved' },
+      { opportunityId: 'markedStale', status: 'marked_stale' },
+      { opportunityId: null, status: 'pending' },
+    ],
+  )
+  // The false "delisted" goes everywhere (it hides a row from Drift's search).
+  assert.deepEqual(plan.clearStatus, ['plain', 'pending', 'rejected', 'dup', 'approved', 'markedStale'])
+  assert.deepEqual(plan.toActive, ['plain'])
+  assert.deepEqual(plan.toNeedsReview, ['pending']) // still waiting in review: back to the queue, not active
+  assert.deepEqual(plan.keptByDecision, ['rejected', 'dup', 'markedStale'])
 })
