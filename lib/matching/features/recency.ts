@@ -6,7 +6,8 @@ import type { ListingData, FeatureResult } from '../scorerTypes'
 //
 // Brief 41: a seller contact (CRM/Mojo supply) abstains. Its createdAt is the day
 // the row was imported into DealFlow, not a market event, so it boosted newly
-// synced sellers for two weeks and then sank them.
+// synced sellers for two weeks and then sank them. scorePair leaves recency out
+// for contacts altogether; this LOW is the safe answer for any other caller.
 export function computeRecency(listing: ListingData, now: Date): FeatureResult {
   if (listing.sourceType === 'contact') return { key: 'recency', score: 0.5, confidence: 'LOW' }
   const ageDays = (now.getTime() - listing.createdAt.getTime()) / (1000 * 60 * 60 * 24)

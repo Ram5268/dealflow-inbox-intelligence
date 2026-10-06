@@ -19,12 +19,15 @@
 // partial-extraction rows regress). Trailing params are optional, so existing
 // 2-arg scalar calls are unchanged.
 //
-// Brief 41: a range with only ONE end stays open on the other side — "2+ BR"
-// (min only) is [2, ∞) and "up to 3BR" (max only) is [0, 3]. It used to collapse
-// to the one number it had, so a "2+ BR" buyer scored a 4BR home 0. The ±1 band
-// now also covers part-bedroom gaps: within the range → 20; 1 bedroom outside →
-// 10, rising toward 20 as the gap shrinks (a 2.5-per-unit duplex vs a 3BR+ buyer
-// → 15; it used to score 0 while a farther 2.0 scored 10); further out → 0.
+// Brief 41, for a RANGE (scalar null — how the Brief 32 scorer always calls it):
+//  - only ONE end set stays open on the other side — "2+ BR" (min only) is
+//    [2, ∞) and "up to 3BR" (max only) is [0, 3]. It used to collapse to the one
+//    number it had, so a "2+ BR" buyer scored a 4BR home 0.
+//  - the ±1 band covers part-bedroom gaps: 1 bedroom outside → 10, rising toward
+//    20 as the gap shrinks (a 2.5-per-unit duplex vs a 3BR+ buyer → 15; it used
+//    to score 0 while a farther 2.0 scored 10); further out → 0.
+// A scalar keeps its exact rule (±1 only at a gap of exactly 1), unchanged for
+// the legacy matcher, which passes mapISO's range midpoint (2.5) as a scalar.
 export function bedsScore(
   listingBeds: number | null | undefined,
   isoBeds: number | null | undefined,
@@ -41,8 +44,10 @@ export function bedsScore(
   const hi = rawHi ?? Number.POSITIVE_INFINITY // "N+" → no upper bound
 
   if (listingBeds >= lo && listingBeds <= hi) return 20 // in range — includes studio↔studio (0 in [0,0])
-  // Rounded so per-unit fractions (2.3, 3.3) don't miss the band by a float hair.
-  const distance = Math.round((listingBeds < lo ? lo - listingBeds : listingBeds - hi) * 1000) / 1000
+  const gap = listingBeds < lo ? lo - listingBeds : listingBeds - hi
+  if (isoBeds != null) return gap === 1 ? 10 : 0 // scalar: exact ±1, as before
+  // Rounded so per-unit fractions (2.7 vs 1.7) don't miss the band by a float hair.
+  const distance = Math.round(gap * 1000) / 1000
   if (distance <= 1) return Math.round(20 - 10 * distance) // ±1 from the range: 10 at a full bedroom, more when closer
   return 0                                                // mismatch (e.g. 2BR demand vs studio)
 }

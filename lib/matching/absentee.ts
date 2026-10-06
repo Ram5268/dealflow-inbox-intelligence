@@ -11,11 +11,13 @@ import type { ListingData } from './scorerTypes'
 
 const streetOf = (address: string | null): string | null => normalizeStreet(address?.split(',')[0])
 
-// true: absentee owner. false: owner lives there. null: unknown.
+// true: absentee owner. false: owner lives there. null: unknown. Streets only:
+// ListingData has no property city (CRM rows already carry ownerOccupied, which
+// the sync computed from street AND city). A mailing address with no property
+// street counts as absentee, as in the CRM rule.
 export function isAbsenteeOwner(listing: Pick<ListingData, 'ownerOccupied' | 'address' | 'alternateAddress'>): boolean | null {
   if (listing.ownerOccupied != null) return !listing.ownerOccupied
   const mailing = streetOf(listing.alternateAddress)
   if (!mailing) return null
-  const property = streetOf(listing.address)
-  return property ? mailing !== property : null
+  return mailing !== streetOf(listing.address)
 }

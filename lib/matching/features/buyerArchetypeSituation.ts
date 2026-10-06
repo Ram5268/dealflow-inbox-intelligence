@@ -1,6 +1,6 @@
 import type { ListingData, BuyerData, FeatureResult } from '../scorerTypes'
 import { isAbsenteeOwner } from '../absentee'
-import { listingPropertyClass } from '../propertyTypes'
+import { listingPropertyClasses } from '../propertyTypes'
 
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000
 
@@ -30,10 +30,10 @@ function profileOf(listing: ListingData, now: Date): SituationProfile {
   // streets) and the shared property-type vocabulary, so this feature agrees with
   // absenteeOwner and propertyType.
   const isAbsentee = isAbsenteeOwner(listing) === true
-  const cls = listingPropertyClass(listing)
-  const isMultifamily = (listing.unitCount ?? 0) >= 2 || cls === 'multifamily'
-  const isCondoCoop = !isMultifamily && (cls === 'condo' || cls === 'coop')
-  const isSFH = !isMultifamily && (cls === 'single_family' || cls === 'townhouse')
+  const cls = listingPropertyClasses(listing) // includes multi-family for 2+ units
+  const isMultifamily = cls.has('multifamily')
+  const isCondoCoop = !isMultifamily && (cls.has('condo') || cls.has('coop'))
+  const isSFH = !isMultifamily && (cls.has('single_family') || cls.has('townhouse'))
   const longTenure = listing.lastSaleDate != null && (now.getTime() - listing.lastSaleDate.getTime()) / MS_PER_YEAR >= 10
   return {
     hasDistress,

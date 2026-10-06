@@ -1,5 +1,5 @@
 import type { ListingData, BuyerData, FeatureResult } from '../scorerTypes'
-import { listingPropertyClass, propertyClass } from '../propertyTypes'
+import { listingPropertyClasses, propertyClasses } from '../propertyTypes'
 
 // 1.0 if listing type is in the buyer's list; 0.8 (MEDIUM) if the buyer didn't
 // specify; 0.2 if the listing type is set and NOT wanted; 0.5 (LOW) if unknown.
@@ -13,9 +13,10 @@ export function computePropertyType(listing: ListingData, buyer: BuyerData): Fea
   if (listing.propertyType == null) return { key, score: 0.5, confidence: 'LOW' }
   if (buyer.propertyTypes.length === 0) return { key, score: 0.8, confidence: 'MEDIUM' }
 
-  const listingClass = listingPropertyClass(listing)
-  const buyerClasses = buyer.propertyTypes.map(propertyClass)
-  if (listingClass != null && buyerClasses.includes(listingClass)) return { key, score: 1.0, confidence: 'HIGH' }
+  const listingClasses = listingPropertyClasses(listing)
+  const buyerContext = buyer.propertyTypes.join(' ')
+  const buyerClasses = buyer.propertyTypes.map(p => propertyClasses(p, buyerContext))
+  if (buyerClasses.some(cs => [...cs].some(c => listingClasses.has(c)))) return { key, score: 1.0, confidence: 'HIGH' }
 
   // Same words on both sides still count, whatever the class.
   const lt = listing.propertyType.toLowerCase().trim()
@@ -25,6 +26,6 @@ export function computePropertyType(listing: ListingData, buyer: BuyerData): Fea
   })
   if (textMatch) return { key, score: 1.0, confidence: 'HIGH' }
 
-  const allKnown = listingClass != null && buyerClasses.every(c => c != null)
+  const allKnown = listingClasses.size > 0 && buyerClasses.every(cs => cs.size > 0)
   return { key, score: 0.2, confidence: allKnown ? 'HIGH' : 'MEDIUM' }
 }

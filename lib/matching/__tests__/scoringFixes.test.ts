@@ -1,6 +1,7 @@
 // Brief 41 (PR 2) — regression tests for the Brief 40 audit's matching-score
-// findings H2, M7, M8, M9 and M10, ported from the auditor's proof tests. Each
-// one failed on main 7c4f063. Pure: type-only Prisma imports, no DB, no network.
+// findings H2, M7, M8, M9 and M10, ported from the auditor's proof tests. The
+// bug tests fail on main 7c4f063; the "unchanged" tests guard behaviour that
+// must stay the same. Pure: type-only Prisma imports, no DB, no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { ExtractedOpportunity, MojoContact } from '@prisma/client'
@@ -14,9 +15,9 @@ import { computeBuyerArchetypeSituation } from '../features/buyerArchetypeSituat
 import { computeRecency } from '../features/recency'
 import { scorePair } from '../scorer'
 import { mojoContactToListingData, opportunityToBuyerData } from '../adapters'
-import { propertyClass } from '../propertyTypes'
+import { propertyClasses } from '../propertyTypes'
 import { tierOf } from '../nightly/select'
-import { makeBuyer, makeContext, makeListing } from './fixtures'
+import { makeBuyer, makeListing } from './fixtures'
 import type { ScoringContext } from '../scorerTypes'
 
 const CREATED = new Date('2026-09-25T12:00:00Z')
@@ -79,7 +80,7 @@ test('H2: the ±1 band scales for part-bedroom gaps and keeps whole-bedroom resu
   assert.equal(bedsScore(2.5, null, 3, 6), 15)
   assert.equal(bedsScore(2.3, null, 3, 6), 13)
   assert.equal(bedsScore(6.5, null, 3, 6), 15)
-  assert.equal(bedsScore(3.3, null, 2, 2.3), 10) // a float-noise gap of exactly 1 is still in the band
+  assert.equal(bedsScore(2.7, null, null, 1.7), 10) // 2.7 − 1.7 = 1.0000000000000002 in floating point: still a full bedroom
   assert.equal(bedsScore(2, null, 3, 6), 10)
   assert.equal(bedsScore(1.9, null, 3, 6), 0)
   assert.equal(bedsScore(4, null, 2, 3), 10)
@@ -104,6 +105,10 @@ test('M10: scalar and fully-unknown cases are unchanged', () => {
   assert.equal(bedsScore(2, 2), 20)
   assert.equal(bedsScore(2, null, null, null), 5)
   assert.equal(bedsScore(null, null, 2, null), 5)
+  // The legacy matcher passes mapISO's range midpoint as a scalar: still exact ±1.
+  assert.equal(bedsScore(2, 2.5, 2, 3), 0)
+  assert.equal(bedsScore(3, 2.5, 2, 3), 0)
+  assert.equal(bedsScore(3.5, 2.5, 2, 3), 10)
 })
 
 test('M10: an inbox ISO saying "2+ BR" stays open-ended through the adapter (mapISO fills beds from the lone min)', () => {
@@ -134,14 +139,20 @@ test('M7: a buyer asking for "Multifamily" matches every CRM multi-family type',
 })
 
 test('M7: shared vocabulary on both sides', () => {
-  const cases: [string, string | null][] = [
-    ['Multifamily', 'multifamily'], ['multi-family', 'multifamily'], ['2-family', 'multifamily'], ['Two Family', 'multifamily'],
-    ['Duplex', 'multifamily'], ['Triplex', 'multifamily'], ['Residential Income (Multi-Family)', 'multifamily'],
-    ['Condo', 'condo'], ['condominium', 'condo'], ['Coop', 'coop'], ['co-op', 'coop'], ['Cooperative', 'coop'],
-    ['SFH', 'single_family'], ['single family', 'single_family'], ['Townhouse', 'townhouse'], ['brownstone', 'townhouse'],
-    ['duplex condo', 'condo'], ['mixed-use', 'mixed_use'], ['loft', null], ['', null],
+  const cases: [string, string[]][] = [
+    ['Multifamily', ['multifamily']], ['multi-family', ['multifamily']], ['multi', ['multifamily']], ['2-family', ['multifamily']],
+    ['Two Family', ['multifamily']], ['5-family', ['multifamily']], ['multiplex', ['multifamily']], ['multi-unit', ['multifamily']],
+    ['Duplex', ['multifamily']], ['Triplex', ['multifamily']], ['duplexes', ['multifamily']], ['Quadruplex', ['multifamily']],
+    ['Residential Income (Multi-Family)', ['multifamily']], ['Apartment House (5+ Units)', ['multifamily']], ['apartment building', ['multifamily']],
+    ['Condo', ['condo']], ['condominium', ['condo']], ['condop', ['condo']],
+    ['Coop', ['coop']], ['co-op', ['coop']], ['co op', ['coop']], ['Cooperative', ['coop']], ['co-operative', ['coop']],
+    ['SFH', ['single_family']], ['single family', ['single_family']], ['Townhouse', ['townhouse']], ['brownstone', ['townhouse']],
+    ['duplex condo', ['condo']], ['duplex penthouse', []], ['duplex apartment', []], ['multi-level', []],
+    ['mixed-use', ['mixed_use']], ['Mixed-Use Multi-Family', ['mixed_use', 'multifamily']], ['loft', []], ['', []],
   ]
-  for (const [text, want] of cases) assert.equal(propertyClass(text), want, text)
+  for (const [text, want] of cases) assert.deepEqual([...propertyClasses(text)].sort(), [...want].sort(), text)
+  // A buyer's bare "Duplex" next to "Condo" is a two-level apartment, not a 2-family house.
+  assert.deepEqual([...propertyClasses('Duplex', 'Condo Duplex')], [])
 })
 
 test('M7: a real mismatch stays HIGH; text outside the vocabulary is only MEDIUM', () => {
@@ -149,6 +160,10 @@ test('M7: a real mismatch stays HIGH; text outside the vocabulary is only MEDIUM
   assert.deepEqual(computePropertyType(triplex, makeBuyer({ propertyTypes: ['Condo', 'Coop'] })), { key: 'propertyType', score: 0.2, confidence: 'HIGH' })
   assert.deepEqual(computePropertyType(triplex, makeBuyer({ propertyTypes: ['Loft'] })), { key: 'propertyType', score: 0.2, confidence: 'MEDIUM' })
   assert.deepEqual(computePropertyType(makeListing({ propertyType: 'Houseboat' }), makeBuyer({ propertyTypes: ['Condo'] })), { key: 'propertyType', score: 0.2, confidence: 'MEDIUM' })
+  // A condo buyer's "duplex" (an apartment) doesn't match a 3-family house.
+  assert.notEqual(computePropertyType(triplex, makeBuyer({ propertyTypes: ['Condo', 'Duplex'] })).score, 1)
+  // Mixed-use multi-family matches a multi-family buyer.
+  assert.equal(computePropertyType(makeListing({ propertyType: 'Mixed-Use Multi-Family' }), makeBuyer({ propertyTypes: ['Multifamily'] })).score, 1)
   // unchanged: exact words, no buyer preference, unknown listing type
   assert.equal(computePropertyType(makeListing({ propertyType: 'Loft' }), makeBuyer({ propertyTypes: ['loft'] })).score, 1)
   assert.deepEqual(computePropertyType(triplex, makeBuyer({ propertyTypes: [] })), { key: 'propertyType', score: 0.8, confidence: 'MEDIUM' })
@@ -156,6 +171,15 @@ test('M7: a real mismatch stays HIGH; text outside the vocabulary is only MEDIUM
 })
 
 // ── M8: absentee owner ──────────────────────────────────────────────────────
+test('M7: the archetype feature uses the same classes', () => {
+  const inv = makeBuyer({ buyerArchetype: 'INVESTOR_LANDLORD' })
+  assert.equal(computeBuyerArchetypeSituation(makeListing({ propertyType: 'Mixed-Use Multi-Family' }), inv).score, 0.85)
+  assert.equal(computeBuyerArchetypeSituation(makeListing({ propertyType: 'Two Family' }), inv).score, 0.85)
+  assert.equal(computeBuyerArchetypeSituation(makeListing({ propertyType: 'duplex condo' }), inv).score, 0.55) // an apartment, not a 2-family house
+  assert.equal(computeBuyerArchetypeSituation(makeListing({ propertyType: 'condop' }), inv).score, 0.55)
+  assert.equal(computeBuyerArchetypeSituation(makeListing({ propertyType: 'Townhouse' }), inv).score, 0.4)
+})
+
 test('M8: an owner-occupied CRM seller (mailing = property street) is not absentee in either feature', () => {
   const row = (over: Record<string, unknown>) => mojoContactToListingData(contact({
     address: '361 Degraw St # 3', neighborhood: 'Carroll Gardens', zipCode: '11231',
@@ -171,6 +195,8 @@ test('M8: an owner-occupied CRM seller (mailing = property street) is not absent
   const sameStreet = row({ alternateAddress: '361 Degraw Street, Brooklyn, NY', ownerOccupied: null })
   assert.equal(computeAbsenteeOwner(sameStreet).score, 0.4)
   assert.equal(computeBuyerArchetypeSituation(sameStreet, investorCG).score, 0.85)
+  // A mailing address with no property street counts as absentee (the CRM rule).
+  assert.equal(computeAbsenteeOwner(row({ address: null, alternateAddress: '9 Palm Ave, Miami, FL', ownerOccupied: null })).score, 1)
   const elsewhere = row({ alternateAddress: '9 Palm Ave, Miami, FL', ownerOccupied: null })
   assert.equal(computeAbsenteeOwner(elsewhere).score, 1)
   assert.equal(computeBuyerArchetypeSituation(elsewhere, investorCG).score, 1)
@@ -189,6 +215,24 @@ test('M9: an identical CRM seller + buyer pair keeps its score and tier as the i
   assert.deepEqual(new Set(series).size, 1, series.join(' | '))
   assert.equal(tierOf(at(14)), tierOf(at(0)))
   assert.deepEqual(computeRecency(seller, new Date()), { key: 'recency', score: 0.5, confidence: 'LOW' })
+  // Recency doesn't apply to a contact at all: it neither votes nor counts as an
+  // unknown factor (which would lower every CRM seller's matchFit confidence).
+  const mf = scorePair(seller, cashBuyer, ctx(CREATED)).matchFit
+  assert.ok(!mf.unknownFactors.includes('recency'), mf.unknownFactors.join(','))
+  assert.ok(!('recency' in mf.contributions))
+})
+
+test('M9: a CRM seller keeps its matchFit confidence level (recency is left out, not counted unknown)', () => {
+  // A well-documented CRM seller: on main this pair had 8 abstentions (MEDIUM).
+  const seller = mojoContactToListingData(contact({
+    neighborhood: 'Carroll Gardens', zipCode: '11231', address: '361 Degraw St # 3', propertyTypeDetail: 'Duplex', unitCount: 2,
+    propertyBeds: 7, propertyBaths: 4, ownerOccupied: true, alternateAddress: '361 Degraw Street, Brooklyn, NY',
+    lastSaleDate: new Date('2007-09-29T00:00:00Z'), yearBuilt: 1899, buildingSqft: 2848, mojoList: 'Absentee Owners',
+  }))
+  const r = scorePair(seller, investor, ctx(CREATED)).matchFit
+  assert.ok(!r.unknownFactors.includes('recency'))
+  assert.equal(r.matchFitConfidence, r.unknownFactors.length <= 4 ? 'HIGH' : r.unknownFactors.length <= 8 ? 'MEDIUM' : 'LOW')
+  assert.notEqual(r.matchFitConfidence, 'LOW', r.unknownFactors.join(','))
 })
 
 test('M9: inbox listings still decay with age', () => {
@@ -197,5 +241,6 @@ test('M9: inbox listings still decay with age', () => {
   const old = computeRecency(makeListing({ createdAt: new Date(now.getTime() - 30 * DAY) }), now)
   assert.equal(fresh.confidence, 'HIGH')
   assert.ok(fresh.score > old.score)
-  void makeContext
+  // and an inbox listing still gets its recency vote
+  assert.ok('recency' in scorePair(makeListing({ createdAt: now }), makeBuyer(), { ...ctx(now), substitutionCounts: new Map() }).matchFit.contributions)
 })
