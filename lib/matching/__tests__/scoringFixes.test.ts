@@ -148,6 +148,7 @@ test('M7: shared vocabulary on both sides', () => {
     ['Coop', ['coop']], ['co-op', ['coop']], ['co op', ['coop']], ['Cooperative', ['coop']], ['co-operative', ['coop']],
     ['SFH', ['single_family']], ['single family', ['single_family']], ['Townhouse', ['townhouse']], ['brownstone', ['townhouse']],
     ['duplex condo', ['condo']], ['duplex penthouse', []], ['duplex apartment', []], ['multi-level', []],
+    ['2-unit duplex', ['multifamily']], ['Triplex - 3 unit building', ['multifamily']], ['2 fam', ['multifamily']], ['10-family', ['multifamily']],
     ['mixed-use', ['mixed_use']], ['Mixed-Use Multi-Family', ['mixed_use', 'multifamily']], ['loft', []], ['', []],
   ]
   for (const [text, want] of cases) assert.deepEqual([...propertyClasses(text)].sort(), [...want].sort(), text)
@@ -162,6 +163,9 @@ test('M7: a real mismatch stays HIGH; text outside the vocabulary is only MEDIUM
   assert.deepEqual(computePropertyType(makeListing({ propertyType: 'Houseboat' }), makeBuyer({ propertyTypes: ['Condo'] })), { key: 'propertyType', score: 0.2, confidence: 'MEDIUM' })
   // A condo buyer's "duplex" (an apartment) doesn't match a 3-family house.
   assert.notEqual(computePropertyType(triplex, makeBuyer({ propertyTypes: ['Condo', 'Duplex'] })).score, 1)
+  // A 65-unit new-development condo is not a multi-family house.
+  assert.notEqual(computePropertyType(makeListing({ propertyType: 'Condo', unitCount: 65 }), makeBuyer({ propertyTypes: ['Multifamily'] })).score, 1)
+  assert.equal(computePropertyType(makeListing({ propertyType: 'Duplex', unitCount: 2 }), makeBuyer({ propertyTypes: ['Multifamily'] })).score, 1)
   // Mixed-use multi-family matches a multi-family buyer.
   assert.equal(computePropertyType(makeListing({ propertyType: 'Mixed-Use Multi-Family' }), makeBuyer({ propertyTypes: ['Multifamily'] })).score, 1)
   // unchanged: exact words, no buyer preference, unknown listing type
