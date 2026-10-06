@@ -132,7 +132,7 @@ export async function runCalendarConfirm(args: {
 
   if (deps.alreadyWritten && (await deps.alreadyWritten(sessionId, { subject, startISO }))) {
     const text = "That's already on your calendar."
-    await persistMessages(text)
+    try { await persistMessages(text) } catch (err) { console.error('[DealFlow] Calendar confirm: saving the chat failed:', err) }
     return { text, wroteEvent: false, eventId: null }
   }
 
@@ -147,6 +147,7 @@ export async function runCalendarConfirm(args: {
     })
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
+    console.error('[DealFlow] Calendar confirm: the calendar write failed:', error)
     await persistMessages(CALENDAR_CONFIRM_FAILED)
     return { text: CALENDAR_CONFIRM_FAILED, wroteEvent: false, eventId: null, error }
   }

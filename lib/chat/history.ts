@@ -20,9 +20,12 @@ export function oldestFirst<T>(newestFirst: readonly T[]): T[] {
 
 // The model's conversation must start with a user turn. Messages are stored in
 // user/Drift pairs, but a "+" report (or a reply that failed to save) leaves a
-// lone Drift message, so the newest-30 window can start on one. Drop the Drift
-// messages before the first user message (none → an empty history).
-export function startAtUserTurn<T extends { role: string }>(messages: readonly T[]): T[] {
-  const first = messages.findIndex(m => m.role === 'user')
-  return first === -1 ? [] : messages.slice(first)
+// lone Drift message, so the newest-30 window can start on one. Rather than
+// drop it (a "+" report opens its chat, and follow-ups ask about it), put a
+// placeholder user turn in front.
+export const EARLIER_IN_CHAT = '(earlier in this chat)'
+export function startAtUserTurn<T extends { role: string; content: string }>(
+  messages: readonly T[],
+): Array<T | { role: 'user'; content: string }> {
+  return messages[0]?.role === 'assistant' ? [{ role: 'user', content: EARLIER_IN_CHAT }, ...messages] : [...messages]
 }

@@ -256,7 +256,6 @@ export async function POST(req: NextRequest) {
             touchSession:   (id) => prisma.chatSession.update({ where: { id }, data: { updatedAt: new Date() } }),
           },
         })
-        if (result.error) console.error('[DealFlow] Calendar confirm error:', result.error)
         return NextResponse.json({ sessionId: session.id, response: result.text, deals: [], suggestions: [] })
       } catch (err) {
         // Brief 41 (M17): never fall through to the AI after a failed confirm (it
