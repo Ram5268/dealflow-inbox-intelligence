@@ -19,6 +19,7 @@
 import { z } from 'zod'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Category } from '@prisma/client'
+import { safeLeadText, leadFallbackTitle } from './personalCircumstances'
 
 // ── The row shape every mapItem produces (subset of ExtractedOpportunity that
 //    an extractor sets; extractEmailV2 adds organizationId/rawEmailId/status). ─
@@ -687,7 +688,7 @@ EXTRACTION RULES:
 - address: the property address they want to list, if stated
 - price: their asking price or estimated value if mentioned
 - beds/baths/squareFeet: the property's details if stated
-- motivation: brief note on why they're selling if mentioned (estate, divorce, relocation, downsizing, etc.)
+- motivation: brief note on why they're selling if mentioned (relocation, downsizing, upsizing, investment, timing). Never record personal circumstances (estate, probate, inheritance, divorce, death, illness, family matters): use null instead, and leave them out of every other field too
 - availabilityDate: when they're thinking of listing ("YYYY-MM-DD" or null)
 - sourceAgentName/Email: the person who sent the email (seller or referring agent)
 - propertyType: condo, co-op, townhouse, multi-family, etc.
@@ -708,6 +709,12 @@ const SELLER_ITEM_REQUIRED = ['address', 'neighborhood', 'borough', 'city', 'sta
 
 function mapSeller(raw: unknown): OppRowData {
   const l = raw as SellerT
+  // Brief 41 (H9): personal circumstances are dropped from the title, summary,
+  // motivation and reason before saving, even if the model returns them.
+  const text = safeLeadText({
+    title: l.extractedTitle, summary: l.extractedSummary, reason: l.classificationReason, motivation: l.motivation,
+    fallbackTitle: leadFallbackTitle('SELLER_LEAD', l.address ?? l.neighborhood),
+  })
   return {
     category: 'SELLER_LEAD', transactionType: 'SALE', propertyType: l.propertyType ?? null,
     address: l.address ?? null, neighborhood: l.neighborhood ?? null, borough: l.borough ?? null,
@@ -717,9 +724,9 @@ function mapSeller(raw: unknown): OppRowData {
     squareFeet: l.squareFeet ?? null, availabilityDate: l.availabilityDate ?? null,
     sourceAgentName: l.sourceAgentName ?? null, sourceAgentEmail: l.sourceAgentEmail ?? null,
     sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'seller', status: l.status ?? null,
-    extractedTitle: l.extractedTitle,
-    extractedSummary: l.motivation ? `${l.extractedSummary} Motivation: ${l.motivation}` : l.extractedSummary,
-    classificationReason: l.classificationReason, confidenceScore: l.confidenceScore,
+    extractedTitle: text.title,
+    extractedSummary: text.summary,
+    classificationReason: text.reason, confidenceScore: l.confidenceScore,
   }
 }
 
@@ -792,6 +799,13 @@ const LANDLORD_ITEM_REQUIRED = ['address', 'neighborhood', 'borough', 'city', 's
 
 function mapLandlord(raw: unknown): OppRowData {
   const l = raw as LandlordT
+  // Brief 41 (H9): the same filter as seller leads.
+  const text = safeLeadText({
+    title: l.extractedTitle,
+    summary: l.leaseType ? `${l.extractedSummary} Lease: ${l.leaseType}` : l.extractedSummary,
+    reason: l.classificationReason,
+    fallbackTitle: leadFallbackTitle('LANDLORD_LEAD', l.address ?? l.neighborhood),
+  })
   return {
     category: 'LANDLORD_LEAD', transactionType: 'RENTAL', propertyType: l.propertyType ?? null,
     address: l.address ?? null, neighborhood: l.neighborhood ?? null, borough: l.borough ?? null,
@@ -801,9 +815,9 @@ function mapLandlord(raw: unknown): OppRowData {
     squareFeet: l.squareFeet ?? null, availabilityDate: l.availabilityDate ?? null,
     sourceAgentName: l.sourceAgentName ?? null, sourceAgentEmail: l.sourceAgentEmail ?? null,
     sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'landlord', status: l.status ?? null,
-    extractedTitle: l.extractedTitle,
-    extractedSummary: l.leaseType ? `${l.extractedSummary} Lease: ${l.leaseType}` : l.extractedSummary,
-    classificationReason: l.classificationReason, confidenceScore: l.confidenceScore,
+    extractedTitle: text.title,
+    extractedSummary: text.summary,
+    classificationReason: text.reason, confidenceScore: l.confidenceScore,
   }
 }
 

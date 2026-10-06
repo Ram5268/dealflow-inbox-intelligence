@@ -9,6 +9,7 @@ import { lookupPluto, type PlutoRecord } from './lookupPluto'
 import { hasCondoDeclaration, splitBbl } from './lookupAcris'
 import { classifyBuildingClass, looksLikeCoopOwner } from './bldgClassToType'
 import { readCache, writeCache } from './cache'
+import { COOP_OWNER_REASON, withoutOwnerName } from './ownerName'
 
 export interface EnrichableOpportunity {
   category:        string
@@ -160,7 +161,6 @@ async function finish(
       latitude:            geo.lat,
       longitude:           geo.lng,
       bldgclass:           pluto?.bldgclass ?? null,
-      ownername:           pluto?.ownername ?? null,
       unitsRes:            toInt(pluto?.unitsres),
       unitsTotal:          toInt(pluto?.unitstotal),
       yearBuilt:           toInt(pluto?.yearbuilt),
@@ -208,7 +208,7 @@ export async function resolvePropertyType(opp: EnrichableOpportunity): Promise<E
   if (cached) {
     return {
       propertyType:       cached.propertyType,
-      propertyTypeReason: `cached:${cached.propertyTypeReason}`,
+      propertyTypeReason: `cached:${withoutOwnerName(cached.propertyTypeReason)}`,
       confidence:         cached.confidence,
     }
   }
@@ -276,9 +276,10 @@ export async function resolvePropertyType(opp: EnrichableOpportunity): Promise<E
   }
 
   // 10. Ambiguous walk-up/elevator. Co-op-corp ownername heuristic first (skips ACRIS).
+  // Brief 41 (H8): the owner's name is checked in memory only; the reason and
+  // the cache never record it.
   if (looksLikeCoopOwner(pluto.ownername)) {
-    const owner = (pluto.ownername ?? '').slice(0, 40)
-    return finish(key, orgId, geo, pluto, 'co-op', false, `pluto_class=${cls}+ownername_corp:${owner}`, 'medium')
+    return finish(key, orgId, geo, pluto, 'co-op', false, `pluto_class=${cls}+${COOP_OWNER_REASON}`, 'medium')
   }
 
   // 11. ACRIS condo-declaration override.

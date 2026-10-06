@@ -2,6 +2,7 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import type { ExtractorInput, ExtractionResult } from '../types'
+import { safeLeadText, leadFallbackTitle, mentionsPersonalCircumstances } from '../../extraction/personalCircumstances'
 
 export const EXTRACTOR_VERSION = '1.0'
 
@@ -23,7 +24,7 @@ const SellerItemSchema = z.object({
   sourceAgentName:  z.string().nullable(),   // the seller or referring agent
   sourceAgentEmail: z.string().nullable(),
   sourceBrokerage:  z.string().nullable(),
-  motivation:       z.string().nullable(),   // why they're selling (divorce, estate, relocation, etc.)
+  motivation:       z.string().nullable(),   // why they're selling (relocation, downsizing, etc.; never personal circumstances)
   extractedTitle:   z.string().nullish().transform(v => v ?? ''),
   extractedSummary: z.string().nullish().transform(v => v ?? ''),
   classificationReason: z.string().nullish().transform(v => v ?? ''),
@@ -46,7 +47,7 @@ EXTRACTION RULES:
 - address: the property address they want to list, if stated
 - price: their asking price or estimated value if mentioned
 - beds/baths/squareFeet: the property's details if stated
-- motivation: brief note on why they're selling if mentioned (estate, divorce, relocation, downsizing, etc.)
+- motivation: brief note on why they're selling if mentioned (relocation, downsizing, upsizing, investment, timing). Never record personal circumstances (estate, probate, inheritance, divorce, death, illness, family matters): use null instead, and leave them out of every other field too
 - availabilityDate: when they're thinking of listing ("YYYY-MM-DD" or null)
 - sourceAgentName/Email: the person who sent the email (seller or referring agent)
 - propertyType: condo, co-op, townhouse, multi-family, etc.
@@ -126,9 +127,14 @@ export default async function extract(input: ExtractorInput): Promise<Extraction
     sourceBrokerage:      l.sourceBrokerage ?? null,
     clientSide:           'seller',
     status:               l.status ?? null,
-    extractedTitle:       l.extractedTitle,
-    extractedSummary:     l.motivation ? `${l.extractedSummary} Motivation: ${l.motivation}` : l.extractedSummary,
-    classificationReason: l.classificationReason,
+    // Brief 41 (H9): personal circumstances are dropped from the title, summary,
+    // motivation and reason before saving (the same helper as V2's mapSeller).
+    ...(({ title, summary, reason }) => ({ extractedTitle: title, extractedSummary: summary, classificationReason: reason }))(
+      safeLeadText({
+        title: l.extractedTitle, summary: l.extractedSummary, reason: l.classificationReason, motivation: l.motivation,
+        fallbackTitle: leadFallbackTitle('SELLER_LEAD', l.address ?? l.neighborhood),
+      }),
+    ),
     confidenceScore:      l.confidenceScore,
   }))
 }
@@ -158,7 +164,7 @@ function schemaFailed(input: ExtractorInput, reason: string): ExtractionResult {
     sourceBrokerage:      null,
     clientSide:           'seller',
     status:               null,
-    extractedTitle:       input.subject ?? '(seller lead)',
+    extractedTitle:       input.subject && !mentionsPersonalCircumstances(input.subject) ? input.subject : '(seller lead)',
     extractedSummary:     'Extraction failed — requires manual review.',
     classificationReason: reason,
     confidenceScore:      0,
