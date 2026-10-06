@@ -6,18 +6,33 @@
 // already stored. A production data step: run it only with Ryan's OK. It never
 // prints a name, only counts.
 //
+// It also counts (never changes) stored listing summaries that mention estate,
+// probate, divorce, a death and the like (Brief 41, H9), for Ryan to decide on.
+//
 //   npx tsx scripts/brief41-null-ownernames.ts            # dry run (default): counts only
 //   npx tsx scripts/brief41-null-ownernames.ts --apply    # null the names, strip them from reasons
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 
+// The words lib/extraction/personalCircumstances.ts filters (Postgres regex;
+// "estate" is left out here because most summaries say "real estate").
+const PERSONAL_SQL = '\\m(probate|divorc\\w*|passed away|deceased|death|died|dying|heirs?|inherit\\w*|executor|executrix|widow\\w*|funeral)\\M'
+
 async function counts() {
-  const [row] = await prisma.$queryRaw<Array<{ owners: number; cacheReasons: number; oppReasons: number }>>`
+  const [row] = await prisma.$queryRaw<Array<{ owners: number; cacheReasons: number; oppReasons: number; personal: number; personalTest: number }>>`
     SELECT
       (SELECT COUNT(*)::int FROM "NycParcelCache" WHERE ownername IS NOT NULL) AS owners,
       (SELECT COUNT(*)::int FROM "NycParcelCache" WHERE "propertyTypeReason" LIKE '%ownername_corp:%') AS "cacheReasons",
-      (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE "propertyTypeReason" LIKE '%ownername_corp:%') AS "oppReasons"`
-  return { parcelsWithOwnerName: row.owners, cacheReasonsWithName: row.cacheReasons, opportunityReasonsWithName: row.oppReasons }
+      (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE "propertyTypeReason" LIKE '%ownername_corp:%') AS "oppReasons",
+      (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE "extractedSummary" ~* ${PERSONAL_SQL}) AS personal,
+      (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE "extractedSummary" ~* ${PERSONAL_SQL} AND "isTestData") AS "personalTest"`
+  return {
+    parcelsWithOwnerName: row.owners,
+    cacheReasonsWithName: row.cacheReasons,
+    opportunityReasonsWithName: row.oppReasons,
+    summariesMentioningPersonalCircumstances: row.personal, // counted only, never changed here
+    ofWhichTestData: row.personalTest,
+  }
 }
 
 async function main() {
