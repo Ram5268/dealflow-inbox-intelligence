@@ -141,7 +141,11 @@ export function scorePair(
     computeSourceListMotivation(listing),
     computeSubstitutionScarcity(buyer, context),
     computeBuyerArchetypeSituation(listing, buyer),
-    computeRecency(listing, context.now),
+    // Brief 41 (M9): a seller contact has no market-event date (its createdAt is
+    // the DealFlow import date), so recency doesn't apply to it at all. Leaving
+    // it out, rather than abstaining, keeps it from counting as an unknown factor
+    // and pushing every CRM seller's matchFit confidence down a level.
+    ...(listing.sourceType === 'contact' ? [] : [computeRecency(listing, context.now)]),
   ]
 
   const matchFit = capForPriceChance(composeMatchFit(features), listing, buyer)
