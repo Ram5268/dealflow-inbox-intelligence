@@ -11,7 +11,8 @@ const src = (p: string) => readFileSync(join(ROOT, p), 'utf8')
 
 test('old reasons lose the owner name; others are untouched', () => {
   assert.equal(withoutOwnerName('pluto_class=D4+ownername_corp:123 MAIN ST OWNERS CORP'), 'pluto_class=D4+ownername_corp')
-  assert.equal(withoutOwnerName('cached:pluto_class=C6+ownername_corp:ACME TENANTS CORP+x'), 'cached:pluto_class=C6+ownername_corp+x')
+  // The name is always the end of the note, "+" included.
+  assert.equal(withoutOwnerName('cached:pluto_class=C6+ownername_corp:A+B OWNERS CORP'), 'cached:pluto_class=C6+ownername_corp')
   assert.equal(withoutOwnerName('pluto_class=A1:one_family'), 'pluto_class=A1:one_family')
   assert.equal(COOP_OWNER_REASON, 'ownername_corp')
 })

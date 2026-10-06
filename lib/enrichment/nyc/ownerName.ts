@@ -6,5 +6,5 @@ export const COOP_OWNER_REASON = 'ownername_corp'
 // Reasons written before Brief 41 (and cached ones) carried the name:
 // "pluto_class=D4+ownername_corp:123 MAIN ST OWNERS CORP". Drop it.
 export function withoutOwnerName(reason: string): string {
-  return reason.replace(/ownername_corp:[^+]*/g, COOP_OWNER_REASON)
+  return reason.replace(/ownername_corp:.*$/, COOP_OWNER_REASON)
 }

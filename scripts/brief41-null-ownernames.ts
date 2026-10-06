@@ -6,31 +6,37 @@
 // already stored. A production data step: run it only with Ryan's OK. It never
 // prints a name, only counts.
 //
-// It also counts (never changes) stored listing summaries that mention estate,
-// probate, divorce, a death and the like (Brief 41, H9), for Ryan to decide on.
+// It also counts (never changes) stored listing titles and summaries that
+// mention estate, probate, divorce, a death and the like (Brief 41, H9), and
+// chat messages whose saved deal cards still carry an owner name, for Ryan to
+// decide on.
 //
 //   npx tsx scripts/brief41-null-ownernames.ts            # dry run (default): counts only
 //   npx tsx scripts/brief41-null-ownernames.ts --apply    # null the names, strip them from reasons
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 
-// The words lib/extraction/personalCircumstances.ts filters (Postgres regex;
-// "estate" is left out here because most summaries say "real estate").
-const PERSONAL_SQL = '\\m(probate|divorc\\w*|passed away|deceased|death|died|dying|heirs?|inherit\\w*|executor|executrix|widow\\w*|funeral)\\M'
+// Roughly the words lib/extraction/personalCircumstances.ts filters (Postgres
+// regex; "estate" only when not "real estate").
+const PERSONAL_SQL =
+  '\\m(probat\\w*|divorc\\w*|ex-(wife|husband|spouse)|passed\\s+away|deceased|deaths?|died|dies|funeral|widow\\w*|heirs?|inherit\\w*|' +
+  'executors?|executrix|(?<!real[ -])estates?|terminally ill|illness|cancer|hospice|nursing home|assisted living|dementia|alzheimer\\w*)\\M'
 
 async function counts() {
-  const [row] = await prisma.$queryRaw<Array<{ owners: number; cacheReasons: number; oppReasons: number; personal: number; personalTest: number }>>`
+  const [row] = await prisma.$queryRaw<Array<{ owners: number; cacheReasons: number; oppReasons: number; chatCards: number; personal: number; personalTest: number }>>`
     SELECT
       (SELECT COUNT(*)::int FROM "NycParcelCache" WHERE ownername IS NOT NULL) AS owners,
       (SELECT COUNT(*)::int FROM "NycParcelCache" WHERE "propertyTypeReason" LIKE '%ownername_corp:%') AS "cacheReasons",
       (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE "propertyTypeReason" LIKE '%ownername_corp:%') AS "oppReasons",
-      (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE "extractedSummary" ~* ${PERSONAL_SQL}) AS personal,
-      (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE "extractedSummary" ~* ${PERSONAL_SQL} AND "isTestData") AS "personalTest"`
+      (SELECT COUNT(*)::int FROM "ChatMessage" WHERE "dealsJson"::text LIKE '%ownername_corp:%') AS "chatCards",
+      (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE "extractedSummary" ~* ${PERSONAL_SQL} OR "extractedTitle" ~* ${PERSONAL_SQL}) AS personal,
+      (SELECT COUNT(*)::int FROM "ExtractedOpportunity" WHERE ("extractedSummary" ~* ${PERSONAL_SQL} OR "extractedTitle" ~* ${PERSONAL_SQL}) AND "isTestData") AS "personalTest"`
   return {
     parcelsWithOwnerName: row.owners,
     cacheReasonsWithName: row.cacheReasons,
     opportunityReasonsWithName: row.oppReasons,
-    summariesMentioningPersonalCircumstances: row.personal, // counted only, never changed here
+    chatMessagesWithOwnerNameInSavedCards: row.chatCards, // counted only, never changed here
+    listingsMentioningPersonalCircumstances: row.personal, // title or summary; counted only, never changed here
     ofWhichTestData: row.personalTest,
   }
 }
@@ -45,8 +51,9 @@ async function main() {
   }
   const [owners, cacheReasons, oppReasons] = await prisma.$transaction([
     prisma.$executeRaw`UPDATE "NycParcelCache" SET ownername = NULL WHERE ownername IS NOT NULL`,
-    prisma.$executeRaw`UPDATE "NycParcelCache" SET "propertyTypeReason" = regexp_replace("propertyTypeReason", 'ownername_corp:[^+]*', 'ownername_corp', 'g') WHERE "propertyTypeReason" LIKE '%ownername_corp:%'`,
-    prisma.$executeRaw`UPDATE "ExtractedOpportunity" SET "propertyTypeReason" = regexp_replace("propertyTypeReason", 'ownername_corp:[^+]*', 'ownername_corp', 'g') WHERE "propertyTypeReason" LIKE '%ownername_corp:%'`,
+    // The name is always the end of the note ("+" included).
+    prisma.$executeRaw`UPDATE "NycParcelCache" SET "propertyTypeReason" = regexp_replace("propertyTypeReason", 'ownername_corp:.*$', 'ownername_corp') WHERE "propertyTypeReason" LIKE '%ownername_corp:%'`,
+    prisma.$executeRaw`UPDATE "ExtractedOpportunity" SET "propertyTypeReason" = regexp_replace("propertyTypeReason", 'ownername_corp:.*$', 'ownername_corp') WHERE "propertyTypeReason" LIKE '%ownername_corp:%'`,
   ])
   console.log(JSON.stringify({ updated: { owners, cacheReasons, oppReasons }, after: await counts() }, null, 2))
 }

@@ -2,7 +2,7 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import type { ExtractorInput, ExtractionResult } from '../types'
-import { safeMotivation, withoutPersonalCircumstances } from '../../extraction/personalCircumstances'
+import { safeLeadText, leadFallbackTitle, mentionsPersonalCircumstances } from '../../extraction/personalCircumstances'
 
 export const EXTRACTOR_VERSION = '1.0'
 
@@ -127,10 +127,14 @@ export default async function extract(input: ExtractorInput): Promise<Extraction
     sourceBrokerage:      l.sourceBrokerage ?? null,
     clientSide:           'seller',
     status:               l.status ?? null,
-    extractedTitle:       l.extractedTitle,
-    // Brief 41 (H9): personal circumstances are dropped before saving.
-    extractedSummary:     ((s, m) => (m ? `${s} Motivation: ${m}`.trim() : s))(withoutPersonalCircumstances(l.extractedSummary), safeMotivation(l.motivation)),
-    classificationReason: l.classificationReason,
+    // Brief 41 (H9): personal circumstances are dropped from the title, summary,
+    // motivation and reason before saving (the same helper as V2's mapSeller).
+    ...(({ title, summary, reason }) => ({ extractedTitle: title, extractedSummary: summary, classificationReason: reason }))(
+      safeLeadText({
+        title: l.extractedTitle, summary: l.extractedSummary, reason: l.classificationReason, motivation: l.motivation,
+        fallbackTitle: leadFallbackTitle('SELLER_LEAD', l.address ?? l.neighborhood),
+      }),
+    ),
     confidenceScore:      l.confidenceScore,
   }))
 }
@@ -160,7 +164,7 @@ function schemaFailed(input: ExtractorInput, reason: string): ExtractionResult {
     sourceBrokerage:      null,
     clientSide:           'seller',
     status:               null,
-    extractedTitle:       input.subject ?? '(seller lead)',
+    extractedTitle:       input.subject && !mentionsPersonalCircumstances(input.subject) ? input.subject : '(seller lead)',
     extractedSummary:     'Extraction failed — requires manual review.',
     classificationReason: reason,
     confidenceScore:      0,

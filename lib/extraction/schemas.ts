@@ -19,7 +19,7 @@
 import { z } from 'zod'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Category } from '@prisma/client'
-import { safeMotivation, withoutPersonalCircumstances } from './personalCircumstances'
+import { safeLeadText, leadFallbackTitle } from './personalCircumstances'
 
 // ── The row shape every mapItem produces (subset of ExtractedOpportunity that
 //    an extractor sets; extractEmailV2 adds organizationId/rawEmailId/status). ─
@@ -709,6 +709,12 @@ const SELLER_ITEM_REQUIRED = ['address', 'neighborhood', 'borough', 'city', 'sta
 
 function mapSeller(raw: unknown): OppRowData {
   const l = raw as SellerT
+  // Brief 41 (H9): personal circumstances are dropped from the title, summary,
+  // motivation and reason before saving, even if the model returns them.
+  const text = safeLeadText({
+    title: l.extractedTitle, summary: l.extractedSummary, reason: l.classificationReason, motivation: l.motivation,
+    fallbackTitle: leadFallbackTitle('SELLER_LEAD', l.address ?? l.neighborhood),
+  })
   return {
     category: 'SELLER_LEAD', transactionType: 'SALE', propertyType: l.propertyType ?? null,
     address: l.address ?? null, neighborhood: l.neighborhood ?? null, borough: l.borough ?? null,
@@ -718,18 +724,10 @@ function mapSeller(raw: unknown): OppRowData {
     squareFeet: l.squareFeet ?? null, availabilityDate: l.availabilityDate ?? null,
     sourceAgentName: l.sourceAgentName ?? null, sourceAgentEmail: l.sourceAgentEmail ?? null,
     sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'seller', status: l.status ?? null,
-    extractedTitle: l.extractedTitle,
-    extractedSummary: sellerSummary(l.extractedSummary, l.motivation),
-    classificationReason: l.classificationReason, confidenceScore: l.confidenceScore,
+    extractedTitle: text.title,
+    extractedSummary: text.summary,
+    classificationReason: text.reason, confidenceScore: l.confidenceScore,
   }
-}
-
-// Brief 41 (H9): personal circumstances are dropped before saving, even if the
-// model returns them despite the prompt.
-function sellerSummary(summary: string, motivation: string | null | undefined): string {
-  const safe = withoutPersonalCircumstances(summary)
-  const m = safeMotivation(motivation)
-  return m ? `${safe} Motivation: ${m}`.trim() : safe
 }
 
 const SELLER_SPEC: ExtractionSpec = {

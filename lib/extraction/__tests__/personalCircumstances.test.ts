@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { EXTRACTION_SPEC_BY_CATEGORY } from '../schemas'
-import { mentionsPersonalCircumstances, safeMotivation, withoutPersonalCircumstances } from '../personalCircumstances'
+import { mentionsPersonalCircumstances, safeMotivation, withoutPersonalCircumstances, safeLeadText, sellerSummary, leadFallbackTitle } from '../personalCircumstances'
 
 const ROOT = join(__dirname, '..', '..', '..')
 const ctx = { subject: 's', senderName: null, senderEmail: null }
@@ -38,6 +38,35 @@ test('a motivation about probate, death or divorce is dropped before saving; the
   assert.equal(row.extractedSummary, 'Owner wants to list. Three units, tenant in place.')
 })
 
+test('the title and the classification reason are cleaned too (Brief 41 review)', () => {
+  const row = EXTRACTION_SPEC_BY_CATEGORY.SELLER_LEAD!.mapItem(
+    lead({ extractedTitle: 'Probate sale – 3-family in Bed-Stuy', classificationReason: 'Seller lead. Owner died in May.' }),
+    ctx,
+  )
+  assert.equal(row.extractedTitle, 'Seller lead – 12 Example St')
+  assert.equal(row.classificationReason, 'Seller lead.')
+  const emptied = safeLeadText({ title: 'x', summary: 's', reason: 'The estate is selling.', fallbackTitle: 'Seller lead' })
+  assert.equal(emptied.reason, 'Classified from the email; personal details left out.')
+  assert.equal(leadFallbackTitle('LANDLORD_LEAD', null), 'Landlord lead')
+})
+
+test('one helper builds the stored summary for V1 and V2', () => {
+  assert.equal(sellerSummary('Owner wants to list. Divorce pending.', 'downsizing'), 'Owner wants to list. Motivation: downsizing')
+  assert.equal(sellerSummary('Owner wants to list.', 'mom passed in March'), 'Owner wants to list.')
+  const v1 = readFileSync(join(ROOT, 'lib/ingestion/extractors/sellerLeadExtractor.ts'), 'utf8')
+  assert.match(v1, /safeLeadText\(\{/)
+  assert.match(v1, /input\.subject && !mentionsPersonalCircumstances\(input\.subject\)/)
+  assert.doesNotMatch(v1, /extractedSummary:\s*l\.extractedSummary/)
+})
+
+test('every writer of seller/landlord free text uses the filter', () => {
+  for (const f of ['lib/ai.ts', 'lib/extraction/extractEmailV2.ts']) {
+    assert.match(readFileSync(join(ROOT, f), 'utf8'), /safeLeadText\(/, f)
+  }
+  const ai = readFileSync(join(ROOT, 'lib/ai.ts'), 'utf8')
+  assert.match(ai, /return results\.map\(withoutPersonalLeadText\)/)
+})
+
 test('an ordinary motivation is still saved', () => {
   const row = EXTRACTION_SPEC_BY_CATEGORY.SELLER_LEAD!.mapItem(lead({ motivation: 'relocating to Boston for work' }), ctx)
   assert.equal(row.extractedSummary, 'Owner wants to list. Motivation: relocating to Boston for work')
@@ -45,13 +74,27 @@ test('an ordinary motivation is still saved', () => {
 
 test('the filter catches the sensitive words and leaves real-estate talk alone', () => {
   for (const s of ['probate', 'going through a divorce', 'divorcing', 'owner passed away', 'the deceased owner', 'heirs want to sell',
-    'inherited the house', 'executor of the will', 'recently widowed', 'estate sale', 'the Smith estate']) {
+    'inherited the house', 'executor of the will', 'recently widowed', 'estate sale', 'the Smith estate',
+    // Brief 41 review: phrasings the first version missed.
+    'the will was probated', 'probating', 'executors', 'co-executors', 'mom passed in March', 'after her passing',
+    'her late husband', 'passed  away', 'passed\naway', 'the owner is dead', 'owner dies', 'two deaths', 'the couple separated',
+    'his ex-wife', 'terminally ill', 'owner is ill', 'cancer', 'moving to hospice', 'going into a nursing home',
+    'assisted living', 'health reasons']) {
     assert.equal(mentionsPersonalCircumstances(s), true, s)
   }
-  for (const s of ['real estate investor', 'relocating', 'downsizing', 'needs a bigger place', 'tired landlord']) {
+  for (const s of ['real estate investor', 'relocating', 'downsizing', 'needs a bigger place', 'tired landlord',
+    'real-estate investor', 'Real  estate', 'estate agent', 'Single-family home in Jamaica Estates, Queens',
+    'Estates at Park Slope', 'estate-sized lot', 'the deal died at contract', 'interest died down', 'dying to move to Florida',
+    'executive', 'deathly quiet', 'heirloom', 'their', 'inherent', 'still', 'ill-fated', 'passed inspection']) {
     assert.equal(mentionsPersonalCircumstances(s), false, s)
   }
   assert.equal(safeMotivation('  downsizing  '), 'downsizing')
   assert.equal(safeMotivation(null), null)
   assert.equal(withoutPersonalCircumstances('A. Divorce pending! B?'), 'A. B?')
+  // Lines, quotes and abbreviations (Brief 41 review)
+  assert.equal(withoutPersonalCircumstances('Owner wants to list\nDivorce pending\nThree units.'), 'Owner wants to list Three units.')
+  assert.equal(withoutPersonalCircumstances('Owner said "my wife died." Three units.'), 'Three units.')
+  assert.equal(withoutPersonalCircumstances('Seller Mr. Smith is the executor. Three units.'), 'Three units.')
+  // Nothing to drop: the text comes back exactly as it was, newlines included.
+  assert.equal(withoutPersonalCircumstances('Three units.\nTenant in place.'), 'Three units.\nTenant in place.')
 })

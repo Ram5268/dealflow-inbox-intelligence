@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
+import { LEAD_CATEGORIES, leadFallbackTitle, safeLeadText } from './extraction/personalCircumstances'
 
 export interface EmailInput {
   subject: string
@@ -210,10 +211,20 @@ export async function classifyAndExtractEmail(
   email: EmailInput
 ): Promise<ExtractionResult[]> {
   const provider = process.env.AI_PROVIDER ?? 'openai'
-  if (provider === 'anthropic') {
-    return extractWithAnthropic(email)
-  }
-  return extractWithOpenAI(email)
+  const results = provider === 'anthropic' ? await extractWithAnthropic(email) : await extractWithOpenAI(email)
+  return results.map(withoutPersonalLeadText)
+}
+
+// Brief 41 (H9): a seller's or landlord's personal circumstances (estate,
+// probate, divorce, a death, illness) never reach a saved row. Every caller
+// (sync/reextract, sync/reclassify, Outlook sync) saves these results.
+export function withoutPersonalLeadText(r: ExtractionResult): ExtractionResult {
+  if (!LEAD_CATEGORIES.has(r.category)) return r
+  const t = safeLeadText({
+    title: r.extractedTitle, summary: r.extractedSummary, reason: r.classificationReason,
+    fallbackTitle: leadFallbackTitle(r.category, r.address ?? r.neighborhood),
+  })
+  return { ...r, extractedTitle: t.title, extractedSummary: t.summary, classificationReason: t.reason }
 }
 
 export interface SearchCriteria {
