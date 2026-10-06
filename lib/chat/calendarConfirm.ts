@@ -1,9 +1,9 @@
 // Brief 8.0-lite Fix #2 — the confirmed-calendar-write side of the chat route's
 // two-step gate (LLM proposes a pendingEvent → user confirms → this runs). The
-// confirm-word regex + pendingEvent detection stay inline in app/api/chat/route.ts;
-// only these side effects live here so they can be (a) guarded by matching test
-// mode and (b) unit-tested with injected fakes — the repo has no route-test
-// harness, and a real POST /me/events is off-limits this brief (tenant-locked).
+// plain-yes check (isCalendarConfirm, below) and the pendingEvent detection run
+// in app/api/chat/route.ts; the side effects live here so they can be (a) guarded
+// by matching test mode and (b) unit-tested with injected fakes — the repo has no
+// route-test harness, and a real POST /me/events is off-limits this brief.
 //
 // Dependencies are injected so the test never touches Prisma or Graph.
 
@@ -17,15 +17,18 @@ export const CALENDAR_CONFIRM_FAILED = "I couldn't add that to your calendar, so
 // don't matter. Everything else goes to Drift as a normal message.
 const CONFIRM_PHRASES = new Set([
   'yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'confirm', 'confirmed',
-  'do it', 'go ahead', 'go for it', 'add it', 'book it', 'please do',
-  'looks good', 'sounds good', 'yes do it', 'yes add it',
+  'do it', 'go ahead', 'go for it', 'add it', 'book it', 'please do', 'please add it',
+  'go ahead and add it', 'go ahead and book it', 'looks good', 'sounds good',
 ])
 const LEAD_INS = new Set(['yes', 'yeah', 'yep', 'ok', 'okay', 'sure'])
 const POLITE_TAIL = /\s+(please|thanks|thank you)$/
+const FILLERS = /^((uh|um|er|hmm)\s+)+/ // voice transcripts: "Um, yes."
+const TO_CALENDAR = /\s+to (my|the) (calendar|outlook)$/
 
 export function isCalendarConfirm(message: string): boolean {
-  let t = message.toLowerCase().replace(/[.,!?;:'"’“”]/g, ' ').replace(/\s+/g, ' ').trim()
-  t = t.replace(POLITE_TAIL, '').trim()
+  if (message.trim().endsWith('?')) return false // "Yes?" asks, it doesn't confirm
+  let t = message.toLowerCase().replace(/[.,!;:'"’“”…]/g, ' ').replace(/\s+/g, ' ').trim()
+  t = t.replace(FILLERS, '').replace(POLITE_TAIL, '').replace(TO_CALENDAR, '').trim()
   if (CONFIRM_PHRASES.has(t)) return true
   const space = t.indexOf(' ')
   return space > 0 && LEAD_INS.has(t.slice(0, space)) && CONFIRM_PHRASES.has(t.slice(space + 1))
@@ -40,6 +43,10 @@ export interface PendingEventInput {
 }
 
 export interface ConfirmDeps {
+  // Brief 41: was this exact event already written in this session? (A reply
+  // that failed to save leaves the proposal as the last message, so a second
+  // "yes" must not book it twice.) Optional for older callers.
+  alreadyWritten?: (sessionId: string, event: { subject: string; startISO: string }) => Promise<boolean>
   // False unless GRAPH_ENABLED is exactly 'true' (Outlook is paused, Brief 41):
   // skip the write and say so, still log the chat.
   graphOn: boolean
@@ -123,6 +130,12 @@ export async function runCalendarConfirm(args: {
     return { text, wroteEvent: false, eventId: null }
   }
 
+  if (deps.alreadyWritten && (await deps.alreadyWritten(sessionId, { subject, startISO }))) {
+    const text = "That's already on your calendar."
+    await persistMessages(text)
+    return { text, wroteEvent: false, eventId: null }
+  }
+
   let created: { id: string; webLink: string | null }
   try {
     created = await deps.createEvent({
@@ -141,8 +154,12 @@ export async function runCalendarConfirm(args: {
   const { day, time } = friendly(startISO)
   const text = `Done — added to your Outlook: ${subject} on ${day} at ${time}.`
 
-  // The event exists now: record it before anything else can fail.
-  await deps.createAuditLog({
+  // The event exists now: record it, then the chat. A failure from here on is
+  // logged but never turns into "nothing was booked" (it was).
+  const afterWrite = async (step: string, run: () => Promise<unknown>) => {
+    try { await run() } catch (err) { console.error(`[DealFlow] Calendar confirm: ${step} failed after the event was created:`, err) }
+  }
+  await afterWrite('audit log', () => deps.createAuditLog({
     organizationId,
     action: 'CALENDAR_WRITE',
     detailsJson: {
@@ -155,8 +172,8 @@ export async function runCalendarConfirm(args: {
       endISO,
       at: new Date().toISOString(),
     },
-  })
-  await persistMessages(text)
+  }))
+  await afterWrite('saving the chat', () => persistMessages(text))
 
   return { text, wroteEvent: true, eventId: created.id }
 }

@@ -123,8 +123,12 @@ test('a short plain yes confirms; a no, a change, a question or extra instructio
     'add it please', 'confirm', 'looks good', 'sounds good thanks', 'yeah add it', 'Book it.']) {
     assert.equal(isCalendarConfirm(yes), true, yes)
   }
+  for (const yes of ['Um, yes.', 'Uh, yeah', 'Yes, add it to my calendar', 'Go ahead and add it', 'Yes please add it', 'yes…']) {
+    assert.equal(isCalendarConfirm(yes), true, yes)
+  }
   for (const no of ["no, don't add it", "don't do it", 'please do not go ahead', 'yes but make it 4pm instead',
-    'do it on friday instead', 'can you confirm what time that was?', 'no', 'not yet', 'wait', 'yes and also find me buyers', '']) {
+    'do it on friday instead', 'can you confirm what time that was?', 'no', 'not yet', 'wait', 'yes and also find me buyers', '',
+    'Yes?', 'Sure?', 'Confirm?', 'ok?']) {
     assert.equal(isCalendarConfirm(no), false, no)
   }
 })
@@ -159,4 +163,26 @@ test('the chat route uses the strict check and never falls through to the AI aft
   assert.doesNotMatch(route, /\\bconfirm\\b\|\\byes\\b/)
   assert.doesNotMatch(route, /Fall through to normal AI/)
   assert.match(route, /response: CALENDAR_CONFIRM_FAILED/)
+})
+
+test('after the event is created, a failing audit or chat save still reports "Done" (it was booked)', async () => {
+  for (const failing of ['createAuditLog', 'createMessage', 'touchSession'] as const) {
+    const { deps, rec } = makeDeps(false)
+    ;(deps as unknown as Record<string, unknown>)[failing] = async () => { throw new Error(`${failing} down`) }
+    const r = await runCalendarConfirm({ ...BASE, deps })
+    assert.equal(r.wroteEvent, true, failing)
+    assert.equal(r.eventId, 'evt_123', failing)
+    assert.match(r.text, /^Done — added to your Outlook/, failing)
+    assert.equal(rec.events.length, 1, failing)
+  }
+})
+
+test('a second yes to the same proposal does not book it twice', async () => {
+  const { deps, rec } = makeDeps(false)
+  deps.alreadyWritten = async () => true
+  const r = await runCalendarConfirm({ ...BASE, deps })
+  assert.equal(r.wroteEvent, false)
+  assert.match(r.text, /already on your calendar/)
+  assert.equal(rec.events.length, 0)
+  assert.equal(rec.audits.length, 0)
 })

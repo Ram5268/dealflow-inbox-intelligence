@@ -17,3 +17,12 @@ export function recentHistoryQuery(sessionId: string) {
 export function oldestFirst<T>(newestFirst: readonly T[]): T[] {
   return [...newestFirst].reverse()
 }
+
+// The model's conversation must start with a user turn. Messages are stored in
+// user/Drift pairs, but a "+" report (or a reply that failed to save) leaves a
+// lone Drift message, so the newest-30 window can start on one. Drop the Drift
+// messages before the first user message (none → an empty history).
+export function startAtUserTurn<T extends { role: string }>(messages: readonly T[]): T[] {
+  const first = messages.findIndex(m => m.role === 'user')
+  return first === -1 ? [] : messages.slice(first)
+}

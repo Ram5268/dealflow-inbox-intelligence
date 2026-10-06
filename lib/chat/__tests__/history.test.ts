@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { HISTORY_LIMIT, oldestFirst, recentHistoryQuery } from '../history'
+import { HISTORY_LIMIT, oldestFirst, recentHistoryQuery, startAtUserTurn } from '../history'
 
 const ROOT = join(__dirname, '..', '..', '..')
 
@@ -67,9 +67,30 @@ test('the chat route loads history through these helpers', () => {
   assert.doesNotMatch(route, /orderBy: \{ createdAt: 'asc' \},\s*take: 30/)
 })
 
+test("the model's conversation starts at a user turn, even when the window starts on a lone Drift message", () => {
+  const lone = { id: 'r', sessionId: 's1', role: 'assistant' as const, content: '[report]', createdAt: new Date(t0 + 10_500) }
+  const withReport = [...messages.slice(0, 21), lone, ...messages.slice(21)] // a "+" report mid-chat: 41 rows
+  const fake = (args: Parameters<typeof findMany>[0]) => {
+    const saved = messages.splice(0, messages.length, ...withReport)
+    try { return findMany(args) } finally { messages.splice(0, messages.length, ...saved) }
+  }
+  const history = oldestFirst(fake(recentHistoryQuery('s1')))
+  assert.equal(history[0].role, 'assistant') // the raw window starts on Drift's message
+  const forModel = startAtUserTurn(history)
+  assert.equal(forModel[0].role, 'user')
+  const firstUser = history.findIndex(m => m.role === 'user')
+  assert.ok(firstUser > 0)
+  assert.deepEqual(forModel, history.slice(firstUser))
+  assert.ok(forModel.some(m => m.content === 'drift turn 20')) // the latest turns are all still there
+  assert.deepEqual(startAtUserTurn([{ role: 'assistant' }, { role: 'assistant' }]), [])
+  assert.deepEqual(startAtUserTurn([]), [])
+  const route = readFileSync(join(ROOT, 'app/api/chat/route.ts'), 'utf8')
+  assert.match(route, /const anthropicHistory: Anthropic\.Messages\.MessageParam\[\] = startAtUserTurn\(history\)\.map/)
+})
+
 test('chat context blocks only read: no side-channel fetcher writes to the DB (M18)', () => {
   const dir = join(ROOT, 'lib/chat/context')
-  const writes = /\.(update|updateMany|upsert|create|createMany|delete|deleteMany)\(/
+  const writes = /prisma\.\w+\.(update|updateMany|upsert|create|createMany|delete|deleteMany)\(|\$executeRaw/
   for (const f of readdirSync(dir).filter(f => f.endsWith('.ts'))) {
     assert.doesNotMatch(readFileSync(join(dir, f), 'utf8'), writes, f)
   }
