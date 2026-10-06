@@ -21,6 +21,8 @@ test('only *_perf and *_test databases count as test databases', () => {
   assert.equal(isTestDatabase(LIVE), false)
   assert.equal(isTestDatabase('postgresql://u:p@h/dealflow_test_backup'), false)
   assert.equal(isTestDatabase(undefined), false)
+  // Only postgres URLs: a socket URL's path isn't the database it connects to.
+  assert.equal(isTestDatabase('socket:/x_test?db=railway'), false)
 })
 
 test('refuses a live or unset database, unless --i-mean-live is passed', () => {

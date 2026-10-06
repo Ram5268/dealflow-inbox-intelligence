@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { prisma } from '../../../../prisma'
 import { generateBuyerMatchReport, generateBuyerMatchSection } from '../index'
 
-// Run via `npm test`. End-to-end against the real DB, but Sonnet is OMITTED
+// Run via `npm run test:integration` (Brief 41). End-to-end against a database, but Sonnet is OMITTED
 // (anthropic undefined) so the one LLM section falls back deterministically — no
 // API key, no cost, no flake. Picks a seed [TEST_10] BUYER_ISO with matches
 // dynamically so it survives seed-id churn; skips cleanly if the seed is absent.

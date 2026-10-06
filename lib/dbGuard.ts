@@ -8,7 +8,11 @@ export const LIVE_OVERRIDE_FLAG = '--i-mean-live'
 export function databaseName(url: string | null | undefined): string | null {
   if (!url) return null
   try {
-    return decodeURIComponent(new URL(url).pathname.replace(/^\//, '')) || null
+    const u = new URL(url)
+    // Only postgres URLs: for others (e.g. socket:/x_test?db=railway) the path
+    // isn't the database the driver uses.
+    if (u.protocol !== 'postgres:' && u.protocol !== 'postgresql:') return null
+    return decodeURIComponent(u.pathname.replace(/^\//, '')) || null
   } catch {
     return null
   }
