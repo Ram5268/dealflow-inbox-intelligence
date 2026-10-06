@@ -7,8 +7,9 @@ import { useEffect, useRef, useState } from 'react'
 // unless GRAPH_ENABLED is 'true' (Outlook is paused; Brief 41), and /matches
 // hides the button that opens this sheet while it's off.
 // Styling mirrors DismissReasonSheet (glass bottom sheet, slide-up, backdrop dim).
-// The safety footnote is required: this is the one place email-adjacent read-only
-// posture is broken, and only on the user's explicit tap.
+// The safety footnote is required: this is one of the two places (with Drift's
+// calendar confirm) where DealFlow writes to Microsoft 365, and only on the
+// user's explicit tap. Email stays read-only.
 interface Props {
   matchId: string
   address: string          // read-only summary line

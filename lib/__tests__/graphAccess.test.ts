@@ -103,10 +103,15 @@ function routeFiles(dir: string): string[] {
 test('every Microsoft route checks graphEnabled() as its first statement', () => {
   for (const f of GUARDED_ROUTES) {
     const src = readFileSync(join(ROOT, f), 'utf8')
+    // Arrow-style handlers would dodge the first-statement check below.
+    assert.doesNotMatch(src, /export const (GET|POST|PUT|PATCH|DELETE)\b/, `${f}: use export async function handlers`)
     const handlers = [...src.matchAll(/export async function (GET|POST|PUT|PATCH|DELETE)\b/g)].map(m => m[1])
     assert.ok(handlers.length > 0, f)
     for (const h of handlers) {
-      assert.match(firstStatement(src, new RegExp(`export async function ${h}\\b[\\s\\S]*?\\)\\s*\\{\\s*\\n`)), /^if \(!graphEnabled\(\)\)/, `${f} ${h}`)
+      // The first statement refuses (returns or throws) when the switch is off.
+      assert.match(firstStatement(src, new RegExp(`export async function ${h}\\b[\\s\\S]*?\\)\\s*\\{\\s*\\n`)), /^if \(!graphEnabled\(\)\)\s*(\{\s*$|return\b|throw\b)/, `${f} ${h}`)
+      const body = src.slice(src.search(new RegExp(`export async function ${h}\\b`)))
+      assert.match(body, /if \(!graphEnabled\(\)\)\s*(return\b|throw\b|\{\s*\n\s*return\b)/, `${f} ${h}: the guard must return or throw`)
     }
   }
 })
