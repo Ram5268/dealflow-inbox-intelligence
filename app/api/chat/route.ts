@@ -6,8 +6,9 @@ import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { graphEnabled } from '@/lib/graphAccess'
+import { recentHistoryQuery, oldestFirst, startAtUserTurn } from '@/lib/chat/history'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
-import { runCalendarConfirm } from '@/lib/chat/calendarConfirm'
+import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
@@ -103,7 +104,7 @@ Presenting reports in your drift_response:
 - After generate_report_section: set attachedFragment, and write response as the section's content in full, readable prose — restate the actual addresses, prices, and reasons from the tool result so Ryan can read the section directly in the chat. Do not invent anything beyond what the tool returned.
 
 Tool structure:
-Reply through the drift_response tool: plain text (no markdown, no bullet dashes, no em-dashes), exactly two short follow-up suggestions, and the card ids you referenced. For a scheduling request, propose the event via pendingEvent. For everything else, use your search tools first, then drift_response.`
+Reply through the drift_response tool: plain text (no markdown, no bullet dashes, no em-dashes), exactly two short follow-up suggestions, and the card ids you referenced. For a scheduling request, propose the event via pendingEvent. You can't add events yourself: only Ryan's plain yes to that proposal does, so never say an event is booked or added unless a calendar confirmation appears in the conversation. For everything else, use your search tools first, then drift_response.`
 
 // Brief 36 — voice mode sends `voice: true`. Appended as its own uncached system
 // block after the side-channels, so the cached prefix, the guard's grounding
@@ -173,12 +174,9 @@ export async function POST(req: NextRequest) {
       session = await prisma.chatSession.create({ data: { organizationId } })
     }
 
-    // Load conversation history for this session only
-    const history = await prisma.chatMessage.findMany({
-      where: { sessionId: session.id },
-      orderBy: { createdAt: 'asc' },
-      take: 30,
-    })
+    // Load conversation history for this session only: the newest 30 messages,
+    // oldest first (Brief 41: it used to be the oldest 30).
+    const history = oldestFirst(await prisma.chatMessage.findMany(recentHistoryQuery(session.id)))
 
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
@@ -213,13 +211,14 @@ export async function POST(req: NextRequest) {
         if (assistantJson?.pendingEvent) lastPendingEvent = assistantJson.pendingEvent
       } catch { /* not JSON */ }
     }
-    const isConfirmMessage = lastPendingEvent != null
-      && /\bconfirm\b|\byes\b|\bdo it\b|\blooks good\b|\bgo ahead\b|\badd it\b/.test(queryText)
+    // Brief 41 (M17): only a short, plain yes confirms; anything else (a "no",
+    // a change of time, a question) goes to Drift as a normal message.
+    const isConfirmMessage = lastPendingEvent != null && isCalendarConfirm(userMessage)
 
     // ── Calendar confirm fast-path: create the pending event directly, skip LLM + all context fetches ──
     // Brief 8.0-lite Fix #2 — the actual write + audit + guard moved into
-    // runCalendarConfirm (injectable, unit-tested). The two-step gate (regex +
-    // lastPendingEvent) stays inline above; only the side effects moved.
+    // runCalendarConfirm (injectable, unit-tested). The two-step gate (a plain
+    // yes via isCalendarConfirm + lastPendingEvent) stays inline above.
     if (isConfirmMessage && lastPendingEvent) {
       try {
         const result = await runCalendarConfirm({
@@ -234,6 +233,21 @@ export async function POST(req: NextRequest) {
             notes:    lastPendingEvent.notes,
           },
           deps: {
+            alreadyWritten: (sid, ev) =>
+              prisma.auditLog
+                .findFirst({
+                  where: {
+                    organizationId,
+                    action: 'CALENDAR_WRITE',
+                    AND: [
+                      { detailsJson: { path: ['sessionId'], equals: sid } },
+                      { detailsJson: { path: ['startISO'], equals: ev.startISO } },
+                      { detailsJson: { path: ['subject'], equals: ev.subject } },
+                    ],
+                  },
+                  select: { id: true },
+                })
+                .then(Boolean),
             graphOn:        graphEnabled(),
             testModeOn:     isMatchingTestModeOnly(),
             createEvent:    createCalendarEvent,
@@ -244,8 +258,12 @@ export async function POST(req: NextRequest) {
         })
         return NextResponse.json({ sessionId: session.id, response: result.text, deals: [], suggestions: [] })
       } catch (err) {
-        // Fall through to normal AI if creation fails
+        // Brief 41 (M17): never fall through to the AI after a failed confirm (it
+        // could claim the event was booked). runCalendarConfirm only throws
+        // before the calendar write (after it, failures are logged and the
+        // "Done" reply still goes out), so nothing was booked.
         console.error('[DealFlow] Calendar confirm error:', err)
+        return NextResponse.json({ sessionId: session.id, response: CALENDAR_CONFIRM_FAILED, deals: [], suggestions: [] })
       }
     }
 
@@ -372,7 +390,8 @@ export async function POST(req: NextRequest) {
       } as Anthropic.Messages.Tool.InputSchema,
     }
 
-    const anthropicHistory: Anthropic.Messages.MessageParam[] = history.map(m => ({
+    // Brief 41: the model's conversation must start with a user turn.
+    const anthropicHistory: Anthropic.Messages.MessageParam[] = startAtUserTurn(history).map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     }))

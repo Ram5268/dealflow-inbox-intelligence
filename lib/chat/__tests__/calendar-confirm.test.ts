@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { runCalendarConfirm, type ConfirmDeps } from '../calendarConfirm'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED, type ConfirmDeps } from '../calendarConfirm'
 
 // Run: `npm test` (ts-node via node:test). Injected fakes — never touches Prisma
 // or Microsoft Graph (POST /me/events is off-limits this brief).
@@ -113,4 +115,74 @@ test('Outlook paused: no event, no CALENDAR_WRITE audit, honest reply, chat stil
     assert.equal(rec.audits.length, 0)
     assert.equal(rec.messages.length, 2)
   }
+})
+
+// Brief 41 (M17): only a short, plain yes confirms a proposed event.
+test('a short plain yes confirms; a no, a change, a question or extra instructions do not', () => {
+  for (const yes of ['yes', 'Yes.', 'YES!', 'yes please', 'yep', 'Sure', 'ok', 'Okay, go ahead.', 'go ahead', 'do it',
+    'add it please', 'confirm', 'looks good', 'sounds good thanks', 'yeah add it', 'Book it.']) {
+    assert.equal(isCalendarConfirm(yes), true, yes)
+  }
+  for (const yes of ['Um, yes.', 'Uh, yeah', 'Yes, add it to my calendar', 'Go ahead and add it', 'Yes please add it', 'yes…']) {
+    assert.equal(isCalendarConfirm(yes), true, yes)
+  }
+  for (const no of ["no, don't add it", "don't do it", 'please do not go ahead', 'yes but make it 4pm instead',
+    'do it on friday instead', 'can you confirm what time that was?', 'no', 'not yet', 'wait', 'yes and also find me buyers', '',
+    'Yes?', 'Sure?', 'Confirm?', 'ok?']) {
+    assert.equal(isCalendarConfirm(no), false, no)
+  }
+})
+
+test('a failed calendar write says so plainly: nothing booked, no audit row, never "Done"', async () => {
+  const { deps, rec } = makeDeps(false)
+  deps.createEvent = async () => { throw new Error('Graph 503') }
+  const r = await runCalendarConfirm({ ...BASE, deps })
+  assert.equal(r.wroteEvent, false)
+  assert.equal(r.eventId, null)
+  assert.equal(r.text, CALENDAR_CONFIRM_FAILED)
+  assert.match(r.error ?? '', /Graph 503/)
+  assert.doesNotMatch(r.text, /Done|added to your Outlook/)
+  assert.equal(rec.audits.length, 0)
+  assert.equal(rec.messages.length, 2)
+  assert.equal(rec.messages[1].content, CALENDAR_CONFIRM_FAILED)
+})
+
+test('a successful write is audited before the chat messages are saved', async () => {
+  const order: string[] = []
+  const { deps } = makeDeps(false)
+  deps.createAuditLog = async (d) => { order.push('audit'); return d }
+  deps.createMessage = async (d) => { order.push('message'); return d }
+  const r = await runCalendarConfirm({ ...BASE, deps })
+  assert.equal(r.wroteEvent, true)
+  assert.deepEqual(order, ['audit', 'message', 'message'])
+})
+
+test('the chat route uses the strict check and never falls through to the AI after a failed confirm', () => {
+  const route = readFileSync(join(__dirname, '..', '..', '..', 'app/api/chat/route.ts'), 'utf8')
+  assert.match(route, /const isConfirmMessage = lastPendingEvent != null && isCalendarConfirm\(userMessage\)/)
+  assert.doesNotMatch(route, /\\bconfirm\\b\|\\byes\\b/)
+  assert.doesNotMatch(route, /Fall through to normal AI/)
+  assert.match(route, /response: CALENDAR_CONFIRM_FAILED/)
+})
+
+test('after the event is created, a failing audit or chat save still reports "Done" (it was booked)', async () => {
+  for (const failing of ['createAuditLog', 'createMessage', 'touchSession'] as const) {
+    const { deps, rec } = makeDeps(false)
+    ;(deps as unknown as Record<string, unknown>)[failing] = async () => { throw new Error(`${failing} down`) }
+    const r = await runCalendarConfirm({ ...BASE, deps })
+    assert.equal(r.wroteEvent, true, failing)
+    assert.equal(r.eventId, 'evt_123', failing)
+    assert.match(r.text, /^Done — added to your Outlook/, failing)
+    assert.equal(rec.events.length, 1, failing)
+  }
+})
+
+test('a second yes to the same proposal does not book it twice', async () => {
+  const { deps, rec } = makeDeps(false)
+  deps.alreadyWritten = async () => true
+  const r = await runCalendarConfirm({ ...BASE, deps })
+  assert.equal(r.wroteEvent, false)
+  assert.match(r.text, /already on your calendar/)
+  assert.equal(rec.events.length, 0)
+  assert.equal(rec.audits.length, 0)
 })
