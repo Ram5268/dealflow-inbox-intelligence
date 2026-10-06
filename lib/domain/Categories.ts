@@ -64,7 +64,8 @@ export const INFORMATIONAL = [
 // ── StreetEasy lookup-eligible categories ───────────────────────────────────
 // Copied verbatim from app/api/opportunities/[id]/route.ts:5. These are the
 // categories worth a live SE API call when we don't have a streetEasyId cached.
-// Phase B will retire that local Set in favor of importing this one.
+// Used by POST /api/opportunities/[id]/streeteasy, which runs only when asked
+// (Brief 41: opening a listing no longer triggers a lookup).
 export const SE_LISTABLE: ReadonlySet<Category> = new Set<Category>([
   Category.ACTIVE_SALE_LISTING,
   Category.COMING_SOON_SALE,

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { classifyAndExtractEmail } from '@/lib/ai'
 import { buildOpportunityText, upsertOpportunityEmbedding } from '@/lib/embeddings'
 import { Category, TransactionType } from '@prisma/client'
+import { maintenanceEnabled, MAINTENANCE_OFF_BODY } from '@/lib/config/maintenance'
 
 export const maxDuration = 300
 
@@ -16,7 +17,9 @@ const VALID_TX = new Set([
   'SALE','RENTAL','BUYER_NEED','RENTER_NEED','SELLER_LEAD','LANDLORD_LEAD','UNKNOWN',
 ])
 
+// Maintenance route (Brief 41, H6): off unless MAINTENANCE_ENABLED=true.
 export async function GET() {
+  if (!maintenanceEnabled()) return NextResponse.json(MAINTENANCE_OFF_BODY, { status: 403 })
   const remaining = await prisma.extractedOpportunity.count({
     where: {
       classificationReason: { not: { contains: 'SENDER ROLE' } },
@@ -33,6 +36,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!maintenanceEnabled()) return NextResponse.json(MAINTENANCE_OFF_BODY, { status: 403 })
   try {
     const body = await req.json().catch(() => ({}))
     const limit: number = body.limit ?? 150

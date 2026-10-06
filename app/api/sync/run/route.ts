@@ -4,20 +4,14 @@ import { runIncrementalSync } from '@/lib/backgroundSync'
 import { prisma } from '@/lib/prisma'
 import { runMatchmaking } from '@/lib/matchmaking'
 import { isIngestionTestModeOnly } from '@/lib/config/ingestionTestMode'
+import { checkCronBearer } from '@/lib/auth/cronBearer'
 
 // Brief 9.0 — scheduler auth. The sync tick runs on an external scheduler in
 // prod (Vercel Cron on Pro, or Upstash QStash on Hobby). Both hit this route
-// via GET. When CRON_SECRET is set we require it (as `Authorization: Bearer
-// <secret>` or `?secret=<secret>`), mirroring /api/push/digest. The existing
-// client-triggered POST (app page load) stays open — same-origin browser call.
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return true // no secret configured (local/dev) — allow
-  const auth = req.headers.get('authorization')
-  if (auth === `Bearer ${secret}`) return true
-  if (req.nextUrl.searchParams.get('secret') === secret) return true
-  return false
-}
+// via GET with `Authorization: Bearer <CRON_SECRET>`. Brief 41 (L1): the GET
+// uses checkCronBearer (fails closed when the secret is unset; no ?secret=).
+// The client-triggered POST (Check In on the home page) stays open — same-origin
+// browser call; the app has no login by design.
 
 // Internal route — only calls Microsoft Graph GET requests externally.
 export async function POST() {
@@ -26,8 +20,9 @@ export async function POST() {
 
 // Scheduler entrypoint (Vercel Cron / QStash). Secured by CRON_SECRET.
 export async function GET(req: NextRequest) {
-  if (!authorized(req)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const auth = checkCronBearer(req.headers.get('authorization'), process.env.CRON_SECRET)
+  if (auth !== 200) {
+    return NextResponse.json({ error: auth === 500 ? 'CRON_SECRET not configured' : 'unauthorized' }, { status: auth })
   }
   return runSync()
 }

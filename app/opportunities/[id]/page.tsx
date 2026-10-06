@@ -14,6 +14,7 @@ export default function OpportunityDetailPage() {
   const router = useRouter()
   const [opp, setOpp] = useState<OppWithEmail | null>(null)
   const [loading, setLoading] = useState(true)
+  const [seLooking, setSeLooking] = useState(false)
 
   useEffect(() => {
     fetch(`/api/opportunities/${id}`)
@@ -22,6 +23,27 @@ export default function OpportunityDetailPage() {
       .catch(() => showToast("Couldn't load opportunity"))
       .finally(() => setLoading(false))
   }, [id])
+
+  // Brief 41 (H5): the StreetEasy lookup runs only when asked (it used to run
+  // on every view, and a miss hid the listing as delisted).
+  const findOnStreetEasy = async () => {
+    setSeLooking(true)
+    try {
+      const res = await fetch(`/api/opportunities/${id}/streeteasy`, { method: 'POST' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) { showToast(data.error ?? 'StreetEasy lookup failed'); return }
+      if (data.streetEasyId) {
+        setOpp(o => (o ? { ...o, streetEasyId: data.streetEasyId, streetEasyStatus: data.streetEasyStatus, processingStatus: data.processingStatus } : o))
+        showToast('Found it on StreetEasy')
+      } else {
+        showToast(data.checked ? 'Not found on StreetEasy. Nothing was changed.' : 'StreetEasy lookups are paused right now.')
+      }
+    } catch {
+      showToast('StreetEasy lookup failed')
+    } finally {
+      setSeLooking(false)
+    }
+  }
 
   const Field = ({ label, value }: { label: string; value: string | number | null | undefined }) =>
     value != null ? (
@@ -145,7 +167,18 @@ export default function OpportunityDetailPage() {
           {seUrl && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 13 }}>
               <span style={{ color: 'rgba(255,255,255,0.45)' }}>StreetEasy</span>
-              <a href={seUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(120,200,220,0.9)' }}>{seLabel}</a>
+              <span style={{ display: 'flex', gap: 14 }}>
+                {seSearchUrl && (
+                  <button
+                    onClick={findOnStreetEasy}
+                    disabled={seLooking}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 13, color: 'rgba(255,255,255,0.55)' }}
+                  >
+                    {seLooking ? 'Looking…' : 'Find listing'}
+                  </button>
+                )}
+                <a href={seUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(120,200,220,0.9)' }}>{seLabel}</a>
+              </span>
             </div>
           )}
           {opp.rawEmail.webLink && (
