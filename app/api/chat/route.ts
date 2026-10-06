@@ -6,8 +6,9 @@ import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { graphEnabled } from '@/lib/graphAccess'
+import { recentHistoryQuery, oldestFirst } from '@/lib/chat/history'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
-import { runCalendarConfirm } from '@/lib/chat/calendarConfirm'
+import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
@@ -173,12 +174,9 @@ export async function POST(req: NextRequest) {
       session = await prisma.chatSession.create({ data: { organizationId } })
     }
 
-    // Load conversation history for this session only
-    const history = await prisma.chatMessage.findMany({
-      where: { sessionId: session.id },
-      orderBy: { createdAt: 'asc' },
-      take: 30,
-    })
+    // Load conversation history for this session only: the newest 30 messages,
+    // oldest first (Brief 41: it used to be the oldest 30).
+    const history = oldestFirst(await prisma.chatMessage.findMany(recentHistoryQuery(session.id)))
 
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
@@ -213,8 +211,9 @@ export async function POST(req: NextRequest) {
         if (assistantJson?.pendingEvent) lastPendingEvent = assistantJson.pendingEvent
       } catch { /* not JSON */ }
     }
-    const isConfirmMessage = lastPendingEvent != null
-      && /\bconfirm\b|\byes\b|\bdo it\b|\blooks good\b|\bgo ahead\b|\badd it\b/.test(queryText)
+    // Brief 41 (M17): only a short, plain yes confirms; anything else (a "no",
+    // a change of time, a question) goes to Drift as a normal message.
+    const isConfirmMessage = lastPendingEvent != null && isCalendarConfirm(userMessage)
 
     // ── Calendar confirm fast-path: create the pending event directly, skip LLM + all context fetches ──
     // Brief 8.0-lite Fix #2 — the actual write + audit + guard moved into
@@ -244,8 +243,11 @@ export async function POST(req: NextRequest) {
         })
         return NextResponse.json({ sessionId: session.id, response: result.text, deals: [], suggestions: [] })
       } catch (err) {
-        // Fall through to normal AI if creation fails
+        // Brief 41 (M17): never fall through to the AI after a failed confirm (it
+        // could claim the event was booked). runCalendarConfirm only throws before
+        // anything is written, so nothing was booked.
         console.error('[DealFlow] Calendar confirm error:', err)
+        return NextResponse.json({ sessionId: session.id, response: CALENDAR_CONFIRM_FAILED, deals: [], suggestions: [] })
       }
     }
 

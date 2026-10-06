@@ -7,6 +7,30 @@
 //
 // Dependencies are injected so the test never touches Prisma or Graph.
 
+// Brief 41 (M17): the reply when a calendar write fails. Never a false "booked".
+export const CALENDAR_CONFIRM_FAILED = "I couldn't add that to your calendar, so nothing was booked."
+
+// Brief 41 (M17): only a short, plain yes confirms a proposed event. The old
+// check matched these words ANYWHERE in the message, so "no, don't add it" and
+// "yes but make it 4pm" booked the original event. Optional: a leading "ok" /
+// "yes"-type word and a trailing "please" / "thanks"; case and punctuation
+// don't matter. Everything else goes to Drift as a normal message.
+const CONFIRM_PHRASES = new Set([
+  'yes', 'yeah', 'yep', 'yup', 'sure', 'ok', 'okay', 'confirm', 'confirmed',
+  'do it', 'go ahead', 'go for it', 'add it', 'book it', 'please do',
+  'looks good', 'sounds good', 'yes do it', 'yes add it',
+])
+const LEAD_INS = new Set(['yes', 'yeah', 'yep', 'ok', 'okay', 'sure'])
+const POLITE_TAIL = /\s+(please|thanks|thank you)$/
+
+export function isCalendarConfirm(message: string): boolean {
+  let t = message.toLowerCase().replace(/[.,!?;:'"’“”]/g, ' ').replace(/\s+/g, ' ').trim()
+  t = t.replace(POLITE_TAIL, '').trim()
+  if (CONFIRM_PHRASES.has(t)) return true
+  const space = t.indexOf(' ')
+  return space > 0 && LEAD_INS.has(t.slice(0, space)) && CONFIRM_PHRASES.has(t.slice(space + 1))
+}
+
 export interface PendingEventInput {
   subject: string
   startISO: string
@@ -40,6 +64,7 @@ export interface ConfirmResult {
   text: string
   wroteEvent: boolean
   eventId: string | null
+  error?: string // set when the calendar write failed (nothing was booked)
 }
 
 // Default end = 30 min after start when the proposal didn't carry one.
@@ -59,10 +84,11 @@ function friendly(startISO: string): { day: string; time: string } {
 }
 
 // Runs a user-confirmed calendar write. On success writes the CALENDAR_WRITE
-// AuditLog. In test mode it skips the Graph write entirely (no event, no audit
+// AuditLog first (Brief 41: so a later failure can't lose it), then the chat
+// messages. In test mode it skips the Graph write entirely (no event, no audit
 // row) but STILL persists the user + assistant chat messages so the transcript
-// stays honest. Throws only if the Graph write itself fails — the route catches
-// that and falls through to the normal AI path (existing behavior preserved).
+// stays honest. If the Graph write fails it says so plainly (Brief 41: the route
+// used to fall through to the AI, which could claim the event was booked).
 export async function runCalendarConfirm(args: {
   organizationId: string
   sessionId: string
@@ -97,19 +123,25 @@ export async function runCalendarConfirm(args: {
     return { text, wroteEvent: false, eventId: null }
   }
 
-  // Real write. Throws propagate to the route's try/catch (falls through to AI).
-  const created = await deps.createEvent({
-    subject,
-    startISO,
-    endISO,
-    location: pendingEvent.location ?? undefined,
-    notes:    pendingEvent.notes ?? undefined,
-  })
+  let created: { id: string; webLink: string | null }
+  try {
+    created = await deps.createEvent({
+      subject,
+      startISO,
+      endISO,
+      location: pendingEvent.location ?? undefined,
+      notes:    pendingEvent.notes ?? undefined,
+    })
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err)
+    await persistMessages(CALENDAR_CONFIRM_FAILED)
+    return { text: CALENDAR_CONFIRM_FAILED, wroteEvent: false, eventId: null, error }
+  }
 
   const { day, time } = friendly(startISO)
   const text = `Done — added to your Outlook: ${subject} on ${day} at ${time}.`
-  await persistMessages(text)
 
+  // The event exists now: record it before anything else can fail.
   await deps.createAuditLog({
     organizationId,
     action: 'CALENDAR_WRITE',
@@ -124,6 +156,7 @@ export async function runCalendarConfirm(args: {
       at: new Date().toISOString(),
     },
   })
+  await persistMessages(text)
 
   return { text, wroteEvent: true, eventId: created.id }
 }

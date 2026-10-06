@@ -1,9 +1,11 @@
 import type { ContextFetcher } from './types'
 import { prisma } from '@/lib/prisma'
 
-// Triggered by the 'match' keyword in the query.
-// Side effect: marks the surfaced matches as seen=true after rendering, so they don't
-// re-appear on the next request. Preserved verbatim from pre-PR5 inline behavior.
+// Triggered by the 'match' keyword in the query. Read-only (Brief 41, M18): it
+// used to mark up to 20 unseen matches seen=true BEFORE the LLM ran (even when
+// the turn failed, and on every chip that mentions matches), so /matches and
+// the greeting silently lost matches Ryan never saw. Seen is set where Ryan
+// actually views a match.
 export const matchesFetcher: ContextFetcher = async ({ queryText }) => {
   const isMatchQuery = queryText.includes('match')
   if (!isMatchQuery) return { block: null }
@@ -29,12 +31,6 @@ export const matchesFetcher: ContextFetcher = async ({ queryText }) => {
       : `[MATCH score:${m.score}] ${m.reason}`
   )
   const block = `\n\nNEW MATCHES FROM LAST SYNC (${unseenMatches.length} total):\n` + lines.join('\n')
-
-  // Mark as seen so we don't re-surface them next time
-  await prisma.match.updateMany({
-    where: { id: { in: unseenMatches.map(m => m.id) } },
-    data:  { seen: true },
-  })
 
   return { block }
 }
