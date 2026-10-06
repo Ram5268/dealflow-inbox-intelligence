@@ -60,7 +60,13 @@ test('one helper builds the stored summary for V1 and V2', () => {
 })
 
 test('every writer of seller/landlord free text uses the filter', () => {
-  for (const f of ['lib/ai.ts', 'lib/extraction/extractEmailV2.ts']) {
+  const landlord = EXTRACTION_SPEC_BY_CATEGORY.LANDLORD_LEAD!.mapItem(
+    lead({ extractedTitle: 'Estate rental – owner died', extractedSummary: 'Two units. Owner died in May.', classificationReason: 'Landlord lead.' }),
+    ctx,
+  )
+  assert.equal(landlord.extractedTitle, 'Landlord lead – 12 Example St')
+  assert.equal(landlord.extractedSummary, 'Two units.')
+  for (const f of ['lib/ai.ts', 'lib/extraction/extractEmailV2.ts', 'lib/ingestion/extractors/landlordLeadExtractor.ts']) {
     assert.match(readFileSync(join(ROOT, f), 'utf8'), /safeLeadText\(/, f)
   }
   const ai = readFileSync(join(ROOT, 'lib/ai.ts'), 'utf8')
@@ -79,13 +85,19 @@ test('the filter catches the sensitive words and leaves real-estate talk alone',
     'the will was probated', 'probating', 'executors', 'co-executors', 'mom passed in March', 'after her passing',
     'her late husband', 'passed  away', 'passed\naway', 'the owner is dead', 'owner dies', 'two deaths', 'the couple separated',
     'his ex-wife', 'terminally ill', 'owner is ill', 'cancer', 'moving to hospice', 'going into a nursing home',
-    'assisted living', 'health reasons']) {
+    'assisted living', 'health reasons',
+    // Round 2
+    'legal separation', 'they separated last year', 'lost her husband', 'bereavement', 'letters testamentary',
+    "Surrogate's Court filing", 'the owner died']) {
     assert.equal(mentionsPersonalCircumstances(s), true, s)
   }
   for (const s of ['real estate investor', 'relocating', 'downsizing', 'needs a bigger place', 'tired landlord',
     'real-estate investor', 'Real  estate', 'estate agent', 'Single-family home in Jamaica Estates, Queens',
     'Estates at Park Slope', 'estate-sized lot', 'the deal died at contract', 'interest died down', 'dying to move to Florida',
-    'executive', 'deathly quiet', 'heirloom', 'their', 'inherent', 'still', 'ill-fated', 'passed inspection']) {
+    'executive', 'deathly quiet', 'heirloom', 'their', 'inherent', 'still', 'ill-fated', 'passed inspection',
+    // Round 2
+    'Owner passed on our first offer.', 'relocating to Chicago, Ill.', 'ill-equipped kitchen',
+    'owner is separating the two lots', 'dead-bolt locks', 'death-defying views']) {
     assert.equal(mentionsPersonalCircumstances(s), false, s)
   }
   assert.equal(safeMotivation('  downsizing  '), 'downsizing')
@@ -95,6 +107,8 @@ test('the filter catches the sensitive words and leaves real-estate talk alone',
   assert.equal(withoutPersonalCircumstances('Owner wants to list\nDivorce pending\nThree units.'), 'Owner wants to list Three units.')
   assert.equal(withoutPersonalCircumstances('Owner said "my wife died." Three units.'), 'Three units.')
   assert.equal(withoutPersonalCircumstances('Seller Mr. Smith is the executor. Three units.'), 'Three units.')
+  // A phrase split across lines never comes back whole: fail closed.
+  assert.equal(withoutPersonalCircumstances('She passed\naway last year. Three units.'), '')
   // Nothing to drop: the text comes back exactly as it was, newlines included.
   assert.equal(withoutPersonalCircumstances('Three units.\nTenant in place.'), 'Three units.\nTenant in place.')
 })

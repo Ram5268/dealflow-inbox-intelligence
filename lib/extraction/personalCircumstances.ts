@@ -5,14 +5,18 @@
 // that mentions one).
 const PERSONAL = new RegExp(
   [
-    'probat\\w*', 'divorc\\w*', 'ex-(?:wife|husband|spouse)', 'marital', 'separation agreement',
-    '(?:couple|spouses?|husband|wife|owners?)\\s+(?:are\\s+|is\\s+)?separat(?:ed|ing)',
-    'passed\\s+away', '(?:his|her|their)\\s+passing',
+    'probat\\w*', 'divorc\\w*', 'ex-(?:wife|husband|spouse)', 'marital', 'separation agreement', 'legal\\s+separation',
+    '(?:couple|spouses?|husband|wife|they|we)\\s+(?:are\\s+|is\\s+|have\\s+)?separat(?:ed|ing)',
+    'passed\\s+away', '(?:his|her|their)\\s+passing', 'bereave\\w*', 'letters\\s+testamentary', "surrogate(?:'s|s)?\\s+court",
     '(?:late|deceased)\\s+(?:husband|wife|spouse|mother|father|mom|dad|parents?|owners?|grand(?:mother|father|ma|pa))',
-    '(?:mother|father|mom|dad|husband|wife|spouse|parents?|owners?|grand(?:mother|father|ma|pa)|aunt|uncle|brother|sister|son|daughter)\\s+(?:has\\s+|had\\s+)?(?:passed|died)',
+    // A relative who passed or died ("the owner died" is caught by "died"; "the
+    // owner passed on our offer" is ordinary).
+    '(?:mother|father|mom|dad|husband|wife|spouse|parents?|grand(?:mother|father|ma|pa)|aunt|uncle|brother|sister|son|daughter)\\s+(?:has\\s+|had\\s+)?(?:passed|died)',
+    'lost\\s+(?:his|her|their|a)\\s+(?:husband|wife|spouse|mother|father|mom|dad|parents?|son|daughter|child)',
     'deceased', 'deaths?', 'died', 'dies', 'dying', 'dead', 'funeral', 'widow\\w*',
     'heirs?', 'inherit\\w*', 'executors?', 'co-executors?', 'executrix', 'estates?',
-    '(?:terminally\\s+)?ill(?:ness)?', 'cancer', 'hospice', 'nursing\\s+home', 'assisted\\s+living', 'dementia',
+    '(?:terminally|seriously|chronically|very)\\s+ill', '(?:is|was|became|being|fell|falls)\\s+ill', 'illness(?:es)?',
+    'cancer', 'hospice', 'nursing\\s+home', 'assisted\\s+living', 'dementia',
     'alzheimer\\w*', '(?:health|medical)\\s+(?:issues?|problems?|reasons?|condition)',
   ]
     .map((p) => `\\b${p}\\b`)
@@ -21,7 +25,7 @@ const PERSONAL = new RegExp(
 )
 // Ordinary phrases that contain those words (removed before the check).
 const BENIGN =
-  /\breal[\s-]+estates?\b|\bestate[\s-]+(?:agents?|sized)\b|\bjamaica\s+estates\b|\bestates\s+at\b|\b\w+\s+estates\s+(?:condo|co-?op|building|development)s?\b|\bdead[\s-]+end\b|\bdeal\s+died\b|\bdied\s+down\b|\bdying\s+to\b|\bill[\s-]+(?:fated|advised)\b/gi
+  /\breal[\s-]+estates?\b|\bestate[\s-]+(?:agents?|sized)\b|\bjamaica\s+estates\b|\bestates\s+at\b|\b\w+\s+estates\s+(?:condo|co-?op|building|development)s?\b|\bdead[\s-]+end\b|\bdead[\s-]?bolts?\b|\bdeath[\s-]+defying\b|\bdeal\s+died\b|\bdied\s+down\b|\bdying\s+to\b|\bill[\s-]+(?:fated|advised)\b/gi
 
 export function mentionsPersonalCircumstances(text: string | null | undefined): boolean {
   return !!text && PERSONAL.test(text.replace(BENIGN, ' '))
@@ -38,11 +42,14 @@ export function safeMotivation(motivation: string | null | undefined): string | 
 const SENTENCE_END = /(?<=(?<!\b(?:Mr|Mrs|Ms|Dr|St|Ave|Jr|Sr|Apt|No))[.!?]["')\]]?)\s+|\n+/
 export function withoutPersonalCircumstances(text: string): string {
   if (!mentionsPersonalCircumstances(text)) return text
-  return text
+  const out = text
     .split(SENTENCE_END)
     .filter((sentence) => !mentionsPersonalCircumstances(sentence))
     .join(' ')
     .trim()
+  // A phrase split across lines ("passed" / "away") comes back whole when the
+  // pieces are joined: fail closed.
+  return mentionsPersonalCircumstances(out) ? '' : out
 }
 
 // A seller lead's summary as stored: the safe summary plus a safe motivation.

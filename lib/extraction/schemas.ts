@@ -799,6 +799,13 @@ const LANDLORD_ITEM_REQUIRED = ['address', 'neighborhood', 'borough', 'city', 's
 
 function mapLandlord(raw: unknown): OppRowData {
   const l = raw as LandlordT
+  // Brief 41 (H9): the same filter as seller leads.
+  const text = safeLeadText({
+    title: l.extractedTitle,
+    summary: l.leaseType ? `${l.extractedSummary} Lease: ${l.leaseType}` : l.extractedSummary,
+    reason: l.classificationReason,
+    fallbackTitle: leadFallbackTitle('LANDLORD_LEAD', l.address ?? l.neighborhood),
+  })
   return {
     category: 'LANDLORD_LEAD', transactionType: 'RENTAL', propertyType: l.propertyType ?? null,
     address: l.address ?? null, neighborhood: l.neighborhood ?? null, borough: l.borough ?? null,
@@ -808,9 +815,9 @@ function mapLandlord(raw: unknown): OppRowData {
     squareFeet: l.squareFeet ?? null, availabilityDate: l.availabilityDate ?? null,
     sourceAgentName: l.sourceAgentName ?? null, sourceAgentEmail: l.sourceAgentEmail ?? null,
     sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'landlord', status: l.status ?? null,
-    extractedTitle: l.extractedTitle,
-    extractedSummary: l.leaseType ? `${l.extractedSummary} Lease: ${l.leaseType}` : l.extractedSummary,
-    classificationReason: l.classificationReason, confidenceScore: l.confidenceScore,
+    extractedTitle: text.title,
+    extractedSummary: text.summary,
+    classificationReason: text.reason, confidenceScore: l.confidenceScore,
   }
 }
 
