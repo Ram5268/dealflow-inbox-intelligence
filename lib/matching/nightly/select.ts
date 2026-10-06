@@ -18,11 +18,12 @@ export interface Candidate {
 export { HOT_MIN_FIT, WARM_MIN_FIT }
 export const tierOf = (mf: number): 'HOT' | 'WARM' | 'POSSIBLE' => (mf >= HOT_MIN_FIT ? 'HOT' : mf >= WARM_MIN_FIT ? 'WARM' : 'POSSIBLE')
 
-// Brief 41 (H7): the stored reason is a plain-English line of the top 3 FIT
-// contributions (seller-motivation signals are never named). It used to be the
-// raw keys ("preForeclosure + highEquity + beds"), which reached reports,
-// drafts and the CRM's "Why" column.
-export const reasonOf = (contributions: Record<string, number>): string => fitReason(contributions)
+// Brief 41 (H7): the stored reason is a plain-English line of the fit features
+// that raised the match, then any that lowered it (seller-motivation signals are
+// never named; nor is price when it's our estimate). It used to be the raw keys
+// ("preForeclosure + highEquity + beds"), which reached reports, drafts and the
+// CRM's "Why" column.
+export const reasonOf = (mf: MatchFitResult): string => fitReason(mf)
 
 // One seller's eligible, undismissed candidates → at most n with matchFit >=
 // MIN_MATCH_FIT, best first (ties: buyer id ascending, so runs are stable).
@@ -40,7 +41,7 @@ export function toMatchRow(c: Candidate) {
     counterpartType: c.counterpartType,
     score: c.matchFit.matchFit,
     tier: tierOf(c.matchFit.matchFit),
-    reason: reasonOf(c.matchFit.contributions),
+    reason: reasonOf(c.matchFit),
     captureStatus: c.captureStatus,
     matchFitConfidence: c.matchFit.matchFitConfidence,
     contributions: c.matchFit.contributions,

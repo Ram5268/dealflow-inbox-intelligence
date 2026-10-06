@@ -19,12 +19,15 @@ export function draftOutreachSystemPrompt(args: {
   party: DraftParty
   supply: ResolvedSupply
   matchReason: string | null
+  counterpartType?: string
 }): string {
   const { channel, party, supply } = args
   const listingAddress = supply.address ?? supply.extractedTitle
   const listingPrice = outreachPriceText(supply) // never our estimate for a seller contact
   const listingBeds = supply.beds ? `${supply.beds}BR` : 'beds n/a'
-  const reason = plainFitReason(args.matchReason, { homeowner: supply.opportunityType === 'contact' })
+  // Either side can be a homeowner: legacy-engine rows with a Mojo contact
+  // counterpart quote that contact's estimated value as a "budget".
+  const reason = plainFitReason(args.matchReason, { homeowner: supply.opportunityType === 'contact' || args.counterpartType === 'mojo' })
 
   return `You are drafting a brief outreach ${channel} from a NYC real estate broker (Ryan Martin, Douglas Elliman) to a prospect. Match context:
 

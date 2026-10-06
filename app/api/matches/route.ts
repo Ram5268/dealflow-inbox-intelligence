@@ -8,6 +8,7 @@ import { resolveDismissKey } from '@/lib/matching/dismissKey'
 import { resolveSupplies } from '@/lib/matching/supplyResolver'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { crmLeadUrl } from '@/lib/crmLink'
+import { plainFitReason } from '@/lib/matching/fitReason'
 
 // GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1]
 // List with both sides hydrated. Sort: unseen first, then highest-scoring,
@@ -154,7 +155,10 @@ export async function GET(req: NextRequest) {
     return {
     id:              m.id,
     score:           m.score,
-    reason:          m.reason,
+    // Brief 41 (H7): the plain, safe reason (older rows hold raw scorer keys).
+    reason:          m.reason == null || m.counterpartType === 'showing_confirmation'
+      ? m.reason
+      : plainFitReason(m.reason, { homeowner: m.opportunityType === 'contact' || m.counterpartType === 'mojo' }),
     tier:            m.tier,           // Brief 7.1 — 'HOT' | 'WARM' | 'POSSIBLE' | null
     partyPriority:   partyPriorityFor(m),
     counterpartType: m.counterpartType,

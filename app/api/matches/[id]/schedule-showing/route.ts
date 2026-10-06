@@ -7,6 +7,7 @@ import { graphEnabled, GRAPH_PAUSED_BODY } from '@/lib/graphAccess'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
 import { MIXED_TEST_PAIR, isMixedTestPair, matchSides } from '@/lib/matching/pairSafety'
 import { crmLeadUrl } from '@/lib/crmLink'
+import { plainFitReason } from '@/lib/matching/fitReason'
 
 // POST /api/matches/[id]/schedule-showing
 // Body: { start: string (naive local "YYYY-MM-DDTHH:mm[:ss]"), durationMinutes: number }
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const notes = [
     extractedSummary,
     partyName ? `Party: ${partyName}` : null,
-    match.reason ? `Match: ${match.reason}` : null,
+    match.reason ? `Match: ${plainFitReason(match.reason, { homeowner: match.opportunityType === 'contact' || match.counterpartType === 'mojo' })}` : null,
     link ? `${match.opportunityType === 'contact' ? 'CRM' : 'DealFlow'}: ${link}` : null,
   ].filter(Boolean).join('\n')
 

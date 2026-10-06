@@ -158,7 +158,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!opp) return NextResponse.json({ error: 'listing side not found' }, { status: 404 })
   // Brief 41 (H7): never a homeowner's name, our estimate or a seller-circumstance reason.
   const listingAddress = opp.address ?? opp.extractedTitle
-  const system = draftOutreachSystemPrompt({ channel, party, supply: opp, matchReason: match.reason })
+  const system = draftOutreachSystemPrompt({ channel, party, supply: opp, matchReason: match.reason, counterpartType: match.counterpartType })
 
   let resp: Anthropic.Messages.Message
   try {

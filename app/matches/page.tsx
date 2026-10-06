@@ -177,7 +177,9 @@ function contextLine(m: Match): string {
   const p = m.primary
   const c = m.counterpart
   if (!p) return ''
-  const pBit = `${formatPriceRange(p.minPrice, p.maxPrice, p.price)}${p.beds ? ` ${p.beds}BR` : ''}${p.neighborhood ? ` ${p.neighborhood}` : ''}`.trim()
+  // Brief 41 (H7): a homeowner has no asking price (our estimate is never shown as one).
+  const pPrice = p.opportunityType === 'contact' ? 'off-market' : formatPriceRange(p.minPrice, p.maxPrice, p.price)
+  const pBit = `${pPrice}${p.beds ? ` ${p.beds}BR` : ''}${p.neighborhood ? ` ${p.neighborhood}` : ''}`.trim()
   if (!c) return pBit
   if (m.counterpartType === 'mojo') {
     const mc = c as CounterpartMojo
@@ -1049,8 +1051,10 @@ function SellerSide({ p }: { p: PrimaryOpp }) {
   return (
     <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 12, padding: '10px 12px' }}>
       <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.45)' }}>SELLER</div>
+      {/* Brief 41 (H7): the title is the address (or "Homeowner in …"), never the
+          homeowner's name; the name is in the CRM (Open in CRM). */}
       <div style={{ marginTop: 4, fontSize: 13, color: '#fff', fontWeight: 500 }}>{p.extractedTitle}</div>
-      {p.address && <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{p.address}</div>}
+      {p.address && p.address !== p.extractedTitle && <div style={{ marginTop: 2, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{p.address}</div>}
       <div style={{ marginTop: 4, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
         {[p.neighborhood, p.units ? `${p.units}-unit` : null, p.beds ? `${p.beds} beds` : null, p.mojoList].filter(Boolean).join(' · ')}
       </div>
