@@ -7,15 +7,17 @@ const PERSONAL = new RegExp(
   [
     'probat\\w*', 'divorc\\w*', 'ex-(?:wife|husband|spouse)', 'marital', 'separation agreement', 'legal\\s+separation',
     '(?:couple|spouses?|husband|wife|they|we)\\s+(?:are\\s+|is\\s+|have\\s+)?separat(?:ed|ing)',
-    'passed\\s+away', '(?:his|her|their)\\s+passing', 'bereave\\w*', 'letters\\s+testamentary', "surrogate(?:'s|s)?\\s+court",
+    'passed\\s+away', '(?:his|her|their)\\s+passing', 'bereave\\w*', 'letters\\s+testamentary', "surrogate(?:['’]s|s)?\\s+court",
     '(?:late|deceased)\\s+(?:husband|wife|spouse|mother|father|mom|dad|parents?|owners?|grand(?:mother|father|ma|pa))',
-    // A relative who passed or died ("the owner died" is caught by "died"; "the
-    // owner passed on our offer" is ordinary).
+    // A relative who passed or died; an owner who "passed" only when nothing
+    // follows that makes it ordinary ("the owner passed in March" vs "the owner
+    // passed on our offer").
     '(?:mother|father|mom|dad|husband|wife|spouse|parents?|grand(?:mother|father|ma|pa)|aunt|uncle|brother|sister|son|daughter)\\s+(?:has\\s+|had\\s+)?(?:passed|died)',
+    'owners?\\s+(?:has\\s+|had\\s+|recently\\s+)?passed(?=\\s+(?:away|in|last|recently|earlier|suddenly)\\b|\\s*[.,;]|\\s*$)',
     'lost\\s+(?:his|her|their|a)\\s+(?:husband|wife|spouse|mother|father|mom|dad|parents?|son|daughter|child)',
     'deceased', 'deaths?', 'died', 'dies', 'dying', 'dead', 'funeral', 'widow\\w*',
     'heirs?', 'inherit\\w*', 'executors?', 'co-executors?', 'executrix', 'estates?',
-    '(?:terminally|seriously|chronically|very)\\s+ill', '(?:is|was|became|being|fell|falls)\\s+ill', 'illness(?:es)?',
+    '(?:terminally|seriously|chronically|very)\\s+ill(?!-)', '(?:is|was|are|were|been|got|gets|getting|became|become|becomes|being|fell|falls)\\s+ill(?!-)', 'illness(?:es)?',
     'cancer', 'hospice', 'nursing\\s+home', 'assisted\\s+living', 'dementia',
     'alzheimer\\w*', '(?:health|medical)\\s+(?:issues?|problems?|reasons?|condition)',
   ]

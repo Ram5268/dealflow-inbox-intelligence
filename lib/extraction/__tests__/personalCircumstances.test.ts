@@ -88,7 +88,10 @@ test('the filter catches the sensitive words and leaves real-estate talk alone',
     'assisted living', 'health reasons',
     // Round 2
     'legal separation', 'they separated last year', 'lost her husband', 'bereavement', 'letters testamentary',
-    "Surrogate's Court filing", 'the owner died']) {
+    "Surrogate's Court filing", 'the owner died',
+    // Round 3
+    'The owner passed in March.', 'the owner has passed', 'Owner passed last month and the kids want to sell.',
+    'her father has been ill', 'the seller got ill', 'Surrogate’s Court']) {
     assert.equal(mentionsPersonalCircumstances(s), true, s)
   }
   for (const s of ['real estate investor', 'relocating', 'downsizing', 'needs a bigger place', 'tired landlord',
@@ -97,7 +100,9 @@ test('the filter catches the sensitive words and leaves real-estate talk alone',
     'executive', 'deathly quiet', 'heirloom', 'their', 'inherent', 'still', 'ill-fated', 'passed inspection',
     // Round 2
     'Owner passed on our first offer.', 'relocating to Chicago, Ill.', 'ill-equipped kitchen',
-    'owner is separating the two lots', 'dead-bolt locks', 'death-defying views']) {
+    'owner is separating the two lots', 'dead-bolt locks', 'death-defying views',
+    // Round 3
+    'The owner passed the board.', 'The kitchen is ill-equipped.']) {
     assert.equal(mentionsPersonalCircumstances(s), false, s)
   }
   assert.equal(safeMotivation('  downsizing  '), 'downsizing')
