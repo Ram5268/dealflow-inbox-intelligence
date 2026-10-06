@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { graphEnabled, GRAPH_PAUSED_MESSAGE } from '@/lib/graphAccess'
 
 const SCOPES = [
   'https://graph.microsoft.com/Mail.Read',
@@ -10,7 +11,11 @@ const SCOPES = [
   'profile',
 ].join(' ')
 
-export async function GET() {
+export async function GET(req: Request) {
+  // Outlook is paused (Brief 41): back to Settings, which explains why.
+  if (!graphEnabled()) {
+    return NextResponse.redirect(new URL(`/settings?oauth_error=${encodeURIComponent(GRAPH_PAUSED_MESSAGE)}`, req.url))
+  }
   const clientId = process.env.AZURE_CLIENT_ID
   const redirectUri = process.env.AZURE_REDIRECT_URI
   const tenant = process.env.AZURE_TENANT ?? 'common'

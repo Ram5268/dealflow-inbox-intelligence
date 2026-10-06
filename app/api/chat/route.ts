@@ -5,6 +5,7 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
+import { graphEnabled } from '@/lib/graphAccess'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { runCalendarConfirm } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
@@ -233,6 +234,7 @@ export async function POST(req: NextRequest) {
             notes:    lastPendingEvent.notes,
           },
           deps: {
+            graphOn:        graphEnabled(),
             testModeOn:     isMatchingTestModeOnly(),
             createEvent:    createCalendarEvent,
             createMessage:  (data) => prisma.chatMessage.create({ data: data as never }),
@@ -565,6 +567,9 @@ export async function POST(req: NextRequest) {
     // HALLUCINATION_GUARD_ENABLED=false. Calendar turns are skipped — the confirm
     // fast-path returns earlier, and a proposal's pendingEvent date/time
     // legitimately isn't in tool results, so guarding it would false-positive.
+    // Outlook is paused (Brief 41): drop any calendar proposal, so this turn is
+    // guarded like any other and a later "yes" can't hit the confirm path.
+    if (!graphEnabled()) aiResult.pendingEvent = null
     const guardEnabled = process.env.HALLUCINATION_GUARD_ENABLED !== 'false'
     const guardApplies = guardEnabled && !aiResult.pendingEvent
     let currentResponse = aiResult.response ?? ''

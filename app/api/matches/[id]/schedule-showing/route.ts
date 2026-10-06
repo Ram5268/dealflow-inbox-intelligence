@@ -3,16 +3,19 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
+import { graphEnabled, GRAPH_PAUSED_BODY } from '@/lib/graphAccess'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
 import { MIXED_TEST_PAIR, isMixedTestPair, matchSides } from '@/lib/matching/pairSafety'
 import { crmLeadUrl } from '@/lib/crmLink'
 
 // POST /api/matches/[id]/schedule-showing
 // Body: { start: string (naive local "YYYY-MM-DDTHH:mm[:ss]"), durationMinutes: number }
-// Creates a real Microsoft 365 calendar event via Graph POST /me/events. This is
-// the ONLY write path to M365 in the whole app — email stays strictly read-only
-// per CLAUDE.md. Every write is logged to AuditLog (action: CALENDAR_WRITE) and
-// blocked with 409 while MATCHING_TEST_MODE_ONLY is on (no real writes in test).
+// Creates a real Microsoft 365 calendar event via Graph POST /me/events. It is
+// one of TWO calendar write paths (the other is Drift's calendar confirm in
+// app/api/chat/route.ts); email stays strictly read-only per CLAUDE.md. Both
+// refuse unless GRAPH_ENABLED is exactly 'true' (Outlook is paused; Brief 41).
+// Every write is logged to AuditLog (action: CALENDAR_WRITE) and blocked with
+// 409 while MATCHING_TEST_MODE_ONLY is on (no real writes in test).
 //
 // `start` is a naive local datetime (no timezone) so it maps 1:1 onto Graph's
 // { dateTime, timeZone: America/New_York } shape (see lib/microsoftCalendar.ts).
@@ -51,6 +54,8 @@ async function counterpartName(counterpartType: string, counterpartId: string): 
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  // Outlook is paused (Brief 41): no calendar event is written.
+  if (!graphEnabled()) return NextResponse.json(GRAPH_PAUSED_BODY, { status: 403 })
   const { id } = await ctx.params
 
   // Block real M365 writes while the matching engine is in test-mode isolation.

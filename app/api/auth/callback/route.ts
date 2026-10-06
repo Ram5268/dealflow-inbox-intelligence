@@ -2,8 +2,13 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
+import { graphEnabled, GRAPH_PAUSED_MESSAGE } from '@/lib/graphAccess'
 
 export async function GET(req: NextRequest) {
+  // Outlook is paused (Brief 41): no code exchange, no token stored.
+  if (!graphEnabled()) {
+    return NextResponse.redirect(new URL(`/settings?oauth_error=${encodeURIComponent(GRAPH_PAUSED_MESSAGE)}`, req.url))
+  }
   const code = req.nextUrl.searchParams.get('code')
   const error = req.nextUrl.searchParams.get('error')
   const errorDescription = req.nextUrl.searchParams.get('error_description')

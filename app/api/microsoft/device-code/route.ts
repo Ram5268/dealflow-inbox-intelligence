@@ -1,10 +1,13 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { graphEnabled, GRAPH_PAUSED_BODY } from '@/lib/graphAccess'
 
 // Initiates the OAuth 2.0 device code flow.
 // User visits verificationUri, enters userCode, signs in with their DE account.
 // No IT consent required — uses delegated permissions the user approves themselves.
 export async function POST() {
+  // Outlook is paused (Brief 41): no Microsoft sign-in is started.
+  if (!graphEnabled()) return NextResponse.json(GRAPH_PAUSED_BODY, { status: 403 })
   const clientId = process.env.AZURE_CLIENT_ID
   if (!clientId) {
     return NextResponse.json(

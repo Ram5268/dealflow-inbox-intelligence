@@ -1,6 +1,7 @@
 import { prisma } from './prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { getRecentMessages, getMessageAttachments } from './microsoftGraph'
+import { graphEnabled, GRAPH_PAUSED_MESSAGE } from './graphAccess'
 import { classifyAndExtractEmail } from './ai'
 import { ingestEmail } from './ingestion/ingestEmail'
 import { queueItem as queueReviewItem } from './ingestion/reviewQueueManager'
@@ -110,6 +111,8 @@ const VALID_TX = new Set([
 export async function runIncrementalSync(): Promise<{
   fetched: number; newEmails: number; newOpps: number; skipped: boolean; matches?: number; error?: string
 }> {
+  // Outlook is paused (Brief 41): nothing to fetch. Expected, so not logged.
+  if (!graphEnabled()) return { fetched: 0, newEmails: 0, newOpps: 0, skipped: true, error: GRAPH_PAUSED_MESSAGE }
   try {
     const organizationId = await getCurrentOrgId()
 

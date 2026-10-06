@@ -1,9 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { testConnection } from '@/lib/microsoftGraph'
+import { graphEnabled, GRAPH_PAUSED_BODY } from '@/lib/graphAccess'
 
 // READ-ONLY: Only calls GET /me on Microsoft Graph
 export async function GET() {
+  if (!graphEnabled()) return NextResponse.json(GRAPH_PAUSED_BODY, { status: 403 })
   const result = await testConnection()
 
   if (!result.ok) {

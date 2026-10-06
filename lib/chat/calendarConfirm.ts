@@ -16,6 +16,9 @@ export interface PendingEventInput {
 }
 
 export interface ConfirmDeps {
+  // False unless GRAPH_ENABLED is exactly 'true' (Outlook is paused, Brief 41):
+  // skip the write and say so, still log the chat.
+  graphOn: boolean
   // True when MATCHING_TEST_MODE_ONLY is on — skip the real write, still log the chat.
   testModeOn: boolean
   createEvent: (input: {
@@ -78,6 +81,13 @@ export async function runCalendarConfirm(args: {
       content: assistantText, dealsJson: [], suggestions: [],
     })
     await deps.touchSession(sessionId)
+  }
+
+  // Outlook is paused: nothing is written, and the reply says so plainly.
+  if (!deps.graphOn) {
+    const text = "Outlook is paused, so I didn't add that to your calendar."
+    await persistMessages(text)
+    return { text, wroteEvent: false, eventId: null }
   }
 
   // Safety gate — no real M365 write while the matcher is in test-mode isolation.

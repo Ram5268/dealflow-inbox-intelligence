@@ -1,7 +1,12 @@
 // Microsoft Graph service. Email access is read-only (GET only).
-// Calendar writes (POST /me/events) are permitted — user's own calendar only.
+// Calendar writes (POST /me/events, user's own calendar only) happen in exactly
+// two places: the /matches Calendar button (schedule-showing) and Drift's
+// calendar confirm. Everything here goes through getToken(), which refuses
+// unless GRAPH_ENABLED is exactly 'true' (lib/graphAccess.ts; Brief 41). Outlook
+// is on a compliance pause, so leave it unset.
 
 import { prisma } from './prisma'
+import { graphEnabled, GraphDisabledError, resolveGraphToken } from './graphAccess'
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0'
 
@@ -47,47 +52,21 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
   return access_token
 }
 
+// Brief 41 (H10): unless GRAPH_ENABLED is exactly 'true' this throws
+// GraphDisabledError before touching anything: no DB read, no refresh call to
+// Microsoft, no stale-token or env-token fallback.
 export async function getToken(): Promise<string> {
-  try {
-    const record = await prisma.connectedMailbox.findUnique({
-      where: { id: 'runtime-token' },
-      select: {
-        accessTokenEncrypted: true,
-        refreshTokenEncrypted: true,
-        lastSyncAt: true,
-      },
-    })
-
-    if (record?.accessTokenEncrypted) {
-      // Check if access token is expired (lastSyncAt stores expiry)
-      const isExpired = record.lastSyncAt
-        ? record.lastSyncAt.getTime() < Date.now() + 60_000 // refresh 1 min early
-        : false
-
-      if (!isExpired) {
-        return record.accessTokenEncrypted
-      }
-
-      // Try to refresh using refresh token
-      if (record.refreshTokenEncrypted) {
-        const newToken = await refreshAccessToken(record.refreshTokenEncrypted)
-        if (newToken) return newToken
-      }
-
-      // Access token may still work even if we think it's expired — try it
-      return record.accessTokenEncrypted
-    }
-  } catch {
-    // DB not ready — fall through to env var
-  }
-
-  const token = process.env.MICROSOFT_GRAPH_ACCESS_TOKEN
-  if (!token) {
-    throw new Error(
-      'No Microsoft Graph token found. Go to Settings and click "Connect Outlook" to set up permanent access.'
-    )
-  }
-  return token
+  if (!graphEnabled()) throw new GraphDisabledError()
+  return resolveGraphToken({
+    loadStored: () =>
+      prisma.connectedMailbox.findUnique({
+        where: { id: 'runtime-token' },
+        select: { accessTokenEncrypted: true, refreshTokenEncrypted: true, lastSyncAt: true },
+      }),
+    refresh: refreshAccessToken,
+    envToken: () => process.env.MICROSOFT_GRAPH_ACCESS_TOKEN,
+    now: () => Date.now(),
+  })
 }
 
 async function graphGet<T>(path: string): Promise<T> {
