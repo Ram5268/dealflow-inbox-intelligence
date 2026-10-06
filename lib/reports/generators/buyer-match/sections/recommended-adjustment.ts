@@ -10,6 +10,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type { GenContext, SectionResult, SourceRef } from '../../types'
 import { nowISO } from '../../types'
 import { criteriaLine } from './_format'
+import { plainFitReason } from '../../../../matching/fitReason'
 
 const MODEL = 'claude-sonnet-4-6'
 
@@ -24,7 +25,8 @@ export async function recommendedAdjustmentSection(
   const hot = matches.filter(m => m.tier === 'HOT')
   const warm = matches.filter(m => m.tier === 'WARM')
   const possible = matches.filter(m => m.tier === 'POSSIBLE')
-  const nearReasons = [...warm, ...possible].slice(0, 5).map(m => `- ${m.reason ?? 'no reason recorded'}`).join('\n')
+  // Brief 41 (H7): never a seller's circumstances or a homeowner's estimate.
+  const nearReasons = [...warm, ...possible].slice(0, 5).map(m => `- ${m.reason ? plainFitReason(m.reason, { homeowner: m.listing.isHomeowner }) : 'no reason recorded'}`).join('\n')
 
   const sources: SourceRef[] = [{ type: 'matcher', at: nowISO() }, { type: 'inbox', id: b.id, at: nowISO() }]
 

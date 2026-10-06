@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { formatPriceRange } from '@/lib/utils'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
-import { outreachPriceText } from '@/lib/matching/outreachPrice'
+import { draftOutreachSystemPrompt } from '@/lib/matching/draftPrompt'
 import { MIXED_TEST_PAIR, isMixedTestPair, matchSides } from '@/lib/matching/pairSafety'
 
 // POST /api/matches/[id]/draft-outreach
@@ -156,26 +156,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // Brief 32 — supply may be an ExtractedOpportunity or a MojoContact seller.
   const opp = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
   if (!opp) return NextResponse.json({ error: 'listing side not found' }, { status: 404 })
+  // Brief 41 (H7): never a homeowner's name, our estimate or a seller-circumstance reason.
   const listingAddress = opp.address ?? opp.extractedTitle
-  const listingPrice = outreachPriceText(opp) // never our estimate for a seller contact
-  const listingBeds = opp.beds ? `${opp.beds}BR` : 'beds n/a'
-
-  const system = `You are drafting a brief outreach ${channel} from a NYC real estate broker (Ryan Martin, Douglas Elliman) to a prospect. Match context:
-
-Prospect: ${party.name} — ${party.role}
-Their criteria: ${[party.budget, party.beds, party.neighborhood].filter(Boolean).join(' · ') || 'unspecified'}
-Property: ${listingAddress} · ${listingBeds} · ${listingPrice}
-Match reason: ${match.reason ?? 'strong fit on criteria'}
-
-Draft ${channel === 'email' ? 'a subject line and a 2-3 sentence body' : 'a 2-3 sentence text'}.
-Rules:
-- Warm but not pushy
-- Reference one specific detail from the property AND from their criteria
-- Include address + one specific number (price OR beds)
-- End with an open question or soft invite ("worth a look?" / "shall I set up a showing?")
-- Do NOT: use exclamation marks, say "act fast" or "urgent", assume prior conversation, over-promise
-
-Return ONLY valid JSON: ${channel === 'email' ? '{ "subject": string, "body": string }' : '{ "body": string }'}`
+  const system = draftOutreachSystemPrompt({ channel, party, supply: opp, matchReason: match.reason, counterpartType: match.counterpartType })
 
   let resp: Anthropic.Messages.Message
   try {

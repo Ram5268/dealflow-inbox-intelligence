@@ -65,6 +65,7 @@ export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
   let weightedTotalAbs = 0
   const unknownFactors: string[] = []
   const perFeatureAbs: Record<string, number> = {}
+  const scores: Record<string, number> = {}
 
   for (const f of features) {
     if (f.confidence === 'LOW') {
@@ -80,6 +81,7 @@ export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
     weightedTotalConf += effective
     weightedTotalAbs += abs
     perFeatureAbs[f.key] = abs
+    scores[f.key] = f.score
   }
 
   const matchFitConfidence = confidenceFromAbstentions(unknownFactors.length)
@@ -100,7 +102,7 @@ export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
     }
   }
 
-  return { matchFit, matchFitConfidence, contributions, unknownFactors }
+  return { matchFit, matchFitConfidence, contributions, unknownFactors, scores }
 }
 
 export function scorePair(
@@ -148,7 +150,10 @@ export function scorePair(
     ...(listing.sourceType === 'contact' ? [] : [computeRecency(listing, context.now)]),
   ]
 
-  const matchFit = capForPriceChance(composeMatchFit(features), listing, buyer)
+  const matchFit = {
+    ...capForPriceChance(composeMatchFit(features), listing, buyer),
+    homeownerSeller: listing.sourceType === 'contact',
+  }
   const captureStatus = computeCaptureStatus(listing, buyer, context)
 
   return { matchFit, captureStatus, eligibility }

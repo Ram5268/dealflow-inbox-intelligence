@@ -35,7 +35,7 @@ export async function budgetRealitySection(ctx: GenContext): Promise<SectionResu
     metrics.push({ label: 'Median $/SF in criteria', value: money(medianPpsf), source: 'matcher' })
     metrics.push({ label: '$/SF range', value: `${money(minPpsf)}–${money(maxPpsf)}`, source: 'matcher' })
   } else {
-    metrics.push({ label: 'Median $/SF in criteria', value: 'not available (no SF on matched listings)', source: 'matcher' })
+    metrics.push({ label: 'Median $/SF in criteria', value: 'not available (no matched listing has both an asking price and SF)', source: 'matcher' })
   }
   metrics.push({ label: 'Budget ceiling', value: money(ceiling), source: 'inbox' })
 
@@ -57,7 +57,7 @@ export async function budgetRealitySection(ctx: GenContext): Promise<SectionResu
 
   const ppsfProse = medianPpsf != null
     ? `Matched inventory runs about ${money(medianPpsf)} per square foot (${money(minPpsf)}–${money(maxPpsf)}).`
-    : `None of the matched listings carry square footage, so a $/SF read is not available this period.`
+    : `None of the matched listings carry both an asking price and square footage, so a $/SF read is not available this period.`
 
   const budgetProse = ceiling != null
     ? ` The buyer's ceiling is ${money(ceiling)}.`

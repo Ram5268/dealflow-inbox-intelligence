@@ -18,7 +18,7 @@ const BUYER: BuyerRecord = {
 function listing(id: string, address: string, price: number) {
   return {
     id, category: Category.ACTIVE_SALE_LISTING, address, neighborhood: 'Soho', borough: 'Manhattan',
-    price, beds: 2, squareFeet: 1500, extractedTitle: address, sourceBrokerage: 'Compass', sourceAgentName: null, availabilityDate: null,
+    price, beds: 2, squareFeet: 1500, extractedTitle: address, sourceBrokerage: 'Compass', sourceAgentName: null, availabilityDate: null, isHomeowner: false,
   }
 }
 

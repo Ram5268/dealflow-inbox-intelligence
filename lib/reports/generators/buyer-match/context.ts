@@ -94,6 +94,7 @@ export async function gatherContext({
           sourceBrokerage: s.sourceBrokerage,
           sourceAgentName: s.sourceAgentName,
           availabilityDate: s.availabilityDate,
+          isHomeowner: s.opportunityType === 'contact',
         },
       }]
     })

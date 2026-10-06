@@ -77,6 +77,9 @@ export type MatchedListing = {
     sourceBrokerage: string | null
     sourceAgentName: string | null
     availabilityDate: string | null
+    // Brief 41 (H7): a homeowner (CRM/Mojo seller), not a listing: no price,
+    // no name, no seller circumstances in anything shown for it.
+    isHomeowner: boolean
   }
 }
 

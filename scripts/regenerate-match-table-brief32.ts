@@ -17,15 +17,13 @@ import {
 import { scorePair } from '../lib/matching/scorer'
 import { precomputeCompsMedians, precomputeSubstitutionCounts } from '../lib/matching/compsCache'
 import type { ListingData, BuyerData } from '../lib/matching/scorerTypes'
+import { reasonOf } from '../lib/matching/nightly/select'
 import type { Prisma } from '@prisma/client'
 
 const SALE_LISTING_CATS = ['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'ACTIVE_SALE_LISTING', 'PRICE_DROP', 'BACK_ON_MARKET', 'DEVELOPMENT_INVENTORY', 'SPONSOR_UNIT', 'COMING_SOON_DEVELOPMENT']
 
 function tierOf(mf: number): 'HOT' | 'WARM' | 'POSSIBLE' {
   return mf >= 80 ? 'HOT' : mf >= 65 ? 'WARM' : 'POSSIBLE'
-}
-function reasonOf(contributions: Record<string, number>): string {
-  return Object.entries(contributions).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(' + ')
 }
 async function chunked<T>(arr: T[], size: number, fn: (slice: T[]) => Promise<void>) {
   for (let i = 0; i < arr.length; i += size) await fn(arr.slice(i, i + size))
@@ -116,7 +114,7 @@ async function main() {
         counterpartType: buyer.sourceType === 'contact' ? 'mojo' : 'opportunity',
         score: mf,
         tier: tierOf(mf),
-        reason: reasonOf(res.matchFit.contributions),
+        reason: reasonOf(res.matchFit), // Brief 41: plain English, never motivation keys
         captureStatus: res.captureStatus,
         matchFitConfidence: res.matchFit.matchFitConfidence,
         contributions: res.matchFit.contributions as Prisma.InputJsonValue,

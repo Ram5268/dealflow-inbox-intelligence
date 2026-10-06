@@ -19,6 +19,15 @@ export interface MatchFitResult {
   matchFitConfidence: Confidence // Brief 32.A.1: derived from unknownFactors count
   contributions: Record<string, number> // per-feature % of |total signal|
   unknownFactors: string[] // features with LOW confidence (abstained)
+  // Brief 41 (H7): each voting feature's score (0-1; above 0.5 raised the fit,
+  // below lowered it). `contributions` is sign-blind, so a reason reads these
+  // to never call a drawback, a partial fit or a "no preference" default a
+  // strength.
+  scores?: Record<string, number>
+  // Brief 41 (H7): the seller is a homeowner (CRM contact). Reports and drafts
+  // never show a homeowner's price (our estimate, or an expired listing's last
+  // asking price: "off-market, price not set"), so a reason never names price.
+  homeownerSeller?: boolean
 }
 
 export interface ScoringContext {
