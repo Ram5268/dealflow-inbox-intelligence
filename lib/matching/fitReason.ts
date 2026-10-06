@@ -2,9 +2,11 @@
 //
 // It names only fit features (place, price, size, type, building). It never
 // names the seller-side motivation signals the scorer also weighs (distress,
-// equity, vacancy, absentee owner, tenure, lead lists): those must never reach
-// a buyer, a report or an outreach draft. It never calls a drawback a strength,
-// and it never names price when the seller's only price is our estimate.
+// equity, vacancy, absentee owner, tenure, lead lists), or the buyer-strategy
+// feature (it partly scores distress): those must never reach a buyer, a
+// report or an outreach draft. A strength is only a real match of what the
+// buyer asked for; a drawback is named as one; and price is never named when
+// the seller's only price is our estimate.
 import type { MatchFitResult } from './scorerTypes'
 
 // A fit feature that raised the match.
@@ -18,7 +20,6 @@ const FIT_LABELS: Record<string, string> = {
   outdoorSpace: 'outdoor space',
   buildingAmenity: 'building amenities',
   substitutionScarcity: 'few alternatives for this buyer',
-  buyerArchetypeSituation: "suits the buyer's strategy",
   recency: 'fresh listing',
 }
 // The same feature when it lowered the match.
@@ -32,7 +33,6 @@ const WEAK_LABELS: Record<string, string> = {
   outdoorSpace: 'outdoor space',
   buildingAmenity: 'building amenities',
   substitutionScarcity: 'uniqueness',
-  buyerArchetypeSituation: "fit with the buyer's strategy",
   recency: 'listing age',
 }
 // The same feature when the direction isn't known (older stored reasons).
@@ -46,7 +46,6 @@ const NEUTRAL_LABELS: Record<string, string> = {
   outdoorSpace: 'outdoor space',
   buildingAmenity: 'building amenities',
   substitutionScarcity: 'scarcity of alternatives',
-  buyerArchetypeSituation: "the buyer's strategy",
   recency: 'listing date',
 }
 // The scorer's seller-motivation features: never named.
@@ -54,24 +53,31 @@ export const MOTIVATION_KEYS: ReadonlySet<string> = new Set([
   'highEquity', 'freeAndClear', 'goldenHandcuff', 'absenteeOwner', 'vacancy',
   'preForeclosure', 'foreclosureUrgency', 'tenure', 'sourceListMotivation',
 ])
+// Never named: the motivation signals, and the buyer-strategy feature (for a
+// cash buyer it scores distress and equity).
+export const NEVER_NAMED: ReadonlySet<string> = new Set([...MOTIVATION_KEYS, 'buyerArchetypeSituation'])
 export const FIT_KEYS: readonly string[] = Object.keys(FIT_LABELS)
 export const GENERIC_FIT_REASON = "Fits the buyer's criteria"
 
-// A drawback is named only when it carried a real share of the score.
+// A strength is a real match of what the buyer asked for: those score 0.9-1.0.
+// "No preference" defaults (0.7-0.8) and partial fits (an adjacent
+// neighborhood 0.6, a price just over the budget) are not strengths.
+const STRONG_SCORE = 0.9
+// A drawback (score under 0.5) is named only when it carried a real share.
 const MIN_HURT_SHARE = 10
 
 const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1)
 
-// The nightly reason: up to 3 fit features that raised the match, strongest
-// first, then up to 2 that lowered it ("Right neighborhood, bedroom count;
-// weaker on price").
-export function fitReason(mf: Pick<MatchFitResult, 'contributions' | 'helped' | 'hurt' | 'priceFromEstimate'>): string {
-  const nameable = (k: string) => Object.hasOwn(FIT_LABELS, k) && !(k === 'price' && mf.priceFromEstimate)
-  const strengths = (mf.helped ?? []).filter(nameable).slice(0, 3).map(k => FIT_LABELS[k])
-  const drawbacks = (mf.hurt ?? [])
-    .filter(k => nameable(k) && (mf.contributions[k] ?? 0) >= MIN_HURT_SHARE)
-    .slice(0, 2)
-    .map(k => WEAK_LABELS[k])
+// The nightly reason: up to 3 strengths, then up to 2 drawbacks, each by its
+// share of the score ("Right neighborhood, bedroom count; weaker on price").
+export function fitReason(mf: Pick<MatchFitResult, 'contributions' | 'scores' | 'priceFromEstimate'>): string {
+  const scores = mf.scores ?? {}
+  const share = (k: string) => mf.contributions[k] ?? 0
+  const ranked = Object.keys(scores)
+    .filter(k => Object.hasOwn(FIT_LABELS, k) && !(k === 'price' && mf.priceFromEstimate))
+    .sort((a, b) => share(b) - share(a))
+  const strengths = ranked.filter(k => scores[k] >= STRONG_SCORE).slice(0, 3).map(k => FIT_LABELS[k])
+  const drawbacks = ranked.filter(k => scores[k] < 0.5 && share(k) >= MIN_HURT_SHARE).slice(0, 2).map(k => WEAK_LABELS[k])
   const weaker = drawbacks.length ? `weaker on ${drawbacks.join(' and ')}` : ''
   if (strengths.length && weaker) return `${capitalize(strengths.join(', '))}; ${weaker}`
   if (strengths.length) return capitalize(strengths.join(', '))

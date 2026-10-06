@@ -14,8 +14,10 @@ import { recommendedAdjustmentSection } from '../sections/recommended-adjustment
 import { resolveSupply } from '../../../../matching/supplyResolver'
 import { draftOutreachSystemPrompt } from '../../../../matching/draftPrompt'
 import { reasonOf } from '../../../../matching/nightly/select'
-import { FIT_KEYS, MOTIVATION_KEYS, plainFitReason } from '../../../../matching/fitReason'
+import { FIT_KEYS, NEVER_NAMED, plainFitReason } from '../../../../matching/fitReason'
 import { WEIGHTS } from '../../../../matching/weights'
+import { scorePair } from '../../../../matching/scorer'
+import { makeListing, makeBuyer, makeContext } from '../../../../matching/__tests__/fixtures'
 import type { MatchFitResult } from '../../../../matching/scorerTypes'
 
 const HOMEOWNER = {
@@ -107,28 +109,53 @@ test('an outreach draft prompt for a homeowner has the address, no name, no esti
   }
 })
 
-const mf = (contributions: Record<string, number>, helped: string[], hurt: string[] = [], priceFromEstimate = false): MatchFitResult =>
-  ({ matchFit: 70, matchFitConfidence: 'HIGH', contributions, unknownFactors: [], helped, hurt, priceFromEstimate })
+const mf = (contributions: Record<string, number>, scores: Record<string, number>, priceFromEstimate = false): MatchFitResult =>
+  ({ matchFit: 70, matchFitConfidence: 'HIGH', contributions, unknownFactors: [], scores, priceFromEstimate })
 
 test('new nightly reasons never name a seller-motivation signal', () => {
-  const r = reasonOf(mf({ preForeclosure: 40, highEquity: 25, absenteeOwner: 10, neighborhood: 15, beds: 10 }, ['preForeclosure', 'highEquity', 'neighborhood', 'absenteeOwner', 'beds']))
+  const r = reasonOf(mf({ preForeclosure: 40, highEquity: 25, absenteeOwner: 10, neighborhood: 15, beds: 10 }, { preForeclosure: 1, highEquity: 1, absenteeOwner: 1, neighborhood: 1, beds: 1 }))
   assertClean('nightly reason', r)
   assert.equal(r, 'Right neighborhood, bedroom count')
 })
 
-test('a homeowner priced over the budget by our estimate is never called "in budget" (Brief 41 review)', () => {
-  // Estimate $2.6M vs a $1.5–2.0M buyer: price pulled the score down, and the
-  // scorer says the only price is our estimate.
-  const r = reasonOf(mf({ price: 45, neighborhood: 30, beds: 25 }, ['neighborhood', 'beds'], ['price'], true))
-  assert.equal(r, 'Right neighborhood, bedroom count')
-  assert.doesNotMatch(r, /budget|price/i)
-  // Wrong neighborhood (same borough, not adjacent): named as a drawback.
-  assert.equal(reasonOf(mf({ neighborhood: 40, beds: 35, price: 25 }, ['beds', 'price'], ['neighborhood'])), 'Bedroom count, in budget; weaker on location')
+// The real scorer, end to end, on CRM sellers as they're synced: outdoor space
+// and amenities unknown, no buyer preference for them, baths or type.
+const ctx = makeContext({ now: new Date('2026-10-05T12:00:00Z'), substitutionCounts: new Map([['b1', 20]]) })
+const crmSeller = (over: Parameters<typeof makeListing>[0]) => makeListing({
+  id: 's1', sourceType: 'contact', neighborhood: 'Carroll Gardens', borough: 'Brooklyn', beds: 4, baths: 2,
+  propertyType: null, unitCount: 1, buildingSqft: 2400, createdAt: new Date('2026-09-01'), ...over,
+})
+const buyer = (over: Parameters<typeof makeBuyer>[0] = {}) =>
+  makeBuyer({ id: 'b1', neighborhoods: ['Carroll Gardens'], priceMin: 1_500_000, priceMax: 2_000_000, bedsMin: 3, bedsMax: 5, ...over })
+const nightlyReason = (l: ReturnType<typeof crmSeller>, b: ReturnType<typeof buyer>) => {
+  const r = scorePair(l, b, ctx)
+  assert.equal(r.eligibility.eligible, true, r.eligibility.reason)
+  return reasonOf(r.matchFit)
+}
+const NOT_ASKED_OR_ESTIMATE = /budget|price|outdoor|amenit|bathroom|property type|strategy|fresh/i
+
+test('a homeowner our estimate puts over budget: no "in budget", no defaults named as strengths (Brief 41 review)', () => {
+  // Estimate $2.6M vs a $1.5–2.0M buyer (about a 1-in-4 chance): capped at POSSIBLE.
+  const r = nightlyReason(crmSeller({ price: 2_600_000, estimatedValue: 2_600_000 }), buyer())
+  assert.match(r, /^Right neighborhood, bedroom count$/)
+  assert.doesNotMatch(r, NOT_ASKED_OR_ESTIMATE)
+  // As synced today (no estimate at all).
+  assert.match(nightlyReason(crmSeller({ price: null }), buyer()), /^Right neighborhood, bedroom count$/)
+})
+
+test('an adjacent neighborhood is not "right neighborhood"', () => {
+  const r = nightlyReason(crmSeller({ price: null, neighborhood: 'Clinton Hill' }), buyer({ neighborhoods: ['Bedford-Stuyvesant'] }))
+  assert.doesNotMatch(r, /right neighborhood/i)
+  assert.doesNotMatch(r, NOT_ASKED_OR_ESTIMATE)
+})
+
+test('a wrong neighborhood (same borough, not adjacent) is named as a drawback', () => {
+  assert.equal(reasonOf(mf({ neighborhood: 40, beds: 35, price: 25 }, { neighborhood: 0.3, beds: 1, price: 1 })), 'Bedroom count, in budget; weaker on location')
 })
 
 test('every scorer feature is either named as a fit feature or never named', () => {
-  assert.deepEqual([...FIT_KEYS, ...MOTIVATION_KEYS].sort(), Object.keys(WEIGHTS).sort())
-  assert.equal(FIT_KEYS.filter(k => MOTIVATION_KEYS.has(k)).length, 0)
+  assert.deepEqual([...FIT_KEYS, ...NEVER_NAMED].sort(), Object.keys(WEIGHTS).sort())
+  assert.equal(FIT_KEYS.filter(k => NEVER_NAMED.has(k)).length, 0)
 })
 
 test('an older stored reason: neutral words, motivation and unknown keys dropped', () => {

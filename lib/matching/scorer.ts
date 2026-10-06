@@ -65,7 +65,7 @@ export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
   let weightedTotalAbs = 0
   const unknownFactors: string[] = []
   const perFeatureAbs: Record<string, number> = {}
-  const signed: Array<[string, number]> = []
+  const scores: Record<string, number> = {}
 
   for (const f of features) {
     if (f.confidence === 'LOW') {
@@ -81,7 +81,7 @@ export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
     weightedTotalConf += effective
     weightedTotalAbs += abs
     perFeatureAbs[f.key] = abs
-    signed.push([f.key, contrib])
+    scores[f.key] = f.score
   }
 
   const matchFitConfidence = confidenceFromAbstentions(unknownFactors.length)
@@ -102,11 +102,7 @@ export function composeMatchFit(features: FeatureResult[]): MatchFitResult {
     }
   }
 
-  const strongestFirst = (xs: Array<[string, number]>) => xs.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).map(([k]) => k)
-  const helped = strongestFirst(signed.filter(([, c]) => c > 0))
-  const hurt = strongestFirst(signed.filter(([, c]) => c < 0))
-
-  return { matchFit, matchFitConfidence, contributions, unknownFactors, helped, hurt }
+  return { matchFit, matchFitConfidence, contributions, unknownFactors, scores }
 }
 
 export function scorePair(

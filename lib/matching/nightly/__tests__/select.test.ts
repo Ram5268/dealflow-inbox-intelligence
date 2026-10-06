@@ -7,11 +7,12 @@ const c = (buyerId: string, matchFit: number): Candidate => ({
   sellerId: 's1', buyerId, counterpartType: 'opportunity', captureStatus: 'EXTERNAL_BOTH',
   matchFit: {
     matchFit, matchFitConfidence: 'LOW', contributions: { beds: 50, neighborhood: 30, recency: 15, tenure: 5 }, unknownFactors: ['price'],
-    helped: ['beds', 'neighborhood', 'recency'], hurt: ['tenure'], priceFromEstimate: false,
+    scores: { beds: 1, neighborhood: 1, recency: 0.95, tenure: 0.2 }, priceFromEstimate: false,
   },
 })
-const mf = (contributions: Record<string, number>, helped: string[], hurt: string[] = [], priceFromEstimate = false): MatchFitResult =>
-  ({ matchFit: 70, matchFitConfidence: 'HIGH', contributions, unknownFactors: [], helped, hurt, priceFromEstimate })
+// contributions = each feature's share of the score; scores = its 0-1 score.
+const mf = (contributions: Record<string, number>, scores: Record<string, number>, priceFromEstimate = false): MatchFitResult =>
+  ({ matchFit: 70, matchFitConfidence: 'HIGH', contributions, unknownFactors: [], scores, priceFromEstimate })
 
 test('pairs below the threshold are dropped', () => {
   assert.equal(MIN_MATCH_FIT, 50)
@@ -28,29 +29,45 @@ test('top 10 per seller, best first; ties by buyer id ascending', () => {
 
 test('tiers and reason', () => {
   assert.deepEqual([tierOf(80), tierOf(79), tierOf(65), tierOf(64), tierOf(50)], ['HOT', 'WARM', 'WARM', 'POSSIBLE', 'POSSIBLE'])
-  // Brief 41 (H7): plain English, the fit features that helped (top 3), never a
-  // seller-motivation key.
-  assert.equal(reasonOf(mf({ beds: 50, neighborhood: 30, recency: 15, tenure: 5 }, ['beds', 'neighborhood', 'recency', 'tenure'])), 'Bedroom count, right neighborhood, fresh listing')
-  assert.equal(reasonOf(mf({ preForeclosure: 60, highEquity: 25, neighborhood: 10, absenteeOwner: 5 }, ['preForeclosure', 'highEquity', 'neighborhood', 'absenteeOwner'])), 'Right neighborhood')
-  assert.equal(reasonOf(mf({ tenure: 70, vacancy: 30 }, ['tenure', 'vacancy'])), "Fits the buyer's criteria")
+  // Brief 41 (H7): plain English, the fit features that really matched (top 3),
+  // never a seller-motivation key.
+  assert.equal(reasonOf(mf({ beds: 50, neighborhood: 30, recency: 15, tenure: 5 }, { beds: 1, neighborhood: 1, recency: 0.95, tenure: 0.9 })), 'Bedroom count, right neighborhood, fresh listing')
+  assert.equal(reasonOf(mf({ preForeclosure: 60, highEquity: 25, neighborhood: 10, absenteeOwner: 5 }, { preForeclosure: 1, highEquity: 1, neighborhood: 1, absenteeOwner: 0.9 })), 'Right neighborhood')
+  assert.equal(reasonOf(mf({ tenure: 70, vacancy: 30 }, { tenure: 1, vacancy: 1 })), "Fits the buyer's criteria")
 })
 
 test('a drawback is never called a strength (Brief 41 review)', () => {
   // Price and neighborhood pulled the score down: they're named as weaker, not as fits.
-  const r = reasonOf(mf({ price: 40, neighborhood: 25, beds: 20, baths: 10, preForeclosure: 5 }, ['beds', 'baths', 'preForeclosure'], ['price', 'neighborhood']))
+  const r = reasonOf(mf({ price: 40, neighborhood: 25, beds: 20, baths: 10, preForeclosure: 5 }, { price: 0.2, neighborhood: 0.3, beds: 1, baths: 1, preForeclosure: 1 }))
   assert.equal(r, 'Bedroom count, bathrooms; weaker on price and location')
   assert.doesNotMatch(r, /in budget|right neighborhood/i)
   // Only drawbacks: just those.
-  assert.equal(reasonOf(mf({ neighborhood: 70, beds: 30 }, [], ['neighborhood', 'beds'])), 'Weaker on location and bedrooms')
+  assert.equal(reasonOf(mf({ neighborhood: 70, beds: 30 }, { neighborhood: 0.3, beds: 0.3 })), 'Weaker on location and bedrooms')
   // A drawback with a small share isn't worth naming.
-  assert.equal(reasonOf(mf({ beds: 60, neighborhood: 35, baths: 5 }, ['beds', 'neighborhood'], ['baths'])), 'Bedroom count, right neighborhood')
+  assert.equal(reasonOf(mf({ beds: 60, neighborhood: 35, baths: 5 }, { beds: 1, neighborhood: 1, baths: 0.3 })), 'Bedroom count, right neighborhood')
+})
+
+test('"no preference" defaults and partial fits are never called strengths (Brief 41 review)', () => {
+  // The buyer asked nothing about outdoor space, amenities, baths or type (0.7-0.8
+  // defaults); the neighborhood is only adjacent (0.6); the price is a bit over (0.6).
+  const r = reasonOf(mf(
+    { beds: 30, neighborhood: 8, price: 8, outdoorSpace: 3, buildingAmenity: 3, baths: 10, propertyType: 12 },
+    { beds: 1, neighborhood: 0.6, price: 0.6, outdoorSpace: 0.7, buildingAmenity: 0.7, baths: 0.7, propertyType: 0.8 },
+  ))
+  assert.equal(r, 'Bedroom count')
+  // Nothing really matched and nothing hurt: the generic line.
+  assert.equal(reasonOf(mf({ outdoorSpace: 50, buildingAmenity: 50 }, { outdoorSpace: 0.7, buildingAmenity: 0.7 })), "Fits the buyer's criteria")
+  // The buyer-strategy feature is never named (for a cash buyer it scores distress).
+  assert.equal(reasonOf(mf({ buyerArchetypeSituation: 60, beds: 40 }, { buyerArchetypeSituation: 1, beds: 1 })), 'Bedroom count')
+  assert.equal(reasonOf(mf({ buyerArchetypeSituation: 60, beds: 40 }, { buyerArchetypeSituation: 0.2, beds: 1 })), 'Bedroom count')
 })
 
 test('price is never named when the seller\'s only price is our estimate', () => {
-  assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, ['price', 'beds', 'neighborhood'], [], true)), 'Bedroom count, right neighborhood')
-  assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, ['beds', 'neighborhood'], ['price'], true)), 'Bedroom count, right neighborhood')
+  assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, { price: 1, beds: 1, neighborhood: 1 }, true)), 'Bedroom count, right neighborhood')
+  assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, { price: 0.1, beds: 1, neighborhood: 1 }, true)), 'Bedroom count, right neighborhood')
   // A real asking price (or an expired listing's last asking price) is named.
-  assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, ['beds', 'neighborhood'], ['price'])), 'Bedroom count, right neighborhood; weaker on price')
+  assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, { price: 0.1, beds: 1, neighborhood: 1 })), 'Bedroom count, right neighborhood; weaker on price')
+  assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, { price: 1, beds: 1, neighborhood: 1 })), 'In budget, bedroom count, right neighborhood')
 })
 
 test('toMatchRow carries the scorer outputs', () => {
