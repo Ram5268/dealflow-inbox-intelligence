@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { maintenanceEnabled, adminSecretOk } from '../config/maintenance'
-import { mapStatus, statusUpdateFor } from '../streetEasyStatusUpdate'
+import { mapStatus, statusUpdateFor, SE_CHECKABLE_CATEGORIES } from '../streetEasyStatusUpdate'
 
 const ROOT = join(__dirname, '..', '..')
 const src = (f: string) => readFileSync(join(ROOT, f), 'utf8')
@@ -79,6 +79,9 @@ test('reextract extracts first, then swaps the listings in one transaction', () 
   assert.ok(del > tx, 'the old listings are deleted only inside the transaction')
   assert.equal(s.split('extractedOpportunity.deleteMany(').length - 1, 1, 'no other delete')
   assert.doesNotMatch(s.slice(0, tx), /extractedOpportunity\.create\(/, 'nothing is created outside the transaction')
+  // An answer with no entries keeps the old listings (Brief 41 review).
+  const empty = s.indexOf('if (results.length === 0) throw')
+  assert.ok(empty > extract && empty < tx, 'an empty extraction is refused before the swap')
 })
 
 const CRON_ROUTES: Array<[string, string[]]> = [
@@ -118,6 +121,10 @@ test('opening a listing never runs a StreetEasy lookup; the lookup is an explici
   const lookup = src('app/api/opportunities/[id]/streeteasy/route.ts')
   assert.deepEqual(handlers(lookup), ['POST'])
   assert.match(lookup, /syncOpportunityStatus\(id\)/)
+  // Same categories as the lookup itself, and a time limit for a 17-call miss.
+  assert.match(lookup, /SE_CHECKABLE_CATEGORIES\.has\(before\.category\)/)
+  assert.match(lookup, /export const maxDuration = 60/)
+  assert.match(src('app/opportunities/[id]/page.tsx'), /SE_CHECKABLE_CATEGORIES\.has\(opp\.category\)/)
   assert.match(src('app/opportunities/[id]/page.tsx'), /fetch\(`\/api\/opportunities\/\$\{id\}\/streeteasy`, \{ method: 'POST' \}\)/)
 })
 
@@ -134,4 +141,15 @@ test('a StreetEasy miss changes nothing but the check time; only StreetEasy\'s o
   assert.match(body, /const data = statusUpdateFor\(listing, new Date\(\)\)/)
   assert.doesNotMatch(body, /'delisted'|'stale'/)
   assert.match(body, /if \(!RAPIDAPI_KEY\) return \{ updated: false/)
+  assert.match(sync, /const CHECKABLE_CATEGORIES = SE_CHECKABLE_CATEGORIES/)
+  assert.equal(SE_CHECKABLE_CATEGORIES.size, 11)
+})
+
+test('listings StreetEasy never found are re-checked every 30 days, not 7 (quota)', () => {
+  const sync = src('lib/streetEasySync.ts')
+  const sweep = sync.slice(sync.indexOf('export async function runDailyStatusSweep('))
+  assert.match(sweep, /\{ streetEasyCheckedAt: null \}/)
+  assert.match(sweep, /\{ streetEasyId: \{ not: null \}, streetEasyCheckedAt: \{ lt: sevenDaysAgo \} \}/)
+  assert.match(sweep, /\{ streetEasyId: null, streetEasyCheckedAt: \{ lt: thirtyDaysAgo \} \}/)
+  assert.match(sweep, /const thirtyDaysAgo = new Date\(Date\.now\(\) - 30 \* 86_400_000\)/)
 })

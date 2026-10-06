@@ -1,7 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { SE_LISTABLE } from '@/lib/domain/Categories'
+import { SE_CHECKABLE_CATEGORIES } from '@/lib/streetEasyStatusUpdate'
+
+// A miss can be up to 17 sequential StreetEasy calls (the area and its borough's
+// fallbacks).
+export const maxDuration = 60
 
 // Brief 41 (H5): the StreetEasy lookup for one listing, run only when Ryan asks
 // for it ("Find listing" on the listing page). It used to run on every view of
@@ -18,7 +22,7 @@ export async function POST(
     select: { address: true, category: true, streetEasyCheckedAt: true },
   })
   if (!before) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  if (!before.address || !SE_LISTABLE.has(before.category)) {
+  if (!before.address || !SE_CHECKABLE_CATEGORIES.has(before.category)) {
     return NextResponse.json({ error: 'This listing has nothing to look up on StreetEasy' }, { status: 400 })
   }
 

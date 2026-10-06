@@ -72,6 +72,10 @@ export async function POST(req: NextRequest) {
           fullBody: email.bodyContent,
           attachmentText: email.attachmentsText,
         })
+        // An answer with no entries at all isn't a valid extraction (a noise
+        // email still comes back as one entry, isRelevant:false): keep the old
+        // listings rather than delete them and create nothing.
+        if (results.length === 0) throw new Error('the extractor returned no entries; the listings were left as they were')
 
         const fresh: { ext: (typeof results)[number]; data: Prisma.ExtractedOpportunityUncheckedCreateInput }[] = []
         for (const ext of results) {

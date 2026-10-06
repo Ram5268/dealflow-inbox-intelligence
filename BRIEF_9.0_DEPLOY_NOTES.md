@@ -11,7 +11,7 @@ Branch: `brief-9.0-prod-deploy` · executor pre-flight complete, holding for Rya
 | PWA icons generated (192/512/180) | `public/icon-192.png`, `icon-512.png`, `icon-180.png` | Manifest + `sw.js` referenced them but they didn't exist — PWA install + push icon would 404. |
 | Complete `.env.example` | `.env.example` | Was 3 keys; rebuilt from a full `process.env.*` grep. Doubles as the Vercel env checklist (§4). |
 | Prisma `binaryTargets` added | `prisma/schema.prisma` | Per brief. NOTE: project uses the **pg driver adapter** (`lib/prisma.ts`), so Prisma 7 runs queries through the JS `pg` driver, not the native Rust engine — the "engine not found" failure mode doesn't apply here. Added as harmless insurance; `prisma generate` verified clean. |
-| Secured GET entrypoint on sync tick | `app/api/sync/run/route.ts` | Route was POST-only + unauthenticated. Added a `GET` handler gated by `CRON_SECRET` (Bearer header or `?secret=`), mirroring `/api/push/digest`. QStash/Vercel cron use GET. Existing client-triggered POST left open (same-origin app-load call). |
+| Secured GET entrypoint on sync tick | `app/api/sync/run/route.ts` | Route was POST-only + unauthenticated. Added a `GET` handler gated by `CRON_SECRET` (Bearer header only since Brief 41; `?secret=` is no longer accepted), mirroring `/api/push/digest`. QStash/Vercel cron use GET. Existing client-triggered POST left open (same-origin app-load call). |
 
 Typecheck: `npx tsc --noEmit` → **0 errors**.
 
@@ -110,7 +110,7 @@ On "go":
 1. **Token freshness** — `GET <vercel-url>/api/microsoft/token-status` → fresh? else pause.
 2. **Health** — `GET <vercel-url>/api/debug/health` → `graphToken.status==='fresh'`, all three flags `false`, `subsystemLastSuccess.matcher` recent.
 3. **Chat calendar smoke** — `POST <vercel-url>/api/chat` "Schedule a showing for 123 Main St at 3pm tomorrow" → note `pendingEvent`; POST "confirm" → verify event on real calendar; check `AuditLog` `CALENDAR_WRITE` `source:'chat-confirm'`; then `DELETE /me/events/{id}` via Graph (own probe event — deletion allowed).
-4. **Zapier smoke** — fire test POST to `/api/mojo/webhook` (SE Buyers shape) → verify `ZapierIngestLog resultStatus='upserted'`, `MojoContact intent='BUYER'`, notes-parsed criteria, geocoded neighborhood, embedding. Trigger sync (`GET /api/sync/run?secret=<CRON_SECRET>` or wait for QStash tick) → verify BUYER matched against inbox listings, `Match` rows `counterpartType='mojo'`, `/matches/parties` renders.
+4. **Zapier smoke** — fire test POST to `/api/mojo/webhook` (SE Buyers shape) → verify `ZapierIngestLog resultStatus='upserted'`, `MojoContact intent='BUYER'`, notes-parsed criteria, geocoded neighborhood, embedding. Trigger sync (`GET /api/sync/run` with `-H "Authorization: Bearer <CRON_SECRET>"`, or wait for QStash tick) → verify BUYER matched against inbox listings, `Match` rows `counterpartType='mojo'`, `/matches/parties` renders.
 5. **Push smoke** — trigger test push → Ryan confirms on phone; `PushSubscription` row for new origin exists.
 
 Cleanup: delete smoke calendar event; note/keep-or-delete the test Mojo contact.

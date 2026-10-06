@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { ExtractedOpportunity, RawEmail } from '@prisma/client'
 import { CATEGORY_LABELS, TRANSACTION_LABELS, formatPriceRange, timeAgo, confidenceLabel } from '@/lib/utils'
 import TopNav from '@/components/TopNav'
+import { SE_CHECKABLE_CATEGORIES } from '@/lib/streetEasyStatusUpdate'
 import { showToast } from '@/components/Toast'
 
 type OppWithEmail = ExtractedOpportunity & { rawEmail: RawEmail }
@@ -34,9 +35,9 @@ export default function OpportunityDetailPage() {
       if (!res.ok) { showToast(data.error ?? 'StreetEasy lookup failed'); return }
       if (data.streetEasyId) {
         setOpp(o => (o ? { ...o, streetEasyId: data.streetEasyId, streetEasyStatus: data.streetEasyStatus, processingStatus: data.processingStatus } : o))
-        showToast('Found it on StreetEasy')
+        showToast(`Found it on StreetEasy (${data.streetEasyStatus ?? 'status unknown'})`)
       } else {
-        showToast(data.checked ? 'Not found on StreetEasy. Nothing was changed.' : 'StreetEasy lookups are paused right now.')
+        showToast(data.checked ? "StreetEasy didn't find it (or didn't answer). The listing is unchanged." : 'StreetEasy lookups are paused right now.')
       }
     } catch {
       showToast('StreetEasy lookup failed')
@@ -104,6 +105,8 @@ export default function OpportunityDetailPage() {
     : null
   const seUrl = seDirectUrl ?? seSearchUrl
   const seLabel = seDirectUrl ? 'View Listing →' : 'Search StreetEasy →'
+  // The lookup runs only when asked (Brief 41, H5), for the categories it handles.
+  const canLookUp = !seDirectUrl && !!opp.address && SE_CHECKABLE_CATEGORIES.has(opp.category)
 
   return (
     <div className="df-bg min-h-screen" style={{ minHeight: '100dvh', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
@@ -164,11 +167,11 @@ export default function OpportunityDetailPage() {
           <Field label="Subject" value={opp.rawEmail.subject} />
           <Field label="Sender" value={opp.rawEmail.senderName} />
           <Field label="Received" value={new Date(opp.rawEmail.receivedDateTime).toLocaleDateString()} />
-          {seUrl && (
+          {(seUrl || canLookUp) && (
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 13 }}>
               <span style={{ color: 'rgba(255,255,255,0.45)' }}>StreetEasy</span>
               <span style={{ display: 'flex', gap: 14 }}>
-                {seSearchUrl && (
+                {canLookUp && (
                   <button
                     onClick={findOnStreetEasy}
                     disabled={seLooking}
@@ -177,7 +180,7 @@ export default function OpportunityDetailPage() {
                     {seLooking ? 'Looking…' : 'Find listing'}
                   </button>
                 )}
-                <a href={seUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(120,200,220,0.9)' }}>{seLabel}</a>
+                {seUrl && <a href={seUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'rgba(120,200,220,0.9)' }}>{seLabel}</a>}
               </span>
             </div>
           )}

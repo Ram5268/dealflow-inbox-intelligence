@@ -6,6 +6,14 @@
 // the listing delisted + stale, which hid it from Drift's search and the buyer
 // report.
 
+// The categories a StreetEasy status check applies to (supply-side listings).
+// Shared by the sweep, the explicit lookup route and the listing page's button.
+export const SE_CHECKABLE_CATEGORIES: ReadonlySet<string> = new Set([
+  'ACTIVE_SALE_LISTING', 'RENTAL_LISTING', 'COMING_SOON_SALE', 'COMING_SOON_RENTAL',
+  'OFF_MARKET_SALE', 'BACK_ON_MARKET', 'PRICE_DROP', 'OPEN_HOUSE',
+  'DEVELOPMENT_INVENTORY', 'COMING_SOON_DEVELOPMENT', 'SPONSOR_UNIT',
+])
+
 export interface SEStatusListing {
   id: string
   status: string

@@ -1,7 +1,7 @@
 import { prisma } from './prisma'
 import { normalizeAddress } from './domain/Address'
 import { isTestModeOnly } from './config/testMode'
-import { statusUpdateFor } from './streetEasyStatusUpdate'
+import { statusUpdateFor, SE_CHECKABLE_CATEGORIES } from './streetEasyStatusUpdate'
 
 // Brief 3.0 follow-up — trial-mode kill switch. In seed-only trial mode there's
 // no real inbox flow, so the StreetEasy status sweep has no legitimate work and
@@ -21,11 +21,7 @@ const RAPIDAPI_HOST = process.env.RAPIDAPI_SE_HOST ?? 'nyc-real-estate-api.p.rap
 const BASE_URL      = `https://${RAPIDAPI_HOST}`
 
 // Supply-side categories that have real listings to check
-const CHECKABLE_CATEGORIES = new Set([
-  'ACTIVE_SALE_LISTING', 'RENTAL_LISTING', 'COMING_SOON_SALE', 'COMING_SOON_RENTAL',
-  'OFF_MARKET_SALE', 'BACK_ON_MARKET', 'PRICE_DROP', 'OPEN_HOUSE',
-  'DEVELOPMENT_INVENTORY', 'COMING_SOON_DEVELOPMENT', 'SPONSOR_UNIT',
-])
+const CHECKABLE_CATEGORIES = SE_CHECKABLE_CATEGORIES
 
 // Lat/lng bounding boxes for NYC neighborhoods — used to filter
 // broad borough search results down to the specific neighborhood
@@ -696,7 +692,13 @@ export async function runDailyStatusSweep(): Promise<{
   // IS NULL) are processed before previously-checked ones — Postgres' default
   // NULLS LAST for ASC meant new records never got reached when the batch cap
   // was hit (the 596 Van Buren bug pattern).
+  //
+  // Brief 41 (H5): a lookup that finds nothing no longer delists the listing,
+  // so a listing StreetEasy has never found (off-market, coming soon) stays
+  // active. It is re-checked every 30 days, not 7, so those can't fill the
+  // daily 75 and burn the RapidAPI quota (up to 17 calls per miss).
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000)
   const staleChecks = await prisma.extractedOpportunity.findMany({
     where: {
       processingStatus: 'active',
@@ -704,7 +706,8 @@ export async function runDailyStatusSweep(): Promise<{
       address: { not: null },
       OR: [
         { streetEasyCheckedAt: null },
-        { streetEasyCheckedAt: { lt: sevenDaysAgo } },
+        { streetEasyId: { not: null }, streetEasyCheckedAt: { lt: sevenDaysAgo } },
+        { streetEasyId: null, streetEasyCheckedAt: { lt: thirtyDaysAgo } },
       ],
     },
     select: { id: true },
