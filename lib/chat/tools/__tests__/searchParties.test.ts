@@ -1,20 +1,17 @@
-import 'dotenv/config'
-import { test, after } from 'node:test'
+import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { prisma } from '../../../prisma'
-import { searchParties, bedsMatches } from '../searchParties'
+import { bedsMatches } from '../searchParties'
 
 // Brief 30.1 — search_parties beds recall fix.
-// searchParties.ts imports the @/ alias + hits the DB, so this runs under tsx
-// (NOT ts-node, which can't resolve @/). The bedsMatches unit tests are pure;
-// the integration test hits the real Railway dev DB against a known seed id.
+// searchParties.ts imports the @/ alias, so this runs under tsx (NOT ts-node,
+// which can't resolve @/). These bedsMatches unit tests are pure. Brief 41: the
+// database test moved to searchParties.integration.test.ts (npm run
+// test:integration), so `npm test` never touches a database.
 //
 // Root cause fixed: buyer ISOs store bed criteria as minBeds/maxBeds with scalar
 // `beds` null (~90% of rows). The old `where.beds = input.beds` Prisma gate dropped
 // them, so search_parties returned 0 for legitimate range buyers. bedsMatches now
 // filters in-memory over the row's effective range [minBeds ?? beds, maxBeds ?? beds].
-
-after(async () => { await prisma.$disconnect() })
 
 test('bedsMatches — exact query matches ISO range row', () => {
   // BUYER_A pattern: beds=null, minBeds=2, maxBeds=2. Query beds=2 → match.
@@ -43,19 +40,4 @@ test('bedsMatches — unknown row is not excluded (neutral)', () => {
 
 test('bedsMatches — no query means no gate', () => {
   assert.ok(bedsMatches(null, null, null, null, 2, 2))
-})
-
-// Integration — hits real DB against a known seed id (BUYER_A).
-test('searchParties returns BUYER_A for beds=2, neighborhoods=[soho], price 4-5M', async () => {
-  const result = await searchParties({
-    role: 'buyer',
-    neighborhoods: ['soho'],
-    beds: 2,
-    priceRangeOverlaps: { min: 4_000_000, max: 5_000_000 },
-  })
-  const ids = result.cards.map(c => c.id)
-  assert.ok(
-    ids.includes('cmsp7l5he001qloo89haui4u2'),
-    `BUYER_A missing from search_parties result. Got: ${ids.join(',')}`,
-  )
 })

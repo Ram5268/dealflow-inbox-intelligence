@@ -3,7 +3,9 @@
 // correctly (resolveSupplies resolves the contact supply through the dropped-FK
 // reader path). Requires the Brief 32 seed + regen to have run. Run via tsx (this
 // file transitively imports the @/-free report context but hits the live DB).
-import 'dotenv/config'
+// Brief 41 (H11): first, so the guard runs before anything touches a database
+// (it loads .env, which this file used to do itself). npm run test:integration.
+import '../../../../__tests__/requireTestDb'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { prisma } from '@/lib/prisma'

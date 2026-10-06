@@ -1,10 +1,12 @@
-import 'dotenv/config'
+// Brief 41 (H11): first, so the guard runs before anything touches a database
+// (it loads .env, which this file used to do itself). npm run test:integration.
+import '../../../../__tests__/requireTestDb'
 import { test, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { prisma } from '../../../../prisma'
 import { generateBuyerMatchReport, generateBuyerMatchSection } from '../index'
 
-// Run via `npm test`. End-to-end against the real DB, but Sonnet is OMITTED
+// Run via `npm run test:integration` (Brief 41). End-to-end against a database, but Sonnet is OMITTED
 // (anthropic undefined) so the one LLM section falls back deterministically — no
 // API key, no cost, no flake. Picks a seed [TEST_10] BUYER_ISO with matches
 // dynamically so it survives seed-id churn; skips cleanly if the seed is absent.
