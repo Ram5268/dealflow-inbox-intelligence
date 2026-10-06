@@ -1,10 +1,13 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
+import { graphEnabled } from '@/lib/graphAccess'
 
 // Decodes the stored Graph JWT to extract the user's given name.
 // We only read the payload — no signature verification needed for display purposes.
 // Falls back through: given_name → first word of displayName → null.
 export async function GET() {
+  // Outlook is paused (Brief 41): no Microsoft token is read, even from env.
+  if (!graphEnabled()) return NextResponse.json({ givenName: null })
   const token = process.env.MICROSOFT_GRAPH_ACCESS_TOKEN
   if (!token) return NextResponse.json({ givenName: null })
 

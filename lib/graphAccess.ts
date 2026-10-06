@@ -22,6 +22,11 @@ export class GraphDisabledError extends Error {
 // JSON body for routes that refuse while the switch is off.
 export const GRAPH_PAUSED_BODY = { ok: false, paused: true, error: GRAPH_PAUSED_MESSAGE } as const
 
+// Drift's context block while the switch is off (lib/chat/context/calendar.ts),
+// on every turn: its prompt otherwise asks it to propose events.
+export const GRAPH_PAUSED_CALENDAR_BLOCK =
+  "\n\nCALENDAR: Outlook is paused, so you can't see or add calendar events right now. If asked, say that plainly. Never offer to book or schedule anything, and leave pendingEvent empty."
+
 export interface StoredGraphToken {
   accessTokenEncrypted: string | null
   refreshTokenEncrypted: string | null

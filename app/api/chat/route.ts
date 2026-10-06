@@ -567,6 +567,9 @@ export async function POST(req: NextRequest) {
     // HALLUCINATION_GUARD_ENABLED=false. Calendar turns are skipped — the confirm
     // fast-path returns earlier, and a proposal's pendingEvent date/time
     // legitimately isn't in tool results, so guarding it would false-positive.
+    // Outlook is paused (Brief 41): drop any calendar proposal, so this turn is
+    // guarded like any other and a later "yes" can't hit the confirm path.
+    if (!graphEnabled()) aiResult.pendingEvent = null
     const guardEnabled = process.env.HALLUCINATION_GUARD_ENABLED !== 'false'
     const guardApplies = guardEnabled && !aiResult.pendingEvent
     let currentResponse = aiResult.response ?? ''
