@@ -1,4 +1,6 @@
 import type { ListingData, BuyerData, FeatureResult } from '../scorerTypes'
+import { isAbsenteeOwner } from '../absentee'
+import { listingPropertyClass } from '../propertyTypes'
 
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000
 
@@ -24,15 +26,14 @@ function profileOf(listing: ListingData, now: Date): SituationProfile {
     listing.estimatedValue != null &&
     listing.estimatedValue > 0 &&
     listing.equityBalance / listing.estimatedValue >= 0.5
-  const altDiffers =
-    !!listing.alternateAddress &&
-    listing.alternateAddress.replace(/\s+/g, ' ').trim().toLowerCase() !==
-      (listing.address ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
-  const isAbsentee = listing.ownerOccupied === false || altDiffers
-  const typeText = `${listing.propertyType ?? ''} ${listing.propertyTypeDetail ?? ''}`.toLowerCase()
-  const isMultifamily = (listing.unitCount ?? 0) >= 2 || /duplex|triplex|multi/.test(typeText)
-  const isCondoCoop = /condo|coop|co-op/.test(typeText)
-  const isSFH = /sfh|single|town|house/.test(typeText) && !isMultifamily
+  // Brief 41: the shared absentee test (ownerOccupied first, then normalised
+  // streets) and the shared property-type vocabulary, so this feature agrees with
+  // absenteeOwner and propertyType.
+  const isAbsentee = isAbsenteeOwner(listing) === true
+  const cls = listingPropertyClass(listing)
+  const isMultifamily = (listing.unitCount ?? 0) >= 2 || cls === 'multifamily'
+  const isCondoCoop = !isMultifamily && (cls === 'condo' || cls === 'coop')
+  const isSFH = !isMultifamily && (cls === 'single_family' || cls === 'townhouse')
   const longTenure = listing.lastSaleDate != null && (now.getTime() - listing.lastSaleDate.getTime()) / MS_PER_YEAR >= 10
   return {
     hasDistress,
