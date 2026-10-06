@@ -1,6 +1,7 @@
 // Phase 4.6 — PLUTO (Primary Land Use Tax Lot Output) via Socrata 64uk-42ks.
 // Lookup by numeric BBL; we read `bldgclass` (the DOF building class) plus
-// `ownername` (for the co-op-corp heuristic) and a few descriptive fields.
+// `ownername` (for the co-op-corp heuristic, in memory only: never stored or
+// shown, Brief 41) and a few descriptive fields.
 import { getJson } from './socrataClient'
 
 const PLUTO_URL = 'https://data.cityofnewyork.us/resource/64uk-42ks.json'

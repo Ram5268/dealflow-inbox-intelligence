@@ -15,7 +15,6 @@ export type CacheWrite = {
   latitude?:           number | null
   longitude?:          number | null
   bldgclass?:          string | null
-  ownername?:          string | null
   unitsRes?:           number | null
   unitsTotal?:         number | null
   yearBuilt?:          number | null
@@ -26,8 +25,21 @@ export type CacheWrite = {
   confidence:          string
 }
 
-export async function readCache(normalizedAddress: string): Promise<NycParcelCache | null> {
-  return prisma.nycParcelCache.findUnique({ where: { normalizedAddress } })
+// Brief 41 (H8): the ownername column is never written or read (it stays in
+// the schema until a later migration drops it; existing values are nulled by
+// scripts/brief41-null-ownernames.ts with Ryan's OK).
+export type CachedParcel = Omit<NycParcelCache, 'ownername'>
+
+export async function readCache(normalizedAddress: string): Promise<CachedParcel | null> {
+  return prisma.nycParcelCache.findUnique({
+    where: { normalizedAddress },
+    select: {
+      id: true, normalizedAddress: true, organizationId: true, bbl: true, bin: true, borough: true,
+      geosearchConfidence: true, geosearchLabel: true, latitude: true, longitude: true, bldgclass: true,
+      unitsRes: true, unitsTotal: true, yearBuilt: true, plutoVersion: true, hasCondoDecl: true,
+      propertyType: true, propertyTypeReason: true, confidence: true, fetchedAt: true, updatedAt: true,
+    },
+  })
 }
 
 export async function writeCache(data: CacheWrite): Promise<void> {

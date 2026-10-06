@@ -19,6 +19,7 @@
 import { z } from 'zod'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Category } from '@prisma/client'
+import { safeMotivation, withoutPersonalCircumstances } from './personalCircumstances'
 
 // ── The row shape every mapItem produces (subset of ExtractedOpportunity that
 //    an extractor sets; extractEmailV2 adds organizationId/rawEmailId/status). ─
@@ -687,7 +688,7 @@ EXTRACTION RULES:
 - address: the property address they want to list, if stated
 - price: their asking price or estimated value if mentioned
 - beds/baths/squareFeet: the property's details if stated
-- motivation: brief note on why they're selling if mentioned (estate, divorce, relocation, downsizing, etc.)
+- motivation: brief note on why they're selling if mentioned (relocation, downsizing, upsizing, investment, timing). Never record personal circumstances (estate, probate, inheritance, divorce, death, illness, family matters): use null instead, and leave them out of every other field too
 - availabilityDate: when they're thinking of listing ("YYYY-MM-DD" or null)
 - sourceAgentName/Email: the person who sent the email (seller or referring agent)
 - propertyType: condo, co-op, townhouse, multi-family, etc.
@@ -718,9 +719,17 @@ function mapSeller(raw: unknown): OppRowData {
     sourceAgentName: l.sourceAgentName ?? null, sourceAgentEmail: l.sourceAgentEmail ?? null,
     sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'seller', status: l.status ?? null,
     extractedTitle: l.extractedTitle,
-    extractedSummary: l.motivation ? `${l.extractedSummary} Motivation: ${l.motivation}` : l.extractedSummary,
+    extractedSummary: sellerSummary(l.extractedSummary, l.motivation),
     classificationReason: l.classificationReason, confidenceScore: l.confidenceScore,
   }
+}
+
+// Brief 41 (H9): personal circumstances are dropped before saving, even if the
+// model returns them despite the prompt.
+function sellerSummary(summary: string, motivation: string | null | undefined): string {
+  const safe = withoutPersonalCircumstances(summary)
+  const m = safeMotivation(motivation)
+  return m ? `${safe} Motivation: ${m}`.trim() : safe
 }
 
 const SELLER_SPEC: ExtractionSpec = {
