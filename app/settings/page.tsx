@@ -57,6 +57,8 @@ function Btn({ onClick, disabled, children, variant = 'primary' }: { onClick?: (
 }
 
 export default function SettingsPage() {
+  // Outlook is paused unless the server says GRAPH_ENABLED is on (Brief 41).
+  const [graphOn, setGraphOn] = useState<boolean | null>(null)
   const [testResult, setTestResult] = useState<ConnectionResult | null>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [preview, setPreview] = useState<PreviewResult | null>(null)
@@ -100,6 +102,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch('/api/notifications/preferences').then(r => r.json()).then(setNotif).catch(() => {})
+    fetch('/api/microsoft/status').then(r => r.json()).then(d => setGraphOn(d?.enabled === true)).catch(() => setGraphOn(false))
     fetch('/api/microsoft/token-status').then(r => r.json()).then(setTokenStatus).catch(() => {})
     fetch('/api/mojo/status').then(r => r.json()).then((d: { count: number; lastSync: string | null }) => {
       setMojoCount(d.count ?? 0)
@@ -192,6 +195,8 @@ export default function SettingsPage() {
 
       <div style={{ padding: '4px 16px 48px' }}>
 
+        {graphOn && (
+          <>
         {/* Token status pill */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
@@ -203,7 +208,8 @@ export default function SettingsPage() {
           <span style={{ width: 7, height: 7, borderRadius: '50%', background: statusColor, flexShrink: 0 }} />
           <span style={{ fontSize: 12, color: statusColor }}>{statusLabel}</span>
         </div>
-
+          </>
+        )}
 
         {/* Brief 7.4 — Notifications */}
         <Section title="Notifications">
@@ -233,6 +239,9 @@ export default function SettingsPage() {
           )}
         </Section>
 
+        {/* Outlook is paused (Brief 41) unless GRAPH_ENABLED is on: then no connect, token or preview controls. */}
+        {graphOn ? (
+          <>
         {/* Test */}
         <Section title="Connection Status">
           <Btn onClick={testConn} disabled={testLoading} variant="ghost">
@@ -312,6 +321,14 @@ export default function SettingsPage() {
             </p>
           )}
         </Section>
+          </>
+        ) : graphOn === false ? (
+        <Section title="Outlook">
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>
+            {"Outlook is paused for compliance. DealFlow isn't reading your inbox or calendar, and it can't be connected from here."}
+          </p>
+        </Section>
+        ) : null}
 
         {/* CRM seller leads (Brief 34): synced nightly from the CRM, read-only */}
         <Section title="CRM Seller Leads">

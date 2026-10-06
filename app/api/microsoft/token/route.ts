@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
+import { graphEnabled, GRAPH_PAUSED_BODY } from '@/lib/graphAccess'
 
 // CORS — allows the bookmarklet (running on developer.microsoft.com) to POST here
 const CORS = {
@@ -15,6 +16,8 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
+  // Outlook is paused (Brief 41): no Microsoft token is stored.
+  if (!graphEnabled()) return NextResponse.json(GRAPH_PAUSED_BODY, { status: 403, headers: CORS })
   const body = await req.json()
   const token: string        = body.token ?? ''
   const refreshToken: string = body.refreshToken ?? ''

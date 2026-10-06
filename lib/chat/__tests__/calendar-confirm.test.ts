@@ -17,9 +17,10 @@ interface Recorder {
   touched: string[]
 }
 
-function makeDeps(testModeOn: boolean): { deps: ConfirmDeps; rec: Recorder } {
+function makeDeps(testModeOn: boolean, graphOn = true): { deps: ConfirmDeps; rec: Recorder } {
   const rec: Recorder = { events: [], messages: [], audits: [], touched: [] }
   const deps: ConfirmDeps = {
+    graphOn,
     testModeOn,
     createEvent: async (input) => { rec.events.push(input); return { id: 'evt_123', webLink: null } },
     createMessage: async (data) => { rec.messages.push(data); return data },
@@ -96,4 +97,20 @@ test('missing endISO → defaults to 30 min after start', async () => {
     deps,
   })
   assert.equal(rec.events[0].endISO, '2026-08-20T14:30:00.000Z')
+})
+
+// Brief 41 (H10): with Outlook paused (GRAPH_ENABLED not 'true') nothing is
+// written to Graph and the reply says so plainly — never a false "Done".
+test('Outlook paused: no event, no CALENDAR_WRITE audit, honest reply, chat still logged', async () => {
+  for (const testModeOn of [false, true]) {
+    const { deps, rec } = makeDeps(testModeOn, false)
+    const r = await runCalendarConfirm({ ...BASE, deps })
+    assert.equal(r.wroteEvent, false)
+    assert.equal(r.eventId, null)
+    assert.match(r.text, /Outlook is paused/)
+    assert.doesNotMatch(r.text, /Done|added to your Outlook/)
+    assert.equal(rec.events.length, 0)
+    assert.equal(rec.audits.length, 0)
+    assert.equal(rec.messages.length, 2)
+  }
 })

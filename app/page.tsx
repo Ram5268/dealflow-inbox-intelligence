@@ -46,6 +46,7 @@ function formatTime(iso: string): string {
 interface CalToday {
   todayCount: number
   nextEvent: { subject: string; start: string; location: string | null } | null
+  paused?: boolean // Outlook is paused (Brief 41)
 }
 
 // Brief 7.4 (Section D) — market signal
@@ -129,6 +130,8 @@ export default function GreetPage() {
       tag: 'CALENDAR',
       body: calData === undefined
         ? <span style={{ color: 'rgba(255,255,255,0.35)' }}>Loading…</span>
+        : calData?.paused
+        ? <span style={{ color: 'rgba(255,255,255,0.55)' }}>Outlook is paused.</span>
         : calData === null || calData.todayCount === 0
         ? <span style={{ color: 'rgba(255,255,255,0.55)' }}>Clear schedule today.</span>
         : <span>

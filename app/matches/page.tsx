@@ -213,6 +213,12 @@ export default function MatchesPage() {
   // sheet (email|text). `notice` is a plain message toast (no undo), reused for
   // "Added to calendar" / "Copied".
   const [calendarFor, setCalendarFor] = useState<Match | null>(null)
+  // Outlook is paused (Brief 41): the Calendar button only shows when the server
+  // says Outlook features are on. Hidden until then.
+  const [graphOn, setGraphOn] = useState(false)
+  useEffect(() => {
+    fetch('/api/microsoft/status').then(r => r.json()).then(d => setGraphOn(d?.enabled === true)).catch(() => {})
+  }, [])
   const [chooserFor, setChooserFor] = useState<Match | null>(null)
   const [draftFor, setDraftFor] = useState<{ match: Match; channel: 'email' | 'text' } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -446,7 +452,7 @@ export default function MatchesPage() {
             m={m}
             router={router}
             onDismiss={e => { e.stopPropagation(); setDismissSheetFor(m.id) }}
-            onCalendar={e => { e.stopPropagation(); setCalendarFor(m) }}
+            onCalendar={graphOn ? e => { e.stopPropagation(); setCalendarFor(m) } : undefined}
             onDraft={e => { e.stopPropagation(); setChooserFor(m) }}
           />
         )}
@@ -759,7 +765,7 @@ function ExpandedDetail({ m, router, onDismiss, onCalendar, onDraft }: {
   m: Match
   router: ReturnType<typeof useRouter>
   onDismiss: (e: React.MouseEvent) => void
-  onCalendar: (e: React.MouseEvent) => void
+  onCalendar?: (e: React.MouseEvent) => void // absent while Outlook is paused
   onDraft: (e: React.MouseEvent) => void
 }) {
   const isMojo    = m.counterpartType === 'mojo'
@@ -834,7 +840,7 @@ function ExpandedDetail({ m, router, onDismiss, onCalendar, onDraft }: {
           email+text behind a chooser so the row stays 3 wide. */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <ActionPill label="✓ Dismiss"   onClick={onDismiss} />
-        <ActionPill label="📅 Calendar" onClick={onCalendar} />
+        {onCalendar && <ActionPill label="📅 Calendar" onClick={onCalendar} />}
         <ActionPill label="✍️ Draft"    onClick={onDraft} />
       </div>
     </div>

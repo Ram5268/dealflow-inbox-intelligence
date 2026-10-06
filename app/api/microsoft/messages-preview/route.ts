@@ -1,9 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { getRecentMessages } from '@/lib/microsoftGraph'
+import { graphEnabled, GRAPH_PAUSED_BODY } from '@/lib/graphAccess'
 
 // READ-ONLY: Only calls GET /me/messages. Does not store anything.
 export async function GET() {
+  if (!graphEnabled()) return NextResponse.json(GRAPH_PAUSED_BODY, { status: 403 })
   try {
     const messages = await getRecentMessages(5, 30)
 

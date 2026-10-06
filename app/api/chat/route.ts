@@ -5,6 +5,7 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
+import { graphEnabled } from '@/lib/graphAccess'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { runCalendarConfirm } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
@@ -233,6 +234,7 @@ export async function POST(req: NextRequest) {
             notes:    lastPendingEvent.notes,
           },
           deps: {
+            graphOn:        graphEnabled(),
             testModeOn:     isMatchingTestModeOnly(),
             createEvent:    createCalendarEvent,
             createMessage:  (data) => prisma.chatMessage.create({ data: data as never }),

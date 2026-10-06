@@ -2,10 +2,13 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
+import { graphEnabled, GRAPH_PAUSED_BODY } from '@/lib/graphAccess'
 
 // Polls Microsoft's token endpoint for a device code grant.
 // Returns ok:true when the user has signed in and tokens are stored.
 export async function POST(req: NextRequest) {
+  // Outlook is paused (Brief 41): no Microsoft token is fetched or stored.
+  if (!graphEnabled()) return NextResponse.json(GRAPH_PAUSED_BODY, { status: 403 })
   const { deviceCode } = await req.json()
   const clientId     = process.env.AZURE_CLIENT_ID
   const clientSecret = process.env.AZURE_CLIENT_SECRET
