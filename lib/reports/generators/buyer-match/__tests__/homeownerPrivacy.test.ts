@@ -109,8 +109,8 @@ test('an outreach draft prompt for a homeowner has the address, no name, no esti
   }
 })
 
-const mf = (contributions: Record<string, number>, scores: Record<string, number>, priceFromEstimate = false): MatchFitResult =>
-  ({ matchFit: 70, matchFitConfidence: 'HIGH', contributions, unknownFactors: [], scores, priceFromEstimate })
+const mf = (contributions: Record<string, number>, scores: Record<string, number>, homeownerSeller = false): MatchFitResult =>
+  ({ matchFit: 70, matchFitConfidence: 'HIGH', contributions, unknownFactors: [], scores, homeownerSeller })
 
 test('new nightly reasons never name a seller-motivation signal', () => {
   const r = reasonOf(mf({ preForeclosure: 40, highEquity: 25, absenteeOwner: 10, neighborhood: 15, beds: 10 }, { preForeclosure: 1, highEquity: 1, absenteeOwner: 1, neighborhood: 1, beds: 1 }))
@@ -141,6 +141,10 @@ test('a homeowner our estimate puts over budget: no "in budget", no defaults nam
   assert.doesNotMatch(r, NOT_ASKED_OR_ESTIMATE)
   // As synced today (no estimate at all).
   assert.match(nightlyReason(crmSeller({ price: null }), buyer()), /^Right neighborhood, bedroom count$/)
+  // An expired listing's last asking price inside the budget: the report shows
+  // "off-market, price not set", so the reason doesn't say "in budget" either.
+  const expired = nightlyReason(crmSeller({ price: null, priorListingStatus: 'EXPIRED', priorListingPrice: 1_800_000 }), buyer())
+  assert.doesNotMatch(expired, NOT_ASKED_OR_ESTIMATE)
 })
 
 test('an adjacent neighborhood is not "right neighborhood"', () => {

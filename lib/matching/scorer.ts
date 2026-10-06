@@ -152,7 +152,7 @@ export function scorePair(
 
   const matchFit = {
     ...capForPriceChance(composeMatchFit(features), listing, buyer),
-    priceFromEstimate: sellerPrice(listing)?.basis === 'estimate',
+    homeownerSeller: listing.sourceType === 'contact',
   }
   const captureStatus = computeCaptureStatus(listing, buyer, context)
 

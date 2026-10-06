@@ -7,12 +7,12 @@ const c = (buyerId: string, matchFit: number): Candidate => ({
   sellerId: 's1', buyerId, counterpartType: 'opportunity', captureStatus: 'EXTERNAL_BOTH',
   matchFit: {
     matchFit, matchFitConfidence: 'LOW', contributions: { beds: 50, neighborhood: 30, recency: 15, tenure: 5 }, unknownFactors: ['price'],
-    scores: { beds: 1, neighborhood: 1, recency: 0.95, tenure: 0.2 }, priceFromEstimate: false,
+    scores: { beds: 1, neighborhood: 1, recency: 0.95, tenure: 0.2 }, homeownerSeller: false,
   },
 })
 // contributions = each feature's share of the score; scores = its 0-1 score.
-const mf = (contributions: Record<string, number>, scores: Record<string, number>, priceFromEstimate = false): MatchFitResult =>
-  ({ matchFit: 70, matchFitConfidence: 'HIGH', contributions, unknownFactors: [], scores, priceFromEstimate })
+const mf = (contributions: Record<string, number>, scores: Record<string, number>, homeownerSeller = false): MatchFitResult =>
+  ({ matchFit: 70, matchFitConfidence: 'HIGH', contributions, unknownFactors: [], scores, homeownerSeller })
 
 test('pairs below the threshold are dropped', () => {
   assert.equal(MIN_MATCH_FIT, 50)
@@ -62,10 +62,10 @@ test('"no preference" defaults and partial fits are never called strengths (Brie
   assert.equal(reasonOf(mf({ buyerArchetypeSituation: 60, beds: 40 }, { buyerArchetypeSituation: 0.2, beds: 1 })), 'Bedroom count')
 })
 
-test('price is never named when the seller\'s only price is our estimate', () => {
+test('price is never named for a homeowner (their price is never shown)', () => {
   assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, { price: 1, beds: 1, neighborhood: 1 }, true)), 'Bedroom count, right neighborhood')
   assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, { price: 0.1, beds: 1, neighborhood: 1 }, true)), 'Bedroom count, right neighborhood')
-  // A real asking price (or an expired listing's last asking price) is named.
+  // A listing's real asking price is named.
   assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, { price: 0.1, beds: 1, neighborhood: 1 })), 'Bedroom count, right neighborhood; weaker on price')
   assert.equal(reasonOf(mf({ price: 50, beds: 30, neighborhood: 20 }, { price: 1, beds: 1, neighborhood: 1 })), 'In budget, bedroom count, right neighborhood')
 })

@@ -24,9 +24,10 @@ export interface MatchFitResult {
   // to never call a drawback, a partial fit or a "no preference" default a
   // strength.
   scores?: Record<string, number>
-  // Brief 41 (H7): the seller's only price is our estimate, so a reason never
-  // names price (in or out of budget would be a claim from our estimate).
-  priceFromEstimate?: boolean
+  // Brief 41 (H7): the seller is a homeowner (CRM contact). Reports and drafts
+  // never show a homeowner's price (our estimate, or an expired listing's last
+  // asking price: "off-market, price not set"), so a reason never names price.
+  homeownerSeller?: boolean
 }
 
 export interface ScoringContext {

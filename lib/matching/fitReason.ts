@@ -5,8 +5,9 @@
 // equity, vacancy, absentee owner, tenure, lead lists), or the buyer-strategy
 // feature (it partly scores distress): those must never reach a buyer, a
 // report or an outreach draft. A strength is only a real match of what the
-// buyer asked for; a drawback is named as one; and price is never named when
-// the seller's only price is our estimate.
+// buyer asked for; a drawback is named as one; and price is never named for a
+// homeowner (their price is never shown: our estimate, or an expired listing's
+// last asking price).
 import type { MatchFitResult } from './scorerTypes'
 
 // A fit feature that raised the match.
@@ -70,11 +71,11 @@ const capitalize = (s: string) => s[0].toUpperCase() + s.slice(1)
 
 // The nightly reason: up to 3 strengths, then up to 2 drawbacks, each by its
 // share of the score ("Right neighborhood, bedroom count; weaker on price").
-export function fitReason(mf: Pick<MatchFitResult, 'contributions' | 'scores' | 'priceFromEstimate'>): string {
+export function fitReason(mf: Pick<MatchFitResult, 'contributions' | 'scores' | 'homeownerSeller'>): string {
   const scores = mf.scores ?? {}
   const share = (k: string) => mf.contributions[k] ?? 0
   const ranked = Object.keys(scores)
-    .filter(k => Object.hasOwn(FIT_LABELS, k) && !(k === 'price' && mf.priceFromEstimate))
+    .filter(k => Object.hasOwn(FIT_LABELS, k) && !(k === 'price' && mf.homeownerSeller))
     .sort((a, b) => share(b) - share(a))
   const strengths = ranked.filter(k => scores[k] >= STRONG_SCORE).slice(0, 3).map(k => FIT_LABELS[k])
   const drawbacks = ranked.filter(k => scores[k] < 0.5 && share(k) >= MIN_HURT_SHARE).slice(0, 2).map(k => WEAK_LABELS[k])
