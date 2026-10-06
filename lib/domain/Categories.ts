@@ -6,7 +6,6 @@
 //   - lib/retrieval/queryPlanner.ts SUPPLY_* / DEMAND_ALL / LEAD_ALL / PREMARKET_CATS / SALE_CATS_FOR_FILTER / RENTAL_CATS_FOR_FILTER
 //   - lib/ingestion/validator.ts SUPPLY_SIDE / LOW_RISK
 //   - lib/matchmaking.ts SALE_CATEGORIES / RENTAL_CATEGORIES
-//   - app/api/opportunities/[id]/route.ts SE_LISTABLE
 //
 // Every value of `Category` must appear in exactly one of SUPPLY_SALE /
 // SUPPLY_RENTAL / DEMAND_BUYER / DEMAND_RENTER / LEAD_SELLER /
@@ -61,24 +60,7 @@ export const INFORMATIONAL = [
   Category.SHOWING_CONFIRMATION,
 ] as const satisfies readonly Category[]
 
-// ── StreetEasy lookup-eligible categories ───────────────────────────────────
-// Copied verbatim from app/api/opportunities/[id]/route.ts:5. These are the
-// categories worth a live SE API call when we don't have a streetEasyId cached.
-// Phase B will retire that local Set in favor of importing this one.
-export const SE_LISTABLE: ReadonlySet<Category> = new Set<Category>([
-  Category.ACTIVE_SALE_LISTING,
-  Category.COMING_SOON_SALE,
-  Category.OFF_MARKET_SALE,
-  Category.RENTAL_LISTING,
-  Category.COMING_SOON_RENTAL,
-  Category.DEVELOPMENT_INVENTORY,
-  Category.SPONSOR_UNIT,
-  Category.PRICE_DROP,
-  Category.BACK_ON_MARKET,
-  Category.OPEN_HOUSE,
-  Category.SHOWING_CONFIRMATION,
-  Category.COMING_SOON_DEVELOPMENT,
-])
+// (StreetEasy lookups use SE_CHECKABLE_CATEGORIES in lib/streetEasyStatusUpdate.ts.)
 
 // ── Predicates ───────────────────────────────────────────────────────────────
 const SUPPLY_SALE_SET    = new Set<Category>(SUPPLY_SALE)

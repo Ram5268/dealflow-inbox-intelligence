@@ -4,12 +4,16 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { runHotsheetSync } from '@/lib/streetEasyHotsheet'
+import { maintenanceEnabled, MAINTENANCE_OFF_BODY, adminSecretOk } from '@/lib/config/maintenance'
 
+// Maintenance route (Brief 41, H6): off unless MAINTENANCE_ENABLED=true.
 export async function POST(req: NextRequest) {
+  if (!maintenanceEnabled()) return NextResponse.json(MAINTENANCE_OFF_BODY, { status: 403 })
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
 
-  // Simple secret guard so this can't be called publicly
-  if (body.secret !== process.env.ADMIN_SECRET && process.env.ADMIN_SECRET) {
+  // Secret guard so this can't be called publicly. Brief 41: fails closed (with
+  // ADMIN_SECRET unset it used to let every request through).
+  if (!adminSecretOk(body.secret, process.env.ADMIN_SECRET)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

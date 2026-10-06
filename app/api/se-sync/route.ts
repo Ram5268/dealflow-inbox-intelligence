@@ -1,17 +1,17 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { runDailyStatusSweep, syncOpportunityStatus } from '@/lib/streetEasySync'
+import { checkCronBearer } from '@/lib/auth/cronBearer'
 
 // POST /api/se-sync              → run full daily sweep
 // POST /api/se-sync?id=<oppId>   → check one specific opportunity
-// Protected by CRON_SECRET header when set
+// Protected by `Authorization: Bearer <CRON_SECRET>` (GitHub's daily-sweep
+// workflow). Brief 41 (L1): checkCronBearer, so it fails closed when the
+// secret is unset.
 export async function POST(req: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET
-  if (cronSecret) {
-    const authHeader = req.headers.get('authorization')
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const auth = checkCronBearer(req.headers.get('authorization'), process.env.CRON_SECRET)
+  if (auth !== 200) {
+    return NextResponse.json({ error: auth === 500 ? 'CRON_SECRET not configured' : 'unauthorized' }, { status: auth })
   }
 
   if (!process.env.RAPIDAPI_KEY) {

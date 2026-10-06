@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { classifyAndExtractEmail } from '@/lib/ai'
 import { buildOpportunityText, upsertOpportunityEmbedding } from '@/lib/embeddings'
-import { Category, TransactionType } from '@prisma/client'
+import { Category, Prisma, TransactionType } from '@prisma/client'
+import { maintenanceEnabled, MAINTENANCE_OFF_BODY } from '@/lib/config/maintenance'
 
 export const maxDuration = 300
 
@@ -17,7 +18,9 @@ const VALID_TX = new Set([
   'SALE','RENTAL','BUYER_NEED','RENTER_NEED','SELLER_LEAD','LANDLORD_LEAD','UNKNOWN',
 ])
 
+// Maintenance route (Brief 41, H6): off unless MAINTENANCE_ENABLED=true.
 export async function POST(req: NextRequest) {
+  if (!maintenanceEnabled()) return NextResponse.json(MAINTENANCE_OFF_BODY, { status: 403 })
   try {
     const body = await req.json().catch(() => ({}))
 
@@ -58,13 +61,8 @@ export async function POST(req: NextRequest) {
 
     for (const email of emails) {
       try {
-        // Delete all existing opportunities for this email
-        const { count: deleted } = await prisma.extractedOpportunity.deleteMany({
-          where: { rawEmailId: email.id },
-        })
-        totalDeleted += deleted
-
-        // Re-extract with the new multi-listing prompt
+        // Re-extract with the new multi-listing prompt. Brief 41 (H6): extract
+        // FIRST; the old listings are only replaced once this has succeeded.
         const results = await classifyAndExtractEmail({
           subject: email.subject,
           senderName: email.senderName,
@@ -74,8 +72,12 @@ export async function POST(req: NextRequest) {
           fullBody: email.bodyContent,
           attachmentText: email.attachmentsText,
         })
+        // An answer with no entries at all isn't a valid extraction (a noise
+        // email still comes back as one entry, isRelevant:false): keep the old
+        // listings rather than delete them and create nothing.
+        if (results.length === 0) throw new Error('the extractor returned no entries; the listings were left as they were')
 
-        let created = 0
+        const fresh: { ext: (typeof results)[number]; data: Prisma.ExtractedOpportunityUncheckedCreateInput }[] = []
         for (const ext of results) {
           if (!ext.isRelevant || ext.category === 'NOISE') continue
 
@@ -83,7 +85,8 @@ export async function POST(req: NextRequest) {
           if (category === Category.NOISE) continue
           const transactionType = VALID_TX.has(ext.transactionType) ? ext.transactionType as TransactionType : TransactionType.UNKNOWN
 
-          const opp = await prisma.extractedOpportunity.create({
+          fresh.push({
+            ext,
             data: {
               organizationId,
               rawEmailId: email.id, category, transactionType,
@@ -102,11 +105,20 @@ export async function POST(req: NextRequest) {
               confidenceScore: ext.confidenceScore,
             },
           })
-          created++
-          totalCreated++
-
-          upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...ext, ...opp })).catch(() => {})
         }
+
+        // Swap: delete the old listings and create the new ones in one
+        // transaction, so a failure leaves the old ones in place.
+        const [{ count: deleted }, ...opps] = await prisma.$transaction([
+          prisma.extractedOpportunity.deleteMany({ where: { rawEmailId: email.id } }),
+          ...fresh.map(f => prisma.extractedOpportunity.create({ data: f.data })),
+        ])
+        const created = opps.length
+        totalDeleted += deleted
+        totalCreated += created
+        opps.forEach((opp, k) => {
+          upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...fresh[k].ext, ...opp })).catch(() => {})
+        })
 
         console.log(`[Reextract] "${email.subject}": ${deleted} deleted → ${created} created`)
         summary.push({ subject: email.subject, deleted, created })

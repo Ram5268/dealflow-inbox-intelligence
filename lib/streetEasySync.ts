@@ -1,6 +1,7 @@
 import { prisma } from './prisma'
 import { normalizeAddress } from './domain/Address'
 import { isTestModeOnly } from './config/testMode'
+import { statusUpdateFor, SE_CHECKABLE_CATEGORIES } from './streetEasyStatusUpdate'
 
 // Brief 3.0 follow-up — trial-mode kill switch. In seed-only trial mode there's
 // no real inbox flow, so the StreetEasy status sweep has no legitimate work and
@@ -20,11 +21,7 @@ const RAPIDAPI_HOST = process.env.RAPIDAPI_SE_HOST ?? 'nyc-real-estate-api.p.rap
 const BASE_URL      = `https://${RAPIDAPI_HOST}`
 
 // Supply-side categories that have real listings to check
-const CHECKABLE_CATEGORIES = new Set([
-  'ACTIVE_SALE_LISTING', 'RENTAL_LISTING', 'COMING_SOON_SALE', 'COMING_SOON_RENTAL',
-  'OFF_MARKET_SALE', 'BACK_ON_MARKET', 'PRICE_DROP', 'OPEN_HOUSE',
-  'DEVELOPMENT_INVENTORY', 'COMING_SOON_DEVELOPMENT', 'SPONSOR_UNIT',
-])
+const CHECKABLE_CATEGORIES = SE_CHECKABLE_CATEGORIES
 
 // Lat/lng bounding boxes for NYC neighborhoods — used to filter
 // broad borough search results down to the specific neighborhood
@@ -400,48 +397,6 @@ export async function findListingByAddress(
   return null
 }
 
-// ── Map SE status to our processingStatus ────────────────────────────────────
-// Observed API status vocabulary (audited 2026-05-28 against /sales/{id} and
-// /rentals/{id}): 'open' (active listings — most common), 'closed' (rental
-// off-market / sale withdrawn or sold), 'sold' (sale completed; also used
-// loosely for rentals where lease was signed), 'temporary_off_market'
-// (surfaced from the default-fallback warning during the X.4 catch-up
-// sweep — semantically off-market with possible relisting later).
-// Defensive cases below cover plausible variants we haven't observed yet
-// ('active', 'available', 'new', 'pending', 'in contract', 'withdrawn', etc.)
-// in case the API vocabulary expands. Unrecognized strings warn-log so we
-// catch new states before they pollute streetEasyStatus at scale.
-function mapStatus(seStatus: string): { streetEasyStatus: string; processingStatus?: string } {
-  switch (seStatus?.toLowerCase()) {
-    case 'open':
-    case 'active':
-    case 'available':
-    case 'new':
-      return { streetEasyStatus: 'active' }
-    case 'pending':
-    case 'in contract':
-    case 'contract signed':
-    case 'in_contract':
-      return { streetEasyStatus: 'in_contract' }
-    case 'closed':
-    case 'delisted':
-    case 'off market':
-    case 'off_market':
-    case 'temporary_off_market':
-    case 'withdrawn':
-    case 'cancelled':
-    case 'rented':
-    case 'leased':
-    case 'no_longer_available':
-      return { streetEasyStatus: 'delisted', processingStatus: 'stale' }
-    case 'sold':
-      return { streetEasyStatus: 'sold', processingStatus: 'stale' }
-    default:
-      console.warn(`[mapStatus] unrecognized SE status: "${seStatus}" — defaulting to 'unknown'. Consider adding to the case map.`)
-      return { streetEasyStatus: 'unknown' }
-  }
-}
-
 // ── Check + update a single opportunity ──────────────────────────────────────
 export async function syncOpportunityStatus(opportunityId: string): Promise<{
   updated: boolean
@@ -449,6 +404,8 @@ export async function syncOpportunityStatus(opportunityId: string): Promise<{
   previous: string | null
 }> {
   if (!SYNC_ENABLED || TEST_MODE_SKIP) return { updated: false, streetEasyStatus: null, previous: null }
+  // Brief 41 (H5): with no key every lookup "misses"; don't record a check.
+  if (!RAPIDAPI_KEY) return { updated: false, streetEasyStatus: null, previous: null }
 
   const opp = await prisma.extractedOpportunity.findUnique({
     where: { id: opportunityId },
@@ -477,43 +434,14 @@ export async function syncOpportunityStatus(opportunityId: string): Promise<{
     listing = await findListingByAddress(opp.address, opp.neighborhood, type, opp.borough)
   }
 
-  if (!listing) {
-    // getListingById 404'd AND findListingByAddress fallback also returned null.
-    // The listing genuinely isn't on SE → effectively off-market from our view.
-    // Reserve 'unknown' for real API errors (network, parse) thrown earlier.
-    await prisma.extractedOpportunity.update({
-      where: { id: opportunityId },
-      data: {
-        streetEasyStatus:    'delisted',
-        streetEasyCheckedAt: new Date(),
-        processingStatus:    'stale',
-      },
-    })
-    return { updated: previous !== 'delisted', streetEasyStatus: 'delisted', previous }
-  }
+  // Brief 41 (H5): only StreetEasy's own status changes the listing. Not
+  // finding it (off-market, coming soon, an API error, a 429, the quota) used
+  // to mark it delisted + stale; now it records the check time and nothing else.
+  const data = statusUpdateFor(listing, new Date())
+  await prisma.extractedOpportunity.update({ where: { id: opportunityId }, data })
 
-  const { streetEasyStatus, processingStatus } = mapStatus(listing.status)
-
-  // Prefer the URL path from the API (e.g. "building/newswalk-phase-3/204")
-  // over constructing one from the numeric ID — named developments need the slug form.
-  let seId = listing.id
-  if (listing.url) {
-    const m = listing.url.match(/streeteasy\.com\/(.+?)(?:\?.*)?$/)
-    if (m) seId = m[1].replace(/\/$/, '')
-  }
-
-  await prisma.extractedOpportunity.update({
-    where: { id: opportunityId },
-    data: {
-      streetEasyId:        seId,
-      streetEasyStatus,
-      streetEasyCheckedAt: new Date(),
-      ...(processingStatus ? { processingStatus } : {}),
-    },
-  })
-
-  const changed = streetEasyStatus !== previous
-  return { updated: changed, streetEasyStatus, previous }
+  const streetEasyStatus = data.streetEasyStatus ?? previous
+  return { updated: streetEasyStatus !== previous, streetEasyStatus, previous }
 }
 
 // ── Shared: cross-reference a list of SE delisted listings against our DB ─────
@@ -764,7 +692,13 @@ export async function runDailyStatusSweep(): Promise<{
   // IS NULL) are processed before previously-checked ones — Postgres' default
   // NULLS LAST for ASC meant new records never got reached when the batch cap
   // was hit (the 596 Van Buren bug pattern).
+  //
+  // Brief 41 (H5): a lookup that finds nothing no longer delists the listing,
+  // so a listing StreetEasy has never found (off-market, coming soon) stays
+  // active. It is re-checked every 30 days, not 7, so those can't fill the
+  // daily 75 and burn the RapidAPI quota (up to 17 calls per miss).
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000)
   const staleChecks = await prisma.extractedOpportunity.findMany({
     where: {
       processingStatus: 'active',
@@ -772,7 +706,8 @@ export async function runDailyStatusSweep(): Promise<{
       address: { not: null },
       OR: [
         { streetEasyCheckedAt: null },
-        { streetEasyCheckedAt: { lt: sevenDaysAgo } },
+        { streetEasyId: { not: null }, streetEasyCheckedAt: { lt: sevenDaysAgo } },
+        { streetEasyId: null, streetEasyCheckedAt: { lt: thirtyDaysAgo } },
       ],
     },
     select: { id: true },

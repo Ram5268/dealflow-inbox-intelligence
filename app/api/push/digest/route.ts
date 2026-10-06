@@ -6,25 +6,19 @@ import { formatPriceRange } from '@/lib/utils'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
 import { loadDismissedPairs } from '@/lib/matching/dismissals'
 import { tierCounts } from '@/lib/push/digestCounts'
+import { checkCronBearer } from '@/lib/auth/cronBearer'
 
 // Brief 7.4 (A.1) — morning digest. Triggered by external cron (daily 8am ET =
 // 12:00 UTC during EDT). Deployment-agnostic: prod DB is on Railway, so this is
 // written to be hit by ANY external scheduler — vercel.json cron (default,
 // committed) OR a Railway cron job pointing at the same URL. Protected by
-// CRON_SECRET when set (Vercel cron sends `Authorization: Bearer <CRON_SECRET>`).
+// CRON_SECRET (Vercel cron sends `Authorization: Bearer <CRON_SECRET>`). Brief 41
+// (L1): checkCronBearer, so it fails closed when the secret is unset, and the
+// header is the only way in (no ?secret=).
 //
 // For each org with ≥1 push subscription: find today's un-dismissed matches, pick
 // the best (top HOT, else top-scored), and push a one-line digest. Zero matches →
 // a lighter "quiet morning" nudge. Every send is logged (action: PUSH_SENT).
-
-function authorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET
-  if (!secret) return true // no secret configured (local/dev) — allow
-  const auth = req.headers.get('authorization')
-  if (auth === `Bearer ${secret}`) return true
-  if (req.nextUrl.searchParams.get('secret') === secret) return true
-  return false
-}
 
 function startOfTodayUtc(): Date {
   const n = new Date()
@@ -126,7 +120,10 @@ async function counterpartName(counterpartType: string, counterpartId: string): 
 }
 
 async function run(req: NextRequest) {
-  if (!authorized(req)) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const auth = checkCronBearer(req.headers.get('authorization'), process.env.CRON_SECRET)
+  if (auth !== 200) {
+    return NextResponse.json({ error: auth === 500 ? 'CRON_SECRET not configured' : 'unauthorized' }, { status: auth })
+  }
 
   // Every org that has at least one push subscription.
   const orgs = await prisma.pushSubscription.findMany({ select: { organizationId: true }, distinct: ['organizationId'] })
