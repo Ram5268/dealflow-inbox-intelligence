@@ -1,5 +1,6 @@
 import type { MatchFitResult } from '../scorerTypes'
 import { HOT_MIN_FIT, WARM_MIN_FIT } from '../tiers'
+import { fitReason } from '../fitReason'
 
 // Brief 35: which scored (seller, buyer) pairs the nightly job keeps, and the
 // Match row each kept pair becomes. Pure, so it's unit-tested without a DB.
@@ -17,9 +18,11 @@ export interface Candidate {
 export { HOT_MIN_FIT, WARM_MIN_FIT }
 export const tierOf = (mf: number): 'HOT' | 'WARM' | 'POSSIBLE' => (mf >= HOT_MIN_FIT ? 'HOT' : mf >= WARM_MIN_FIT ? 'WARM' : 'POSSIBLE')
 
-// Top-3 contribution keys, strongest first (same as the Brief 32 regen script).
-export const reasonOf = (contributions: Record<string, number>): string =>
-  Object.entries(contributions).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => k).join(' + ')
+// Brief 41 (H7): the stored reason is a plain-English line of the top 3 FIT
+// contributions (seller-motivation signals are never named). It used to be the
+// raw keys ("preForeclosure + highEquity + beds"), which reached reports,
+// drafts and the CRM's "Why" column.
+export const reasonOf = (contributions: Record<string, number>): string => fitReason(contributions)
 
 // One seller's eligible, undismissed candidates → at most n with matchFit >=
 // MIN_MATCH_FIT, best first (ties: buyer id ascending, so runs are stable).

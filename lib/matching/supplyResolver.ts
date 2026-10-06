@@ -12,6 +12,7 @@
 import { Category } from '@prisma/client'
 import type { PrismaClient } from '@prisma/client'
 import { fromRaw, getBorough } from '../domain/Neighborhood'
+import { homeownerTitle } from './fitReason'
 
 export interface ResolvedSupply {
   id: string
@@ -20,7 +21,10 @@ export interface ResolvedSupply {
   address: string | null
   neighborhood: string | null
   borough: string | null
+  // A real asking price only. Brief 41 (H7): a homeowner (contact) has none;
+  // our estimate is NOT a price and lives in estimatedValue (internal only).
   price: number | null
+  estimatedValue: number | null
   minPrice: number | null
   maxPrice: number | null
   beds: number | null
@@ -65,6 +69,7 @@ export async function resolveSupplies(
         neighborhood: o.neighborhood,
         borough: o.borough,
         price: o.price,
+        estimatedValue: null,
         minPrice: o.minPrice,
         maxPrice: o.maxPrice,
         beds: o.beds,
@@ -81,7 +86,7 @@ export async function resolveSupplies(
     const contacts = await prisma.mojoContact.findMany({
       where: { id: { in: contactIds } },
       select: {
-        id: true, fullName: true, address: true, neighborhood: true, estimatedValue: true,
+        id: true, address: true, neighborhood: true, estimatedValue: true,
         propertyBeds: true, buildingSqft: true, priorListingBrokerage: true,
       },
     })
@@ -94,12 +99,13 @@ export async function resolveSupplies(
         address: c.address,
         neighborhood: c.neighborhood,
         borough: canon ? getBorough(canon) : null,
-        price: c.estimatedValue, // estimatedValue is the seller-side list-price proxy
+        price: null, // Brief 41 (H7): our estimate is never a price (internal only, below)
+        estimatedValue: c.estimatedValue,
         minPrice: null,
         maxPrice: null,
         beds: c.propertyBeds,
         squareFeet: c.buildingSqft,
-        extractedTitle: c.fullName, // seller contact name stands in for a listing title
+        extractedTitle: homeownerTitle(c.address, c.neighborhood), // never the homeowner's name (Brief 41)
         sourceBrokerage: c.priorListingBrokerage,
         sourceAgentName: null,
         availabilityDate: null,

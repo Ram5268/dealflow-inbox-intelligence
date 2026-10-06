@@ -22,13 +22,16 @@ test('top 10 per seller, best first; ties by buyer id ascending', () => {
 
 test('tiers and reason', () => {
   assert.deepEqual([tierOf(80), tierOf(79), tierOf(65), tierOf(64), tierOf(50)], ['HOT', 'WARM', 'WARM', 'POSSIBLE', 'POSSIBLE'])
-  assert.equal(reasonOf({ beds: 50, neighborhood: 30, recency: 15, tenure: 5 }), 'beds + neighborhood + recency')
+  // Brief 41 (H7): plain English, top 3 fit features, never a seller-motivation key.
+  assert.equal(reasonOf({ beds: 50, neighborhood: 30, recency: 15, tenure: 5 }), 'Bedroom count, right neighborhood, fresh listing')
+  assert.equal(reasonOf({ preForeclosure: 60, highEquity: 40, neighborhood: 10, absenteeOwner: 5 }), 'Right neighborhood')
+  assert.equal(reasonOf({ tenure: 70, vacancy: 30 }), "Fits the buyer's criteria")
 })
 
 test('toMatchRow carries the scorer outputs', () => {
   assert.deepEqual(toMatchRow(c('b1', 83)), {
     opportunityId: 's1', counterpartId: 'b1', counterpartType: 'opportunity', score: 83, tier: 'HOT',
-    reason: 'beds + neighborhood + recency', captureStatus: 'EXTERNAL_BOTH', matchFitConfidence: 'LOW',
+    reason: 'Bedroom count, right neighborhood, fresh listing', captureStatus: 'EXTERNAL_BOTH', matchFitConfidence: 'LOW',
     contributions: { beds: 50, neighborhood: 30, recency: 15, tenure: 5 }, unknownFactors: ['price'],
   })
 })

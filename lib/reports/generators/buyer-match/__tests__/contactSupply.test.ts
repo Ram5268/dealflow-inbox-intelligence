@@ -30,7 +30,10 @@ test('contact-supply match is persisted with opportunityType=contact and renders
   const rendered = listings.find(l => l.listing.id === match.opportunityId)
   assert.ok(rendered, 'contact supply should appear in the buyer-match report listings')
   assert.equal(rendered.listing.category, null, 'contact supply has no email Category')
-  assert.equal(rendered.listing.extractedTitle, seller.fullName, 'contact supply title = seller name')
+  // Brief 41 (H7): a homeowner is never named; no estimate shows as a price.
+  assert.notEqual(rendered.listing.extractedTitle, seller.fullName, 'contact supply title is never the seller name')
+  assert.equal(rendered.listing.price, null, 'contact supply has no price (our estimate is internal only)')
+  assert.equal(rendered.listing.isHomeowner, true)
 
   await prisma.$disconnect()
 })
