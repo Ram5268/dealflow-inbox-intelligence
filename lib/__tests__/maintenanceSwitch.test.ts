@@ -156,7 +156,13 @@ test('listings StreetEasy never found are re-checked every 30 days, not 7 (quota
 })
 
 test('restoring listings delisted by a miss respects what Ryan decided in review', () => {
-  const row = (id: string, processingStatus = 'stale', isDuplicate = false) => ({ id, processingStatus, isDuplicate })
+  // Brief 41.1 (PR H): the plan is also category- and date-aware; see
+  // streetEasyMissRepair.test.ts. These are off-market listings, which a miss says nothing about.
+  const now = new Date('2026-10-06T12:00:00Z')
+  const row = (id: string, processingStatus = 'stale', isDuplicate = false) => ({
+    id, processingStatus, isDuplicate, rawEmailId: 'e', category: 'OFF_MARKET_SALE', isTestData: false,
+    streetEasyStatus: 'delisted', streetEasyId: null, streetEasyCheckedAt: now, availabilityDate: null, createdAt: now,
+  })
   const plan = planMissRepair(
     [row('plain'), row('pending'), row('rejected'), row('dup', 'stale', true), row('approved', 'active'), row('markedStale')],
     [
@@ -166,10 +172,13 @@ test('restoring listings delisted by a miss respects what Ryan decided in review
       { opportunityId: 'markedStale', status: 'marked_stale' },
       { opportunityId: null, status: 'pending' },
     ],
+    now,
   )
-  // The false "delisted" goes everywhere (it hides a row from Drift's search).
-  assert.deepEqual(plan.clearStatus, ['plain', 'pending', 'rejected', 'dup', 'approved', 'markedStale'])
-  assert.deepEqual(plan.toActive, ['plain'])
-  assert.deepEqual(plan.toNeedsReview, ['pending']) // still waiting in review: back to the queue, not active
-  assert.deepEqual(plan.keptByDecision, ['rejected', 'dup', 'markedStale'])
+  const ids = (outcome: string) => plan.changes.filter(c => c.outcome === outcome).map(c => c.id)
+  // The false "delisted" goes everywhere.
+  assert.deepEqual(plan.changes.map(c => [c.id, c.newStreetEasyStatus]), ['plain', 'pending', 'rejected', 'dup', 'approved', 'markedStale'].map(id => [id, null]))
+  assert.deepEqual(ids('active'), ['plain'])
+  assert.deepEqual(ids('needs_review'), ['pending']) // still waiting in review: back to the queue, not active
+  assert.deepEqual(ids('as_decided'), ['rejected', 'dup', 'markedStale'])
+  assert.deepEqual(ids('flag_only'), ['approved'])
 })

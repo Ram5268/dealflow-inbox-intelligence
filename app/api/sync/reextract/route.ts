@@ -6,19 +6,14 @@ import { classifyAndExtractEmail } from '@/lib/ai'
 import { buildOpportunityText, upsertOpportunityEmbedding } from '@/lib/embeddings'
 import { Category, Prisma, TransactionType } from '@prisma/client'
 import { maintenanceEnabled, MAINTENANCE_OFF_BODY } from '@/lib/config/maintenance'
+import { REEXTRACT_TRANSACTION_TYPES, forceRequested, listingEntries, reextractSwapDecision } from '@/lib/reextractGuard'
 
 export const maxDuration = 300
 
-const VALID_CATEGORIES = new Set([
-  'COMING_SOON_SALE','OFF_MARKET_SALE','ACTIVE_SALE_LISTING','RENTAL_LISTING',
-  'BUYER_ISO','RENTER_INQUIRY','SELLER_LEAD','LANDLORD_LEAD',
-  'DEVELOPMENT_INVENTORY','OPEN_HOUSE','PRICE_DROP','BACK_ON_MARKET','NOISE',
-])
-const VALID_TX = new Set([
-  'SALE','RENTAL','BUYER_NEED','RENTER_NEED','SELLER_LEAD','LANDLORD_LEAD','UNKNOWN',
-])
-
 // Maintenance route (Brief 41, H6): off unless MAINTENANCE_ENABLED=true.
+// Brief 41.1 (F12): it never replaces an email's saved listings with an answer
+// that has none; the response reports those as skipped. "force": true in the
+// body replaces them anyway.
 export async function POST(req: NextRequest) {
   if (!maintenanceEnabled()) return NextResponse.json(MAINTENANCE_OFF_BODY, { status: 403 })
   try {
@@ -54,10 +49,12 @@ export async function POST(req: NextRequest) {
     const organizationId = await getCurrentOrgId()
     console.log(`[Reextract] Processing ${emails.length} email(s)`)
 
+    const force = forceRequested(body)
     let totalDeleted = 0
     let totalCreated = 0
     let failed = 0
-    const summary: { subject: string; deleted: number; created: number }[] = []
+    let skipped = 0
+    const summary: { subject: string; deleted: number; created: number; kept?: number; skipped?: string }[] = []
 
     for (const email of emails) {
       try {
@@ -78,12 +75,9 @@ export async function POST(req: NextRequest) {
         if (results.length === 0) throw new Error('the extractor returned no entries; the listings were left as they were')
 
         const fresh: { ext: (typeof results)[number]; data: Prisma.ExtractedOpportunityUncheckedCreateInput }[] = []
-        for (const ext of results) {
-          if (!ext.isRelevant || ext.category === 'NOISE') continue
-
-          const category = VALID_CATEGORIES.has(ext.category) ? ext.category as Category : Category.NOISE
-          if (category === Category.NOISE) continue
-          const transactionType = VALID_TX.has(ext.transactionType) ? ext.transactionType as TransactionType : TransactionType.UNKNOWN
+        for (const ext of listingEntries(results)) {
+          const category = ext.category as Category
+          const transactionType = REEXTRACT_TRANSACTION_TYPES.has(ext.transactionType) ? ext.transactionType as TransactionType : TransactionType.UNKNOWN
 
           fresh.push({
             ext,
@@ -107,21 +101,31 @@ export async function POST(req: NextRequest) {
           })
         }
 
-        // Swap: delete the old listings and create the new ones in one
-        // transaction, so a failure leaves the old ones in place.
-        const [{ count: deleted }, ...opps] = await prisma.$transaction([
-          prisma.extractedOpportunity.deleteMany({ where: { rawEmailId: email.id } }),
-          ...fresh.map(f => prisma.extractedOpportunity.create({ data: f.data })),
-        ])
-        const created = opps.length
-        totalDeleted += deleted
-        totalCreated += created
-        opps.forEach((opp, k) => {
-          upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...fresh[k].ext, ...opp })).catch(() => {})
-        })
+        // Brief 41.1 (F12): an answer with no listings in it (only noise,
+        // irrelevant or malformed entries) never wipes the saved ones.
+        const saved = await prisma.extractedOpportunity.count({ where: { rawEmailId: email.id } })
+        const decision = reextractSwapDecision({ saved, fresh: fresh.length, force })
+        if (decision.swap) {
+          // Swap: delete the old listings and create the new ones in one
+          // transaction, so a failure leaves the old ones in place.
+          const [{ count: deleted }, ...opps] = await prisma.$transaction([
+            prisma.extractedOpportunity.deleteMany({ where: { rawEmailId: email.id } }),
+            ...fresh.map(f => prisma.extractedOpportunity.create({ data: f.data })),
+          ])
+          const created = opps.length
+          totalDeleted += deleted
+          totalCreated += created
+          opps.forEach((opp, k) => {
+            upsertOpportunityEmbedding(opp.id, buildOpportunityText({ ...fresh[k].ext, ...opp })).catch(() => {})
+          })
 
-        console.log(`[Reextract] "${email.subject}": ${deleted} deleted → ${created} created`)
-        summary.push({ subject: email.subject, deleted, created })
+          console.log(`[Reextract] "${email.subject}": ${deleted} deleted → ${created} created`)
+          summary.push({ subject: email.subject, deleted, created })
+        } else {
+          if (decision.kept) skipped++
+          console.log(`[Reextract] "${email.subject}": ${decision.reason}`)
+          summary.push({ subject: email.subject, deleted: 0, created: 0, ...(decision.kept ? { kept: decision.kept, skipped: decision.reason } : {}) })
+        }
 
         // Small delay between emails to stay under rate limits
         await new Promise(r => setTimeout(r, 500))
@@ -132,7 +136,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ totalDeleted, totalCreated, failed, summary })
+    return NextResponse.json({ totalDeleted, totalCreated, failed, skipped, summary })
   } catch (err) {
     console.error('[Reextract] Error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

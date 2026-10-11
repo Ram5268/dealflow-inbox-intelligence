@@ -1,4 +1,5 @@
 // Brief 41 (H7) — withdraw Buyer Match reports saved before the privacy fix.
+// Tightened in Brief 41.1 (PR H).
 //
 // A report, and a single report section shown in chat, is stored when it's
 // made. Ones made before Brief 41 can hold a homeowner's name, our estimate
@@ -7,26 +8,40 @@
 // short note; Ryan can ask Drift to make any of them again. A production data
 // step: run it only with Ryan's OK. It never prints report or chat content.
 //
-//   npx tsx scripts/brief41-withdraw-old-buyer-reports.ts --before <ISO time the fix went live>            # dry run (default): counts only
-//   npx tsx scripts/brief41-withdraw-old-buyer-reports.ts --before <ISO time the fix went live> --apply    # withdraw them + an AuditLog entry
+// --before must be a full ISO time with a time zone and not later than now;
+// the recommended cutoff is 2026-10-06T05:55:00Z (lib/reports/withdrawOldReports.ts).
+// --apply first writes the ids it withdraws to a private JSON file
+// (~/dev/brief41-1/private/ unless --preimage-dir <dir>, never inside a git
+// checkout), then records the same ids in the AuditLog entry.
+//
+//   npx tsx scripts/brief41-withdraw-old-buyer-reports.ts --before 2026-10-06T05:55:00Z            # dry run (default): counts and ids only
+//   npx tsx scripts/brief41-withdraw-old-buyer-reports.ts --before 2026-10-06T05:55:00Z --apply    # withdraw them + an AuditLog entry
 import 'dotenv/config'
+import { resolve } from 'node:path'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { NOTE, RECOMMENDATION, RECOMMENDED_CUTOFF, TEMPLATE, applyWithdrawal, parseCutoff } from '../lib/reports/withdrawOldReports'
+import { PrivateDirRefusal, assertPrivateDir, privateDirFrom, privateFileName, writePrivateJson } from '../lib/privateRecord'
 
-const TEMPLATE = 'buyer-match'
 const ORG_SLUG = 'dealflow-ryan'
-const NOTE = 'This report was made before a privacy fix (Brief 41) and has been withdrawn. Ask Drift to make it again.'
-const SECTION_NOTE = 'This report section was made before a privacy fix (Brief 41) and has been withdrawn. Ask Drift to make it again.'
+const REPO_ROOT = resolve(__dirname, '..')
 
 async function main() {
   const at = process.argv.indexOf('--before')
-  const before = at > 0 ? new Date(process.argv[at + 1] ?? '') : null
-  if (!before || Number.isNaN(before.getTime())) {
-    console.log('Usage: --before <ISO time the fix went live> [--apply]')
+  const cutoff = parseCutoff(at > 0 ? process.argv[at + 1] : undefined, new Date())
+  if ('error' in cutoff) {
+    console.log(cutoff.error)
     process.exitCode = 2
     return
   }
+  const { before } = cutoff
   const apply = process.argv.includes('--apply')
+  const privateDir = privateDirFrom(process.argv)
+  if (apply) assertPrivateDir(privateDir, REPO_ROOT) // refuse a bad --preimage-dir before reading anything
+  console.log(RECOMMENDATION)
+  if (before.toISOString() !== new Date(RECOMMENDED_CUTOFF).toISOString()) {
+    console.log(`Note: --before ${before.toISOString()} is not the recommended cutoff. An earlier one leaves some pre-fix reports in place; a later one also withdraws reports made after the fix.`)
+  }
 
   const reports = await prisma.report.findMany({
     where: { templateId: TEMPLATE, createdAt: { lt: before }, NOT: { markdown: NOTE } },
@@ -53,37 +68,24 @@ async function main() {
     return
   }
   const org = await prisma.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG }, select: { id: true } })
-  await prisma.$transaction([
-    prisma.report.updateMany({
-      where: { id: { in: reports.map(r => r.id) } },
-      data: {
-        markdown: NOTE,
-        sections: [{ key: 'withdrawn', title: 'Report withdrawn', content: { prose: NOTE }, sources: [] }],
-        sources: [],
-      },
-    }),
-    // The chat message that carried a section also restated it in prose.
-    prisma.chatMessage.updateMany({
-      where: { id: { in: sections.map(m => m.id) } },
-      data: { attachedFragment: Prisma.DbNull, content: SECTION_NOTE },
-    }),
-    prisma.auditLog.create({
-      data: {
-        organizationId: org.id,
-        action: 'OLD_BUYER_REPORTS_WITHDRAWN',
-        detailsJson: {
-          source: 'brief41-withdraw-old-buyer-reports',
-          at: new Date().toISOString(),
-          before: before.toISOString(),
-          reports: reports.length,
-          chatSections: sections.length,
-        },
-      },
-    }),
-  ])
-  console.log(`Withdrew ${reports.length} report(s) and ${sections.length} chat section(s); logged OLD_BUYER_REPORTS_WITHDRAWN.`)
+  const now = new Date()
+  const { recordFile } = await applyWithdrawal(prisma, {
+    organizationId: org.id,
+    before,
+    reportIds: reports.map(r => r.id),
+    chatMessageIds: sections.map(m => m.id),
+    now,
+    dbNull: Prisma.DbNull,
+    writeRecord: record => writePrivateJson(privateDir, REPO_ROOT, privateFileName('brief41-withdraw-old-buyer-reports', now), record),
+  })
+  console.log(`Ids written first: ${recordFile}`)
+  console.log(`Withdrew ${reports.length} report(s) and ${sections.length} chat section(s); logged OLD_BUYER_REPORTS_WITHDRAWN with their ids.`)
 }
 
 main()
-  .catch(e => { console.error(e); process.exitCode = 1 })
+  .catch(e => {
+    if (e instanceof PrivateDirRefusal) { console.log(e.message); process.exitCode = 2; return }
+    console.error(e)
+    process.exitCode = 1
+  })
   .finally(() => prisma.$disconnect())
