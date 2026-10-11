@@ -12,6 +12,7 @@
 // with the full issue path and also skipped.
 import Anthropic from '@anthropic-ai/sdk'
 import type { ZodType } from 'zod'
+import { toolInputShape } from './toolInputShape'
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6'
 const RETRY_DELAY_MS = 30_000
@@ -156,14 +157,16 @@ export async function extractWithSonnet<T>(
 
   const parsed = opts.zodSchema.safeParse(toolUse.input)
   if (!parsed.success) {
-    // Per decision tree: log full Zod path + the Sonnet output, write nothing.
+    // Per decision tree: log full Zod path + the shape of the Sonnet output,
+    // write nothing. Brief 41.1: never the output's text, which can carry a
+    // seller's personal circumstances or a name.
     const issues = parsed.error.issues
       .slice(0, 5)
       .map(i => `${i.path.join('.') || '(root)'}: ${i.message}`)
       .join('; ')
     console.error(
       `[sonnetExtractor] Zod validation failed for tool ${opts.toolName}: ${issues}`,
-      `\n  toolInput: ${JSON.stringify(toolUse.input).slice(0, 1500)}`,
+      `\n  toolInput shape: ${toolInputShape(toolUse.input).slice(0, 1500)}`,
     )
     return { data: null, toolInput: toolUse.input, usage, error: `Zod validation failed: ${issues}` }
   }

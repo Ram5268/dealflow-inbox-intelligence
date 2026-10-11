@@ -112,8 +112,11 @@ test('the filter catches the sensitive words and leaves real-estate talk alone',
   assert.equal(withoutPersonalCircumstances('Owner wants to list\nDivorce pending\nThree units.'), 'Owner wants to list Three units.')
   assert.equal(withoutPersonalCircumstances('Owner said "my wife died." Three units.'), 'Three units.')
   assert.equal(withoutPersonalCircumstances('Seller Mr. Smith is the executor. Three units.'), 'Three units.')
+  // A line break inside a sentence keeps the sentence together, so it's dropped
+  // whole (Brief 41.1: "She passed" alone is caught too).
+  assert.equal(withoutPersonalCircumstances('She passed\naway last year. Three units.'), 'Three units.')
   // A phrase split across lines never comes back whole: fail closed.
-  assert.equal(withoutPersonalCircumstances('She passed\naway last year. Three units.'), '')
+  assert.equal(withoutPersonalCircumstances('Letters of\nAdministration granted. Three units.'), '')
   // Nothing to drop: the text comes back exactly as it was, newlines included.
   assert.equal(withoutPersonalCircumstances('Three units.\nTenant in place.'), 'Three units.\nTenant in place.')
 })

@@ -2,7 +2,7 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import type { ExtractorInput, ExtractionResult } from '../types'
-import { safeLeadText, leadFallbackTitle, mentionsPersonalCircumstances } from '../../extraction/personalCircumstances'
+import { safeLeadText, safeStatus, leadFallbackTitle, mentionsPersonalCircumstances } from '../../extraction/personalCircumstances'
 
 export const EXTRACTOR_VERSION = '1.0'
 
@@ -128,7 +128,7 @@ export default async function extract(input: ExtractorInput): Promise<Extraction
     sourceAgentEmail:     l.sourceAgentEmail ?? null,
     sourceBrokerage:      l.sourceBrokerage ?? null,
     clientSide:           'landlord',
-    status:               l.status ?? null,
+    status:               safeStatus(l.status), // Brief 41.1: free text from the model too
     // Brief 41 (H9): the same filter as seller leads (V2 mapLandlord too).
     ...(({ title, summary, reason }) => ({ extractedTitle: title, extractedSummary: summary, classificationReason: reason }))(
       safeLeadText({
