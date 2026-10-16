@@ -166,3 +166,78 @@ test('sentence handling: only the sentences or lines that mention one are droppe
   assert.equal(sellerSummary('Owner wants to list.', 'estate sale'), 'Owner wants to list.')
   assert.equal(sellerSummary('Owner wants to list.', 'They’re splitting up'), 'Owner wants to list.')
 })
+
+// PR G review, round 3: an "ordinary" exception is narrow, tied to a building,
+// listing or deal, and never applies when a person is the subject.
+test('a medical center is ordinary only as a tenant or a space, never where someone is treated', () => {
+  for (const s of ['Owner is in treatment at the cancer center.', 'Her husband is being treated at a cancer center.',
+    'Owner goes to the cancer center every week.', 'Owner was admitted to a cancer facility.', 'Owner spends her days at the cancer clinic.',
+    'Owner sees doctors at the cancer practice.', 'Owner goes to the dialysis center three times a week.', 'Owner is at a chemo clinic daily.',
+    'Owner is at a rehab facility after her fall.', 'Owner is in a medical facility.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['Dialysis center tenant.', 'Cancer center tenant on the ground floor.', 'Urgent care tenant.']) assert.equal(mentions(s), false, s)
+})
+
+test('a relative who "passed" is a death unless they passed on an offer or passed a check', () => {
+  for (const s of ['Her husband passed around Christmas.', 'Her husband passed around the holidays.', 'His wife passed by the time the house was listed.',
+    'Her father passed along with her mother in the crash.', 'Her father passed on the house to her.', 'Her father passed on the house to her two years ago.',
+    'Her mother passed her the house.', 'Her father passed us the house.', 'His father passed him the brownstone.', 'Her mother passed it along to her.',
+    'Her father passed the building to me.', 'Her husband passed, no thanks to the doctors.', 'Her husband passed at home.', 'Her father passed at asking.',
+    'Her husband passed for now.', 'Her husband passed up north.', 'Her husband passed over the summer.', 'Her mother passed on Christmas.',
+    'Her father passed on the house.', 'Her mother passed on it.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['Her son passed the co-op board interview.', "The owner's son passed on our offer.", 'Her son passed the bar.',
+    'Her son passed his driving test.', 'Her husband passed on buying it.']) {
+    assert.equal(mentions(s), false, s)
+  }
+})
+
+test('an owner\'s "declined" exceptions are narrow: no "around", no passing the property, "no thanks" only at the end', () => {
+  for (const s of ['The owner passed, no thanks to her doctors.', 'Owner passed — no thanks to the bank.', 'The owner passed around Christmas.',
+    'The owner passed by the end of the year.', 'Seller passed through a long illness.', 'The owner passed at 92.', 'The owner passed at home.',
+    'She passed the house to her son.', 'The owner passed on the house to her son.', 'The landlord passed this time last spring.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['Owner passed — not interested.', 'Owner passed, no thanks.', 'He passed me the keys.', 'Who passed the listing to me?',
+    'Seller passed it along to her attorney.', 'The owner passed by the property yesterday.', 'Owner passed at asking.', 'Seller passed for now.']) {
+    assert.equal(mentions(s), false, s)
+  }
+})
+
+test('passing away, passes, may pass: the present and the future too', () => {
+  for (const s of ['Owner is passing away.', 'When he passes away the kids will sell.', 'When she passes, the kids will sell.',
+    'Her husband is passing.', 'Owner may pass soon.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['The owner is passing on the deal.', 'The seller passes the board review.', 'Owner is passing through town.']) assert.equal(mentions(s), false, s)
+})
+
+test('a nursing home as a building, never where someone is; a lead is a person; a family member inheriting is an inheritance', () => {
+  for (const s of ['Her mother is in assisted living on the second floor of the building.', 'Her mother is in a nursing home on the top floor.',
+    'Owner lives next to the nursing home where his wife is.', 'Owner moved to be near the assisted living facility where her husband lives.',
+    'Owner moved next door to the nursing home to be close to his wife.', 'Owner is near a funeral home for her husband.',
+    'The seller lead died in March.', 'Our seller lead died last month.', 'The market died with the owner.', "The owner's car died and so did he.",
+    'Her husband is dead weight on the sale.', 'Her daughter will inherit the tenants.', 'The kids inherit the tenants when she passes.',
+    'His son inherits the lease from him.', 'Johnson Estates hired a lawyer to sell the house.', "The Miller Estates' attorney called.",
+    'Brown Estates Inc is selling.', 'The Smith and Jones Estates agreed to sell.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['Mixed-use with a funeral home on the ground floor.', 'Nursing-home building for sale.', 'Across from a nursing home.',
+    'Next door to an assisted living facility.', 'The house is next to a nursing home.', 'The deal died in attorney review.', 'Drop-dead skyline views from the roof.',
+    'Buyer will inherit two rent-stabilized tenants.', "You'll inherit the existing lease.", 'Inherit the tenants.',
+    'Kensington Estates co-op unit', 'Bayside Estates two-family', 'Single-family home in Fresh Meadows Estates, Queens.']) {
+    assert.equal(mentions(s), false, s)
+  }
+  // A blank line ends a paragraph; a lowercase line carries on the one before.
+  assert.equal(without('Three units\n\nowner died'), 'Three units')
+})
+
+test('the filter and the fit line stay fast on long inputs (round 3 review: no quadratic splits)', () => {
+  const started = Date.now()
+  without('Owner died\n' + 'abc\n'.repeat(200_000))
+  without('Owner died.' + ' '.repeat(100_000) + 'x')
+  without('Owner died.' + '\n '.repeat(50_000) + 'x')
+  assert.ok(Date.now() - started < 3_000, `${Date.now() - started} ms`)
+})

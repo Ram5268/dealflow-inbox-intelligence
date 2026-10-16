@@ -107,3 +107,10 @@ test('a figure without "$" never reaches a homeowner line, nor a home value any 
   // A scorer key in older free text never is.
   assert.equal(plainFitReason('goldenHandcuff + Bushwick'), GENERIC_FIT_REASON)
 })
+
+test('a stored reason with a long run of spaces is fast (the old regex split was quadratic)', () => {
+  const started = Date.now()
+  assert.equal(plainFitReason('beds' + ' '.repeat(100_000) + '+ neighborhood'), 'Matched on bedrooms, neighborhood')
+  plainFitReason('a' + ' '.repeat(100_000) + 'b', { homeowner: true })
+  assert.ok(Date.now() - started < 3_000, `${Date.now() - started} ms`)
+})
