@@ -47,8 +47,9 @@ test('a bad or ambiguous --before is refused; the usage names the recommended cu
 })
 
 // A stand-in for the Prisma client: the update calls build the operations,
-// $transaction runs them; every call is logged in order.
-function fakeDb() {
+// $transaction runs them; every call is logged in order. `failWith` makes the
+// transaction fail (a timeout, a dropped connection).
+function fakeDb(failWith?: Error) {
   const log: string[] = []
   const calls: Record<string, unknown> = {}
   const op = (name: string) => (args: unknown) => { log.push(name); calls[name] = args; return Promise.resolve({ count: 1 }) }
@@ -56,7 +57,11 @@ function fakeDb() {
     report: { updateMany: op('report.updateMany') },
     chatMessage: { updateMany: op('chatMessage.updateMany') },
     auditLog: { create: op('auditLog.create') },
-    $transaction: async (ops: Promise<unknown>[]) => { log.push('$transaction'); return Promise.all(ops) },
+    $transaction: async (ops: Promise<unknown>[]) => {
+      log.push('$transaction')
+      if (failWith) throw failWith
+      return Promise.all(ops)
+    },
   }
   return { db: db as unknown as WithdrawDb, log, calls }
 }
@@ -100,4 +105,18 @@ test('if the private file can\'t be written, nothing is withdrawn', async () => 
     writeRecord: () => { throw new Error('EACCES') },
   }), /EACCES/)
   assert.deepEqual(log, [])
+})
+
+test('a transaction that fails says the ids were written but nothing was withdrawn', async () => {
+  const dropped = new Error("Can't reach database server")
+  const { db } = fakeDb(dropped)
+  const said: string[] = []
+  await assert.rejects(applyWithdrawal(db, {
+    organizationId: 'org1', before: new Date(RECOMMENDED_CUTOFF), reportIds: ['r1'], chatMessageIds: ['m1'], now: NOW, dbNull: DB_NULL,
+    writeRecord: () => '/private/withdraw.json', log: (l) => said.push(l),
+  }), (e: Error) => e === dropped)
+  assert.deepEqual(said, [
+    'Ids written but NOT applied: nothing changed (the transaction failed and was rolled back). ' +
+    'Re-run the dry run to confirm. Record: /private/withdraw.json',
+  ])
 })

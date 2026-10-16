@@ -12,9 +12,12 @@
 // where a miss means nothing (off-market, coming soon, buyer and renter
 // requests); to the review queue for every other category (an active sale or
 // rental may really have sold); still stale where the sweep's date rules say
-// so (a past open house); Ryan's review decisions stand. A production data
-// step: run it only with Ryan's OK on the dry run's split. It prints counts
-// and ids, never listing content.
+// so (a past open house); Ryan's review decisions stand. Age alone never keeps
+// a listing hidden: an old off-market or coming-soon listing comes back
+// whatever its age (the table's age column shows them). The dry run also
+// prints how many items are already waiting in the review queue. A production
+// data step: run it only with Ryan's OK on the dry run's split. It prints
+// counts and ids, never listing content.
 //
 // --apply needs --expect <n>, the row count of the dry run Ryan approved, and
 // writes a pre-image (id, old and new statuses) to a private JSON file before
@@ -54,9 +57,12 @@ async function main() {
   const reviewItems = rows.length
     ? await prisma.reviewQueueItem.findMany({ where: { opportunityId: { in: rows.map(r => r.id) } }, select: { opportunityId: true, status: true } })
     : []
+  // The review queue's backlog, counted as /review counts it (it lists them 50
+  // at a time, oldest first), so Ryan sees where the new items will land.
+  const pendingReview = await prisma.reviewQueueItem.count({ where: { status: 'pending' } })
   const plan = planMissRepair(rows, reviewItems, now)
-  console.log(formatMissRepairTable(plan))
-  console.log(JSON.stringify(missRepairSummary(plan), null, 2))
+  console.log(formatMissRepairTable(plan, { pendingReview }))
+  console.log(JSON.stringify(missRepairSummary(plan, { pendingReview }), null, 2))
 
   if (!apply) {
     console.log(`Dry run: nothing changed. To apply exactly this plan, re-run with --apply --expect ${plan.changes.length}`)

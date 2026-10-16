@@ -74,41 +74,53 @@ export interface ApplyWithdrawalOptions {
   // Writes the record to a private file and returns its path. Called before
   // any update; if it throws, nothing is changed.
   writeRecord: (record: WithdrawalRecord) => string
+  // Where the "written but NOT applied" line goes if the transaction fails
+  // (default console.log).
+  log?: (line: string) => void
 }
 
 export async function applyWithdrawal(db: WithdrawDb, opts: ApplyWithdrawalOptions): Promise<{ recordFile: string }> {
   const { before, reportIds, chatMessageIds } = opts
   const recordFile = opts.writeRecord(withdrawalRecord(before, reportIds, chatMessageIds, opts.now))
-  await db.$transaction([
-    db.report.updateMany({
-      where: { id: { in: reportIds }, templateId: TEMPLATE, createdAt: { lt: before } },
-      data: {
-        markdown: NOTE,
-        sections: [{ key: 'withdrawn', title: 'Report withdrawn', content: { prose: NOTE }, sources: [] }],
-        sources: [],
-      },
-    }),
-    // The chat message that carried a section also restated it in prose.
-    db.chatMessage.updateMany({
-      where: { id: { in: chatMessageIds }, createdAt: { lt: before }, attachedFragment: { path: ['templateId'], equals: TEMPLATE } },
-      data: { attachedFragment: opts.dbNull, content: SECTION_NOTE },
-    }),
-    db.auditLog.create({
-      data: {
-        organizationId: opts.organizationId,
-        action: AUDIT_ACTION,
-        detailsJson: {
-          source: SOURCE,
-          at: opts.now.toISOString(),
-          before: before.toISOString(),
-          reports: reportIds.length,
-          chatSections: chatMessageIds.length,
-          reportIds,
-          chatMessageIds,
-          recordFile,
+  // One transaction: if it fails (a timeout, a dropped connection), nothing is
+  // withdrawn. The record file stays, so say it wasn't applied.
+  try {
+    await db.$transaction([
+      db.report.updateMany({
+        where: { id: { in: reportIds }, templateId: TEMPLATE, createdAt: { lt: before } },
+        data: {
+          markdown: NOTE,
+          sections: [{ key: 'withdrawn', title: 'Report withdrawn', content: { prose: NOTE }, sources: [] }],
+          sources: [],
         },
-      },
-    }),
-  ])
+      }),
+      // The chat message that carried a section also restated it in prose.
+      db.chatMessage.updateMany({
+        where: { id: { in: chatMessageIds }, createdAt: { lt: before }, attachedFragment: { path: ['templateId'], equals: TEMPLATE } },
+        data: { attachedFragment: opts.dbNull, content: SECTION_NOTE },
+      }),
+      db.auditLog.create({
+        data: {
+          organizationId: opts.organizationId,
+          action: AUDIT_ACTION,
+          detailsJson: {
+            source: SOURCE,
+            at: opts.now.toISOString(),
+            before: before.toISOString(),
+            reports: reportIds.length,
+            chatSections: chatMessageIds.length,
+            reportIds,
+            chatMessageIds,
+            recordFile,
+          },
+        },
+      }),
+    ])
+  } catch (e) {
+    (opts.log ?? console.log)(
+      `Ids written but NOT applied: nothing changed (the transaction failed and was rolled back). ` +
+      `Re-run the dry run to confirm. Record: ${recordFile}`)
+    throw e
+  }
   return { recordFile }
 }

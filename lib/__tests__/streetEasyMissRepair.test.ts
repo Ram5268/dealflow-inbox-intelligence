@@ -79,8 +79,6 @@ test('by date: the sweep\'s date rules still apply, so past open houses, showing
     row('ohPast', { category: 'OPEN_HOUSE', availabilityDate: isoDay(3) }),
     row('ohFuture', { category: 'OPEN_HOUSE', availabilityDate: isoDay(-3) }),
     row('showPast', { category: 'SHOWING_CONFIRMATION', availabilityDate: `${isoDay(1)}T14:00` }),
-    row('offOldUnchecked', { category: 'OFF_MARKET_SALE', createdAt: daysAgo(120), streetEasyCheckedAt: null }),
-    row('offOldChecked', { category: 'OFF_MARKET_SALE', createdAt: daysAgo(120) }),
   ], [], NOW))
   assert.equal(plan.csPast.outcome, 'stays_stale')
   assert.equal(plan.csPast.newProcessingStatus, 'stale')
@@ -90,11 +88,25 @@ test('by date: the sweep\'s date rules still apply, so past open houses, showing
   assert.equal(plan.ohPast.outcome, 'stays_stale')
   assert.equal(plan.ohFuture.outcome, 'needs_review') // an upcoming open house is for a listing that may have sold
   assert.equal(plan.showPast.outcome, 'stays_stale')
-  // The 90-day rule (old and never checked by StreetEasy) sends it to review, as the sweep would.
-  assert.equal(plan.offOldUnchecked.outcome, 'needs_review')
-  assert.equal(plan.offOldChecked.outcome, 'active')
   // Every one of them still loses the false flag.
   for (const c of Object.values(plan)) assert.deepEqual([c.oldStreetEasyStatus, c.newStreetEasyStatus], ['delisted', null])
+})
+
+test('age alone never keeps a listing hidden: an old off-market or coming-soon listing comes back active', () => {
+  // Every old miss wrote streetEasyCheckedAt, so the sweep's 90-day rule (for
+  // listings StreetEasy never checked) never applies to these rows. The dry
+  // run's age column is where Ryan sees how old they are.
+  const plan = byId(planMissRepair([
+    row('off400', { category: 'OFF_MARKET_SALE', createdAt: daysAgo(400), streetEasyCheckedAt: daysAgo(300) }),
+    row('off120', { category: 'OFF_MARKET_SALE', createdAt: daysAgo(120), streetEasyCheckedAt: daysAgo(100) }),
+    row('cs400', { category: 'COMING_SOON_SALE', createdAt: daysAgo(400), streetEasyCheckedAt: daysAgo(300) }), // undated
+    row('csDev400', { category: 'COMING_SOON_DEVELOPMENT', createdAt: daysAgo(400), streetEasyCheckedAt: daysAgo(300) }),
+    row('buyer400', { category: 'BUYER_ISO', createdAt: daysAgo(400), streetEasyCheckedAt: daysAgo(300) }),
+    row('sale400', { category: 'ACTIVE_SALE_LISTING', createdAt: daysAgo(400), streetEasyCheckedAt: daysAgo(300) }),
+  ], [], NOW))
+  for (const id of ['off400', 'off120', 'cs400', 'csDev400', 'buyer400']) assert.equal(plan[id].outcome, 'active', id)
+  assert.equal(plan.sale400.outcome, 'needs_review') // by category, not by age
+  assert.deepEqual([plan.off400.ageDays, ageBucket(plan.off400.ageDays)], [400, '180+'])
 })
 
 test('what Ryan decided in review stands; a row still waiting goes back to the queue', () => {
@@ -171,11 +183,19 @@ test('the dry run splits the plan by category x test data x age', () => {
   assert.match(table, /^all\s+8\s+4\s+2\s+1\s+0\s+1$/m)
   assert.match(table, /1 new review item\(s\)/) // 'h'; 'e' was already waiting
   assert.match(table, /--apply changes 8 row\(s\)/)
+  assert.match(table, /-> active +shown again in Drift, search and buyer reports, whatever their age/)
   const summary = missRepairSummary(plan)
   assert.equal(summary.falseStatusToClear, 8)
   assert.equal(summary.ofWhichTestData, 3)
   assert.deepEqual(summary.reviewIds, ['e', 'h'])
   assert.equal(formatMissRepairTable({ changes: [] }), 'No listings are marked "delisted" by a StreetEasy miss. Nothing to restore.')
+  // The review queue's backlog, so Ryan sees where the new items land.
+  assert.doesNotMatch(table, /review queue already has|no pending items/)
+  assert.match(formatMissRepairTable(plan, { pendingReview: 120 }),
+    /The review queue already has 120 pending item\(s\)\. \/review shows 50 at a time, oldest first, so the 1 new one\(s\) come after those 120\./)
+  assert.match(formatMissRepairTable(plan, { pendingReview: 0 }), /The review queue has no pending items now, so the 1 new one\(s\) are the first ones on \/review\./)
+  assert.equal(missRepairSummary(plan, { pendingReview: 120 }).pendingReviewItemsNow, 120)
+  assert.equal('pendingReviewItemsNow' in summary, false)
 })
 
 // ── Applying it, on a stand-in for the Prisma client ─────────────────────────
@@ -186,8 +206,9 @@ type AuditArgs = { data: { organizationId: string; action: string; detailsJson: 
 
 // Records every call in order. A category listed in `changedMeanwhile` has
 // that many fewer rows matching (they changed since the read). A throw inside
-// the transaction rolls back what it wrote.
-function fakeDb(changedMeanwhile: Record<string, number> = {}) {
+// the transaction rolls back what it wrote; `failWith` makes the transaction
+// itself fail after its writes (a timeout, a dropped connection).
+function fakeDb(changedMeanwhile: Record<string, number> = {}, failWith?: Error) {
   const log: string[] = []
   const state = { updates: [] as UpdateArgs[], reviewItems: [] as Array<Record<string, unknown>>, audit: [] as AuditArgs['data'][] }
   const tx = {
@@ -218,7 +239,9 @@ function fakeDb(changedMeanwhile: Record<string, number> = {}) {
       log.push('$transaction')
       const before = { ...state, updates: [...state.updates], reviewItems: [...state.reviewItems], audit: [...state.audit] }
       try {
-        return await fn(tx)
+        const result = await fn(tx)
+        if (failWith) throw failWith
+        return result
       } catch (e) {
         log.push('rollback')
         Object.assign(state, before)
@@ -298,13 +321,32 @@ test('if the pre-image can\'t be written, nothing is updated', async () => {
 
 test('a row that changed since the read rolls the whole run back', async () => {
   const { db, log, state } = fakeDb({ ACTIVE_SALE_LISTING: 1 })
+  const said: string[] = []
   await assert.rejects(
-    applyMissRepair(db, PLAN, { organizationId: 'org1', expect: 3, now: NOW, writePreimage: () => '/private/pre.json' }),
+    applyMissRepair(db, PLAN, { organizationId: 'org1', expect: 3, now: NOW, writePreimage: () => '/private/pre.json', log: (l) => said.push(l) }),
     (e: Error) => e instanceof MissRepairRefusal && /changed since they were read/.test(e.message),
   )
   assert.equal(log.at(-1), 'rollback')
   assert.ok(!log.includes('auditLog.create'))
   assert.deepEqual([state.updates.length, state.reviewItems.length, state.audit.length], [0, 0, 0])
+  assert.deepEqual(said, [
+    'Pre-image written but NOT applied: nothing changed (the transaction failed and was rolled back). ' +
+    'Re-run the dry run to confirm. Pre-image: /private/pre.json',
+  ])
+})
+
+test('a transaction that fails (a timeout, a dropped connection) says the pre-image was not applied', async () => {
+  const timeout = new Error('Transaction API error: Transaction already closed: the timeout for this transaction was 120000 ms')
+  const { db, log, state } = fakeDb({}, timeout)
+  const said: string[] = []
+  await assert.rejects(
+    applyMissRepair(db, PLAN, { organizationId: 'org1', expect: 3, now: NOW, writePreimage: () => '/private/pre.json', log: (l) => said.push(l) }),
+    (e: Error) => e === timeout, // the original error, rethrown
+  )
+  assert.equal(log.at(-1), 'rollback')
+  assert.deepEqual([state.updates.length, state.reviewItems.length, state.audit.length], [0, 0, 0])
+  assert.equal(said.length, 1)
+  assert.match(said[0], /^Pre-image written but NOT applied: nothing changed .*Pre-image: \/private\/pre\.json$/)
 })
 
 test('an empty plan changes nothing and writes no file', async () => {

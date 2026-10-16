@@ -4,7 +4,7 @@
 // so it must never be committed: it goes outside every git checkout. The
 // default is ~/dev/brief41-1/private/ (built from the home directory);
 // --preimage-dir <dir> picks another. File system only: no DB, no network.
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
@@ -73,13 +73,28 @@ export function privateFileName(prefix: string, now: Date): string {
   return `${prefix}-${now.toISOString().replace(/[:.]/g, '-')}.json`
 }
 
-// Writes data as JSON to a new file in dir (created owner-only if missing).
-// The file is readable by the owner only and is never overwritten. Returns
-// its path.
+// Makes dir owner-only (0700), whether it is new or already there: mkdir's
+// mode only applies to a folder it creates, so an existing 0755 folder would
+// otherwise stay readable by others. Refuses if that can't be done.
+export function makeOwnerOnly(dir: string): void {
+  try {
+    chmodSync(dir, 0o700)
+  } catch (e) {
+    throw new PrivateDirRefusal(`Refusing: can't make ${dir} owner-only (${(e as Error).message}). Nothing changed.`)
+  }
+  if ((statSync(dir).mode & 0o077) !== 0) {
+    throw new PrivateDirRefusal(`Refusing: ${dir} is still readable by others after chmod 700. Nothing changed.`)
+  }
+}
+
+// Writes data as JSON to a new file in dir, which is created if missing and
+// made owner-only either way. The file is readable by the owner only and is
+// never overwritten. Returns its path.
 export function writePrivateJson(dir: string, repoRoot: string, name: string, data: unknown): string {
   if (name !== basename(name)) throw new PrivateDirRefusal(`Refusing: "${name}" is not a plain file name. Nothing changed.`)
   const real = assertPrivateDir(dir, repoRoot)
   mkdirSync(real, { recursive: true, mode: 0o700 })
+  makeOwnerOnly(real)
   const file = join(real, name)
   writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
   return file

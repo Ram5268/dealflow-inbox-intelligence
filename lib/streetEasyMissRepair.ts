@@ -16,7 +16,12 @@
 //     item, because /review lists queue items, not statuses;
 //   - it stays 'stale' where the sweep's date rules (lib/dateExpiryRules.ts)
 //     say so: an open house or showing whose date has passed, a coming soon
-//     30+ days past its date. The rules' 90-day "needs_review" applies too.
+//     30+ days past its date.
+// - Age alone never keeps a listing hidden: an old off-market or coming-soon
+//   listing comes back active whatever its age (the dry run's age column shows
+//   them). The sweep's 90-day "needs_review" rule only covers listings
+//   StreetEasy never checked, and every old miss wrote a check time, so it
+//   never applies to these rows.
 // - What Ryan decided stands: a duplicate, or a row he rejected or marked
 //   duplicate/stale in review, keeps its status. A row still waiting in the
 //   review queue goes to 'needs_review' (no second queue item).
@@ -94,6 +99,9 @@ function outcomeFor(row: MissDelistedRow, reviewStatuses: string[], now: Date): 
   if (row.processingStatus !== 'stale') return 'flag_only'
   const byDate = dateExpiryFor(row, now)
   if (byDate === 'stale') return 'stays_stale'
+  // byDate is never 'needs_review' for a real miss row: that 90-day rule needs
+  // streetEasyCheckedAt null, and every old miss wrote it. So the category and
+  // the review queue decide, not the listing's age.
   if (byDate === 'needs_review' || !RESTORE_TO_ACTIVE.has(row.category) || reviewStatuses.includes('pending')) return 'needs_review'
   return 'active'
 }
@@ -171,7 +179,9 @@ const COLUMNS: ReadonlyArray<{ title: string; outcome: MissOutcome }> = [
 ]
 
 // The table Ryan approves: one line per category, real/test data and age.
-export function formatMissRepairTable(plan: MissRepairPlan): string {
+// pendingReview: the review queue's pending items now (all of them, as /review
+// counts them), so Ryan can see where the new items will land.
+export function formatMissRepairTable(plan: MissRepairPlan, opts: { pendingReview?: number } = {}): string {
   const n = plan.changes.length
   if (n === 0) return 'No listings are marked "delisted" by a StreetEasy miss. Nothing to restore.'
   const split = splitMissRepair(plan)
@@ -189,8 +199,9 @@ export function formatMissRepairTable(plan: MissRepairPlan): string {
     '',
     ...lines.map(fmt),
     '',
-    '  -> active    shown again in Drift, search and buyer reports (off-market, coming soon, buyer and renter requests only)',
+    '  -> active    shown again in Drift, search and buyer reports, whatever their age (off-market, coming soon, buyer and renter requests only)',
     `  -> review    to the review queue on /review: Approve shows it again, Stale keeps it hidden. ${newItems} new review item(s); the rest were already waiting`,
+    ...(opts.pendingReview === undefined ? [] : [reviewQueueLine(opts.pendingReview, newItems)]),
     '  stays stale  stays hidden: its date has passed (an open house or showing, or a coming soon 30+ days past its date)',
     '  as decided   left as decided in review: a duplicate, or rejected / marked duplicate or stale',
     "  flag only    the miss didn't hide it (already active, in review, or rejected): nothing else changes",
@@ -198,8 +209,16 @@ export function formatMissRepairTable(plan: MissRepairPlan): string {
   ].join('\n')
 }
 
+// /review lists pending items 50 at a time, oldest first, so new items land
+// behind the current backlog.
+export function reviewQueueLine(pending: number, newItems: number): string {
+  if (pending === 0) return `               The review queue has no pending items now, so the ${newItems} new one(s) are the first ones on /review.`
+  return `               The review queue already has ${pending} pending item(s). /review shows 50 at a time, oldest first, ` +
+    `so the ${newItems} new one(s) come after those ${pending}.`
+}
+
 // Counts and ids, as the dry run has always printed them.
-export function missRepairSummary(plan: MissRepairPlan) {
+export function missRepairSummary(plan: MissRepairPlan, opts: { pendingReview?: number } = {}) {
   const ids = (o: MissOutcome) => plan.changes.filter((c) => c.outcome === o).map((c) => c.id)
   const byCategory: Record<string, number> = {}
   for (const c of plan.changes) byCategory[c.category] = (byCategory[c.category] ?? 0) + 1
@@ -214,6 +233,7 @@ export function missRepairSummary(plan: MissRepairPlan) {
     staysStaleByDate: ids('stays_stale').length,
     leftAsDecided: ids('as_decided').length,
     flagOnly: ids('flag_only').length,
+    ...(opts.pendingReview === undefined ? {} : { pendingReviewItemsNow: opts.pendingReview }),
     activeIds: ids('active').slice(0, 50),
     reviewIds: ids('needs_review').slice(0, 50),
   }
@@ -306,6 +326,9 @@ export interface ApplyMissRepairOptions {
   // Writes the pre-image to a private file and returns its path. Called
   // before any update; if it throws, nothing is changed.
   writePreimage: (preimage: MissRepairPreimage) => string
+  // Where the "written but NOT applied" line goes if the transaction fails
+  // (default console.log).
+  log?: (line: string) => void
 }
 
 export interface ApplyMissRepairResult {
@@ -335,55 +358,64 @@ export async function applyMissRepair(db: MissRepairDb, plan: MissRepairPlan, op
   const byCategory: Record<string, number> = {}
   for (const c of plan.changes) byCategory[c.category] = (byCategory[c.category] ?? 0) + 1
 
-  // All or nothing: if any row changed since it was read, the transaction
-  // rolls back and nothing is written.
-  const reviewItemIds = await db.$transaction(async (tx) => {
-    for (const w of writes) {
-      const { count: updated } = await tx.extractedOpportunity.updateMany({
-        where: missRepairWhere(w, opts.organizationId),
-        data: w.to === w.from ? { streetEasyStatus: null } : { streetEasyStatus: null, processingStatus: w.to },
-      })
-      if (updated !== w.ids.length) {
-        throw new MissRepairRefusal(
-          `Refusing: ${w.ids.length - updated} ${w.category} listing(s) changed since they were read. ` +
-          `Nothing changed (rolled back). Re-run the dry run. The pre-image ${preimageFile} was not used.`)
+  // All or nothing: if any row changed since it was read, or the transaction
+  // fails for any other reason (a timeout, a dropped connection), it rolls back
+  // and nothing is written. The pre-image file stays, so say it wasn't applied.
+  let reviewItemIds: string[]
+  try {
+    reviewItemIds = await db.$transaction(async (tx) => {
+      for (const w of writes) {
+        const { count: updated } = await tx.extractedOpportunity.updateMany({
+          where: missRepairWhere(w, opts.organizationId),
+          data: w.to === w.from ? { streetEasyStatus: null } : { streetEasyStatus: null, processingStatus: w.to },
+        })
+        if (updated !== w.ids.length) {
+          throw new MissRepairRefusal(
+            `Refusing: ${w.ids.length - updated} ${w.category} listing(s) changed since they were read. ` +
+            'Re-run the dry run and get a new OK on its split.')
+        }
       }
-    }
-    const items = newItems.length === 0 ? [] : await tx.reviewQueueItem.createManyAndReturn({
-      data: newItems.map((c) => ({
-        organizationId: opts.organizationId,
-        opportunityId: c.id,
-        rawEmailId: c.rawEmailId,
-        flagReason: REVIEW_FLAG,
-        suggestedAction: REVIEW_SUGGESTION,
-        status: 'pending',
-      })),
-      select: { id: true },
-    })
-    const ids = items.map((i) => i.id)
-    await tx.auditLog.create({
-      data: {
-        organizationId: opts.organizationId,
-        action: AUDIT_ACTION,
-        detailsJson: {
-          source: SOURCE,
-          at: opts.now.toISOString(),
-          preimageFile,
-          byCategory,
-          cleared: n,
-          active: count('active'),
-          review: count('needs_review'),
-          staysStale: count('stays_stale'),
-          leftAsDecided: count('as_decided'),
-          flagOnly: count('flag_only'),
-          newReviewItems: ids.length,
-          reviewItemIds: ids,
-          rows: preimage.rows,
+      const items = newItems.length === 0 ? [] : await tx.reviewQueueItem.createManyAndReturn({
+        data: newItems.map((c) => ({
+          organizationId: opts.organizationId,
+          opportunityId: c.id,
+          rawEmailId: c.rawEmailId,
+          flagReason: REVIEW_FLAG,
+          suggestedAction: REVIEW_SUGGESTION,
+          status: 'pending',
+        })),
+        select: { id: true },
+      })
+      const ids = items.map((i) => i.id)
+      await tx.auditLog.create({
+        data: {
+          organizationId: opts.organizationId,
+          action: AUDIT_ACTION,
+          detailsJson: {
+            source: SOURCE,
+            at: opts.now.toISOString(),
+            preimageFile,
+            byCategory,
+            cleared: n,
+            active: count('active'),
+            review: count('needs_review'),
+            staysStale: count('stays_stale'),
+            leftAsDecided: count('as_decided'),
+            flagOnly: count('flag_only'),
+            newReviewItems: ids.length,
+            reviewItemIds: ids,
+            rows: preimage.rows,
+          },
         },
-      },
-    })
-    return ids
-  }, { maxWait: 10_000, timeout: 120_000 })
+      })
+      return ids
+    }, { maxWait: 10_000, timeout: 120_000 })
+  } catch (e) {
+    (opts.log ?? console.log)(
+      `Pre-image written but NOT applied: nothing changed (the transaction failed and was rolled back). ` +
+      `Re-run the dry run to confirm. Pre-image: ${preimageFile}`)
+    throw e
+  }
 
   return { changed: n, active: count('active'), review: count('needs_review'), reviewItemIds, preimageFile }
 }
