@@ -116,7 +116,8 @@ test('a transaction that fails says the ids were written but nothing was withdra
     writeRecord: () => '/private/withdraw.json', log: (l) => said.push(l),
   }), (e: Error) => e === dropped)
   assert.deepEqual(said, [
-    'Ids written but NOT applied: nothing changed (the transaction failed and was rolled back). ' +
-    'Re-run the dry run to confirm. Record: /private/withdraw.json',
+    'Ids written but probably NOT applied: the transaction failed and was rolled back (if it failed while ' +
+    'saving, it may have gone through). Re-run the dry run: the same counts mean nothing changed, 0 means it ' +
+    'was applied. Record: /private/withdraw.json',
   ])
 })

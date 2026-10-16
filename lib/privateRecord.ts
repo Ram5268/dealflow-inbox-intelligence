@@ -73,9 +73,8 @@ export function privateFileName(prefix: string, now: Date): string {
   return `${prefix}-${now.toISOString().replace(/[:.]/g, '-')}.json`
 }
 
-// Makes dir owner-only (0700), whether it is new or already there: mkdir's
-// mode only applies to a folder it creates, so an existing 0755 folder would
-// otherwise stay readable by others. Refuses if that can't be done.
+// Makes a folder this script just created owner-only (0700). Refuses if that
+// can't be done.
 export function makeOwnerOnly(dir: string): void {
   try {
     chmodSync(dir, 0o700)
@@ -87,14 +86,27 @@ export function makeOwnerOnly(dir: string): void {
   }
 }
 
-// Writes data as JSON to a new file in dir, which is created if missing and
-// made owner-only either way. The file is readable by the owner only and is
-// never overwritten. Returns its path.
+// An existing folder is never changed (a --preimage-dir could name any
+// folder, even the home folder): it must already be owner-only, or the run is
+// refused. mkdir's mode only applies to a folder it creates.
+export function assertOwnerOnly(dir: string): void {
+  if ((statSync(dir).mode & 0o077) !== 0) {
+    throw new PrivateDirRefusal(`Refusing: others can read ${dir}. Pick a new folder, or make this one owner-only first (chmod 700 ${dir}). Nothing changed.`)
+  }
+}
+
+// Writes data as JSON to a new file in dir. A missing folder is created
+// owner-only; an existing one must already be owner-only. The file is
+// readable by the owner only and is never overwritten. Returns its path.
 export function writePrivateJson(dir: string, repoRoot: string, name: string, data: unknown): string {
   if (name !== basename(name)) throw new PrivateDirRefusal(`Refusing: "${name}" is not a plain file name. Nothing changed.`)
   const real = assertPrivateDir(dir, repoRoot)
-  mkdirSync(real, { recursive: true, mode: 0o700 })
-  makeOwnerOnly(real)
+  if (existsSync(real)) {
+    assertOwnerOnly(real)
+  } else {
+    mkdirSync(real, { recursive: true, mode: 0o700 })
+    makeOwnerOnly(real)
+  }
   const file = join(real, name)
   writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600, flag: 'wx' })
   return file

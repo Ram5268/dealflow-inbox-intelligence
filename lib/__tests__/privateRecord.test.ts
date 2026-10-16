@@ -3,7 +3,7 @@
 // File system only (temporary folders, removed afterwards): no DB, no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -68,12 +68,15 @@ test('writes the JSON once, owner-only, in an owner-only folder it creates', () 
   })
 })
 
-test('an existing folder that others can read is made owner-only before the file is written', () => {
+test('an existing folder is never changed: one that others can read is refused, an owner-only one is used', () => {
   withTemp((tmp) => {
     const dir = join(tmp, 'private')
     mkdirSync(dir)
     chmodSync(dir, 0o755) // mkdir's mode only applies to a folder it creates
-    assert.equal(statSync(dir).mode & 0o777, 0o755)
+    assert.throws(() => writePrivateJson(dir, ROOT, 'pre.json', { rows: [] }), /Refusing: others can read .*chmod 700/)
+    assert.equal(statSync(dir).mode & 0o777, 0o755) // left as it was
+    assert.equal(existsSync(join(dir, 'pre.json')), false)
+    chmodSync(dir, 0o700)
     const file = writePrivateJson(dir, ROOT, 'pre.json', { rows: [] })
     assert.equal(statSync(dir).mode & 0o777, 0o700)
     assert.equal(statSync(file).mode & 0o777, 0o600)

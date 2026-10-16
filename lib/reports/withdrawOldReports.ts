@@ -118,8 +118,9 @@ export async function applyWithdrawal(db: WithdrawDb, opts: ApplyWithdrawalOptio
     ])
   } catch (e) {
     (opts.log ?? console.log)(
-      `Ids written but NOT applied: nothing changed (the transaction failed and was rolled back). ` +
-      `Re-run the dry run to confirm. Record: ${recordFile}`)
+      `Ids written but probably NOT applied: the transaction failed and was rolled back (if it failed while ` +
+      `saving, it may have gone through). Re-run the dry run: the same counts mean nothing changed, 0 means it ` +
+      `was applied. Record: ${recordFile}`)
     throw e
   }
   return { recordFile }

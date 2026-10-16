@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   MissRepairRefusal, REVIEW_FLAG, RESTORE_TO_ACTIVE, ageBucket, applyMissRepair, formatMissRepairTable,
-  missRepairSummary, missRepairWhere, missRepairWrites, parseExpect, planMissRepair, splitMissRepair,
+  missRepairSummary, missRepairWhere, missRepairWrites, parseExpect, planMissRepair, reviewQueueLine, splitMissRepair,
   type MissDelistedRow, type MissRepairDb, type MissRepairPreimage,
 } from '../streetEasyMissRepair'
 
@@ -194,6 +194,7 @@ test('the dry run splits the plan by category x test data x age', () => {
   assert.match(formatMissRepairTable(plan, { pendingReview: 120 }),
     /The review queue already has 120 pending item\(s\)\. \/review shows 50 at a time, oldest first, so the 1 new one\(s\) come after those 120\./)
   assert.match(formatMissRepairTable(plan, { pendingReview: 0 }), /The review queue has no pending items now, so the 1 new one\(s\) are the first ones on \/review\./)
+  assert.equal(reviewQueueLine(120, 0).trim(), 'This run adds no review items (the queue has 120 pending now).')
   assert.equal(missRepairSummary(plan, { pendingReview: 120 }).pendingReviewItemsNow, 120)
   assert.equal('pendingReviewItemsNow' in summary, false)
 })
@@ -330,8 +331,9 @@ test('a row that changed since the read rolls the whole run back', async () => {
   assert.ok(!log.includes('auditLog.create'))
   assert.deepEqual([state.updates.length, state.reviewItems.length, state.audit.length], [0, 0, 0])
   assert.deepEqual(said, [
-    'Pre-image written but NOT applied: nothing changed (the transaction failed and was rolled back). ' +
-    'Re-run the dry run to confirm. Pre-image: /private/pre.json',
+    'Pre-image written but probably NOT applied: the transaction failed and was rolled back (if it failed while ' +
+    'saving, it may have gone through). Re-run the dry run: the same count means nothing changed, none left means ' +
+    'it was applied. Pre-image: /private/pre.json',
   ])
 })
 
@@ -346,7 +348,7 @@ test('a transaction that fails (a timeout, a dropped connection) says the pre-im
   assert.equal(log.at(-1), 'rollback')
   assert.deepEqual([state.updates.length, state.reviewItems.length, state.audit.length], [0, 0, 0])
   assert.equal(said.length, 1)
-  assert.match(said[0], /^Pre-image written but NOT applied: nothing changed .*Pre-image: \/private\/pre\.json$/)
+  assert.match(said[0], /^Pre-image written but probably NOT applied: .*Pre-image: \/private\/pre\.json$/)
 })
 
 test('an empty plan changes nothing and writes no file', async () => {

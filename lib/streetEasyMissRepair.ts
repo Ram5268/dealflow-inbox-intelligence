@@ -212,6 +212,7 @@ export function formatMissRepairTable(plan: MissRepairPlan, opts: { pendingRevie
 // /review lists pending items 50 at a time, oldest first, so new items land
 // behind the current backlog.
 export function reviewQueueLine(pending: number, newItems: number): string {
+  if (newItems === 0) return `               This run adds no review items (the queue has ${pending} pending now).`
   if (pending === 0) return `               The review queue has no pending items now, so the ${newItems} new one(s) are the first ones on /review.`
   return `               The review queue already has ${pending} pending item(s). /review shows 50 at a time, oldest first, ` +
     `so the ${newItems} new one(s) come after those ${pending}.`
@@ -412,8 +413,9 @@ export async function applyMissRepair(db: MissRepairDb, plan: MissRepairPlan, op
     }, { maxWait: 10_000, timeout: 120_000 })
   } catch (e) {
     (opts.log ?? console.log)(
-      `Pre-image written but NOT applied: nothing changed (the transaction failed and was rolled back). ` +
-      `Re-run the dry run to confirm. Pre-image: ${preimageFile}`)
+      `Pre-image written but probably NOT applied: the transaction failed and was rolled back (if it failed while ` +
+      `saving, it may have gone through). Re-run the dry run: the same count means nothing changed, none left means ` +
+      `it was applied. Pre-image: ${preimageFile}`)
     throw e
   }
 
