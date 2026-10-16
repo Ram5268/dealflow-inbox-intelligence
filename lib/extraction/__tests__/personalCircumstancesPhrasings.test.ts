@@ -1,6 +1,7 @@
 // Brief 41.1 (review F4) — the personal-circumstances filter on the phrasings
 // the Brief 41 review probe (filter-probe.ts) found it missing or wrongly
-// catching, plus how it splits text. Pure: imports only the filter.
+// catching, the PR G review's cases, and how it splits text. Pure: imports
+// only the filter.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mentionsPersonalCircumstances as mentions, withoutPersonalCircumstances as without, sellerSummary } from '../personalCircumstances'
@@ -49,20 +50,33 @@ test('an owner who "passed" on, over or up something, or passed a check, is ordi
     'The landlord passed on renewing.', 'She passed on the house.', 'They passed on it last week.',
     'The owner has passed the board interview.', 'The owner passed title at closing.', 'Owner passed the lead to me.',
     'The owner passed by the property yesterday.', 'Showed it to the Smiths; they passed.',
+    'Seller passed it along to her attorney.', 'He passed me the keys.', 'Who passed the listing to me?', 'The owner passed at $1.8M.',
+    'Owner passed at asking.', 'Seller passed for now.', 'Owner passed — not interested.', 'Owner passed because the price was too low.',
+    'Her son passed the co-op board interview.', "The owner's son passed on our offer.",
   ]) assert.equal(mentions(s), false, s)
   for (const s of [
     'The owner passed on Tuesday.', 'Owner passed suddenly.', 'The landlord passed last spring.', 'Mr. Smith passed last year.',
     'Mrs. Jones has passed.', 'The owner, who passed in 2023, left it to her kids.', 'He passed in his sleep.',
     'She passed the house to her son.', 'The house was passed down to the kids.', 'Owner passed', 'the seller passed.',
+    // PR G review: a word or an aside before "passed", and a partner
+    'The owner unfortunately passed in May.', 'The owner has now passed.', 'The owners both passed.', 'The owner recently and unexpectedly passed.',
+    'The owner, John Smith, passed in March.', 'The owner, sadly, passed.', 'Her husband unfortunately passed.', 'After his partner passed, he wants out.',
+    'The seller passed this time last year.', 'Her husband passed on in 2020.',
   ]) assert.equal(mentions(s), true, s)
 })
 
 test('separating and splitting up are a couple\'s only when nothing they act on follows', () => {
   for (const s of ['Owner is separating the two units.', 'Owners are splitting up the building into condos.',
-    'The garage is separated from the house.', 'The lots were separated by a 10-foot alley.', 'Breaking up the concrete in the yard.']) {
+    'The garage is separated from the house.', 'The lots were separated by a 10-foot alley.', 'Breaking up the concrete in the yard.',
+    // PR G review nits: things, not people
+    'The bedrooms are separated.', 'Unit 3 is separated from unit 4.', 'Gas and electric are separated.', "The lot can't be split up.",
+    'They split the commission.', 'A breakup fee applies.']) {
     assert.equal(mentions(s), false, s)
   }
-  for (const s of ['The couple is separating.', 'The couple broke up.', 'The owners are splitting up.', 'They separated last year.']) {
+  for (const s of ['The couple is separating.', 'The couple broke up.', 'The owners are splitting up.', 'They separated last year.',
+    'Owner is going through a separation.', 'After their breakup, they are selling.', 'After their break-up, the house is for sale.',
+    'The couple split last year.', 'The couple is parting ways.', "His soon-to-be ex wants to sell.", "The owner's ex wants half.",
+    'Their marriage ended.', 'Family court ordered the sale.', 'Husband moved out.']) {
     assert.equal(mentions(s), true, s)
   }
 })
@@ -71,32 +85,77 @@ test('illness, care and age wording is caught; the same words as places or idiom
   for (const s of ['Owner is in hospice.', 'Owner had a heart attack.', 'Owner is undergoing chemotherapy.', 'Owner was diagnosed with cancer.',
     'Owner needs a caregiver.', 'Owner is in a nursing home.', 'Moving into assisted living.', 'Owner was rushed to the hospital.',
     'Elderly couple selling.', 'Aging owner wants out.', 'Senior citizen owner.', '85-year-old owner.', 'Owner is in her 80s.',
-    'Owner in his late seventies.', 'Selling for family reasons.', 'Owner has health issues.']) {
+    'Owner in his late seventies.', 'Selling for family reasons.', 'Owner has health issues.',
+    // PR G review: hyphenated forms
+    'Owner is moving to an assisted-living facility.', 'Mom is going into a nursing-home.', 'Moving to memory-care.', 'Moving into a care-home.',
+    'Needs a home-health aide.', 'Owner is in ill-health.',
+    // incapacity
+    'Son has power of attorney.', 'Court-appointed guardian is selling.', 'A conservator was appointed.', 'Owner is incapacitated.',
+    // illness and death
+    'Owner is unwell.', 'Owner had surgery.', 'Owner is disabled.', 'The surviving spouse wants to sell.', 'The beneficiaries want to sell.',
+    'Owner is terminal.', 'Owner is terminally\nIll and in a nursing home.', 'Owner is in the ICU.', 'Owner is bedridden.', 'Owner needs full-time care.',
+    // age tied to a person
+    'Owner is 85 years old.', 'Owner is 85.', 'The owner, 82, wants to downsize.', 'Owner is a senior.', 'Older couple selling.',
+    'Owner is getting older.', 'Retired couple selling.', "She's 85 and selling.", "He's disabled.",
+    // a building type someone moves into is not a building listing
+    'Owner is moving to an assisted living building.', 'Moving to an old nursing home near her daughter.', 'Moving to senior living.']) {
     assert.equal(mentions(s), true, s)
   }
   for (const s of ['Two blocks from Methodist Hospital.', 'Near the hospital and the park.', 'Next door to an assisted living facility.',
     'Converted funeral home, now a three-family.', 'Owner is sick of managing tenants.', 'A stroke of luck: the zoning allows a fourth floor.',
     'Built in the late 1920s.', 'Roof replaced in the late 90s.', 'Late fee waived.', 'Great for a growing family.',
-    'Owner retiring to Florida.', 'The deal died in attorney review.', 'Purchaser will inherit the existing leases.']) {
+    'Owner retiring to Florida.', 'The deal died in attorney review.', 'Purchaser will inherit the existing leases.',
+    // PR G review: ages of things, and building types as buildings
+    'The building is 100 years old.', 'Two brownstones. They are 100 years old.', 'The owner is 20 minutes away.', 'Owner is a senior partner at a law firm.',
+    'Funeral home for sale.', 'Nursing home for sale.', 'Mixed-use with a funeral home on the ground floor.', 'Former nursing home, now vacant.',
+    // PR G review nits
+    'Disability access ramp.', 'Escrow custody account.', 'Home health agency tenant on the first floor.', 'Dialysis center tenant.',
+    'In the hospital district.', 'The boiler died last winter.', 'Market is dead.']) {
     assert.equal(mentions(s), false, s)
   }
 })
 
-test('"<Name> Estates" is a place; an estate that sells is not', () => {
-  for (const s of ['Fieldston Estates colonial', 'Jamaica Estates single family']) assert.equal(mentions(s), false, s)
-  for (const s of ['The Smith Estates are selling the brownstone.', 'The Estates of the late owner.', 'Smith estate is selling.']) assert.equal(mentions(s), true, s)
+test('a buyer inherits the tenants or the lease; anyone "inheriting" is an inheritance', () => {
+  for (const s of ['You will inherit two tenants.', 'Buyer inherits the lease.', 'Inherit a rent-stabilized tenant.']) assert.equal(mentions(s), false, s)
+  for (const s of ['The kids are inheriting the tenants and the house.', 'Her son is inheriting the rent roll.', 'She inherited the tenants.']) {
+    assert.equal(mentions(s), true, s)
+  }
 })
 
-test('sentence handling: only the pieces that mention one are dropped', () => {
+test('"<Name> Estates" is a place; an estate that sells is not; the words before the place are still checked', () => {
+  for (const s of ['Fieldston Estates colonial', 'Jamaica Estates single family', 'Jamaica Estates colonial, owner is relocating.']) {
+    assert.equal(mentions(s), false, s)
+  }
+  for (const s of ['The Smith Estates are selling the brownstone.', 'The Estates of the late owner.', 'Smith estate is selling.',
+    // PR G review (blocker): Title Case words before the place name, and the verb in any case
+    'Inherited Jamaica Estates Colonial', 'Probate Jamaica Estates Listing', 'Widowed Jamaica Estates owner wants to list.',
+    'Inherited Jamaica Estates colonial with a finished basement.', 'The Smith Estates Are Selling The Brownstone.',
+    'Heirs Bayside Estates', 'Family Estates Liquidation', 'Probate Estates condo for sale.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  assert.equal(without('Inherited Jamaica Estates colonial with a finished basement. Asking $1.4M.'), 'Asking $1.4M.')
+})
+
+test('sentence handling: only the sentences or lines that mention one are dropped', () => {
   const cases: Array<[string, string]> = [
     ['Three-family in Bed-Stuy. Owner passed two months ago. Asking $1.8M.', 'Three-family in Bed-Stuy. Asking $1.8M.'],
     // A sentence that starts with no space after the full stop
     ['Owner wants to list.Divorce pending. Three units.', 'Owner wants to list. Three units.'],
     ['Asking $1.2M. Owner died. 3 units.', 'Asking $1.2M. 3 units.'],
     ['Seller is the executor (her late husband’s estate). Two units.', 'Two units.'],
-    // Clauses between spaced dashes or semicolons
-    ['Owner wants to list - divorce pending - three units', 'Owner wants to list - three units'],
-    ['Owner wants to list; divorce pending; three units.', 'Owner wants to list; three units.'],
+    // A sensitive clause drops its whole sentence, with the context around it (PR G review: privacy wins)
+    ['Owner wants to list - divorce pending - three units', ''],
+    ['Owner wants to list; divorce pending; three units.', ''],
+    ['Divorce pending; wife keeps the house; husband wants cash. Three units.', 'Three units.'],
+    ['Owner passed in March; the kids want to sell fast. Three units.', 'Three units.'],
+    ['Owner is moving to assisted living - her son will handle the sale. Three units.', 'Three units.'],
+    ['The owner — who passed in March — left it to her kids. Three units.', 'Three units.'],
+    // A web address or an email is never split (PR G review)
+    ['See www.Example.com for photos. Owner died. Three units.', 'See www.Example.com for photos. Three units.'],
+    ['Seller is jane.Doe@example.com. Owner died. Three units.', 'Seller is jane.Doe@example.com. Three units.'],
+    ['Probate.Two units.', 'Two units.'],
+    ['Owner wants to list\r\nDivorce pending\r\nThree units.', 'Owner wants to list Three units.'],
+    ['Prof. Smith died. Three units.', 'Three units.'],
     // Nothing sensitive: unchanged
     ['Great 2-family. Buyer would inherit tenants. Drop-dead views.', 'Great 2-family. Buyer would inherit tenants. Drop-dead views.'],
     // "passed" at the end of a line, with no full stop

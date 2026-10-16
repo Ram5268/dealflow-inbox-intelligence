@@ -164,7 +164,7 @@ export function plainFitReason(stored: string | null | undefined, opts: { homeow
   const reason = (stored ?? '').trim()
   if (!reason) return GENERIC_FIT_REASON
   const homeowner = !!opts.homeowner
-  const parts = reason.split(/\s*\+\s*/)
+  const parts = reason.split('+').map(p => p.trim()) // (a regex split here was quadratic on long runs of spaces)
   if (parts.every(p => SCORER_KEY.test(p))) {
     const named = parts
       .filter(p => Object.hasOwn(NEUTRAL_LABELS, p))

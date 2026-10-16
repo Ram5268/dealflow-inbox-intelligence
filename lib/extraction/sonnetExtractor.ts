@@ -166,7 +166,7 @@ export async function extractWithSonnet<T>(
       .join('; ')
     console.error(
       `[sonnetExtractor] Zod validation failed for tool ${opts.toolName}: ${issues}`,
-      `\n  toolInput shape: ${toolInputShape(toolUse.input).slice(0, 1500)}`,
+      `\n  toolInput shape: ${toolInputShape(toolUse.input, opts.inputSchema).slice(0, 1500)}`,
     )
     return { data: null, toolInput: toolUse.input, usage, error: `Zod validation failed: ${issues}` }
   }

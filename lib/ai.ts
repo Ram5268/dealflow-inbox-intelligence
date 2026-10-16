@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
-import { LEAD_CATEGORIES, leadFallbackTitle, safeLeadText, safeStatus, safeConversationText } from './extraction/personalCircumstances'
+import { withoutPersonalText } from './extraction/personalCircumstances'
 
 export interface EmailInput {
   subject: string
@@ -218,22 +218,11 @@ export async function classifyAndExtractEmail(
 // Brief 41 (H9): a seller's or landlord's personal circumstances (estate,
 // probate, divorce, a death, illness) never reach a saved row. Every caller
 // (sync/reextract, sync/reclassify, Outlook sync) saves these results.
-// Brief 41.1: nor do they through a lead's status or a client conversation
-// with a seller or landlord (or one whose side isn't clear).
+// Brief 41.1: nor do they through a lead's or a conversation's status, or a
+// client conversation with a seller or landlord (or one whose side isn't
+// clear). The pure helper is tested in lib/extraction/__tests__.
 export function withoutPersonalLeadText(r: ExtractionResult): ExtractionResult {
-  const fallbackTitle = leadFallbackTitle(r.category, r.address ?? r.neighborhood)
-  if (r.category === 'CLIENT_CONVERSATION') {
-    const t = safeConversationText({
-      clientSide: r.clientSide, title: r.extractedTitle, summary: r.extractedSummary, reason: r.classificationReason, fallbackTitle,
-    })
-    return { ...r, extractedTitle: t.title, extractedSummary: t.summary, classificationReason: t.reason }
-  }
-  if (!LEAD_CATEGORIES.has(r.category)) return r
-  const t = safeLeadText({ title: r.extractedTitle, summary: r.extractedSummary, reason: r.classificationReason, fallbackTitle })
-  return {
-    ...r, extractedTitle: t.title, extractedSummary: t.summary, classificationReason: t.reason,
-    status: typeof r.status === 'string' ? safeStatus(r.status) : r.status,
-  }
+  return withoutPersonalText(r)
 }
 
 export interface SearchCriteria {

@@ -66,11 +66,13 @@ test('every writer of seller/landlord free text uses the filter', () => {
   )
   assert.equal(landlord.extractedTitle, 'Landlord lead – 12 Example St')
   assert.equal(landlord.extractedSummary, 'Two units.')
-  for (const f of ['lib/ai.ts', 'lib/extraction/extractEmailV2.ts', 'lib/ingestion/extractors/landlordLeadExtractor.ts']) {
+  for (const f of ['lib/extraction/extractEmailV2.ts', 'lib/ingestion/extractors/landlordLeadExtractor.ts']) {
     assert.match(readFileSync(join(ROOT, f), 'utf8'), /safeLeadText\(/, f)
   }
   const ai = readFileSync(join(ROOT, 'lib/ai.ts'), 'utf8')
   assert.match(ai, /return results\.map\(withoutPersonalLeadText\)/)
+  // Brief 41.1: the legacy extractor's filter is the pure withoutPersonalText (privacyWriters.test.ts).
+  assert.match(ai, /return withoutPersonalText\(r\)/)
 })
 
 test('an ordinary motivation is still saved', () => {
