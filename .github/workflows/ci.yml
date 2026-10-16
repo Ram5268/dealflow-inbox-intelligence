@@ -1,0 +1,42 @@
+name: ci
+
+# Brief 41.1 (PR A): typecheck and the database-free tests on every pull request
+# and every push to main.
+#
+# `npm test` never touches a database (Brief 41, #21: the DB-backed files live in
+# the guarded `npm run test:integration`, which this job doesn't run). The job is
+# given no database or API secrets, so nothing in it can reach production.
+# Lint isn't run yet: main has 67 known errors.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Nothing later needs git access, so the job's token isn't left in
+          # .git/config while package install scripts run.
+          persist-credentials: false
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        # The postinstall `prisma generate` needs no database.
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test (database-free)
+        run: npm test
