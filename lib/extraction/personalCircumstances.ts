@@ -224,7 +224,7 @@ const ABOUT_SOMEONE = /\b(?:owners?|sellers?|homeowners?|landlords?|he|she|him|h
 const PERSON_HERE = /\b(?:he|she|him|her|his|hers|they|them|their|who|whom)\b|\b(?:owners?|sellers?|homeowners?|landlords?)\s(?:(?:is|was|are|were)\s(?:now\s|still\s)?(?:a|an|in|at|on)|spends?|sleeps?)\b/i
 const HEIRS = /\b(?:kids|children|heirs?|family|siblings?)\b/i
 // A death anywhere in the sentence ("…inherits the tenants when Jane passes").
-const DEATH_WORD = /\b(?:pass(?:es|ed|ing)|died|dies|dying|deceased|deaths?|(?:is|was|are|were)\s(?:now\s)?gone|no\slonger\swith\sus)\b/i
+const DEATH_WORD = /\b(?:pass(?:es|ed|ing)|died|dies|dying|deceased|deaths?|(?:is|was|are|were|['’]s|has|have|had)\s(?:now\s|since\s)?gone|no\slonger\swith\sus|left\sus|lost)\b/i
 const COUPLE = /\b(?:couples?|spouses?|husbands?|wife|wives|partners?|marriage|married)\b/i
 
 // "<Name> Estates" is a place, so the word "Estates" there is ordinary, but
@@ -236,9 +236,10 @@ const COUPLE = /\b(?:couples?|spouses?|husbands?|wife|wives|partners?|marriage|m
 // being sold"), nor after "The/His/…". "Estates at <Place>" is a development.
 const NAMED_ESTATES = /\b(?!(?:The|A|An|His|Her|Their|Its|Our|My|Your|This|That|These|Those|Both|All|Two|Three|Four|Five|Several|Many|Some|Any|No|Each|Every)\b)[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\sEstates\b/g
 const PLACE_BEFORE = /\b(?:in|at|near|around|throughout|across)\s(?:the\s)?$/i
-// "in the <Name> Estates" is a place only in a sentence about a home ("Homes in
-// Fresh Meadows Estates are pricey", not "Money is tied up in the Smith Estates").
-const HOME_WORD = /\b(?:homes?|houses?|condos?|co-?ops?|units?|apartments?|apts?|propert(?:y|ies)|listings?|lots?|parcels?|townhouses?|brownstones?|colonials?|tudors?|ranch(?:es)?|single[\s-]famil(?:y|ies)|(?:one|two|three|four|multi)[\s-]famil(?:y|ies)|buildings?|located|neighborhood|area)\b/i
+// "in the <Name> Estates" is a place only right after a home or place word ("Single-family home
+// in Fresh Meadows Estates", "located in Bayside Estates"), not "The property is tied up in the
+// Smith Estates". Read from a bounded slice, so it stays linear.
+const HOME_WORD_BEFORE = /\b(?:homes?|houses?|condos?|co-?ops?|units?|apartments?|apts?|propert(?:y|ies)|listings?|lots?|parcels?|townhouses?|brownstones?|colonials?|tudors?|ranch(?:es)?|famil(?:y|ies)|buildings?|located|situated|neighborhood|area)\s(?:in|at)\s(?:the\s)?$/i
 // "a stake / an interest / a share in the Smith Estates" is a party, not a place.
 const STAKE_BEFORE = /\b(?:stakes?|interests?|shares?|claims?|part|portion|beneficiar\w{0,6}|rights?)\s(?:in|at)\s(?:the\s)?$/i
 const PLACE_AFTER = /^\s(?:(?:one|two|three|four|1|2|3|4|multi|single)[\s-]famil(?:y|ies)|co-?ops?|condos?|condominiums?|homes?|houses?|colonials?|tudors?|capes?|ranch(?:es)?|split[\s-]levels?|brownstones?|townhouses?|town\shomes?|row\s?houses?|units?|apartments?|apts?|section|neighborhood|area|development|community|complex|detached|semi[\s-]detached|brick)\b/i
@@ -246,7 +247,7 @@ const ESTATES_AT_PLACE = /\bEstates\sat\s(?=[A-Z])/g
 function withoutPlaceEstates(text: string): string {
   return text
     .replace(NAMED_ESTATES, (m: string, offset: number) =>
-      (PLACE_BEFORE.test(text.slice(Math.max(0, offset - 16), offset)) && !STAKE_BEFORE.test(text.slice(Math.max(0, offset - 30), offset)) && HOME_WORD.test(text) && /^(?:\s*$|\s*[.!?]|,\s(?:Queens|Brooklyn|Bronx|Manhattan|Staten\sIsland|Long\sIsland|NY|New\sYork))/.test(text.slice(offset + m.length, offset + m.length + 20))) || PLACE_AFTER.test(text.slice(offset + m.length, offset + m.length + 40))
+      (PLACE_BEFORE.test(text.slice(Math.max(0, offset - 16), offset)) && !STAKE_BEFORE.test(text.slice(Math.max(0, offset - 30), offset)) && HOME_WORD_BEFORE.test(text.slice(Math.max(0, offset - 40), offset)) && /^(?:\s*$|\s*[.!?]|,\s(?:Queens|Brooklyn|Bronx|Manhattan|Staten\sIsland|Long\sIsland|NY|New\sYork))/.test(text.slice(offset + m.length, offset + m.length + 20))) || PLACE_AFTER.test(text.slice(offset + m.length, offset + m.length + 40))
         ? m.replace(/Estates$/, ' ')
         : m,
     )

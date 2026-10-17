@@ -328,3 +328,21 @@ test('round 5 review: building-condition and deal-wording exceptions never hide 
     assert.equal(mentions(s), false, s)
   }
 })
+
+test('round 6 review: an estate tie-up is never a place; more ways of saying someone died; the Estates check stays linear', () => {
+  for (const s of ['The property is tied up in the Johnson Estates.', 'The house is held in the Smith Estates.', 'The house is frozen in the Smith Estates.',
+    'Her share of the house is locked in the Smith Estates.', 'The brownstone is caught up in the Smith Estates.',
+    "The new owner inherits the tenants now that Jane's gone.", 'The new owner inherits the tenants now that Jane has gone.',
+    'The new owner inherits the tenants after Jane left us.', 'Buyer inherits the tenants after we lost Jane.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['Single-family home in Fresh Meadows Estates, Queens.', 'Brick colonial located in Fresh Meadows Estates, Queens.',
+    'Buyer will inherit two rent-stabilized tenants.']) {
+    assert.equal(mentions(s), false, s)
+  }
+  const long = 'Funds in the Smith Estates '.repeat(6000)
+  const t = Date.now()
+  mentions(long)
+  without(long)
+  assert.ok(Date.now() - t < 3000, `long Estates input took ${Date.now() - t} ms`)
+})
