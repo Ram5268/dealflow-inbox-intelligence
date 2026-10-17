@@ -289,3 +289,25 @@ test('title to the family, "<Name> Estates" as a party, prognosis, and a name be
     assert.equal(mentions(s), false, s)
   }
 })
+
+test("round 4 review: a pronoun, a step- or in-law relative or a named person keeps a care place or a dead thing sensitive; deal wording stays ordinary", () => {
+  for (const s of ['She is a nursing home tenant.', 'The owner is a nursing home tenant.', 'He is now a nursing home tenant.',
+    'She is in the nursing home building on the third floor.', 'The owner is in the assisted living facility building on the second floor.',
+    'Owner is in a converted nursing home now, after her fall.', 'She is in the cancer center space most days.',
+    'Her mother moved last year. She is a nursing home tenant now.', "Owner's husband lives upstairs. He is a nursing home tenant during the week.",
+    'Her stepmother is a nursing home tenant.', 'His stepfather is in the nursing home building on the second floor.',
+    'Her mother-in-law is a nursing home tenant.', 'Her fiancé is a nursing home tenant.', 'His stepson is a nursing home tenant.',
+    'The market died along with Jane.', 'The sale died after Jane passed in May.', 'The listing died the day Mr. Smith did.',
+    'The deal died when Jane passed.', 'The deal died with Jane.', 'The deal died with Mr. Smith.',
+    'The kids have a stake in the Smith Estates.', 'Her interest in the Johnson Estates is disputed.', 'The attorney at Johnson Estates called about the sale.',
+    'The new owner inherits the tenants when Jane passes.', 'The owner is in critical condition.', 'He is on life support.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['The seller left us a voicemail.', 'Owner left us the keys.', 'The seller left us a message about the price.', 'The landlord left us a note.',
+    'Seller wants 60 days to live in the house after closing.', 'Seller needs 30 days to live in the home after closing (rent-back).',
+    'The tenant has two years to live there under the lease.', 'The boiler is end-of-life.', 'The roof is in critical condition.',
+    "The building's life support systems were upgraded.", "It won't be long to live here with the new subway.", 'Three-family with a nursing home tenant.',
+    'Single-family home in Fresh Meadows Estates, Queens.', 'Owner is selling a former funeral home.']) {
+    assert.equal(mentions(s), false, s)
+  }
+})

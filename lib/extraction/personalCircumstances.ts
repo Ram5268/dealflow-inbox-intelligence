@@ -106,7 +106,7 @@ const PERSONAL = new RegExp(
     'power\\s+of\\s+attorney', 'poa', 'incapacit\\w*', 'lacks?\\s+(?:mental\\s+)?capacity',
     `(?:late|deceased)\\s+(?:husband|wife|spouse|mother|father|mom|dad|parents?|owners?|grand(?:mother|father|ma|pa)|(?:mr|mrs|ms|miss|dr)\\b)`,
     OWNER_PASSES, RELATIVE_PASSES,
-    `(?:owners?|sellers?|homeowners?|landlords?|he|she|partners?|${RELATIVE})\\s+(?:(?:has|had|sadly|recently|just|suddenly)\\s+){0,2}left\\s+us`,
+    `(?:owners?|sellers?|homeowners?|landlords?|he|she|partners?|${RELATIVE})\\s+(?:(?:has|had|sadly|recently|just|suddenly)\\s+){0,2}left\\s+us(?!\\s{1,3}(?:a|an|the|some|his|her|their|our|its|this|that|these|those|keys?|messages?|voicemails?|notes?|word|instructions|details|info\\w{0,10}|\\d+)\\b)`,
     'lost\\s+(?:his|her|their|a)\\s+(?:husband|wife|spouse|partner|mother|father|mom|dad|parents?|son|daughter|child|baby|life|lives|battle)',
     'deceased', 'deaths?', 'deathbeds?', 'died', 'dies', 'dying', 'dead', 'funeral', 'widow\\w*',
     'heirs?', 'inherit\\w*', 'executors?', 'co-executors?', 'executrix', 'administratrix', 'estates?',
@@ -116,7 +116,7 @@ const PERSONAL = new RegExp(
     'sick(?:ly|ness|er)?', '(?:poor|failing|declining|bad|frail|fragile|deteriorating|ill)[\\s-]+health', 'frail(?:ty)?',
     '(?:health|medical)\\s+(?:issues?|problems?|reasons?|conditions?|concerns?|scares?|crisis|decline|emergenc(?:y|ies)|bills?|treatments?)',
     'terminal(?:ly)?\\s+(?:ill\\w*|diagnos\\w*|cancer|conditions?|disease|prognosis)', 'diagnosed\\s+with',
-    'not\\s+expected\\s+to\\s+(?:live|survive|make\\s+it|recover|last)', '(?:days|weeks|months|years)\\s+(?:left\\s+)?to\\s+live', 'long\\s+to\\s+live',
+    'not\\s+expected\\s+to\\s+(?:live|survive|make\\s+it|recover|last)', '(?:days|weeks|months|years)\\s+(?:left\\s+)?to\\s+live(?!\\s{1,3}(?:in|there|here|at|on|with|upstairs|downstairs|rent)\\b)', 'long\\s+to\\s+live',
     'end[\\s-]+of[\\s-]+life', 'life\\s+support', '(?:in|into|out\\s+of)\\s+(?:a\\s+)?coma', 'comatose', 'in\\s+(?:critical|grave)\\s+condition',
     'undergoing\\s+(?:\\w+\\s+)?(?:treatments?|therapy|chemo\\w*|dialysis|surgery)',
     'strokes?', 'hospitali[sz](?:ed|ation|ations)', 'surger(?:y|ies)', 'injured', 'bed-?ridden', 'housebound', 'homebound',
@@ -167,6 +167,9 @@ const ALWAYS_ORDINARY = phrases([
   'died\\s+down', 'dying\\s+to', 'ill[\\s-]+(?:fated|advised)', "widow['’]?s[\\s-]+walks?",
   'sick\\s+(?:and\\s+tired\\s+)?of', 'sick\\s+building(?:\\s+syndrome)?', 'strokes?\\s+of\\s+(?:luck|genius|good\\s+(?:luck|fortune)|midnight)', '(?:brush|pen|key|master)[\\s-]?strokes?',
   '(?:building|property|roof|boiler|market|economy|block|structure)\\s+(?:is\\s+|was\\s+)?in\\s+(?:poor|failing|good|bad|great|fine)\\s+health',
+  // The building's condition, not a person's (round 4 review).
+  '(?:building|property|roof|boiler|furnace|heater|hvac|systems?|equipment|elevators?|appliances?|windows?|facade|façade|foundation|plumbing|wiring|chimney|deck|porch|stairs?|structure)(?:[\'’]s)?\\s+(?:is|are|was|were)\\s+(?:(?:now|already|nearly|near|at|the|its|their)\\s+){0,3}(?:end[\\s-]+of[\\s-]+life|in\\s+(?:critical|grave)\\s+condition)',
+  'life\\s+support\\s+systems?', 'long\\s+to\\s+live(?=\\s{1,3}(?:in|there|here|at|on|with)\\b)',
 ])
 
 // A nursing or funeral home, an assisted living or a medical center as a
@@ -190,7 +193,7 @@ const CARE_PLACES = phrases([
 // about someone ("The listing died in March, as did the owner").
 const DEAD_THING = '(?:deal|listing|sale|contract|offer|bid|escrow|financing|loan|mortgage|application|project|negotiations?|transaction|(?:1031\\s+)?exchange|market|heater|boiler|furnace|batter(?:y|ies)|roof|trees?|plants?|grass|lawn|engine|compressor|elevator|motor|pump|hvac|phone|car|signal|wifi|internet|momentum|buzz)'
 const DEAD_THINGS = phrases([
-  `${DEAD_THING}s?\\s+(?:(?:is|was|has|had|have|just|basically|now|already|then|seems|looks|looked|went|totally|completely)\\s+){0,2}(?:died|dead|dies|dying)`,
+  `${DEAD_THING}s?\\s+(?:(?:is|was|has|had|have|just|basically|now|already|then|seems|looks|looked|went|totally|completely)\\s+){0,2}(?:died|dead|dies|dying)(?![\\s,;:—–-]{1,4}(?:with|along|and|as|like|after|when|the\\s{1,3}day|together|alongside|too|also|so|then)\\b)`,
 ])
 // Custody of the keys or the escrow, never of anyone. Off when the sentence is about someone.
 const CUSTODY_OF_THINGS = phrases(['(?:escrow|bank|deposit|securities|key|keys)\\s+custody', 'custody\\s+of\\s+(?:the\\s+)?(?:keys|deposit|funds|escrow|documents|files)'])
@@ -209,11 +212,15 @@ const SEPARATE_THINGS = phrases([
 ])
 
 // What makes a sentence about a person, for the groups above.
-const NAMES_FAMILY = new RegExp(`\\b(?:${RELATIVE}s?|wives|partners?|mum|in-laws?|nephews?|nieces?|cousins?|grand(?:sons?|daughters?|kids?|children)|widow\\w*)\\b`, 'i')
+const NAMES_FAMILY = new RegExp(`(?:\\b(?:step-?|god)?(?:${RELATIVE}s?)(?:-in-laws?)?\\b|\\b(?:wives|partners?|mum|in-laws?|nephews?|nieces?|cousins?|siblings?|fianc[eé]e?s?|boyfriends?|girlfriends?|grand(?:sons?|daughters?|kids?|children)|widow\\w*)\\b)`, 'i')
 const CARE_CONTEXT = /\b(?:lives?|(?<!assisted[\s-])living(?!\s{1,3}(?:rooms?|areas?|spaces?|quarters))|lived|resides?|residing|resided|moved?|moving|stays?|staying|stayed|admitted|treated|treatments?|visits?|visiting|visited|cares?\s+for|caring\s+for|cared\s+for|going\s+into|go(?:es)?\s+into|went\s+into|placed\s+in|placement|aides?|nurses?|caregivers?|caretakers?|to\s+be\s+(?:close|near)|so\s+(?:she|he|they)\s+can)\b/i
 const PERSON_NEEDS = /\b(?:owners?|sellers?|homeowners?|landlords?|he|she|they)\s+(?:(?:also|now|really|still|will|would|may|might|does|do|did|doesn['’]t|don['’]t|can|could)\s+)?(?:needs?|uses?|using|requires?|gets?|getting|relies\s+on|depends\s+on|receives?)\b/i
-const ABOUT_SOMEONE = /\b(?:owners?|sellers?|homeowners?|landlords?|he|she|him|her|his|hers|they|them|their|who|whom|kids|children|family|heirs?|killed|crash|accident|did\s+too|as\s+did|so\s+did)\b/i
+const ABOUT_SOMEONE = /\b(?:owners?|sellers?|homeowners?|landlords?|he|she|him|her|his|hers|they|them|their|who|whom|kids|children|(?<!-)family|heirs?|killed|crash|accident|did\s+too|as\s+did|so\s+did)\b/i
+// A person in the sentence for the care places: a pronoun, or an owner who is somewhere ("The owner is a nursing home tenant", not "The owner is selling a former funeral home").
+const PERSON_HERE = /\b(?:he|she|him|her|his|hers|they|them|their|who|whom)\b|\b(?:owners?|sellers?|homeowners?|landlords?)\s(?:(?:is|was|are|were)\s(?:now\s|still\s)?(?:a|an|in|at|on)|spends?|sleeps?)\b/i
 const HEIRS = /\b(?:kids|children|heirs?|family|siblings?)\b/i
+// A death anywhere in the sentence ("…inherits the tenants when Jane passes").
+const DEATH_WORD = /\b(?:pass(?:es|ed|ing)|died|dies|dying|deceased|deaths?)\b/i
 const COUPLE = /\b(?:couples?|spouses?|husbands?|wife|wives|partners?|marriage|married)\b/i
 
 // "<Name> Estates" is a place, so the word "Estates" there is ordinary, but
@@ -225,12 +232,14 @@ const COUPLE = /\b(?:couples?|spouses?|husbands?|wife|wives|partners?|marriage|m
 // being sold"), nor after "The/His/…". "Estates at <Place>" is a development.
 const NAMED_ESTATES = /\b(?!(?:The|A|An|His|Her|Their|Its|Our|My|Your|This|That|These|Those|Both|All|Two|Three|Four|Five|Several|Many|Some|Any|No|Each|Every)\b)[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\sEstates\b/g
 const PLACE_BEFORE = /\b(?:in|at|near|around|throughout|across)\s(?:the\s)?$/i
+// "a stake / an interest / a share in the Smith Estates" is a party, not a place.
+const STAKE_BEFORE = /\b(?:stakes?|interests?|shares?|claims?|part|portion|beneficiar\w{0,6}|rights?)\s(?:in|at)\s(?:the\s)?$/i
 const PLACE_AFTER = /^\s(?:(?:one|two|three|four|1|2|3|4|multi|single)[\s-]famil(?:y|ies)|co-?ops?|condos?|condominiums?|homes?|houses?|colonials?|tudors?|capes?|ranch(?:es)?|split[\s-]levels?|brownstones?|townhouses?|town\shomes?|row\s?houses?|units?|apartments?|apts?|section|neighborhood|area|development|community|complex|detached|semi[\s-]detached|brick)\b/i
 const ESTATES_AT_PLACE = /\bEstates\sat\s(?=[A-Z])/g
 function withoutPlaceEstates(text: string): string {
   return text
     .replace(NAMED_ESTATES, (m: string, offset: number) =>
-      PLACE_BEFORE.test(text.slice(Math.max(0, offset - 16), offset)) || PLACE_AFTER.test(text.slice(offset + m.length, offset + m.length + 40))
+      (PLACE_BEFORE.test(text.slice(Math.max(0, offset - 16), offset)) && !STAKE_BEFORE.test(text.slice(Math.max(0, offset - 30), offset)) && /^(?:\s*$|\s*[.!?]|,\s(?:Queens|Brooklyn|Bronx|Manhattan|Staten\sIsland|Long\sIsland|NY|New\sYork))/.test(text.slice(offset + m.length, offset + m.length + 20))) || PLACE_AFTER.test(text.slice(offset + m.length, offset + m.length + 40))
         ? m.replace(/Estates$/, ' ')
         : m,
     )
@@ -245,9 +254,9 @@ function withoutOrdinaryPhrases(sentence: string): string {
   const family = NAMES_FAMILY.test(s)
   const aboutSomeone = family || ABOUT_SOMEONE.test(s)
   let out = s.replace(ALWAYS_ORDINARY, ' ')
-  if (!family && !CARE_CONTEXT.test(s) && !PERSON_NEEDS.test(s)) out = out.replace(CARE_PLACES, ' ')
+  if (!family && !PERSON_HERE.test(s) && !CARE_CONTEXT.test(s) && !PERSON_NEEDS.test(s)) out = out.replace(CARE_PLACES, ' ')
   if (!aboutSomeone) out = out.replace(DEAD_THINGS, ' ').replace(CUSTODY_OF_THINGS, ' ')
-  if (!family && !HEIRS.test(s)) out = out.replace(INHERITED_LEASES, ' ')
+  if (!family && !HEIRS.test(s) && !DEATH_WORD.test(s)) out = out.replace(INHERITED_LEASES, ' ')
   if (!COUPLE.test(s)) out = out.replace(SEPARATE_THINGS, ' ')
   return out.replace(/\s+/g, ' ')
 }
