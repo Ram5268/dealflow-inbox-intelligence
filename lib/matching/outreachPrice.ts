@@ -1,6 +1,7 @@
 // Our estimated home values are internal only and never go into outreach. A seller
-// contact's supply "price" is our estimate (supplyResolver.ts), so an outreach draft
-// never quotes a price for one. Listings from email keep their asking price.
+// contact (homeowner) has no asking price: its supply price is null and our estimate
+// isn't carried on supply at all (supplyResolver.ts, Brief 41), so an outreach draft
+// says "price on request" for one. Listings from email keep their asking price.
 import { formatPriceRange } from '../utils'
 import type { ResolvedSupply } from './supplyResolver'
 

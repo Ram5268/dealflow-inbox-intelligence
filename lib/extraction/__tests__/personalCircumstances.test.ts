@@ -66,11 +66,13 @@ test('every writer of seller/landlord free text uses the filter', () => {
   )
   assert.equal(landlord.extractedTitle, 'Landlord lead – 12 Example St')
   assert.equal(landlord.extractedSummary, 'Two units.')
-  for (const f of ['lib/ai.ts', 'lib/extraction/extractEmailV2.ts', 'lib/ingestion/extractors/landlordLeadExtractor.ts']) {
+  for (const f of ['lib/extraction/extractEmailV2.ts', 'lib/ingestion/extractors/landlordLeadExtractor.ts']) {
     assert.match(readFileSync(join(ROOT, f), 'utf8'), /safeLeadText\(/, f)
   }
   const ai = readFileSync(join(ROOT, 'lib/ai.ts'), 'utf8')
   assert.match(ai, /return results\.map\(withoutPersonalLeadText\)/)
+  // Brief 41.1: the legacy extractor's filter is the pure withoutPersonalText (privacyWriters.test.ts).
+  assert.match(ai, /return withoutPersonalText\(r\)/)
 })
 
 test('an ordinary motivation is still saved', () => {
@@ -112,8 +114,11 @@ test('the filter catches the sensitive words and leaves real-estate talk alone',
   assert.equal(withoutPersonalCircumstances('Owner wants to list\nDivorce pending\nThree units.'), 'Owner wants to list Three units.')
   assert.equal(withoutPersonalCircumstances('Owner said "my wife died." Three units.'), 'Three units.')
   assert.equal(withoutPersonalCircumstances('Seller Mr. Smith is the executor. Three units.'), 'Three units.')
+  // A line break inside a sentence keeps the sentence together, so it's dropped
+  // whole (Brief 41.1: "She passed" alone is caught too).
+  assert.equal(withoutPersonalCircumstances('She passed\naway last year. Three units.'), 'Three units.')
   // A phrase split across lines never comes back whole: fail closed.
-  assert.equal(withoutPersonalCircumstances('She passed\naway last year. Three units.'), '')
+  assert.equal(withoutPersonalCircumstances('Letters of\nAdministration granted. Three units.'), '')
   // Nothing to drop: the text comes back exactly as it was, newlines included.
   assert.equal(withoutPersonalCircumstances('Three units.\nTenant in place.'), 'Three units.\nTenant in place.')
 })
