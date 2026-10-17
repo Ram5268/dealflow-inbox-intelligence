@@ -241,3 +241,51 @@ test('the filter and the fit line stay fast on long inputs (round 3 review: no q
   without('Owner died.' + '\n '.repeat(50_000) + 'x')
   assert.ok(Date.now() - started < 3_000, `${Date.now() - started} ms`)
 })
+
+// PR G review, round 4: the building, care, dead-thing, custody, inheriting and
+// separation exceptions switch off in a sentence that is about a person.
+test("a care place is a building only when the sentence isn't about someone's care", () => {
+  for (const s of ['Owner is looking for a condo near an assisted living facility where her mother is.',
+    'Owner bought a place near a nursing home, to be close to her mother.', 'Her mother lives in the nursing home building on the third floor.',
+    'Her mother is a nursing home tenant.', "Owner's wife resides next to the nursing home that cares for her.", 'Her husband is a cancer center tenant.',
+    'Owner needs disability access.', 'Seller is moving because she needs disability access.', 'The owner needs a disability ramp.',
+    'Owner uses a home health agency.', 'A home health agency sends an aide to the owner.', 'Mom is going into the nursing home for rent support.',
+    'Owner is buying near an assisted living to be close to her mother.', 'Owner needs the dialysis center space.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['Across from a nursing home.', 'Former funeral home, zoned R6.', 'Mixed-use with a funeral home on the ground floor.',
+    'Owner is selling a former funeral home.', 'Owner is selling a former nursing home.', "The owner's building is next to a nursing home.",
+    'Owner wants to list the funeral home for sale.', 'Seller owns a nursing home building on the ground floor.', 'Dialysis center tenant.',
+    'Disability access ramp.', 'Home health agency tenant on the first floor.', 'Next door to an assisted living facility.']) {
+    assert.equal(mentions(s), false, s)
+  }
+})
+
+test('a dead thing, custody, inheriting and separated rooms are ordinary only when no one is in the sentence', () => {
+  for (const s of ['The listing died in March, as did the owner.', 'The loan died, then so did the owner.', 'The car died in the crash that killed him.',
+    'The deal died with the seller.', 'She has custody of the files and the kids.', 'Her son becomes the new owner; inherits the tenants.',
+    'Her son, the new owner, inherits the tenants.', "The couple's bedrooms are separated."]) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['The deal died in attorney review.', 'The boiler died last winter.', 'Custody of the keys is with the super.',
+    'Buyer inherits the lease.', 'The bedrooms are separated.']) {
+    assert.equal(mentions(s), false, s)
+  }
+})
+
+test('title to the family, "<Name> Estates" as a party, prognosis, and a name before "passed"', () => {
+  for (const s of ['Her father passed title to her.', 'Her father passed title to his grandson.', 'Her mother passed the title to her son.',
+    'The owner passed the title to his son.', 'The attorney is acting on behalf of the Johnson Estates.', 'Proceeds go to the Smith Estates.',
+    'The house was left to the Rivera Estates.', 'Funds from the Miller Estates will pay the taxes.', 'Johnson Estates properties are being sold.',
+    'Sale of the Johnson Estates holdings.', 'The owner passed, not interested in treatment anymore.', 'The owner is not expected to live much longer.',
+    'The owner has months to live.', 'Owner does not have long to live.', 'The owner is at the end of life.', 'Owner is on his deathbed.',
+    'Owner is on life support.', 'Owner is in a coma.', 'Owner is in critical condition.', 'Owner Jane Smith passed in March.',
+    'The owner passed on that very day.', 'She passed on one of the coldest days of the year.', 'The owner passed on us last spring.',
+    'Owner passed on it in her sleep.', 'The owner recently and very suddenly passed.', 'The owner left us last year.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['Single-family home in Fresh Meadows Estates.', 'Kensington Estates co-op', 'Estates at Brooklyn Heights', 'Bayside Estates two-family',
+    'The owner passed title at closing.', 'Owner passed, not interested in selling.', 'Owner passed: not interested at that price.', 'She passed on it.']) {
+    assert.equal(mentions(s), false, s)
+  }
+})

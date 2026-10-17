@@ -3,52 +3,62 @@
 // ask for them, and anything a model returns anyway is dropped here before
 // saving (a motivation or status entirely; any sentence or line of a title,
 // summary or reason that mentions one).
+//
+// Each check runs on one sentence at a time with its whitespace collapsed, and
+// every quantifier inside a lookbehind or lookahead is bounded, so the checks
+// stay linear on every regex engine (CI's Node 22 was quadratic on an unbounded
+// one).
 
 // "Passed" is a death unless what follows makes it ordinary, and only in a
-// deal or building context. Anyone can pass on (or over) an offer or a deal, or
-// pass a check ("passed on our offer", "passed the co-op board interview"). An
-// owner, seller, landlord, he or she can also pass up, pass at asking, pass for
-// now, pass by the property, or pass the keys, a lead or the listing along to
-// us; a relative can't ("Her mother passed her the house"). Never when it goes
-// to the family ("passed on the house to her"). Covers "passes", "passing" and
-// "may pass", a word or an aside before the verb ("The owner, John Smith,
-// sadly passed") and the end of a line ("Owner passed\nThree units.").
+// deal or building context. Anyone can pass on (or over) an offer, or pass a
+// check ("passed on our offer", "passed the co-op board interview"). An owner,
+// seller, landlord, he or she can also pass on a property, pass up, pass at
+// asking, pass for now, pass by the property, or pass the keys, a lead or the
+// listing along to us; a relative can't ("Her mother passed her the house").
+// Never when it goes to the family ("passed on the house to her", "passed
+// title to his son"). Covers "passes", "passing" and "may pass", a word or an
+// aside before the verb ("The owner, John Smith, sadly passed"), and the end
+// of a line ("Owner passed\nThree units.").
 const DET = 'the|a|an|our|their|his|her|its|my|your|this|that|these|those|both|all|every|each|any|several|multiple|two|three|four|five'
-const ADJ = 'first|second|third|last|latest|new|initial|final|best|highest|higher|lower|lowest|low|high|lowball|strong|weak|cash|all-cash|verbal|written|full|full-price|asking|above-asking|over-asking|below-asking|counter|competing|backup|back-up|other|another|same|one|original|revised|current|previous|\\$?\\d[\\d,.]*[km]?'
-const DEAL = 'offers?|bids?|deals?|price|terms|propert(?:y|ies)|house|homes?|buildings?|listings?|units?|apartments?|place|contracts?|counter-?offers?|proposals?|opportunit(?:y|ies)|chance|buyers?|showings?|leases?|renewals?|financing|loans?|mortgages?|rates?|studios?|condos?|co-?ops?|townhouses?|brownstones?|lofts?|duplex(?:es)?|triplex(?:es)?|lots?|parcels?|spaces?|portfolio|package|\\d+\\s*-?(?:br|bd|bed(?:room)?s?|family)|it|them|that|this|those|these|one|ones|everything|us|me|him|(?:buying|selling|renting|renewing|signing|bidding|countering|offering|making|moving|listing|accepting)\\b'
-const CHECK = 'boards?|inspections?|title|appraisals?|background\\s+checks?|credit\\s+checks?|reviews?|interviews?|tests?|exams?|bar|approvals?|walk-?throughs?|underwriting|muster|requirements?|screenings?|votes?'
+const ADJ = 'first|second|third|last|latest|new|initial|final|best|highest|higher|lower|lowest|low|high|lowball|strong|weak|cash|all-cash|verbal|written|full|full-price|asking|above-asking|over-asking|below-asking|counter|competing|backup|back-up|other|another|same|one|original|revised|current|previous|\\$?\\d[\\d,.]{0,12}[km]?'
+// What someone passes on: a deal or a property. Never "this/that/one" ("passed
+// on that very day"), "us" ("passed on us") or "it" followed by when or how it
+// happened ("passed on it in her sleep").
+const DEAL = "offers?|bids?|deals?|price|terms|propert(?:y|ies)|house|homes?|buildings?|listings?|units?|apartments?|place|contracts?|counter-?offers?|proposals?|opportunit(?:y|ies)|chance|buyers?|showings?|leases?|renewals?|financing|loans?|mortgages?|rates?|studios?|condos?|co-?ops?|townhouses?|brownstones?|lofts?|duplex(?:es)?|triplex(?:es)?|lots?|parcels?|spaces?|portfolio|package|\\d{1,3}\\s{0,2}-?(?:br|bd|bed(?:room)?s?|family)|(?:it|them)(?!\\s{1,3}(?:in|at|on|last|this|that|during|after|before|while|peacefully|suddenly|quietly|overnight|yesterday|today)\\b)|(?:buying|selling|renting|renewing|signing|bidding|countering|offering|making|moving|listing|accepting)\\b"
+// What a relative passes on: only an offer.
+const OFFER = 'offers?|bids?|deals?|price|terms|contracts?|counter-?offers?|proposals?|opportunit(?:y|ies)|chance|(?:buying|selling|renting|renewing|signing|bidding|countering|offering|making|listing|accepting)\\b'
+const CHECK_NO_TITLE = 'boards?|inspections?|appraisals?|background\\s{1,3}checks?|credit\\s{1,3}checks?|reviews?|interviews?|tests?|exams?|bar|approvals?|walk-?throughs?|underwriting|muster|requirements?|screenings?|votes?'
 // Things handed over in a deal, never the property itself.
-const HANDOFF = 'keys?|info(?:rmation)?|leads?|referrals?|listings?|numbers?|messages?|notes?|details|word|contacts?|emails?|files?|paperwork|documents?|docs|forms?|floor\\s+plans?|photos?|pictures?|brochures?|disclosures?|offers?|bids?'
+const HANDOFF = 'keys?|info(?:rmation)?|leads?|referrals?|listings?|numbers?|messages?|notes?|details|word|contacts?|emails?|files?|paperwork|documents?|docs|forms?|floor\\s{1,3}plans?|photos?|pictures?|brochures?|disclosures?|offers?|bids?'
 // …and never to the family: "passed on the house to her", "to the kids".
-const NOT_TO_FAMILY = "(?!(?:\\s+[\\w'’-]+){0,4}?\\s+to\\s+(?:her|him|them|his|their|my|our|the\\s+(?:kids|children|family))\\b)"
-const ON_A_DEAL = `\\s+(?:on|over)\\s+(?:(?:${DET}|${ADJ})\\s+){0,3}(?:${DEAL})\\b${NOT_TO_FAMILY}`
-const A_CHECK = `\\s+(?:(?:${DET})\\s+)?(?:(?:co-?op|condo|building|final|city|home|driving|driver['’]?s|road|licensing|state|real\\s+estate)\\s+)?(?:${CHECK})\\b`
+const NOT_TO_FAMILY = "(?!(?:\\s{1,3}[\\w'’-]{1,40}){0,4}?\\s{1,3}to\\s{1,3}(?:her|him|them|his|their|my|our|the\\s{1,3}(?:kids|children|family))\\b)"
+const ON_A_DEAL = `\\s{1,3}(?:on|over)\\s{1,3}(?:(?:${DET}|${ADJ})\\s{1,3}){0,3}(?:${DEAL})\\b${NOT_TO_FAMILY}`
+const ON_AN_OFFER = `\\s{1,3}(?:on|over)\\s{1,3}(?:(?:${DET}|${ADJ})\\s{1,3}){0,3}(?:${OFFER})\\b${NOT_TO_FAMILY}`
+const CHECK_WORD = "(?:(?:co-?op|condo|building|final|city|home|driving|driver['’]?s|road|licensing|state|real\\s{1,3}estate)\\s{1,3})?"
+const A_CHECK = `\\s{1,3}(?:(?:${DET})\\s{1,3})?${CHECK_WORD}(?:${CHECK_NO_TITLE}|title)\\b${NOT_TO_FAMILY}`
+const A_CHECK_NO_TITLE = `\\s{1,3}(?:(?:${DET})\\s{1,3})?${CHECK_WORD}(?:${CHECK_NO_TITLE})\\b${NOT_TO_FAMILY}`
 const OWNER_ORDINARY = [
   ON_A_DEAL,
   A_CHECK,
-  '\\s+up\\b',
-  '\\s+(?:by|through)\\s+(?:(?:the|a|an|our|my|his|her|their)\\s+)?(?:property|house|home|building|unit|apartment|office|site|block|lot|open\\s+house|neighborhood|area|town|street|listing|showing)\\b',
-  `\\s+(?:along|over)\\s+(?:(?:the|a|an|our|my|his|her|their)\\s+)?(?:${HANDOFF})\\b${NOT_TO_FAMILY}`,
-  `\\s+(?:(?:${DET})\\s+)?(?:${HANDOFF})\\s+(?:along|on|over|to)\\b${NOT_TO_FAMILY}(?!\\s+(?:her|him|them|his|their)\\b)`,
-  '\\s+(?:it|them|this|that)\\s+along\\s+to\\s+(?:me|us|you|(?:her|his|their|my|our|the)\\s+(?:attorney|lawyer|agent|broker|colleague|assistant|manager|office|team|accountant))\\b',
-  `\\s+(?:me|us|him|her|them)\\s+(?:(?:the|a|an|his|her|their|our|my)\\s+)?(?:${HANDOFF})\\b`,
-  '\\s+at\\s+(?:\\$|asking\\b|full\\s+price\\b|\\d[\\d,.]*\\s*(?:k|m|mm|million)\\b)',
-  '\\s+for\\s+(?:now|the\\s+time\\s+being)\\b',
-  '\\s+this\\s+time(?!\\s+(?:last|next|of|around|a|in|two|three|\\d))\\b',
-  '\\s+because\\s+(?:the|our|their|of\\s+the)\\s+(?:price|offer|bid|terms|numbers?|valuation|appraisal|commission)\\b',
-  // "passed, not interested"; "no thanks" only when it ends the clause ("no thanks to her doctors" isn't declining)
-  '\\s*[,:;—–-]+\\s*(?:not\\s+interested\\b|no\\s+thanks(?=\\s*(?:[.!?;)]|$)))',
+  '\\s{1,3}up\\b',
+  '\\s{1,3}(?:by|through)\\s{1,3}(?:(?:the|a|an|our|my|his|her|their)\\s{1,3})?(?:property|house|home|building|unit|apartment|office|site|block|lot|open\\s{1,3}house|neighborhood|area|town|street|listing|showing)\\b',
+  `\\s{1,3}(?:along|over)\\s{1,3}(?:(?:the|a|an|our|my|his|her|their)\\s{1,3})?(?:${HANDOFF})\\b${NOT_TO_FAMILY}`,
+  `\\s{1,3}(?:(?:${DET})\\s{1,3})?(?:${HANDOFF})\\s{1,3}(?:along|on|over|to)\\b${NOT_TO_FAMILY}(?!\\s{1,3}(?:her|him|them|his|their)\\b)`,
+  '\\s{1,3}(?:it|them|this|that)\\s{1,3}along\\s{1,3}to\\s{1,3}(?:me|us|you|(?:her|his|their|my|our|the)\\s{1,3}(?:attorney|lawyer|agent|broker|colleague|assistant|manager|office|team|accountant))\\b',
+  `\\s{1,3}(?:me|us|him|her|them)\\s{1,3}(?:(?:the|a|an|his|her|their|our|my)\\s{1,3})?(?:${HANDOFF})\\b`,
+  '\\s{1,3}at\\s{1,3}(?:\\$|asking\\b|full\\s{1,3}price\\b|\\d[\\d,.]{0,12}\\s{0,2}(?:k|m|mm|million)\\b)',
+  '\\s{1,3}for\\s{1,3}(?:now|the\\s{1,3}time\\s{1,3}being)\\b',
+  '\\s{1,3}this\\s{1,3}time(?!\\s{1,3}(?:last|next|of|around|a|in|two|three|\\d))\\b',
+  '\\s{1,3}because\\s{1,3}(?:the|our|their|of\\s{1,3}the)\\s{1,3}(?:price|offer|bid|terms|numbers?|valuation|appraisal|commission)\\b',
+  // "passed, not interested" (in selling, at that price); "no thanks" only
+  // when it ends the clause ("no thanks to her doctors" isn't declining).
+  '\\s{0,3}[,:;—–-]{1,3}\\s{0,3}(?:not\\s{1,3}interested(?=\\s{0,3}(?:[.!?;)]|$)|\\s{1,3}(?:in\\s{1,3}(?:selling|listing|moving|offers?|(?:the|our|your|any)\\s{1,3}offers?|it)|at\\s{1,3}(?:that|this|the|any)\\s{1,3}price)\\b)|no\\s{1,3}thanks(?=\\s{0,3}(?:[.!?;)]|$)))',
 ].join('|')
-// A relative only passes on an offer ("The owner's son passed on our offer") or
-// passes a check: never on the house or "on it", which can be the house going
-// to the family.
-const OFFER = 'offers?|bids?|deals?|price|terms|contracts?|counter-?offers?|proposals?|opportunit(?:y|ies)|chance|(?:buying|selling|renting|renewing|signing|bidding|countering|offering|making|listing|accepting)\\b'
-const ON_AN_OFFER = `\\s+(?:on|over)\\s+(?:(?:${DET}|${ADJ})\\s+){0,3}(?:${OFFER})\\b${NOT_TO_FAMILY}`
-const RELATIVE_ORDINARY = [ON_AN_OFFER, A_CHECK].join('|')
+const RELATIVE_ORDINARY = [ON_AN_OFFER, A_CHECK_NO_TITLE].join('|')
 const RELATIVE = '(?:mother|father|mom|dad|husband|wife|spouse|parents?|grand(?:mother|father|ma|pa|parents?)|aunt|uncle|brother|sister|son|daughter)'
-const BEFORE_PASSING = 'has|had|have|is|was|will|may|might|could|would|about|to|going|expected|likely|soon|now|recently|just|sadly|suddenly|unexpectedly|unfortunately|tragically|both|all|also|since|and|then|finally|peacefully|quietly|apparently|reportedly|already'
+const BEFORE_PASSING = 'has|had|have|is|was|will|may|might|could|would|about|to|going|expected|likely|soon|now|recently|just|very|sadly|suddenly|unexpectedly|unfortunately|tragically|both|all|also|since|and|then|finally|peacefully|quietly|apparently|reportedly|already'
 const ASIDE = ",\\s*(?:[\\w.'’-]+\\s+){0,3}[\\w.'’-]+\\s*,"
-const PASSES = `(?:\\s*${ASIDE})?\\s+(?:(?:${BEFORE_PASSING})\\s+){0,3}pass(?:ed|es|ing)?\\b`
+const PASSES = `(?:\\s*${ASIDE})?\\s+(?:(?:${BEFORE_PASSING})\\s+){0,4}pass(?:ed|es|ing)?\\b`
 const OWNER_PASSES = `(?:owners?|sellers?|homeowners?|landlords?|he|she|who|(?:mr|mrs|ms|miss|dr)\\.?(?:\\s+[a-z]+){1,2})${PASSES}(?!${OWNER_ORDINARY})`
 const RELATIVE_PASSES = `(?:partners?|${RELATIVE})${PASSES}(?!${RELATIVE_ORDINARY})`
 const PERSON = `(?:owners?|sellers?|homeowners?|landlords?|partner|child|children|${RELATIVE}|(?:mr|mrs|ms|miss|dr)\\b)`
@@ -58,12 +68,12 @@ const SOMEONE = `(?:owners?|sellers?|homeowners?|landlords?|he|she|couple|widow\
 
 // "Separating" or "splitting up" is a couple's only when nothing it acts on
 // follows: "the Smiths are separating" vs "the owner is separating the lots".
-const SEP_OBJECT = '\\s+(?:the|a|an|this|that|these|those|its|two|three|four|five|both|each|all|\\d+|lots?|units?|parcels?|propert(?:y|ies)|buildings?|apartments?|meters?|utilities|spaces?|rooms?|floors?|kitchens?|bedrooms?|entrances?|walls?|fences?|doors?|lines?|partitions?)\\b|\\s+(?:from\\s+(?:the|a|an|its|unit|apartment|apt|floor|room)|into)\\b'
-const SPLIT_OBJECT = '\\s+(?:the|a|an|this|that|these|those|its|it|them|everything|two|three|four|five|\\d+|lots?|units?|parcels?|propert(?:y|ies)|buildings?|apartments?|floors?|space|rooms?|evenly|equally|half|proceeds|costs?|commission|fees?|rent|bills?)\\b|\\s+into\\b'
+const SEP_OBJECT = '\\s{1,3}(?:the|a|an|this|that|these|those|its|two|three|four|five|both|each|all|\\d+|lots?|units?|parcels?|propert(?:y|ies)|buildings?|apartments?|meters?|utilities|spaces?|rooms?|floors?|kitchens?|bedrooms?|entrances?|walls?|fences?|doors?|lines?|partitions?)\\b|\\s{1,3}(?:from\\s{1,3}(?:the|a|an|its|unit|apartment|apt|floor|room)|into)\\b'
+const SPLIT_OBJECT = '\\s{1,3}(?:the|a|an|this|that|these|those|its|it|them|everything|two|three|four|five|\\d+|lots?|units?|parcels?|propert(?:y|ies)|buildings?|apartments?|floors?|space|rooms?|evenly|equally|half|proceeds|costs?|commission|fees?|rent|bills?)\\b|\\s{1,3}into\\b'
 // "is", "are", "was", "were", also "she's" or "they're".
 const IS = "(?:\\s+(?:is|are|was|were)|['’](?:s|re))"
 // Ages that are a count of something else: "the owner is 20 minutes away".
-const NOT_AN_AGE = '(?![\\d/%]|[.,]\\d|\\s*(?:units?|feet|ft|sq|square|percent|famil(?:y|ies)|beds?|bedrooms?|baths?|minutes?|mins?|blocks?|days?|weeks?|months?|stories|storeys|floors?|miles?|k\\b|m\\b))'
+const NOT_AN_AGE = '(?![\\d/%]|[.,]\\d|\\s{0,3}(?:units?|feet|ft|sq|square|percent|famil(?:y|ies)|beds?|bedrooms?|baths?|minutes?|mins?|blocks?|days?|weeks?|months?|stories|storeys|floors?|miles?|k\\b|m\\b))'
 
 const PERSONAL = new RegExp(
   [
@@ -76,28 +86,29 @@ const PERSONAL = new RegExp(
     `(?:couple|spouses?|husband|wife|partners|parents|they|we)\\s+(?:(?:have|had|recently|just|legally|finally)\\s+){0,2}separat(?:ed|ing)\\b(?!${SEP_OBJECT})`,
     `(?:are|is|was|were|['’]re|['’]s|been|being|be|getting|got|gets|get)\\s+(?:(?:now|currently|recently|legally|finally)\\s+)?separat(?:ed|ing)\\b(?!${SEP_OBJECT})`,
     `(?:splitting|split|splits|breaking|broke|breaks)\\s+up\\b(?!${SPLIT_OBJECT})`,
-    `(?:couple|spouses?|they|we|owners)\\s+(?:(?:have|had|recently|just|finally)\\s+){0,2}split\\b(?!\\s+up)(?!${SPLIT_OBJECT})`,
-    'break[\\s-]?ups?(?!\\s+(?:fees?|value|clause))', '(?:couple|spouses?|they|we)\\s+(?:(?:are|is|was|were|have|had)\\s+)?part(?:ing|ed)\\s+ways',
+    `(?:couple|spouses?|they|we|owners)\\s+(?:(?:have|had|recently|just|finally)\\s+){0,2}split\\b(?!\\s{1,3}up)(?!${SPLIT_OBJECT})`,
+    'break[\\s-]?ups?(?!\\s{1,3}(?:fees?|value|clause))', '(?:couple|spouses?|they|we)\\s+(?:(?:are|is|was|were|have|had)\\s+)?part(?:ing|ed)\\s+ways',
     'no\\s+longer\\s+together', '(?:husband|wife|spouse|partner)\\s+(?:(?:has|had|recently|just)\\s+)?moved\\s+out',
     'marriage\\s+(?:ended|is\\s+over|was\\s+over|fell\\s+apart|broke\\s+down|counsel\\w*|troubles?|problems?)', '(?:failed|failing|broken|ended|troubled|rocky)\\s+marriage',
     'family\\s+court', 'equitable\\s+distribution', 'restraining\\s+order', 'domestic\\s+(?:violence|abuse)', 'orders?\\s+of\\s+protection',
     'family\\s+(?:reasons|issues|matters|problems|emergenc(?:y|ies)|tragedy|crisis)',
     // A death, an estate, an inheritance
-    'pass(?:ed|es|ing)?\\s+away', '(?:his|her|their)\\s+passing', "\\w+['’]s\\s+passing(?!\\s+(?:grade|score|mark|lane|traffic))",
+    'pass(?:ed|es|ing)?\\s+away', '(?:his|her|their)\\s+passing', "\\w+['’]s\\s+passing(?!\\s{1,3}(?:grade|score|mark|lane|traffic))",
     `passing\\s+of\\s+(?:(?:the|his|her|their|my|our|a|an)\\s+)?(?:late\\s+)?${PERSON}`,
     'bereave\\w*', 'letters\\s+testamentary', 'letters?\\s+of\\s+administration', "surrogate(?:['’]s|s)?\\s+court",
     'decedents?', 'intestate', 'obituar(?:y|ies)', '(?:passed|handed)\\s+down', 'no\\s+longer\\s+(?:alive|with\\s+us)',
-    'no\\s+longer\\s+living(?!\\s+(?:there|here|in|at|on|upstairs|downstairs|nearby|locally))',
+    'no\\s+longer\\s+living(?!\\s{1,3}(?:there|here|in|at|on|upstairs|downstairs|nearby|locally))',
     'surviving\\s+(?:spouse|husband|wife|partner|children|kids|sons?|daughters?|family|heirs?|siblings?|relatives?)', 'survived\\s+by',
-    'beneficiar(?:y|ies)', 'next\\s+of\\s+kin', '(?:per|in|under|by)\\s+(?:the|his|her|their|my)\\s+(?:last\\s+)?will(?!\\s+(?:of|be|not|to))',
+    'beneficiar(?:y|ies)', 'next\\s+of\\s+kin', '(?:per|in|under|by)\\s+(?:the|his|her|their|my)\\s+(?:last\\s+)?will(?!\\s{1,3}(?:of|be|not|to))',
     'griev(?:e|es|ed|ing)', 'grief', 'mourn(?:s|ed|ing)?', 'condolences?', 'sorry\\s+for\\s+(?:your|their|his|her|the)\\s+loss',
     'suicide', '(?:was|were|been|got)\\s+killed', 'killed\\s+(?:in|by|during)\\s+(?:a|an|the)', 'succumb\\w*', 'est\\.?\\s+of\\s+(?!\\d)',
     'guardianship', 'conservators?', 'conservatorship', 'court[\\s-]+appointed\\s+(?:guardian|conservator)s?', 'appointed\\s+(?:a\\s+)?(?:guardian|conservator)',
     'power\\s+of\\s+attorney', 'poa', 'incapacit\\w*', 'lacks?\\s+(?:mental\\s+)?capacity',
     `(?:late|deceased)\\s+(?:husband|wife|spouse|mother|father|mom|dad|parents?|owners?|grand(?:mother|father|ma|pa)|(?:mr|mrs|ms|miss|dr)\\b)`,
     OWNER_PASSES, RELATIVE_PASSES,
+    `(?:owners?|sellers?|homeowners?|landlords?|he|she|partners?|${RELATIVE})\\s+(?:(?:has|had|sadly|recently|just|suddenly)\\s+){0,2}left\\s+us`,
     'lost\\s+(?:his|her|their|a)\\s+(?:husband|wife|spouse|partner|mother|father|mom|dad|parents?|son|daughter|child|baby|life|lives|battle)',
-    'deceased', 'deaths?', 'died', 'dies', 'dying', 'dead', 'funeral', 'widow\\w*',
+    'deceased', 'deaths?', 'deathbeds?', 'died', 'dies', 'dying', 'dead', 'funeral', 'widow\\w*',
     'heirs?', 'inherit\\w*', 'executors?', 'co-executors?', 'executrix', 'administratrix', 'estates?',
     // Illness, disability and care
     '(?:terminally|seriously|chronically|very|gravely|critically|severely)\\s+ill(?!-)', 'terminally', '(?:is|are|was|became|being)\\s+terminal',
@@ -105,9 +116,11 @@ const PERSONAL = new RegExp(
     'sick(?:ly|ness|er)?', '(?:poor|failing|declining|bad|frail|fragile|deteriorating|ill)[\\s-]+health', 'frail(?:ty)?',
     '(?:health|medical)\\s+(?:issues?|problems?|reasons?|conditions?|concerns?|scares?|crisis|decline|emergenc(?:y|ies)|bills?|treatments?)',
     'terminal(?:ly)?\\s+(?:ill\\w*|diagnos\\w*|cancer|conditions?|disease|prognosis)', 'diagnosed\\s+with',
+    'not\\s+expected\\s+to\\s+(?:live|survive|make\\s+it|recover|last)', '(?:days|weeks|months|years)\\s+(?:left\\s+)?to\\s+live', 'long\\s+to\\s+live',
+    'end[\\s-]+of[\\s-]+life', 'life\\s+support', '(?:in|into|out\\s+of)\\s+(?:a\\s+)?coma', 'comatose', 'in\\s+(?:critical|grave)\\s+condition',
     'undergoing\\s+(?:\\w+\\s+)?(?:treatments?|therapy|chemo\\w*|dialysis|surgery)',
     'strokes?', 'hospitali[sz](?:ed|ation|ations)', 'surger(?:y|ies)', 'injured', 'bed-?ridden', 'housebound', 'homebound',
-    '(?:in|into|out\\s+of|admitted\\s+to|rushed\\s+to|taken\\s+to|went\\s+to|discharged\\s+from|released\\s+from)\\s+(?:(?:the|a)\\s+)?hospitals?(?!\\s+(?:district|zone|area|corridor|campus|buildings?|complex|center|centre|grade|parking))',
+    '(?:in|into|out\\s+of|admitted\\s+to|rushed\\s+to|taken\\s+to|went\\s+to|discharged\\s+from|released\\s+from)\\s+(?:(?:the|a)\\s+)?hospitals?(?!\\s{1,3}(?:district|zone|area|corridor|campus|buildings?|complex|center|centre|grade|parking))',
     'intensive\\s+care', 'icu', 'chemo(?:therapy)?', 'radiation\\s+(?:therapy|treatments?)', 'dialysis', 'palliative', 'hospice',
     'cancer', 'tumou?rs?', 'leukemia', 'lymphoma', 'multiple\\s+sclerosis', 'parkinson\\w*', 'alzheimer\\w*', 'dementia',
     'memory\\s+loss', 'cognitive\\s+(?:decline|impairment|issues?|problems?)', 'senil\\w*',
@@ -117,7 +130,8 @@ const PERSONAL = new RegExp(
     '(?:has|with|suffers\\s+from|battling|struggling\\s+with)\\s+depression', '(?:uses|using|in|needs|confined\\s+to)\\s+a\\s+wheelchair',
     'care\\s+for\\s+(?:her|him|them)', `${SOMEONE}\\s+needs?\\s+care`,
     'needs?\\s+(?:(?:full|part)[\\s-]time|long[\\s-]term|constant|round[\\s-]the[\\s-]clock|24[\\s/-]7|nursing|medical|home)\\s+care',
-    `${SOMEONE}${IS}\\s+in\\s+rehab`, `${SOMEONE}${IS}\\s+(?:in|at)\\s+(?:a|an|the)\\s+(?:medical|rehab(?:ilitation)?|care)\\s+(?:facilit(?:y|ies)|centers?|centres?|units?)`, `${SOMEONE}\\s+(?:has|had|with)\\s+(?:als|ms|copd|hiv|aids)`, 'memory[\\s-]+care', 'care[\\s-]+(?:homes?|facilit(?:y|ies))', 'caregivers?', 'home[\\s-]+health',
+    `${SOMEONE}${IS}\\s+in\\s+rehab`, `${SOMEONE}${IS}\\s+(?:in|at)\\s+(?:a|an|the)\\s+(?:medical|rehab(?:ilitation)?|care)\\s+(?:facilit(?:y|ies)|centers?|centres?|units?)`,
+    `${SOMEONE}\\s+(?:has|had|with)\\s+(?:als|ms|copd|hiv|aids)`, 'memory[\\s-]+care', 'care[\\s-]+(?:homes?|facilit(?:y|ies))', 'caregivers?', 'home[\\s-]+health',
     'nursing[\\s-]+homes?', 'assisted[\\s-]+living', 'skilled\\s+nursing', 'long[\\s-]+term\\s+care',
     '(?:moving|moved|move|going|gone|went|relocating)\\s+(?:in)?to\\s+(?:(?:a|an)\\s+)?(?:senior\\s+(?:living|housing|residences?|homes?|communit(?:y|ies))|retirement\\s+(?:homes?|communit(?:y|ies)|villages?|facilit(?:y|ies)))',
     // Age (a demographic)
@@ -126,10 +140,10 @@ const PERSONAL = new RegExp(
     'retired\\s+(?:couple|owners?|sellers?|homeowners?|landlords?|parents?|widow\\w*|man|woman|lady|gentleman)',
     `${SOMEONE}${IS}\\s+(?:(?:now|recently|already)\\s+)?retired`, '(?:octo|nona|septua|sexa)genarians?', 'getting\\s+on\\s+in\\s+years',
     'seniors?\\s+(?:citizens?|owners?|homeowners?|sellers?|landlords?|couple|selling|downsizing)',
-    `${SOMEONE}${IS}\\s+(?:a\\s+)?seniors?(?!\\s+(?:partner|vice|executive|manager|director|officer|associate|analyst|engineer|loan|broker|agent|vp|counsel|member|editor|consultant|advis[eo]r|designer|developer|architect|scientist|attorney|lawyer|accountant))`,
+    `${SOMEONE}${IS}\\s+(?:a\\s+)?seniors?(?!\\s{1,3}(?:partner|vice|executive|manager|director|officer|associate|analyst|engineer|loan|broker|agent|vp|counsel|member|editor|consultant|advis[eo]r|designer|developer|architect|scientist|attorney|lawyer|accountant))`,
     `${SOMEONE}${IS}\\s+(?:(?:getting|too|very|quite|so)\\s+)?old(?:er)?`,
     `${SOMEONE}${IS}\\s+(?:(?:now|about|nearly|almost|over|around|past|pushing|aged?)\\s+)?\\d{2,3}${NOT_AN_AGE}`,
-    `${SOMEONE}\\s*,\\s*(?:age\\s+|aged\\s+)?\\d{2,3}(?=\\s*,)`,
+    `${SOMEONE}\\s*,\\s*(?:age\\s+|aged\\s+)?\\d{2,3}(?=\\s{0,3},)`,
     '\\d{2,3}[\\s-]+years?[\\s-]+old\\s+(?:owners?|sellers?|homeowners?|landlords?|mother|father|man|woman|lady|gentleman|widow\\w*|parents?|couple)',
     "in\\s+(?:his|her|their)\\s+(?:early\\s+|mid[\\s-]?|late\\s+)?(?:[2-9]0['’]?s|twenties|thirties|forties|fifties|sixties|seventies|eighties|nineties)",
   ]
@@ -138,62 +152,81 @@ const PERSONAL = new RegExp(
   'i',
 )
 
-// Ordinary phrases that contain those words (removed before the check). Each
-// is narrow and tied to a building, listing or deal, and never applies when a
-// person is the subject: over-dropping a sentence is fine, a leak isn't.
-// A nursing or funeral home as a building ("across from a nursing home",
-// "former funeral home", "nursing home for sale"), not where someone lives,
-// moves or visits ("lives next to the nursing home where his wife is").
-const BUILDING_TYPE = '(?:(?:nursing|funeral|care)[\\s-]+homes?|assisted[\\s-]+living(?:\\s+facilit(?:y|ies))?)'
-const NOT_SOMEONES_PLACE = '(?<!\\b(?:lives?|living|lived|moved?|moving|stays?|staying|stayed|visits?|visiting|visited|goes|going|went|be|been)\\s+(?:right\\s+|just\\s+)?)'
-const NOT_WHERE_SOMEONE_IS = '(?!\\s+(?:where|in\\s+which|with|for|to\\s+(?:be|visit|see|stay))\\b)'
-const SEPARATE_THING = '(?:bedrooms?|rooms?|lots?|units?|apartments?|apts?|floors?|meters?|utilities|gas|electric(?:ity)?|kitchens?|baths?|bathrooms?|entrances?|buildings?|parcels?|spaces?|garages?|yards?|wings?|sections?|stairs?|halls?|duplex(?:es)?|living\\s+(?:rooms?|areas?)|dining\\s+(?:rooms?|areas?))'
-// Things (never people: in DealFlow a "lead" is a person) that died or are dead,
-// unless the sentence goes on to someone ("the market died with the owner").
+// Ordinary phrases that contain those words, removed before the check. Each is
+// narrow and tied to a building, listing or deal. The groups below the first
+// are switched off in a sentence that is about a person (their family, their
+// care, their body): over-dropping a sentence is fine, a leak isn't.
+const phrases = (list: string[]) => new RegExp(list.map((p) => `\\b(?:${p})\\b`).join('|'), 'gi')
+
+// Idioms and building words, whoever the sentence is about.
+const ALWAYS_ORDINARY = phrases([
+  'real[\\s-]+estates?', 'estate[\\s-]+(?:agents?|sized|style)', 'jamaica\\s+estates',
+  '(?<=\\w\\s{1,3})estates\\s+(?:condo|co-?op|building|development)s?', // only "estates co-op": the word before is still checked
+  'dead[\\s-]+end', 'dead[\\s-]?bolts?', 'death[\\s-]+defying', 'dead[\\s-]+(?:set|space|rent|trees?|plants?|grass|lawn|leaves|zones?|spots?)',
+  'drop[\\s-]*dead(?=[\\s-]{1,3}(?:gorgeous|views?|skyline|vistas?|location|date|deadline|kitchen|terrace|rooftop|roof|light|finishes|design|layout|unit|apartment|home|house|brownstone|townhouse|condo|penthouse|garden|backyard|yard|space)\\b)',
+  'died\\s+down', 'dying\\s+to', 'ill[\\s-]+(?:fated|advised)', "widow['’]?s[\\s-]+walks?",
+  'sick\\s+(?:and\\s+tired\\s+)?of', 'sick\\s+building(?:\\s+syndrome)?', 'strokes?\\s+of\\s+(?:luck|genius|good\\s+(?:luck|fortune)|midnight)', '(?:brush|pen|key|master)[\\s-]?strokes?',
+  '(?:building|property|roof|boiler|market|economy|block|structure)\\s+(?:is\\s+|was\\s+)?in\\s+(?:poor|failing|good|bad|great|fine)\\s+health',
+])
+
+// A nursing or funeral home, an assisted living or a medical center as a
+// building or a business ("across from a nursing home", "former funeral home",
+// "nursing home for sale", "dialysis center tenant"); disability access and a
+// home health agency as building uses. Off for a person's own care (below).
+const BUILDING_TYPE = '(?:(?:nursing|funeral|care)[\\s-]+homes?\\b|assisted[\\s-]+living(?:\\s+facilit(?:y|ies)\\b|(?!\\s{1,3}facilit)))'
+const NOT_SOMEONES_PLACE = '(?<!\\b(?:lives?|living|lived|moved?|moving|stays?|staying|stayed|visits?|visiting|visited|goes|going|went|be|been)\\s{1,3}(?:right\\s{1,3}|just\\s{1,3})?)'
+const NOT_WHERE_SOMEONE_IS = "(?![\\s,;:—–-]{1,4}(?:where|in\\s{1,3}which|with|for|to\\s{1,3}(?:be|visit|see|stay)|so\\s{1,3}(?:she|he|they))\\b)"
+const CARE_PLACES = phrases([
+  `${NOT_SOMEONES_PLACE}(?:across\\s+(?:the\\s+street\\s+)?from|next\\s+(?:door\\s+)?to|near(?:by)?|beside|behind|adjacent\\s+to|opposite|former(?:ly)?|converted|vacant|abandoned|closed|shuttered)\\s+(?:(?:a|an|the)\\s+)?(?:former\\s+)?${BUILDING_TYPE}${NOT_WHERE_SOMEONE_IS}`,
+  `${BUILDING_TYPE}(?:\\s+(?:building|facility|facilities|property))?\\s+(?:for\\s+(?:sale|lease|rent)(?!\\s{1,3}(?:support|assistance|help|subsid\\w{0,10}|relief))|conversions?|zoning|sites?|parcels?|lots?|use|operators?|business)`,
+  `${BUILDING_TYPE}\\s+(?:(?:building|property)\\s+on\\s+the\\s+(?:ground|first|second|third|top)\\s+floor|tenants?)`,
+  `(?:mixed[\\s-]use|building|property|storefront|retail(?:\\s+space)?)\\s+(?:with|has|houses|includes)\\s+(?:(?:a|an|the)\\s+)?${BUILDING_TYPE}(?:\\s+(?:tenant|business))?\\s+on\\s+the\\s+(?:ground|first|second|third|top)\\s+floor`,
+  '(?:dialysis|surgery|surgical|urgent[\\s-]+care|day[\\s-]+care|child[\\s-]+care|medical|chemo(?:therapy)?|cancer|rehab|physical\\s+therapy)\\s+(?:centers?|centres?|clinics?|offices?|practices?|suites?|facilit(?:y|ies))\\s+(?:tenants?|for\\s+(?:sale|lease|rent)|space|use)',
+  'disabilit(?:y|ies)\\s+(?:access(?:ible|ibility)?|ramps?|compliant|compliance|friendly|parking|bathrooms?|entrances?|lifts?|elevators?)',
+  'home[\\s-]+health\\s+(?:agency|agencies|company|companies|offices?|business|providers?)',
+])
+// Things that died or are dead ("the deal is dead", "the boiler died"); in
+// DealFlow a "lead" is a person, so never a lead. Off when the sentence is
+// about someone ("The listing died in March, as did the owner").
 const DEAD_THING = '(?:deal|listing|sale|contract|offer|bid|escrow|financing|loan|mortgage|application|project|negotiations?|transaction|(?:1031\\s+)?exchange|market|heater|boiler|furnace|batter(?:y|ies)|roof|trees?|plants?|grass|lawn|engine|compressor|elevator|motor|pump|hvac|phone|car|signal|wifi|internet|momentum|buzz)'
-const BENIGN = new RegExp(
-  [
-    'real[\\s-]+estates?', 'estate[\\s-]+(?:agents?|sized|style)', 'jamaica\\s+estates',
-    '(?<=\\w\\s+)estates\\s+(?:condo|co-?op|building|development)s?', // only "estates co-op": the word before is still checked
-    'dead[\\s-]+end', 'dead[\\s-]?bolts?', 'death[\\s-]+defying', 'dead[\\s-]+(?:set|space|rent|trees?|plants?|grass|lawn|leaves|zones?|spots?)',
-    'drop[\\s-]*dead(?=[\\s-]+(?:gorgeous|views?|skyline|vistas?|location|date|deadline|kitchen|terrace|rooftop|roof|light|finishes|design|layout|unit|apartment|home|house|brownstone|townhouse|condo|penthouse|garden|backyard|yard|space)\\b)',
-    `${DEAD_THING}s?\\s+(?:(?:is|was|has|had|have|just|basically|now|already|then|seems|looks|looked|went|totally|completely)\\s+){0,2}(?:died|dead|dies|dying)(?![\\s,;:—–-]+(?:with|along|and|as|like|after|when|together|alongside|too|also|so)\\b)`,
-    'died\\s+down', 'dying\\s+to', 'ill[\\s-]+(?:fated|advised)',
-    // A buyer, purchaser or "you" inherits the tenants or the lease ("Inherit
-    // the tenants." too). Never a family member: "her daughter will inherit the
-    // tenants", "the kids are inheriting the tenants".
-    "(?:(?:buyers?|purchasers?|you(?:['’]ll)?|investors?|(?:the\\s+)?new\\s+owners?)\\s+(?:(?:will|would|could|can|may|might|must|also|then|both|automatically|simply)\\s+){0,2}|(?<=^|[.!?:;]\\s*|\\n\\s*))inherits?\\s+(?:(?:the|a|an|all|any|two|three|four|five|six|\\d+|existing|current|in-place|rent[\\s-]stabilized|rent[\\s-]controlled|stabilized|regulated|long[\\s-]term|paying|good|great|its|occupied|residential|commercial)\\s+){0,3}(?:tenants?|tenancy|tenancies|leases?)",
-    "widow['’]?s[\\s-]+walks?",
-    `${NOT_SOMEONES_PLACE}(?:across\\s+(?:the\\s+street\\s+)?from|next\\s+(?:door\\s+)?to|near(?:by)?|beside|behind|adjacent\\s+to|opposite|former(?:ly)?|converted|vacant|abandoned|closed|shuttered)\\s+(?:(?:a|an|the)\\s+)?(?:former\\s+)?${BUILDING_TYPE}${NOT_WHERE_SOMEONE_IS}`,
-    `${BUILDING_TYPE}(?:\\s+(?:building|facility|facilities|property))?\\s+(?:for\\s+(?:sale|lease|rent)|conversions?|zoning|sites?|parcels?|lots?|use|operators?|business)`,
-    `${BUILDING_TYPE}\\s+(?:(?:building|property)\\s+on\\s+the\\s+(?:ground|first|second|third|top)\\s+floor|tenants?)`,
-    `(?:mixed[\\s-]use|building|property|storefront|retail(?:\\s+space)?)\\s+(?:with|has|houses|includes)\\s+(?:(?:a|an|the)\\s+)?${BUILDING_TYPE}(?:\\s+(?:tenant|business))?\\s+on\\s+the\\s+(?:ground|first|second|third|top)\\s+floor`,
-    'separated\\s+by\\s+(?:(?:a|an|the|\\d+)\\s+)?(?:[\\w-]+\\s+)?(?:courtyards?|yards?|gardens?|walls?|fences?|hallways?|halls?|driveways?|streets?|alleys?|alleyways?|walkways?|breezeways?|lobb(?:y|ies)|stair(?:case|well)?s?|lots?|feet|ft|foot|blocks?|buildings?|garages?|patios?|terraces?|partitions?|doors?|floors?|landings?|corridors?)',
-    `${SEPARATE_THING}(?:\\s+(?:\\d+[a-z]?|[a-z]))?\\s+(?:are|is|were|was|can\\s+be|will\\s+be|have\\s+been|has\\s+been)\\s+(?:(?:fully|completely|physically|well)\\s+)?separated`,
-    "(?:lots?|units?|parcels?|propert(?:y|ies)|buildings?|space|apartments?|floors?|rooms?|portfolio|proceeds|commission)\\s+(?:(?:can|could|can['’]t|cannot|couldn['’]t|may|might|will|won['’]t|would|wouldn['’]t|should|must|to|not|be|been|being|is|are|was|were|easily|legally|never|already|also)\\s+){0,4}split\\s+up",
-    'sick\\s+(?:and\\s+tired\\s+)?of', 'sick\\s+building(?:\\s+syndrome)?', 'strokes?\\s+of\\s+(?:luck|genius|good\\s+(?:luck|fortune)|midnight)', '(?:brush|pen|key|master)[\\s-]?strokes?',
-    'disabilit(?:y|ies)\\s+(?:access(?:ible|ibility)?|ramps?|compliant|compliance|friendly|parking|bathrooms?|entrances?|lifts?|elevators?)',
-    'home[\\s-]+health\\s+(?:agency|agencies|company|companies|offices?|business|providers?)',
-    // A medical business as a tenant or a space ("dialysis center tenant"), never where someone is treated.
-    '(?:dialysis|surgery|surgical|urgent[\\s-]+care|day[\\s-]+care|child[\\s-]+care|medical|chemo(?:therapy)?|cancer|rehab|physical\\s+therapy)\\s+(?:centers?|centres?|clinics?|offices?|practices?|suites?|facilit(?:y|ies))\\s+(?:tenants?|for\\s+(?:sale|lease|rent)|space|use)',
-    '(?:escrow|bank|deposit|securities|key|keys)\\s+custody', 'custody\\s+of\\s+(?:the\\s+)?(?:keys|deposit|funds|escrow|documents|files)',
-    '(?:building|property|roof|boiler|market|economy|block|structure)\\s+(?:is\\s+|was\\s+)?in\\s+(?:poor|failing|good|bad|great|fine)\\s+health',
-  ]
-    .map((p) => `\\b(?:${p})\\b`)
-    .join('|'),
-  'gi',
-)
+const DEAD_THINGS = phrases([
+  `${DEAD_THING}s?\\s+(?:(?:is|was|has|had|have|just|basically|now|already|then|seems|looks|looked|went|totally|completely)\\s+){0,2}(?:died|dead|dies|dying)`,
+])
+// Custody of the keys or the escrow, never of anyone. Off when the sentence is about someone.
+const CUSTODY_OF_THINGS = phrases(['(?:escrow|bank|deposit|securities|key|keys)\\s+custody', 'custody\\s+of\\s+(?:the\\s+)?(?:keys|deposit|funds|escrow|documents|files)'])
+// A buyer, purchaser or "you" inherits the tenants or the lease ("Inherit the
+// tenants." too). Off when the sentence names family ("Her son becomes the new
+// owner; inherits the tenants").
+const INHERITED_LEASES = phrases([
+  "(?:(?:buyers?|purchasers?|you(?:['’]ll)?|investors?|(?:the\\s+)?new\\s+owners?)\\s+(?:(?:will|would|could|can|may|might|must|also|then|both|automatically|simply)\\s+){0,2}|(?<=^|[.!?]\\s{0,3}))inherits?\\s+(?:(?:the|a|an|all|any|two|three|four|five|six|\\d+|existing|current|in-place|rent[\\s-]stabilized|rent[\\s-]controlled|stabilized|regulated|long[\\s-]term|paying|good|great|its|occupied|residential|commercial)\\s+){0,3}(?:tenants?|tenancy|tenancies|leases?)",
+])
+// Separated or split-up rooms, lots and units. Off when the sentence is about a couple.
+const SEPARATE_THING = '(?:bedrooms?|rooms?|lots?|units?|apartments?|apts?|floors?|meters?|utilities|gas|electric(?:ity)?|kitchens?|baths?|bathrooms?|entrances?|buildings?|parcels?|spaces?|garages?|yards?|wings?|sections?|stairs?|halls?|duplex(?:es)?|living\\s+(?:rooms?|areas?)|dining\\s+(?:rooms?|areas?))'
+const SEPARATE_THINGS = phrases([
+  'separated\\s+by\\s+(?:(?:a|an|the|\\d+)\\s+)?(?:[\\w-]+\\s+)?(?:courtyards?|yards?|gardens?|walls?|fences?|hallways?|halls?|driveways?|streets?|alleys?|alleyways?|walkways?|breezeways?|lobb(?:y|ies)|stair(?:case|well)?s?|lots?|feet|ft|foot|blocks?|buildings?|garages?|patios?|terraces?|partitions?|doors?|floors?|landings?|corridors?)',
+  `${SEPARATE_THING}(?:\\s+(?:\\d+[a-z]?|[a-z]))?\\s+(?:are|is|were|was|can\\s+be|will\\s+be|have\\s+been|has\\s+been)\\s+(?:(?:fully|completely|physically|well)\\s+)?separated`,
+  "(?:lots?|units?|parcels?|propert(?:y|ies)|buildings?|space|apartments?|floors?|rooms?|portfolio|proceeds|commission)\\s+(?:(?:can|could|can['’]t|cannot|couldn['’]t|may|might|will|won['’]t|would|wouldn['’]t|should|must|to|not|be|been|being|is|are|was|were|easily|legally|never|already|also)\\s+){0,4}split\\s+up",
+])
+
+// What makes a sentence about a person, for the groups above.
+const NAMES_FAMILY = new RegExp(`\\b(?:${RELATIVE}s?|wives|partners?|mum|in-laws?|nephews?|nieces?|cousins?|grand(?:sons?|daughters?|kids?|children)|widow\\w*)\\b`, 'i')
+const CARE_CONTEXT = /\b(?:lives?|(?<!assisted[\s-])living(?!\s{1,3}(?:rooms?|areas?|spaces?|quarters))|lived|resides?|residing|resided|moved?|moving|stays?|staying|stayed|admitted|treated|treatments?|visits?|visiting|visited|cares?\s+for|caring\s+for|cared\s+for|going\s+into|go(?:es)?\s+into|went\s+into|placed\s+in|placement|aides?|nurses?|caregivers?|caretakers?|to\s+be\s+(?:close|near)|so\s+(?:she|he|they)\s+can)\b/i
+const PERSON_NEEDS = /\b(?:owners?|sellers?|homeowners?|landlords?|he|she|they)\s+(?:(?:also|now|really|still|will|would|may|might|does|do|did|doesn['’]t|don['’]t|can|could)\s+)?(?:needs?|uses?|using|requires?|gets?|getting|relies\s+on|depends\s+on|receives?)\b/i
+const ABOUT_SOMEONE = /\b(?:owners?|sellers?|homeowners?|landlords?|he|she|him|her|his|hers|they|them|their|who|whom|kids|children|family|heirs?|killed|crash|accident|did\s+too|as\s+did|so\s+did)\b/i
+const HEIRS = /\b(?:kids|children|heirs?|family|siblings?)\b/i
+const COUPLE = /\b(?:couples?|spouses?|husbands?|wife|wives|partners?|marriage|married)\b/i
+
 // "<Name> Estates" is a place, so the word "Estates" there is ordinary, but
 // only that word (the words before it are still checked: "Inherited Jamaica
 // Estates colonial" is caught), and only where it reads as a place: after
-// "in/at/near…" or before a home or place word ("Bayside Estates two-family",
-// "Fieldston Estates colonial", "in Kensington Estates"). Never when it acts as
-// a party ("Johnson Estates hired a lawyer", "The Miller Estates' attorney"),
-// nor after "The/His/…". "Estates at <Place>" is a development's name.
-const NAMED_ESTATES = /\b(?!(?:The|A|An|His|Her|Their|Its|Our|My|Your|This|That|These|Those|Both|All|Two|Three|Four|Five|Several|Many|Some|Any|No|Each|Every)\b)[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s+Estates\b/g
-const PLACE_BEFORE = /\b(?:in|at|near|of|from|to|around|throughout|across|off)\s+(?:the\s+)?$/i
-const PLACE_AFTER = /^\s+(?:(?:one|two|three|four|1|2|3|4|multi|single)[\s-]+famil(?:y|ies)|co-?ops?|condos?|condominiums?|homes?|houses?|colonials?|tudors?|capes?|ranch(?:es)?|split[\s-]levels?|brownstones?|townhouses?|town\s+homes?|row\s*houses?|units?|apartments?|apts?|section|neighborhood|area|development|community|complex|detached|semi[\s-]detached|brick|listings?|propert(?:y|ies)|lots?|parcels?)\b/i
-const ESTATES_AT_PLACE = /\bEstates\s+at\s+(?=[A-Z])/g
+// in/at/near/around/throughout/across, or before a home or place word
+// ("Bayside Estates two-family", "Fieldston Estates colonial"). Never as a
+// party ("Proceeds go to the Smith Estates", "Johnson Estates properties are
+// being sold"), nor after "The/His/…". "Estates at <Place>" is a development.
+const NAMED_ESTATES = /\b(?!(?:The|A|An|His|Her|Their|Its|Our|My|Your|This|That|These|Those|Both|All|Two|Three|Four|Five|Several|Many|Some|Any|No|Each|Every)\b)[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\sEstates\b/g
+const PLACE_BEFORE = /\b(?:in|at|near|around|throughout|across)\s(?:the\s)?$/i
+const PLACE_AFTER = /^\s(?:(?:one|two|three|four|1|2|3|4|multi|single)[\s-]famil(?:y|ies)|co-?ops?|condos?|condominiums?|homes?|houses?|colonials?|tudors?|capes?|ranch(?:es)?|split[\s-]levels?|brownstones?|townhouses?|town\shomes?|row\s?houses?|units?|apartments?|apts?|section|neighborhood|area|development|community|complex|detached|semi[\s-]detached|brick)\b/i
+const ESTATES_AT_PLACE = /\bEstates\sat\s(?=[A-Z])/g
 function withoutPlaceEstates(text: string): string {
   return text
     .replace(NAMED_ESTATES, (m: string, offset: number) =>
@@ -203,9 +236,24 @@ function withoutPlaceEstates(text: string): string {
     )
     .replace(ESTATES_AT_PLACE, ' ')
 }
+// "Owner Jane Smith passed in March": the name between the owner and the verb.
+const OWNER_NAME = /\b((?:[Oo]wners?|[Ss]ellers?|[Hh]omeowners?|[Ll]andlords?)\s)(?:(?:Mr|Mrs|Ms|Dr)\.?\s)?(?:[A-Z][a-z'’-]{0,30}\s){1,3}(?=[Pp]ass)/g
+
+// One sentence (whitespace collapsed) without its ordinary phrases.
+function withoutOrdinaryPhrases(sentence: string): string {
+  const s = withoutPlaceEstates(sentence.replace(/\s+/g, ' ').replace(OWNER_NAME, '$1'))
+  const family = NAMES_FAMILY.test(s)
+  const aboutSomeone = family || ABOUT_SOMEONE.test(s)
+  let out = s.replace(ALWAYS_ORDINARY, ' ')
+  if (!family && !CARE_CONTEXT.test(s) && !PERSON_NEEDS.test(s)) out = out.replace(CARE_PLACES, ' ')
+  if (!aboutSomeone) out = out.replace(DEAD_THINGS, ' ').replace(CUSTODY_OF_THINGS, ' ')
+  if (!family && !HEIRS.test(s)) out = out.replace(INHERITED_LEASES, ' ')
+  if (!COUPLE.test(s)) out = out.replace(SEPARATE_THINGS, ' ')
+  return out.replace(/\s+/g, ' ')
+}
 
 export function mentionsPersonalCircumstances(text: string | null | undefined): boolean {
-  return !!text && PERSONAL.test(withoutPlaceEstates(text).replace(BENIGN, ' '))
+  return !!text && PERSONAL.test(sentencesOf(text).map(withoutOrdinaryPhrases).join(' '))
 }
 
 // A motivation that mentions any of them is dropped entirely.
@@ -217,16 +265,17 @@ export function safeMotivation(motivation: string | null | undefined): string | 
 // Free text is checked a line and a sentence at a time; each is kept or dropped
 // whole. A line that carries on the sentence before it (no end mark before the
 // break, the next line starts in lowercase: "She passed\naway last year.")
-// joins it. A sentence ends at . ! or ? (not after Mr./Dr./St. …), also when the
-// next one follows with no space ("list.Divorce"), but never inside a web
-// address or an email ("www.Example.com", "jane.Doe@example.com"). Semicolons
-// and dashes don't split: a sentence with any sensitive clause is dropped whole
-// ("Divorce pending; wife keeps the house").
+// joins it; a blank line ends a paragraph. A sentence ends at . ! or ? (not
+// after Mr./Dr./St. …), also when the next one follows with no space
+// ("list.Divorce"), but never inside a web address or an email
+// ("www.Example.com", "jane.Doe@example.com"). Semicolons and dashes don't
+// split: a sentence with any sensitive clause is dropped whole ("Divorce
+// pending; wife keeps the house").
 const ABBREVIATION = '(?:Mr|Mrs|Ms|Dr|St|Ave|Jr|Sr|Apt|No|Prof|Rev|Hon|Sgt|Capt|Lt|Col|Gen)'
 const SENTENCE_BREAK = new RegExp(
   [
     `(?<=(?<!\\b${ABBREVIATION})[.!?]["')\\]]?)\\s+`,
-    `(?<=(?:^|[\\s("'\\[])[A-Za-z]{2,}[.!?])(?<!(?:^|[\\s("'\\[])${ABBREVIATION}[.!?])(?=[A-Z][a-z]*(?:[\\s,;:!?)"']|[.!?](?:\\s|$)|$))`,
+    `(?<=(?:^|[\\s("'\\[])[A-Za-z]{2,30}[.!?])(?<!(?:^|[\\s("'\\[])${ABBREVIATION}[.!?])(?=[A-Z][a-z]{0,40}(?:[\\s,;:!?)"']|[.!?](?:\\s|$)|$))`,
   ].join('|'),
 )
 const ENDS_SENTENCE = new Set(['.', '!', '?', ':', ';', '"', "'", ')', ']'])
@@ -248,14 +297,19 @@ function linesOf(text: string): string[] {
   return lines.map((parts) => parts.join(' '))
 }
 
+function sentencesOf(text: string): string[] {
+  return linesOf(text)
+    .flatMap((line) => line.split(SENTENCE_BREAK))
+    .map((sentence) => sentence.trim())
+    .filter(Boolean)
+}
+
 // Free text without the sentences (or lines) that mention them. Unchanged text
 // comes back as it was.
 export function withoutPersonalCircumstances(text: string): string {
   if (!mentionsPersonalCircumstances(text)) return text
-  const out = linesOf(text)
-    .flatMap((line) => line.split(SENTENCE_BREAK))
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence && !mentionsPersonalCircumstances(sentence))
+  const out = sentencesOf(text)
+    .filter((sentence) => !mentionsPersonalCircumstances(sentence))
     .join(' ')
   // A phrase split across pieces comes back whole when they're joined: fail closed.
   return mentionsPersonalCircumstances(out) ? '' : out
