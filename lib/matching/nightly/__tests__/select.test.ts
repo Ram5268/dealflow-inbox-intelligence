@@ -30,8 +30,8 @@ test('top 10 per seller, best first; ties by buyer id ascending', () => {
 test('tiers and reason', () => {
   assert.deepEqual([tierOf(80), tierOf(79), tierOf(65), tierOf(64), tierOf(50)], ['HOT', 'WARM', 'WARM', 'POSSIBLE', 'POSSIBLE'])
   // Brief 41 (H7): plain English, the fit features that really matched (top 3),
-  // never a seller-motivation key.
-  assert.equal(reasonOf(mf({ beds: 50, neighborhood: 30, recency: 15, tenure: 5 }, { beds: 1, neighborhood: 1, recency: 0.95, tenure: 0.9 })), 'Bedroom count, right neighborhood, fresh listing')
+  // never a seller-motivation key. Brief 41.1: nor the listing's age.
+  assert.equal(reasonOf(mf({ beds: 50, neighborhood: 30, recency: 15, tenure: 5 }, { beds: 1, neighborhood: 1, recency: 0.95, tenure: 0.9 })), 'Bedroom count, right neighborhood')
   assert.equal(reasonOf(mf({ preForeclosure: 60, highEquity: 25, neighborhood: 10, absenteeOwner: 5 }, { preForeclosure: 1, highEquity: 1, neighborhood: 1, absenteeOwner: 0.9 })), 'Right neighborhood')
   assert.equal(reasonOf(mf({ tenure: 70, vacancy: 30 }, { tenure: 1, vacancy: 1 })), "Fits the buyer's criteria")
 })
@@ -73,7 +73,7 @@ test('price is never named for a homeowner (their price is never shown)', () => 
 test('toMatchRow carries the scorer outputs', () => {
   assert.deepEqual(toMatchRow(c('b1', 83)), {
     opportunityId: 's1', counterpartId: 'b1', counterpartType: 'opportunity', score: 83, tier: 'HOT',
-    reason: 'Bedroom count, right neighborhood, fresh listing', captureStatus: 'EXTERNAL_BOTH', matchFitConfidence: 'LOW',
+    reason: 'Bedroom count, right neighborhood', captureStatus: 'EXTERNAL_BOTH', matchFitConfidence: 'LOW',
     contributions: { beds: 50, neighborhood: 30, recency: 15, tenure: 5 }, unknownFactors: ['price'],
   })
 })
