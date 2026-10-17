@@ -311,3 +311,20 @@ test("round 4 review: a pronoun, a step- or in-law relative or a named person ke
     assert.equal(mentions(s), false, s)
   }
 })
+
+test('round 5 review: building-condition and deal-wording exceptions never hide a person', () => {
+  for (const s of ['Her father is on life support systems.', 'The owner has been on life support systems since May.', 'Mom is on life support systems at the hospital.',
+    "She doesn't have long to live at this point.", 'The owner may not have long to live in this house.', "He doesn't have long to live with his condition.",
+    "Her father's building is in critical condition and so is he.", 'The roof is end-of-life, and so is the owner.',
+    'The owner left us a few months ago.', 'Her husband left us this past spring.', 'He left us a year ago.', 'She left us the day after Christmas.',
+    'The owner has months to live at most.', 'She has weeks to live in all likelihood.', 'He has months to live with treatment.',
+    'Money is tied up in the Smith Estates.', 'Her role in the Johnson Estates.', 'The new owner inherits the tenants after Jane is gone.']) {
+    assert.equal(mentions(s), true, s)
+  }
+  for (const s of ['The seller left us a voicemail.', 'Owner left us the keys.', 'Seller wants 60 days to live in the house after closing.',
+    'The tenant has two years to live there under the lease.', 'The boiler is end-of-life.', 'The roof is in critical condition.',
+    "The building's life support systems were upgraded.", "It won't be long to live here with the new subway.",
+    'Single-family home in Fresh Meadows Estates, Queens.']) {
+    assert.equal(mentions(s), false, s)
+  }
+})

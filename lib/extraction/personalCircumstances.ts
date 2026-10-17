@@ -106,7 +106,7 @@ const PERSONAL = new RegExp(
     'power\\s+of\\s+attorney', 'poa', 'incapacit\\w*', 'lacks?\\s+(?:mental\\s+)?capacity',
     `(?:late|deceased)\\s+(?:husband|wife|spouse|mother|father|mom|dad|parents?|owners?|grand(?:mother|father|ma|pa)|(?:mr|mrs|ms|miss|dr)\\b)`,
     OWNER_PASSES, RELATIVE_PASSES,
-    `(?:owners?|sellers?|homeowners?|landlords?|he|she|partners?|${RELATIVE})\\s+(?:(?:has|had|sadly|recently|just|suddenly)\\s+){0,2}left\\s+us(?!\\s{1,3}(?:a|an|the|some|his|her|their|our|its|this|that|these|those|keys?|messages?|voicemails?|notes?|word|instructions|details|info\\w{0,10}|\\d+)\\b)`,
+    `(?:owners?|sellers?|homeowners?|landlords?|he|she|partners?|${RELATIVE})\\s+(?:(?:has|had|sadly|recently|just|suddenly)\\s+){0,2}left\\s+us(?!\\s{1,3}(?:(?:a|an|the|some|his|her|their|our|its|this|that|these|those|two|three|several|\\d{1,3})\\s{1,3}){0,2}(?:keys?|messages?|voicemails?|notes?|word|instructions|details|info\\w{0,10}|numbers?|emails?|texts?|calls?|reviews?|feedback|offers?|deposits?|checks?|documents?|paperwork|photos?|forms?|cop(?:y|ies)|contracts?|sets?)\\b)`,
     'lost\\s+(?:his|her|their|a)\\s+(?:husband|wife|spouse|partner|mother|father|mom|dad|parents?|son|daughter|child|baby|life|lives|battle)',
     'deceased', 'deaths?', 'deathbeds?', 'died', 'dies', 'dying', 'dead', 'funeral', 'widow\\w*',
     'heirs?', 'inherit\\w*', 'executors?', 'co-executors?', 'executrix', 'administratrix', 'estates?',
@@ -116,7 +116,7 @@ const PERSONAL = new RegExp(
     'sick(?:ly|ness|er)?', '(?:poor|failing|declining|bad|frail|fragile|deteriorating|ill)[\\s-]+health', 'frail(?:ty)?',
     '(?:health|medical)\\s+(?:issues?|problems?|reasons?|conditions?|concerns?|scares?|crisis|decline|emergenc(?:y|ies)|bills?|treatments?)',
     'terminal(?:ly)?\\s+(?:ill\\w*|diagnos\\w*|cancer|conditions?|disease|prognosis)', 'diagnosed\\s+with',
-    'not\\s+expected\\s+to\\s+(?:live|survive|make\\s+it|recover|last)', '(?:days|weeks|months|years)\\s+(?:left\\s+)?to\\s+live(?!\\s{1,3}(?:in|there|here|at|on|with|upstairs|downstairs|rent)\\b)', 'long\\s+to\\s+live',
+    'not\\s+expected\\s+to\\s+(?:live|survive|make\\s+it|recover|last)', '(?:days|weeks|months|years)\\s+(?:left\\s+)?to\\s+live(?!\\s{1,3}(?:(?:in|at)\\s{1,3}(?:the|her|his|their|its|a|an)\\s{1,3}(?:house|home|unit|apartment|property|place|condo|co-?op|building)\\b|(?:there|here|upstairs|downstairs)\\s{1,3}(?:under|until|through|after|before|per|rent)\\b))', 'long\\s+to\\s+live',
     'end[\\s-]+of[\\s-]+life', 'life\\s+support', '(?:in|into|out\\s+of)\\s+(?:a\\s+)?coma', 'comatose', 'in\\s+(?:critical|grave)\\s+condition',
     'undergoing\\s+(?:\\w+\\s+)?(?:treatments?|therapy|chemo\\w*|dialysis|surgery)',
     'strokes?', 'hospitali[sz](?:ed|ation|ations)', 'surger(?:y|ies)', 'injured', 'bed-?ridden', 'housebound', 'homebound',
@@ -167,7 +167,11 @@ const ALWAYS_ORDINARY = phrases([
   'died\\s+down', 'dying\\s+to', 'ill[\\s-]+(?:fated|advised)', "widow['’]?s[\\s-]+walks?",
   'sick\\s+(?:and\\s+tired\\s+)?of', 'sick\\s+building(?:\\s+syndrome)?', 'strokes?\\s+of\\s+(?:luck|genius|good\\s+(?:luck|fortune)|midnight)', '(?:brush|pen|key|master)[\\s-]?strokes?',
   '(?:building|property|roof|boiler|market|economy|block|structure)\\s+(?:is\\s+|was\\s+)?in\\s+(?:poor|failing|good|bad|great|fine)\\s+health',
-  // The building's condition, not a person's (round 4 review).
+])
+
+// The building's condition, not a person's (round 4 review). Off when the sentence is about someone
+// ("Her father is on life support systems", "The roof is end-of-life, and so is the owner").
+const THING_CONDITION = phrases([
   '(?:building|property|roof|boiler|furnace|heater|hvac|systems?|equipment|elevators?|appliances?|windows?|facade|façade|foundation|plumbing|wiring|chimney|deck|porch|stairs?|structure)(?:[\'’]s)?\\s+(?:is|are|was|were)\\s+(?:(?:now|already|nearly|near|at|the|its|their)\\s+){0,3}(?:end[\\s-]+of[\\s-]+life|in\\s+(?:critical|grave)\\s+condition)',
   'life\\s+support\\s+systems?', 'long\\s+to\\s+live(?=\\s{1,3}(?:in|there|here|at|on|with)\\b)',
 ])
@@ -220,7 +224,7 @@ const ABOUT_SOMEONE = /\b(?:owners?|sellers?|homeowners?|landlords?|he|she|him|h
 const PERSON_HERE = /\b(?:he|she|him|her|his|hers|they|them|their|who|whom)\b|\b(?:owners?|sellers?|homeowners?|landlords?)\s(?:(?:is|was|are|were)\s(?:now\s|still\s)?(?:a|an|in|at|on)|spends?|sleeps?)\b/i
 const HEIRS = /\b(?:kids|children|heirs?|family|siblings?)\b/i
 // A death anywhere in the sentence ("…inherits the tenants when Jane passes").
-const DEATH_WORD = /\b(?:pass(?:es|ed|ing)|died|dies|dying|deceased|deaths?)\b/i
+const DEATH_WORD = /\b(?:pass(?:es|ed|ing)|died|dies|dying|deceased|deaths?|(?:is|was|are|were)\s(?:now\s)?gone|no\slonger\swith\sus)\b/i
 const COUPLE = /\b(?:couples?|spouses?|husbands?|wife|wives|partners?|marriage|married)\b/i
 
 // "<Name> Estates" is a place, so the word "Estates" there is ordinary, but
@@ -232,6 +236,9 @@ const COUPLE = /\b(?:couples?|spouses?|husbands?|wife|wives|partners?|marriage|m
 // being sold"), nor after "The/His/…". "Estates at <Place>" is a development.
 const NAMED_ESTATES = /\b(?!(?:The|A|An|His|Her|Their|Its|Our|My|Your|This|That|These|Those|Both|All|Two|Three|Four|Five|Several|Many|Some|Any|No|Each|Every)\b)[A-Z][a-z]+(?:\s[A-Z][a-z]+)?\sEstates\b/g
 const PLACE_BEFORE = /\b(?:in|at|near|around|throughout|across)\s(?:the\s)?$/i
+// "in the <Name> Estates" is a place only in a sentence about a home ("Homes in
+// Fresh Meadows Estates are pricey", not "Money is tied up in the Smith Estates").
+const HOME_WORD = /\b(?:homes?|houses?|condos?|co-?ops?|units?|apartments?|apts?|propert(?:y|ies)|listings?|lots?|parcels?|townhouses?|brownstones?|colonials?|tudors?|ranch(?:es)?|single[\s-]famil(?:y|ies)|(?:one|two|three|four|multi)[\s-]famil(?:y|ies)|buildings?|located|neighborhood|area)\b/i
 // "a stake / an interest / a share in the Smith Estates" is a party, not a place.
 const STAKE_BEFORE = /\b(?:stakes?|interests?|shares?|claims?|part|portion|beneficiar\w{0,6}|rights?)\s(?:in|at)\s(?:the\s)?$/i
 const PLACE_AFTER = /^\s(?:(?:one|two|three|four|1|2|3|4|multi|single)[\s-]famil(?:y|ies)|co-?ops?|condos?|condominiums?|homes?|houses?|colonials?|tudors?|capes?|ranch(?:es)?|split[\s-]levels?|brownstones?|townhouses?|town\shomes?|row\s?houses?|units?|apartments?|apts?|section|neighborhood|area|development|community|complex|detached|semi[\s-]detached|brick)\b/i
@@ -239,7 +246,7 @@ const ESTATES_AT_PLACE = /\bEstates\sat\s(?=[A-Z])/g
 function withoutPlaceEstates(text: string): string {
   return text
     .replace(NAMED_ESTATES, (m: string, offset: number) =>
-      (PLACE_BEFORE.test(text.slice(Math.max(0, offset - 16), offset)) && !STAKE_BEFORE.test(text.slice(Math.max(0, offset - 30), offset)) && /^(?:\s*$|\s*[.!?]|,\s(?:Queens|Brooklyn|Bronx|Manhattan|Staten\sIsland|Long\sIsland|NY|New\sYork))/.test(text.slice(offset + m.length, offset + m.length + 20))) || PLACE_AFTER.test(text.slice(offset + m.length, offset + m.length + 40))
+      (PLACE_BEFORE.test(text.slice(Math.max(0, offset - 16), offset)) && !STAKE_BEFORE.test(text.slice(Math.max(0, offset - 30), offset)) && HOME_WORD.test(text) && /^(?:\s*$|\s*[.!?]|,\s(?:Queens|Brooklyn|Bronx|Manhattan|Staten\sIsland|Long\sIsland|NY|New\sYork))/.test(text.slice(offset + m.length, offset + m.length + 20))) || PLACE_AFTER.test(text.slice(offset + m.length, offset + m.length + 40))
         ? m.replace(/Estates$/, ' ')
         : m,
     )
@@ -255,7 +262,7 @@ function withoutOrdinaryPhrases(sentence: string): string {
   const aboutSomeone = family || ABOUT_SOMEONE.test(s)
   let out = s.replace(ALWAYS_ORDINARY, ' ')
   if (!family && !PERSON_HERE.test(s) && !CARE_CONTEXT.test(s) && !PERSON_NEEDS.test(s)) out = out.replace(CARE_PLACES, ' ')
-  if (!aboutSomeone) out = out.replace(DEAD_THINGS, ' ').replace(CUSTODY_OF_THINGS, ' ')
+  if (!aboutSomeone) out = out.replace(DEAD_THINGS, ' ').replace(CUSTODY_OF_THINGS, ' ').replace(THING_CONDITION, ' ')
   if (!family && !HEIRS.test(s) && !DEATH_WORD.test(s)) out = out.replace(INHERITED_LEASES, ' ')
   if (!COUPLE.test(s)) out = out.replace(SEPARATE_THINGS, ' ')
   return out.replace(/\s+/g, ' ')
