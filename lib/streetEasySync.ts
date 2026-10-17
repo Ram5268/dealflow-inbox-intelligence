@@ -2,6 +2,7 @@ import { prisma } from './prisma'
 import { normalizeAddress } from './domain/Address'
 import { isTestModeOnly } from './config/testMode'
 import { statusUpdateFor, SE_CHECKABLE_CATEGORIES } from './streetEasyStatusUpdate'
+import { dateExpiryCutoffs, PAST_EVENT_CATEGORIES, COMING_SOON_EXPIRY_CATEGORIES, AGED_REVIEW_CATEGORIES } from './dateExpiryRules'
 
 // Brief 3.0 follow-up — trial-mode kill switch. In seed-only trial mode there's
 // no real inbox flow, so the StreetEasy status sweep has no legitimate work and
@@ -594,19 +595,20 @@ export async function sweepForActivations(): Promise<number> {
 }
 
 // ── Date-based expiration (no StreetEasy needed) ─────────────────────────────
-// Group 3: categories that expire purely based on time
+// Group 3: categories that expire purely based on time. The rules (categories
+// and cutoffs) live in lib/dateExpiryRules.ts, shared with the miss-delisting
+// repair (lib/streetEasyMissRepair.ts) so both apply exactly the same rules.
 export async function sweepDateExpirations(): Promise<number> {
   if (!SYNC_ENABLED || TEST_MODE_SKIP) return 0
-  const now  = new Date()
-  const ago30 = new Date(Date.now() - 30 * 86_400_000)
+  const cut = dateExpiryCutoffs(new Date())
   let expiredCount = 0
 
   // OPEN_HOUSE and SHOWING_CONFIRMATION — stale once the event date has passed
   const pastEvents = await prisma.extractedOpportunity.findMany({
     where: {
       processingStatus: 'active',
-      category: { in: ['OPEN_HOUSE', 'SHOWING_CONFIRMATION'] as never[] },
-      availabilityDate: { not: null, lt: now.toISOString() },
+      category: { in: [...PAST_EVENT_CATEGORIES] as never[] },
+      availabilityDate: { not: null, lt: cut.pastEventBefore },
     },
     select: { id: true },
   })
@@ -624,8 +626,8 @@ export async function sweepDateExpirations(): Promise<number> {
   const staleComing = await prisma.extractedOpportunity.findMany({
     where: {
       processingStatus: 'active',
-      category: { in: ['COMING_SOON_SALE', 'COMING_SOON_RENTAL'] as never[] },
-      availabilityDate: { not: null, lt: ago30.toISOString() },
+      category: { in: [...COMING_SOON_EXPIRY_CATEGORIES] as never[] },
+      availabilityDate: { not: null, lt: cut.comingSoonBefore },
     },
     select: { id: true },
   })
@@ -640,14 +642,12 @@ export async function sweepDateExpirations(): Promise<number> {
 
   // General staleness: any active supply-side listing older than 90 days
   // with no StreetEasy verification — mark needs_review, not auto-stale
-  const ago90 = new Date(Date.now() - 90 * 86_400_000)
   const aged = await prisma.extractedOpportunity.findMany({
     where: {
       processingStatus: 'active',
-      category: { in: ['ACTIVE_SALE_LISTING','RENTAL_LISTING','OFF_MARKET_SALE',
-                        'BACK_ON_MARKET','PRICE_DROP'] as never[] },
+      category: { in: [...AGED_REVIEW_CATEGORIES] as never[] },
       streetEasyCheckedAt: null,
-      createdAt: { lt: ago90 },
+      createdAt: { lt: cut.agedBefore },
     },
     select: { id: true },
   })

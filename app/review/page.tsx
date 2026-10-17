@@ -7,7 +7,7 @@ import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 
 type FlagReason = 'low_confidence' | 'ambiguous_category' | 'missing_address' | 'possible_duplicate'
   | 'conflicting_category' | 'schema_validation_failed' | 'multi_listing_ambiguity'
-  | 'missing_date' | 'price_sanity'
+  | 'missing_date' | 'price_sanity' | 'streeteasy_not_found'
 
 interface ReviewItem {
   id: string
@@ -57,6 +57,7 @@ const FLAG_LABELS: Record<FlagReason, string> = {
   multi_listing_ambiguity: 'Multi-listing',
   missing_date:            'Missing date',
   price_sanity:            'Price issue',
+  streeteasy_not_found:    'Not on StreetEasy', // Brief 41.1: a listing an old StreetEasy miss had hidden
 }
 
 const FLAG_COLORS: Record<FlagReason, string> = {
@@ -69,6 +70,7 @@ const FLAG_COLORS: Record<FlagReason, string> = {
   multi_listing_ambiguity: 'rgba(130,200,230,0.85)',
   missing_date:            'rgba(230,140,80,0.85)',
   price_sanity:            'rgba(220,100,100,0.85)',
+  streeteasy_not_found:    'rgba(130,200,230,0.85)',
 }
 
 function timeAgo(iso: string): string {
