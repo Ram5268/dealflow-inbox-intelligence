@@ -108,6 +108,8 @@ model Organization {
   zapierIngestLogs ZapierIngestLog[]
   callQueueEntries CallQueueEntry[]
   callLogs         CallLog[]
+  valuationRuns      ValuationRun[]       // Brief 44
+  propertyValuations PropertyValuation[]  // Brief 44
 }
 
 model User {
@@ -483,6 +485,7 @@ model MojoContact {
   instantlyEvents     InstantlyEvent[]
   callQueueEntries    CallQueueEntry[]   // Brief 33 — ranked call-queue snapshots
   callLogs            CallLog[]          // Brief 33 — schema only (Brief 34 populates)
+  valuations          PropertyValuation[] // Brief 44 — DealFlow's own value, one row per monthly run
 
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])
@@ -998,4 +1001,65 @@ model CallLog {
 
   @@index([organizationId, initiatedAt])
   @@index([contactId, initiatedAt])
+}
+
+// ── Brief 44 — the valuation estimator ──────────────────────────────────────
+// A monthly job (valuation/, run on GitHub Actions) values every CRM seller's home
+// from free public records and sends the results through POST
+// /api/valuations/import. These two tables are its only storage; Property and its
+// currentOwner column are not used. The values are DealFlow's own estimates: they
+// appear only on Ryan's CRM lead page and never on anything a buyer or homeowner
+// could see (Ryan's decision, 2026-10-17). No owner or party names are stored
+// (Ryan's decision, 2026-10-17: PLUTO owner names stay erased).
+
+// One row per job run, published or not.
+model ValuationRun {
+  id             String    @id               // the job's run id
+  organizationId String
+  runAt          DateTime                    // when the job started
+  asOf           DateTime  @db.Date          // the values are as of this day
+  dataThrough    DateTime  @db.Date          // the last city sale date the model saw
+  modelVersion   String
+  gatesPassed    Boolean                     // the job's own publish checks (re-checked here before publishing)
+  gatesJson      Json
+  metricsJson    Json                        // accuracy on recent months, range widths: no values, no addresses
+  scoreboardJson Json?                       // matching scoreboard (shares only)
+  sourcesJson    Json?                       // which public data versions the run used
+  countsJson     Json
+  expectedRows   Int                         // sellers the job will send before publishing
+  published      Boolean   @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id])
+  valuations   PropertyValuation[]
+
+  @@index([organizationId, published, publishedAt])
+}
+
+// One row per CRM seller per run. A home the model can't value has value, low and
+// high null and a reason.
+model PropertyValuation {
+  id             String   @id @default(cuid())
+  runId          String
+  organizationId String
+  contactId      String                      // MojoContact.id of a CRM seller
+  bbl            String?                     // the city tax lot the address matched
+  value          Float?
+  low            Float?                      // the range is sized to hold the sale price about 2 times in 3
+  high           Float?
+  asOf           DateTime @db.Date
+  reason         String?                     // five_plus_units | condo_without_unit | not_found | other_property_type
+  factsJson      Json?                       // whitelisted public-record facts (lib/valuations/contract.ts)
+  compsJson      Json?                       // up to 8 nearby earlier arm's-length sales (public records)
+  createdAt      DateTime @default(now())
+
+  run          ValuationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id])
+  contact      MojoContact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, contactId])
+  @@index([contactId, createdAt])
+  @@index([organizationId])
 }
