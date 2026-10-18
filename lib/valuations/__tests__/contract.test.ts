@@ -125,6 +125,14 @@ test('metrics and the scoreboard are number trees: numbers, yes/no and null only
     assert.ok(!scoreboardOk({ ok: { [k]: 1 } }), `nested ${JSON.stringify(k)}`)
   }
   assert.ok(metricsOk({ ['a'.repeat(48)]: 1 }))
+  // No per-seller maps: at most 64 keys per object, and no key that is a long number.
+  const keys = (n: number, key = (i: number) => `k${i}`) => Object.fromEntries(Array.from({ length: n }, (_, i) => [key(i), 1]))
+  assert.ok(metricsOk({ by_x: keys(64) }))
+  assert.ok(!metricsOk({ by_x: keys(65) }), '65 keys in one object')
+  assert.ok(!metricsOk({ per_lot: keys(1500, i => String(3000000000 + i)) }), 'every seller keyed by tax lot')
+  assert.ok(!metricsOk({ worst: { '3012340056': 0.45 } }), 'a tax-lot-shaped key')
+  assert.ok(!scoreboardOk({ ok: { '2125550123': 1 } }), 'a phone-number-shaped key')
+  assert.ok(metricsOk({ by_month: { '202609': 0.1 }, by_zip: { '11216': 0.1 }, by_year: { '2026': 1 } }), 'months, ZIPs and years still fit')
   // Too deep is refused, never skipped: 6 levels pass, 7 don't.
   assert.ok(metricsOk(nested(6)))
   assert.ok(!metricsOk(nested(7)))

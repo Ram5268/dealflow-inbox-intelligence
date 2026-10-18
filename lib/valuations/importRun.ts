@@ -123,7 +123,8 @@ async function addRows(db: PrismaClient, organizationId: string, runId: string, 
   const written = await db.$transaction(async tx => {
     if (!(await lockRun(tx, organizationId, runId, now))) {
       const run = await tx.valuationRun.findFirst({ where: { id: runId, organizationId }, select: { published: true } })
-      return run ? fail(409, 'already_published') : fail(404, 'run_not_found')
+      // A run that exists but isn't published is one whose start is still being written.
+      return run ? fail(409, run.published ? 'already_published' : 'retry') : fail(404, 'run_not_found')
     }
     const run = await tx.valuationRun.findUnique({ where: { id: runId }, select: { asOf: true } })
     if (!run) return fail(404, 'run_not_found')
@@ -160,11 +161,19 @@ async function addRows(db: PrismaClient, organizationId: string, runId: string, 
 
 async function publishRun(db: PrismaClient, organizationId: string, runId: string, now: Date): Promise<ImportResult> {
   return db.$transaction(async tx => {
+    // Publishes take turns, whatever their run (engineering precaution): otherwise two
+    // runs publishing at the same moment could both pass the "newer month already
+    // published?" check below, and the older month would become "latest". The lock is
+    // released when this transaction ends.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(44, hashtext(${`valuation-publish:${organizationId}`}))`
     // Lock first, then read: a start or a batch of this run either finished before
     // this point or waits until this publish is done.
     if (!(await lockRun(tx, organizationId, runId, now))) {
       const done = await tx.valuationRun.findFirst({ where: { id: runId, organizationId }, select: { published: true } })
-      return done ? ok({ runId, published: true, alreadyPublished: true }) : fail(404, 'run_not_found')
+      if (!done) return fail(404, 'run_not_found')
+      // Only a published run is "already published"; one whose start is still being
+      // written is told to retry.
+      return done.published ? ok({ runId, published: true, alreadyPublished: true }) : fail(409, 'retry')
     }
     const run = await tx.valuationRun.findUnique({
       where: { id: runId },

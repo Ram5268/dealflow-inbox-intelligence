@@ -116,6 +116,11 @@ export type ValuationRow = z.infer<typeof RowSchema>
 // no text anywhere. Deeper than 6 levels (the outer object is level 1) or bigger
 // than 64,000 bytes is refused, never cut short. A refusal names neither keys nor values.
 export const TREE_KEY = /^[a-z0-9][a-z0-9_]{0,47}$/
+// A key that is a long number (a tax lot, a phone number) would turn a blob into a list
+// of homes or people; and at most 64 keys per object leaves no room for one entry per
+// seller (engineering precaution). Years, months and ZIP codes still fit.
+const LONG_NUMBER_KEY = /^[0-9]{7,}$/
+export const TREE_MAX_KEYS = 64
 export const TREE_MAX_DEPTH = 6
 export const TREE_MAX_LIST = 64
 export const TREE_MAX_BYTES = 64_000
@@ -129,8 +134,11 @@ const isPlainObject = (v: unknown): v is Record<string, unknown> =>
 // Why `v` isn't a number tree, or null when it is one.
 export function numberTreeProblem(v: unknown): string | null {
   const walk = (node: Record<string, unknown>, level: number): string | null => {
-    for (const [key, x] of Object.entries(node)) {
+    const entries = Object.entries(node)
+    if (entries.length > TREE_MAX_KEYS) return `level ${level}: more than ${TREE_MAX_KEYS} keys`
+    for (const [key, x] of entries) {
       if (!TREE_KEY.test(key)) return `level ${level}: a key is not a lowercase code`
+      if (LONG_NUMBER_KEY.test(key)) return `level ${level}: a key is a long number`
       if (isScalar(x)) continue
       if (typeof x === 'string') return `level ${level}: text is not allowed`
       if (!Array.isArray(x) && !isPlainObject(x)) return `level ${level}: only numbers, true/false, null, lists and objects`

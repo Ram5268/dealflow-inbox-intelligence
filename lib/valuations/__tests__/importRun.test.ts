@@ -398,3 +398,44 @@ test('every write transaction waits at most 10 s for the run and runs at most 30
   assert.ok(db.txOptions.length >= 3)
   for (const o of db.txOptions) assert.deepEqual(o, { maxWait: 10_000, timeout: 30_000 })
 })
+
+test('two runs publishing at once take turns: the older month never ends up latest', async () => {
+  const db = makeFakeDb(); seedSellers(db, N)
+  const prep = async (runId: string, asOf: string, dataThrough: string) => {
+    assert.equal((await send(db, { action: 'start', run: runInput({ runId, asOf, dataThrough }) })).status, 200)
+    await upload(db, runId, rowsFor(db))
+  }
+  await prep('vr_20261020T100000Z_month10', '2026-10-01', '2026-09-30')
+  await prep('vr_20261020T100000Z_month09', '2026-09-01', '2026-08-31')
+  // October's publish is held just after its "is a newer month published?" read...
+  const pause = db.pauseAfter(op => op.table === 'valuationRun' && op.method === 'findFirst')
+  const october = send(db, { action: 'publish', runId: 'vr_20261020T100000Z_month10' }, new Date(NOW.getTime() + 60_000))
+  await pause.reached
+  // ...while September's publish arrives a second later.
+  const september = send(db, { action: 'publish', runId: 'vr_20261020T100000Z_month09' }, new Date(NOW.getTime() + 61_000))
+  await settle()
+  pause.release()
+  const [oct, sep] = await Promise.all([october, september])
+  assert.equal(oct.status, 200, JSON.stringify(oct.body))
+  assert.equal(sep.status, 409, JSON.stringify(sep.body))
+  assert.equal(sep.body.error, 'older_than_published')
+  assert.deepEqual(db.valuationRun.rows.filter(r => r.published).map(r => r.id), ['vr_20261020T100000Z_month10'])
+})
+
+test('a publish that arrives while the run’s first start is still being written is told to retry, never "already published"', async () => {
+  const db = makeFakeDb(); seedSellers(db, 10)
+  const runId = 'vr_20261020T100000Z_early1'
+  const creating = db.pauseAfter(op => op.table === 'valuationRun' && op.method === 'findUnique')
+  const start = send(db, { action: 'start', run: runInput({ runId, expectedRows: 10 }) })
+  await creating.reached // the start found no run and is about to create it
+  const locking = db.pauseAfter(op => op.table === 'valuationRun' && op.method === 'updateMany')
+  const publish = send(db, { action: 'publish', runId })
+  await locking.reached // the publish found no run to lock
+  creating.release()
+  assert.equal((await start).status, 200)
+  locking.release()
+  const pub = await publish
+  assert.equal(pub.status, 409, JSON.stringify(pub.body))
+  assert.equal(pub.body.error, 'retry')
+  assert.equal(db.valuationRun.rows[0].published, false)
+})

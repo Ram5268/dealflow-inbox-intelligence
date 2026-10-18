@@ -301,7 +301,16 @@ export function makeFakeDb(now: () => Date = () => NOW) {
   }
   const tables = (ctx: Ctx) => {
     const [organization, mojoContact, valuationRun, propertyValuation, serviceKey] = specs.map(s => table(s, data[s.name], ctx, env))
-    return { organization, mojoContact, valuationRun, propertyValuation, serviceKey }
+    // pg_advisory_xact_lock only: held until the transaction ends, like Postgres's.
+    const $executeRaw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+      if (!/pg_advisory_xact_lock/.test(strings.join('?'))) throw new Error('fakeDb: only pg_advisory_xact_lock is supported')
+      await env.locks.take(`advisory:${values.map(String).join('|')}`, ctx.tx ?? env.owner())
+      const op = { table: 'advisory', method: '$executeRaw', tx: ctx.tx }
+      env.ops.push(op)
+      await env.afterOp(op)
+      return 1
+    }
+    return { organization, mojoContact, valuationRun, propertyValuation, serviceKey, $executeRaw }
   }
   const txOptions: unknown[] = []
   const db = {
