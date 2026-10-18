@@ -1,13 +1,19 @@
 // Run this locally (not on Railway) to backfill StreetEasy hotsheets.
 // Your home IP bypasses StreetEasy bot detection. Railway's IP triggers it.
 //
-// Usage:
-//   npx tsx scripts/backfill-hotsheets-local.ts
-//   npx tsx scripts/backfill-hotsheets-local.ts --days 30
-//   npx tsx scripts/backfill-hotsheets-local.ts --start 2026-03-01 --end 2026-05-01
+// Usage (a dry run that only lists the dates, unless --apply):
+//   npx tsx scripts/backfill-hotsheets-local.ts --apply
+//   npx tsx scripts/backfill-hotsheets-local.ts --apply --days 30
+//   npx tsx scripts/backfill-hotsheets-local.ts --apply --start 2026-03-01 --end 2026-05-01
 
 import 'dotenv/config'
 import { runHotsheetSync } from '../lib/streetEasyHotsheet'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+// The dry run fetches nothing (no ScrapingBee calls).
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/backfill-hotsheets-local.ts (DATABASE_URL)')
 
 const DELAY_MS = 45_000  // 45 seconds between dates — looks like a normal user
 
@@ -45,6 +51,10 @@ async function main() {
   console.log(`[Backfill] ${dates.length} dates to process`)
   console.log(`[Backfill] First: ${dates[0]}  Last: ${dates[dates.length - 1]}`)
   console.log(`[Backfill] Estimated time: ~${Math.round(dates.length * DELAY_MS / 60000)} minutes\n`)
+  if (!APPLY) {
+    console.log('[Backfill] Dry run: nothing fetched or saved. Re-run with --apply to scrape these dates through ScrapingBee and save the listings.')
+    return
+  }
 
   let totalSales = 0, totalRentals = 0, failed = 0
 

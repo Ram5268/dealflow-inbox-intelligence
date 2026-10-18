@@ -8,6 +8,12 @@ import { writeFileSync } from 'fs'
 import { prisma } from '../lib/prisma'
 import { normalizeAddress } from '../lib/domain/Address'
 import { stripBareUnitSuffix } from '../lib/enrichment/nyc' // NEW strip (Phase 4.6.3)
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a finished one-off (Phase 4.6.3) that
+// deletes cache rows, so it refuses any database but a *_perf or *_test one,
+// with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/step463-prep.ts (DATABASE_URL)')
 
 // OLD strip (Phase 4.6.2, pre-4.6.3) — to detect rows the new patterns now change.
 function oldStrip(addr: string): string {

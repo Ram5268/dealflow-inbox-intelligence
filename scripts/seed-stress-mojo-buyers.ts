@@ -11,6 +11,11 @@ import {
   fullName, nycPhone, emailFrom,
 } from './seed-stress-common'
 import { prisma } from '../lib/prisma'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): test or seed data only, so it refuses
+// any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/seed-stress-mojo-buyers.ts (DATABASE_URL)')
 
 const TARGET = 200
 

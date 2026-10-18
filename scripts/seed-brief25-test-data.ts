@@ -2,6 +2,11 @@ import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { getCurrentOrgId } from '../lib/auth/orgContext'
 import { Category, TransactionType } from '@prisma/client'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): test or seed data only, so it refuses
+// any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/seed-brief25-test-data.ts (DATABASE_URL)')
 
 // Brief 2.5, Step 3 — controlled 4-category seed data for matcher validation.
 //

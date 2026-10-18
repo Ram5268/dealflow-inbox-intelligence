@@ -2,8 +2,9 @@
 // that predate the X.1 auto-match. Iterates oldest-first, calls
 // findListingByAddress, and persists the match if found.
 //
-// Manual-run, batched. Default batch size 100; override as the first arg:
-//   npx tsx scripts/backfill-se-ids.ts 100
+// Manual-run, batched. Default batch size 100; override as the first arg.
+// A dry run (the batch it would look up, no API calls) unless --apply:
+//   npx tsx scripts/backfill-se-ids.ts --apply 100
 //
 // Cost: 1-3 RapidAPI calls per record (one per area search attempt). Budget
 // gate (lib/streetEasySync.ts:checkAndIncrementQuota) hard-pauses at
@@ -14,10 +15,15 @@ import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { findListingByAddress, QuotaExhaustedError } from '../lib/streetEasySync'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from '../lib/domain/Categories'
+import { maintenanceApply, scriptArgs } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/backfill-se-ids.ts (DATABASE_URL)')
 
 const SUPPLY     = [...SUPPLY_SALE, ...SUPPLY_RENTAL]
 const RENTAL_SET = new Set<string>(SUPPLY_RENTAL)
-const BATCH      = parseInt(process.argv[2] ?? '100', 10)
+const BATCH      = parseInt(scriptArgs()[0] ?? '100', 10)
 const SLEEP_MS   = 500
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }
@@ -37,7 +43,12 @@ async function main() {
     take: BATCH,
   })
 
-  console.log(`[backfill-se-ids] Processing ${records.length} records (batch size ${BATCH})`)
+  console.log(`[backfill-se-ids] ${APPLY ? 'Processing' : 'Dry run:'} ${records.length} records (batch size ${BATCH})`)
+  if (!APPLY) {
+    console.log('[backfill-se-ids] Nothing looked up or written. Re-run with --apply to look them up on StreetEasy (1-3 RapidAPI calls each).')
+    await prisma.$disconnect()
+    return
+  }
   let matched = 0, skipped = 0, errors = 0
 
   for (const r of records) {

@@ -6,8 +6,8 @@
 // successful extraction's wipe-and-insert transaction removes the stale stub
 // opportunity + its review-queue row; a failed extraction is left untouched.
 //
-// Usage:
-//   INGEST_V2=true npx tsx scripts/reprocess-v2-extraction.ts [--limit N] [--category CAT] [--dry-run] [--max-cost USD]
+// Usage (a dry run unless --apply; --dry-run is still accepted):
+//   INGEST_V2=true npx tsx scripts/reprocess-v2-extraction.ts [--limit N] [--category CAT] [--apply] [--max-cost USD]
 import 'dotenv/config'
 import PQueue from 'p-queue'
 import { prisma } from '../lib/prisma'
@@ -15,6 +15,11 @@ import { getCurrentOrgId } from '../lib/auth/orgContext'
 import { ingestEmailV2 } from '../lib/ingestion/ingestEmailV2'
 import { extractEmailV2 } from '../lib/extraction/extractEmailV2'
 import { isIngestionTestModeOnly } from '../lib/config/ingestionTestMode'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/reprocess-v2-extraction.ts (DATABASE_URL)')
 
 process.env.INGEST_V2 = 'true'
 
@@ -26,7 +31,7 @@ function flagValue(name: string): string | undefined {
 }
 const LIMIT    = flagValue('--limit') ? parseInt(flagValue('--limit')!, 10) : undefined
 const CATEGORY = flagValue('--category')
-const DRY_RUN  = argv.includes('--dry-run')
+const DRY_RUN  = !APPLY
 const MAX_COST = flagValue('--max-cost') ? parseFloat(flagValue('--max-cost')!) : undefined
 const IDS      = flagValue('--ids')?.split(',').map(s => s.trim()).filter(Boolean)  // target specific rawEmailIds
 const CONCURRENCY = 5
@@ -143,7 +148,7 @@ async function main() {
     const byCat: Record<string, number> = {}
     for (const c of cohort) byCat[c.category ?? c.oppCategory ?? '?'] = (byCat[c.category ?? c.oppCategory ?? '?'] ?? 0) + 1
     console.log(`\n  categoryBreakdown: ${JSON.stringify(byCat)}`)
-    console.log('\n  DRY RUN — no extraction performed.')
+    console.log('\n  DRY RUN — no extraction performed. Re-run with --apply to extract them.')
     await prisma.$disconnect()
     return
   }
