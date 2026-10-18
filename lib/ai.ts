@@ -1,6 +1,5 @@
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
-import { withoutPersonalText } from './extraction/personalCircumstances'
 
 export interface EmailInput {
   subject: string
@@ -207,22 +206,19 @@ async function extractWithAnthropic(email: EmailInput): Promise<ExtractionResult
   return parseResults(JSON.parse(text.slice(jsonStart, jsonEnd + 1)))
 }
 
+// Every caller (Outlook sync, re-extract, reclassify) saves these results as the
+// provider returned them, a seller's or landlord's estate, probate, divorce,
+// death, illness or age details included. Ryan's decision, 2026-10-17: saved
+// seller notes may keep these details. Buyer-facing text still never names
+// motivation (engineering precaution, Brief 41 H7).
 export async function classifyAndExtractEmail(
   email: EmailInput
 ): Promise<ExtractionResult[]> {
   const provider = process.env.AI_PROVIDER ?? 'openai'
-  const results = provider === 'anthropic' ? await extractWithAnthropic(email) : await extractWithOpenAI(email)
-  return results.map(withoutPersonalLeadText)
-}
-
-// Brief 41 (H9): a seller's or landlord's personal circumstances (estate,
-// probate, divorce, a death, illness) never reach a saved row. Every caller
-// (sync/reextract, sync/reclassify, Outlook sync) saves these results.
-// Brief 41.1: nor do they through a lead's or a conversation's status, or a
-// client conversation with a seller or landlord (or one whose side isn't
-// clear). The pure helper is tested in lib/extraction/__tests__.
-export function withoutPersonalLeadText(r: ExtractionResult): ExtractionResult {
-  return withoutPersonalText(r)
+  if (provider === 'anthropic') {
+    return extractWithAnthropic(email)
+  }
+  return extractWithOpenAI(email)
 }
 
 export interface SearchCriteria {
