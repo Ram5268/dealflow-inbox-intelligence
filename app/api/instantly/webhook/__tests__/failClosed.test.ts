@@ -7,8 +7,9 @@ import { NextRequest } from 'next/server'
 // is set AND the request carries `Authorization: Bearer <that secret>`. Until
 // all three hold it reads no body and touches no database. Engineering
 // precaution from the Oct 16, 2026 system-map review; Instantly itself stays off
-// (Ryan's instruction: nothing contacts a lead). Runs under tsx against an
-// in-memory stand-in for Prisma; no database.
+// (Ryan's instruction, Sep 24, 2026: nothing may call, text or email CRM leads
+// while testing). Runs under tsx against an in-memory stand-in for Prisma; no
+// database.
 
 const SECRET = 'test-only-webhook-secret-6f1c'
 const keys = ['INSTANTLY_ENROLL_ENABLED', 'INSTANTLY_WEBHOOK_SECRET', 'TEST_MODE_ONLY'] as const

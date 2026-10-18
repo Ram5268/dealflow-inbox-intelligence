@@ -11,8 +11,8 @@ import { checkInstantlyWebhookToken } from '@/lib/auth/instantlyWebhook'
 // Brief 41.2 (PR C): fails closed. Until all three of these hold, it reads no
 // body and touches no database:
 //   1. INSTANTLY_ENROLL_ENABLED is exactly 'true' (the Brief 34 Instantly
-//      switch). Otherwise 503. Instantly stays off: Ryan's instruction is that
-//      nothing contacts a lead.
+//      switch). Otherwise 503. Instantly stays off (Ryan's instruction, Sep 24,
+//      2026: nothing may call, text or email CRM leads while testing).
 //   2. INSTANTLY_WEBHOOK_SECRET is set. Otherwise 503.
 //   3. The request has the header `Authorization: Bearer <INSTANTLY_WEBHOOK_SECRET>`.
 //      Otherwise 401. A token in the URL is not accepted.
