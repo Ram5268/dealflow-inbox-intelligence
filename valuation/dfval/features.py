@@ -14,7 +14,7 @@ import pandas as pd
 from scipy.spatial import cKDTree
 
 from . import config
-from .frame import roll_for, roll_releases
+from .frame import roll_for, roll_releases, roll_releases_of
 from .index import build_pairs, fit_index, qidx, qidx1
 
 LAT0 = 40.68
@@ -96,7 +96,7 @@ def base_features(X: pd.DataFrame, S: pd.DataFrame, IDX: dict, roll: pd.DataFram
     X["rs_t0"] = pd.to_datetime([x[2] for x in rs])
     # ---- the city's market value on the roll in effect before the date (class-1 homes only)
     R = roll[roll["mv"] > 0]
-    rel = roll_releases(sorted(R["year"].unique()))
+    rel = roll_releases_of(R)
     mvmap = {(p, y, q): v for p, y, q, v in zip(R["parid"], R["year"], R["period"], R["mv"])}
     X["class1"] = X["tax_class_sale"].astype(str).str.startswith("1") & (X["grp"] != "4F")
     mv = []

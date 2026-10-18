@@ -98,9 +98,12 @@ def test_contract_refuses_text_in_metric_blobs():
     contract.number_tree({"gate": {"all": {"n": 10, "w10": 0.5}}, "q": [0.1, None, True]})
 
 
-def _payload(n=450):
-    run = {"runId": "run-test-0001", "expectedRows": n, "gates": {"passed": True, "checks": []}}
-    rows = [{"contactId": f"c{i}"} for i in range(n)]
+def _payload(n=1450):
+    counts = {"targets": n, "valued": n, "five_plus_units": 0, "condo_without_unit": 0, "not_found": 0, "other_property_type": 0,
+              "trainingSales": 10, "gateSales": 10}
+    checks = [{"key": "sellers_valued", "value": float(n), "pass": True}]
+    run = {"runId": "run-test-0001", "expectedRows": n, "counts": counts, "gates": {"passed": True, "checks": checks}}
+    rows = [{"contactId": f"c{i}", "value": 1e6, "reason": None} for i in range(n)]
     return run, rows
 
 
@@ -109,8 +112,8 @@ def test_publish_sends_start_rows_publish():
     run, rows = _payload()
     assert runjob.publish(fake, run, rows, True, log=lambda m: None)
     kinds = [c["action"] for c in fake.calls]
-    assert kinds == ["start", "rows", "rows", "rows", "publish"]
-    assert [len(c["rows"]) for c in fake.calls if c["action"] == "rows"] == [config.BATCH_SIZE, config.BATCH_SIZE, 50]
+    assert kinds == ["start"] + ["rows"] * 8 + ["publish"]
+    assert [len(c["rows"]) for c in fake.calls if c["action"] == "rows"] == [config.BATCH_SIZE] * 7 + [50]
 
 
 def test_failed_gates_record_the_run_and_publish_nothing():
@@ -126,10 +129,18 @@ def test_sellers_dealflow_no_longer_lists_are_dropped_and_the_run_restarted():
     run, rows = _payload()
     assert runjob.publish(fake, run, rows, True, log=lambda m: None)
     starts = [c for c in fake.calls if c["action"] == "start"]
-    assert [s["run"]["expectedRows"] for s in starts] == [450, 449, 448]  # c5 and c250 sit in different batches
+    assert [s["run"]["expectedRows"] for s in starts] == [1450, 1449, 1448]  # c5 and c250 sit in different batches
+    assert [s["run"]["counts"]["valued"] for s in starts] == [1450, 1449, 1448]
     sent = [r["contactId"] for c in fake.calls if c["action"] == "rows" for r in c["rows"]]
-    assert "c5" not in sent and "c250" not in sent and len(sent) == 448
+    assert "c5" not in sent and "c250" not in sent and len(sent) == 1448
     assert fake.calls[-1]["action"] == "publish"
+
+
+def test_dropping_refused_sellers_below_the_minimum_publishes_nothing():
+    fake = FakeDealFlow(unknown={f"c{i}" for i in range(0, 1450, 9)})  # 162 sellers gone: 1,288 left, under 1,300
+    run, rows = _payload()
+    assert not runjob.publish(fake, run, rows, True, log=lambda m: None)
+    assert "publish" not in [c["action"] for c in fake.calls]
 
 
 def test_other_refusals_stop_the_run():
@@ -139,7 +150,7 @@ def test_other_refusals_stop_the_run():
                 raise Refused(400, {"error": "invalid_payload"})
             return super().post(payload)
     fake = Broken()
-    run, rows = _payload(10)
+    run, rows = _payload()
     with pytest.raises(Refused):
         runjob.publish(fake, run, rows, True, log=lambda m: None)
     assert "publish" not in [c["action"] for c in fake.calls]

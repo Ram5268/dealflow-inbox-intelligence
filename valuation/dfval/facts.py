@@ -12,11 +12,15 @@ import numpy as np
 import pandas as pd
 
 from . import config
-from .frame import roll_for, roll_releases
+from .frame import roll_for, roll_releases_of
 
 COMP_ADDRESS = re.compile(r"^[0-9]+(-[0-9]+)?[A-Z]? [A-Za-z0-9 #&'().,/-]{2,72}$")
 ZONING = re.compile(r"^[A-Z0-9/.-]{1,16}$")
 BLDG_CLASS = re.compile(r"^[A-Z][0-9A-Z]$")
+# DealFlow's limits (lib/valuations/contract.ts): a fact outside them is left out rather than
+# letting one odd lot or lead refuse a whole batch of 200 (engineering precaution).
+MAX_AREA = 10_000_000
+MAX_MONEY = 1_000_000_000
 
 
 def comp_address(a: str | None) -> str | None:
@@ -75,7 +79,7 @@ class FactSources:
         self.last_sale = clean.groupby("bbl")[["date", "price"]].last()
         inp.extend_roll(lots)
         R = inp.roll[(inp.roll["mv"] > 0) & inp.roll["parid"].isin(lots)]
-        rl = roll_for(asof, roll_releases(sorted(R["year"].unique())))
+        rl = roll_for(asof, roll_releases_of(R))
         self.roll_year = rl[0] if rl else None
         self.mv = R[(R["year"] == rl[0]) & (R["period"] == rl[1])].drop_duplicates("parid").set_index("parid")["mv"] if rl else pd.Series(dtype=float)
         dv = raw.dob_violations()
@@ -95,28 +99,28 @@ def facts_for(src: FactSources, bbl: str, permits: dict, subway_mi, lead_units, 
         return None
     p = src.pluto.loc[bbl]
     units = _num(p["unitsres"], 0, 1_000_000)
-    bsqft = _num(p["bldgarea"], 1)
+    bsqft = _num(p["bldgarea"], 1, MAX_AREA)
     zoning = p["zonedist1"] if isinstance(p["zonedist1"], str) and ZONING.match(p["zonedist1"]) else None
     cls = p["bldgclass"] if isinstance(p["bldgclass"], str) and BLDG_CLASS.match(p["bldgclass"]) else None
     yb = _num(p["yearbuilt"], 1700, 2100)
     ls = src.last_sale.loc[bbl] if bbl in src.last_sale.index else None
     mv = src.mv.get(bbl)
     lu = _num(lead_units, 0, 1_000_000)
-    lsq = _num(lead_sqft, 1)
+    lsq = _num(lead_sqft, 1, MAX_AREA)
     vs_units = {"lead": int(lu), "city": int(units)} if (lu is not None and units is not None and int(lu) != int(units)) else None
     vs_sqft = ({"lead": round(lsq), "city": round(bsqft)} if (lsq is not None and bsqft is not None and abs(lsq / bsqft - 1) > 0.10) else None)
     subway = _num(subway_mi, 0, 25)
     return {
         "units": int(units) if units is not None else None,
         "buildingSqft": round(bsqft) if bsqft is not None else None,
-        "lotSqft": round(v) if (v := _num(p["lotarea"], 1)) is not None else None,
+        "lotSqft": round(v) if (v := _num(p["lotarea"], 1, MAX_AREA)) is not None else None,
         "yearBuilt": int(yb) if yb is not None else None,
         "floors": _num(p["numfloors"], 0, 200),
         "zoning": zoning,
         "buildingClass": cls,
         "historicDistrict": bool(pd.notna(p["histdist"])),
         "lastSale": {"date": ls["date"].date().isoformat(), "price": float(ls["price"])} if ls is not None else None,
-        "dofMarketValue": {"value": float(mv), "fiscalYear": int(src.roll_year)} if (mv is not None and pd.notna(mv) and mv > 0) else None,
+        "dofMarketValue": {"value": float(mv), "fiscalYear": int(src.roll_year)} if (mv is not None and pd.notna(mv) and 0 < mv <= MAX_MONEY) else None,
         "permits7y": permits,
         "openViolations": {"dob": int(src.open_dob.get(bbl, 0)), "ecb": int(src.open_ecb.get(bbl, 0)), "hpd": int(src.open_hpd.get(bbl, 0))},
         "subwayMiles": round(subway, 2) if subway is not None else None,

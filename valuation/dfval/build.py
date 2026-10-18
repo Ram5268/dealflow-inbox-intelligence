@@ -14,7 +14,7 @@ from scipy.spatial import cKDTree
 from . import config
 from .deeds import deed_table, match_deeds
 from .features import alteration_events, base_features, cond_features, month_indexes, r2_features, xy
-from .frame import build_frame, class_group, roll_for, roll_releases, subjects
+from .frame import build_frame, class_group, roll_for, roll_releases_of, subjects
 from .raw import Raw
 from .sales import build_sales
 
@@ -27,6 +27,12 @@ class Inputs:
         t0 = time.time()
         self.raw, self.log = raw, log
         self.sales, self.sales_info = build_sales(raw)
+        # A sale dated after the files were downloaded can't be real; one such row would otherwise
+        # move the as-of date and the gate months (engineering precaution).
+        downloaded = pd.Timestamp(raw.manifest["run"]["finished_at"][:10])
+        late = self.sales["date"] > downloaded
+        self.sales_info["dropped_after_download"] = int(late.sum())
+        self.sales = self.sales[~late].reset_index(drop=True)
         self.end = (self.sales["date"].max() + pd.Timedelta(days=1)).normalize()
         log(f"sales: {len(self.sales):,} rows, cut-over {self.sales_info['cutover']}, through {self.sales_info['rolling_last_sale']} ({time.time() - t0:.0f}s)")
         self.pluto = raw.pluto().drop_duplicates("bbl").reset_index(drop=True)
@@ -67,7 +73,7 @@ class Inputs:
         S = self.S
         self.extend_roll(set(sellers["bbl"]))
         R = self.roll[self.roll["mv"] > 0]
-        rel = roll_releases(sorted(R["year"].unique()))
+        rel = roll_releases_of(R)
         rl = roll_for(asof, rel)
         taxclass = R[(R["year"] == rl[0]) & (R["period"] == rl[1])].drop_duplicates("parid").set_index("parid")["curtaxclass"] if rl else pd.Series(dtype=object)
         # Neighborhood: the lot's own latest DOF sale record (any building class), else the nearest sale's.

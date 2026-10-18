@@ -64,6 +64,7 @@ class Raw:
         self.raw = os.path.join(data_dir, "raw")
         if not os.path.isdir(self.raw):
             raise FileNotFoundError(f"no raw/ folder in {data_dir}: run valuation/fetch first")
+        self.manifest  # refuses a folder whose download didn't complete, before any work
 
     # ---- the manifest ----------------------------------------------------------------
     @cached_property
@@ -175,6 +176,7 @@ class Raw:
     def dob_permits(self) -> pd.DataFrame:
         """DOB BIS alteration permits (A1-A3), the research's bt_dob_bis columns."""
         df = self._read("dob_permits", ["bbl", "job__", "job_type", "work_type", "issuance_date", "permit_status"])
+        df = df[df["job_type"].isin(["A1", "A2", "A3"])]  # valuation/fetch filters these too; don't depend on it
         df["bbl"] = clean_bbl(df["bbl"]).astype(object)
         return df[df["bbl"].notna()].drop_duplicates().reset_index(drop=True)
 

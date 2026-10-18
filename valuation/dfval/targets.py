@@ -59,9 +59,8 @@ def parse_address(addr: str | None) -> Parsed | None:
         t = re.sub(r"^(\d+)(ST|ND|RD|TH)$", r"\1", t)  # 57TH -> 57
         t = {"SAINT": "ST", "MOUNT": "MT", "FORT": "FT"}.get(t, t)
         toks.append(DIRECTION.get(t, t))
-    if toks and toks[-1] in SUFFIX:
-        toks[-1] = SUFFIX[toks[-1]]
-    street = " ".join(toks)
+    # Street-type words in any position, so "AVENUE J" and "AVE J" agree (both sides are normalized alike).
+    street = " ".join(SUFFIX.get(t, t) for t in toks)
     street = re.sub(r"\b(MC|MAC) (?=[A-Z])", r"\1", street)  # MC DONALD AVE -> MCDONALD AVE, MAC DONOUGH -> MACDONOUGH
     return Parsed(number=number.lstrip("0") or "0", letter=letter, street=street, unit=unit)
 
@@ -78,6 +77,17 @@ def _edit1(a: str, b: str) -> bool:
     return any(t[:i] + t[i + 1:] == s for i in range(len(t)))
 
 
+def _spelling_twin(a: str, b: str) -> bool:
+    """Two street names that differ only by a one-letter slip inside one word of 4+ letters
+    ("EXMPLE ST" / "EXAMPLE ST"). Never a different number ("E 52 ST" / "E 51 ST" / "E 5 ST"),
+    direction ("E 52 ST" / "W 52 ST") or suffix: those are other streets (engineering precaution)."""
+    ta, tb = a.split(), b.split()
+    if a == b or len(ta) != len(tb):
+        return False
+    diff = [(x, y) for x, y in zip(ta, tb) if x != y]
+    return len(diff) == 1 and all(len(w) >= 4 and w.isalpha() for w in diff[0]) and _edit1(*diff[0])
+
+
 class AddressIndex:
     """Property address -> tax lot, from PLUTO's lot addresses first, then DOF sales addresses.
 
@@ -89,7 +99,7 @@ class AddressIndex:
 
     def __init__(self, pluto: pd.DataFrame, sales: pd.DataFrame):
         self.exact: dict[tuple, set[str]] = defaultdict(set)      # (boro, number+letter, street)
-        self.loose: dict[tuple, set[str]] = defaultdict(set)      # (boro, number, street), any letter
+        self.loose: dict[tuple, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))  # (boro, number, street) -> {letter: lots}
         self.by_number: dict[tuple, set[tuple]] = defaultdict(set)  # (boro, number) -> {(street, bbl)}
         for src, df in (("pluto", pluto[["bbl", "address"]]), ("sales", sales[["bbl", "address"]].dropna().drop_duplicates())):
             for b, a in zip(df["bbl"], df["address"]):
@@ -97,7 +107,7 @@ class AddressIndex:
                 if not p:
                     continue
                 self.exact[(src, b[0], p.number + p.letter, p.street)].add(b)
-                self.loose[(src, b[0], p.number, p.street)].add(b)
+                self.loose[(src, b[0], p.number, p.street)][p.letter].add(b)
                 self.by_number[(src, b[0], p.number)].add((p.street, b))
         self.zip_of = dict(zip(pluto["bbl"], pluto["zipcode"]))
         self.lot = pluto.set_index("bbl")[["unitsres", "bldgarea", "bldgclass"]]
@@ -131,20 +141,30 @@ class AddressIndex:
         if boro is None:
             return None, p, "no_borough"
         z = (zip_ or "").strip()[:5]
+        # Each step finds lots grouped by the address they sit at. A step that finds lots at more
+        # than one address (123A and 123B; North and South 5th St) is ambiguous: the seller gets
+        # "not found" rather than a guess (engineering precaution: a wrong lot is worse than none,
+        # and a published lot is reused as the cached lot every month after).
         steps = []
         for src in ("pluto", "sales"):
-            steps.append((f"{src}", self.exact.get((src, boro, p.number + p.letter, p.street), set())))
-            steps.append((f"{src}_no_letter", self.loose.get((src, boro, p.number, p.street), set())))
+            steps.append((f"{src}", {"": self.exact.get((src, boro, p.number + p.letter, p.street), set())}))
+            steps.append((f"{src}_no_letter", self.loose.get((src, boro, p.number, p.street), {})))
         for src in ("pluto", "sales"):
-            for v in self._street_variants(p.street):
-                steps.append((f"{src}_direction", self.exact.get((src, boro, p.number + p.letter, v), set()) | self.loose.get((src, boro, p.number, v), set())))
+            steps.append((f"{src}_direction", {v: self.exact.get((src, boro, p.number + p.letter, v), set())
+                                               | set().union(*self.loose.get((src, boro, p.number, v), {}).values())
+                                               for v in self._street_variants(p.street)}))
         for src in ("pluto", "sales"):
-            near = {b for st, b in self.by_number.get((src, boro, p.number), set()) if st != p.street and _edit1(st, p.street)
-                    and st.rsplit(" ", 1)[-1] == p.street.rsplit(" ", 1)[-1]}
+            near: dict[str, set[str]] = defaultdict(set)
+            for st, b in self.by_number.get((src, boro, p.number), set()):
+                if _spelling_twin(st, p.street):
+                    near[st].add(b)
             steps.append((f"{src}_spelling", near))
-        for how, hit in steps:
-            hit = self._zip_ok(hit, z)
-            if hit:
+        for how, groups in steps:
+            groups = {k: h for k, v in groups.items() if (h := self._zip_ok(v, z))}
+            if len(groups) > 1:
+                return None, p, how + "_ambiguous"
+            if groups:
+                hit = next(iter(groups.values()))
                 return self.pick(hit, lead_units, lead_sqft), p, how + ("_multi" if len(hit) > 1 else "")
         return None, p, "no_match"
 

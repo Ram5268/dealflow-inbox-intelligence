@@ -26,16 +26,42 @@ from .facts import FactSources, card_comps, facts_for, permits_7y
 from .features import alteration_events, xy
 from .raw import Raw
 from .scoreboard import scoreboard, spread_quantiles
-from .targets import AddressIndex, no_value_reason
+from .targets import AddressIndex, no_value_reason, parse_address
 
 _BBL_OK = lambda b: isinstance(b, str) and len(b) == 10 and b.isdigit() and b[0] in "34"  # noqa: E731
 
 
-def plan_months(asof: pd.Timestamp) -> tuple[list[pd.Timestamp], list[pd.Timestamp]]:
+def plan_months(asof: pd.Timestamp, month_counts: pd.Series | None = None) -> tuple[list[pd.Timestamp], list[pd.Timestamp]]:
+    """The 3 most recent complete months (gates) and the 12 before them (range sizing).
+
+    The newest month is only partly recorded when the files are downloaded (deeds and DOF's
+    monthly file lag by weeks). It counts as complete only when it has at least 75% of the
+    usual number of scored sales (the median of the 6 months before it); otherwise the gate
+    months end a month earlier (engineering precaution: a half-recorded month over-represents
+    quickly recorded deeds)."""
     last = (asof - pd.Timedelta(days=1)).to_period("M").to_timestamp()
+    if month_counts is not None:
+        before = [month_counts.get(last - pd.DateOffset(months=k), 0) for k in range(1, 7)]
+        if month_counts.get(last, 0) < config.COMPLETE_MONTH_SHARE * float(np.median(before)):
+            last = last - pd.DateOffset(months=1)
     gate = [last - pd.DateOffset(months=k) for k in range(config.GATE_MONTHS - 1, -1, -1)]
     rng = [gate[0] - pd.DateOffset(months=k) for k in range(config.RANGE_TUNE_MONTHS, 0, -1)]
     return rng, gate
+
+
+def size_ranges(pred: np.ndarray, y: np.ndarray, top: np.ndarray, in_rng: np.ndarray, in_gate: np.ndarray) -> dict:
+    """Half-widths per segment, chosen on the range months so the shown range (value x (1 +/- w))
+    holds the sale price 2 times in 3; coverage is then measured on the gate months only."""
+    miss = np.abs(np.exp(y - pred) - 1)  # |price / value - 1|: the price is inside value x (1 +/- w) when miss <= w
+    ok = np.isfinite(miss)
+    w_top = float(np.quantile(miss[in_rng & top & ok], config.RANGE_COVER))
+    w_other = float(np.quantile(miss[in_rng & ~top & ok], config.RANGE_COVER))
+    w = np.where(top, w_top, w_other)
+    inside = ok & (miss <= w)
+    g = in_gate & ok
+    return {"w_top": w_top, "w_other": w_other, "w": w, "inside": inside,
+            "cover": float(inside[g].mean()) if g.any() else float("nan"),
+            "cover_top": float(inside[g & top].mean()) if (g & top).any() else None}
 
 
 def match_targets(sellers: pd.DataFrame, pluto: pd.DataFrame, ix: AddressIndex) -> pd.DataFrame:
@@ -43,7 +69,7 @@ def match_targets(sellers: pd.DataFrame, pluto: pd.DataFrame, ix: AddressIndex) 
     P = pluto.set_index("bbl")
     out = []
     for r in sellers.itertuples():
-        bbl, parsed, how = None, None, "cached"
+        bbl, parsed, how = None, parse_address(r.address), "cached"  # parsed even for a cached lot: its unit number decides the reason
         if _BBL_OK(getattr(r, "cachedBbl", None)) and r.cachedBbl in P.index:
             bbl = r.cachedBbl
         lu = float(r.unitCount) if pd.notna(r.unitCount) else None
@@ -88,8 +114,7 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
     inp = Inputs(raw, screen="name-free", log=log)
     asof = inp.end
     data_through = asof - pd.Timedelta(days=1)
-    rng_months, gate_months = plan_months(asof)
-    log(f"as of {asof.date()}; range months {rng_months[0].date()}..{rng_months[-1].date()}; gate months {gate_months[0].date()}..{gate_months[-1].date()}")
+    rng_months, gate_months = None, None  # chosen below, once the scored sales' months are known
 
     # ---- sellers -> tax lots -> reasons
     ix = AddressIndex(inp.pluto, inp.sales)
@@ -99,6 +124,8 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
 
     # ---- rows and inputs
     Xs = inp.sale_rows(config.T_ORIGIN, asof)
+    rng_months, gate_months = plan_months(asof, Xs.groupby("month").size())
+    log(f"as of {asof.date()}; range months {rng_months[0].date()}..{rng_months[-1].date()}; gate months {gate_months[0].date()}..{gate_months[-1].date()}")
     Xv = inp.seller_rows(M[M["reason"].isna()][["contactId", "bbl"]], asof)
     X = pd.concat([Xs, Xv], ignore_index=True)
     comps_out: dict = {}
@@ -111,15 +138,11 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
     seg = MD.segments(X)
     top = seg["top8_two_to_four"]
     price = X["price"].to_numpy(float)
-    err = np.abs(np.exp(pred - y) - 1)
-    in_rng = X["month"].isin(rng_months).to_numpy() & np.isfinite(err)
-    in_gate = X["month"].isin(gate_months).to_numpy() & np.isfinite(err)
-    w_top = float(np.quantile(err[in_rng & top], config.RANGE_COVER))
-    w_other = float(np.quantile(err[in_rng & ~top], config.RANGE_COVER))
-    w = np.where(top, w_top, w_other)
-    v = np.exp(pred)
-    inside = (price >= v * (1 - w)) & (price <= v * (1 + w))
-    cover = float(inside[in_gate].mean())
+    scored = np.isfinite(pred) & np.isfinite(y)
+    in_rng = X["month"].isin(rng_months).to_numpy() & scored
+    in_gate = X["month"].isin(gate_months).to_numpy() & scored
+    rs = size_ranges(pred, y, top, in_rng, in_gate)
+    w_top, w_other, inside, cover = rs["w_top"], rs["w_other"], rs["inside"], rs["cover"]
     gm = {k: MD.metrics(pred, price, in_gate & m) for k, m in seg.items()}
 
     # ---- the final model: every priced sale before the as-of date (at most 48 months back)
@@ -169,7 +192,7 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
     metrics = {
         "gate": gm,
         "range": {"halfwidth_top8_two_to_four": round(w_top, 4), "halfwidth_other": round(w_other, 4), "coverage_gate": round(cover, 4),
-                  "coverage_gate_top8_two_to_four": round(float(inside[in_gate & top].mean()), 4) if (in_gate & top).any() else None,
+                  "coverage_gate_top8_two_to_four": round(rs["cover_top"], 4) if rs["cover_top"] is not None else None,
                   "range_months": len(rng_months)},
         "spread_q_top8_two_to_four": (own_q := spread_quantiles(pred, y, in_rng & top)),
         # The same scoreboard with this model's own spread table, to show whether the live table still fits (PR 4).
@@ -211,6 +234,15 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
     return summary
 
 
+def recount(run_payload: dict, rows: list[dict]) -> dict:
+    """The run's counts and its sellers-valued gate, recomputed for the rows that remain."""
+    valued = sum(r["value"] is not None for r in rows)
+    counts = dict(run_payload["counts"], targets=len(rows), valued=valued, **{k: sum(r["reason"] == k for r in rows) for k in config.NO_VALUE_REASONS})
+    checks = [dict(c, value=float(valued), **{"pass": valued >= config.GATES["sellers_valued"]["min"]}) if c["key"] == "sellers_valued" else c
+              for c in run_payload["gates"]["checks"]]
+    return dict(run_payload, counts=counts, expectedRows=len(rows), gates={"passed": all(c["pass"] for c in checks), "checks": checks})
+
+
 def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool, log) -> bool:
     """start -> rows (200 at a time) -> publish. A seller DealFlow no longer counts as a CRM seller
     is dropped and the run restarted with the smaller row count (CONTRACT.md §3)."""
@@ -231,8 +263,11 @@ def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool,
                 raise
             log(f"DealFlow no longer lists {len(unknown)} seller(s); dropping them and restarting the run's row count")
             rows = [x for x in rows if x["contactId"] not in unknown]
-            run_payload = dict(run_payload, expectedRows=len(rows))
-            client.post({"action": "start", "run": run_payload})
+            run_payload = recount(run_payload, rows)
+            r = client.post({"action": "start", "run": run_payload})
+            if not (run_payload["gates"]["passed"] and r.get("gatesPassed")):
+                log("after dropping them a gate fails: nothing published; DealFlow keeps the last published values")
+                return False
     client.post({"action": "publish", "runId": run_payload["runId"]})
     log(f"published run {run_payload['runId']}: {len(rows):,} rows")
     return True

@@ -36,9 +36,15 @@ def class_group(c) -> str | None:
 
 # The roll in effect before a date: tentative rolls come out about Jan 15, final rolls about
 # Jun 1, of the year before the fiscal year (research: backtest.py ROLLS).
-def roll_releases(years) -> list[tuple[int, int, pd.Timestamp]]:
+def roll_releases(years, present: set | None = None) -> list[tuple[int, int, pd.Timestamp]]:
+    """With `present` (the (year, period) pairs in the file), only rolls that exist: a year whose
+    final roll isn't posted yet falls back to its tentative roll instead of to no value at all."""
     return [(fy, per, pd.Timestamp(f"{fy - 1}-01-15") if per == 1 else pd.Timestamp(f"{fy - 1}-06-01"))
-            for fy in years for per in (1, 3)]
+            for fy in years for per in (1, 3) if present is None or (fy, per) in present]
+
+
+def roll_releases_of(R: pd.DataFrame) -> list[tuple[int, int, pd.Timestamp]]:
+    return roll_releases(sorted(R["year"].unique()), present=set(zip(R["year"], R["period"])))
 
 
 def roll_for(d: pd.Timestamp, releases) -> tuple[int, int] | None:
@@ -110,7 +116,7 @@ def price_to_market_value(S: pd.DataFrame, roll: pd.DataFrame | None) -> pd.Seri
     if roll is None or roll.empty:
         return out
     R = roll[roll["mv"] > 0]
-    rel = roll_releases(sorted(R["year"].unique()))
+    rel = roll_releases_of(R)
     mv = {(p, y, q): v for p, y, q, v in zip(R["parid"], R["year"], R["period"], R["mv"])}
     m = S["acris_matched"].to_numpy()
     vals = []

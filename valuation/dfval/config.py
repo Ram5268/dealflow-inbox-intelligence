@@ -92,6 +92,7 @@ MAX_COMPS = 8              # nearby sales stored for the CRM card
 RANGE_COVER = 2 / 3
 RANGE_TUNE_MONTHS = 12  # half-widths re-chosen each run on these months (Brief 44 revision 2)
 GATE_MONTHS = 3         # the publish gates are checked on the 3 most recent complete months
+COMPLETE_MONTH_SHARE = 0.75  # the newest month counts as complete with >= 75% of the usual scored sales
 
 # ---- Publish gates (engineering precautions, Brief 44 §5; DealFlow re-checks them) ---------
 GATES = {
