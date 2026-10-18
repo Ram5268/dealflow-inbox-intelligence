@@ -3,8 +3,9 @@
 // status-checked (streetEasyCheckedAt IS NULL). Each call is 1 RapidAPI
 // hit (the SE ID is already known, so no address search).
 //
-// Manual-run, batched. Default batch size 200; override as first arg:
-//   npx tsx scripts/catch-up-sweep.ts 200
+// Manual-run, batched. Default batch size 200; override as first arg.
+// A dry run (the batch it would check, no API calls) unless --apply:
+//   npx tsx scripts/catch-up-sweep.ts --apply 200
 //
 // Budget gate (lib/streetEasySync.ts:checkAndIncrementQuota) hard-pauses
 // at 4900/5000 calls/month. QuotaExhaustedError caught here for a clean
@@ -13,8 +14,13 @@
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { syncOpportunityStatus, QuotaExhaustedError } from '../lib/streetEasySync'
+import { maintenanceApply, scriptArgs } from '../lib/dbGuard'
 
-const BATCH      = parseInt(process.argv[2] ?? '200', 10)
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/catch-up-sweep.ts (DATABASE_URL)')
+
+const BATCH      = parseInt(scriptArgs()[0] ?? '200', 10)
 const SLEEP_MS   = 250
 const TIMEOUT_MS = 30_000
 
@@ -44,7 +50,12 @@ async function main() {
     take: BATCH,
   })
 
-  console.log(`[catch-up-sweep] Processing ${records.length} never-checked records (batch size ${BATCH})`)
+  console.log(`[catch-up-sweep] ${APPLY ? 'Processing' : 'Dry run:'} ${records.length} never-checked records (batch size ${BATCH})`)
+  if (!APPLY) {
+    console.log('[catch-up-sweep] Nothing checked or written. Re-run with --apply to check them on StreetEasy (1 RapidAPI call each).')
+    await prisma.$disconnect()
+    return
+  }
   let updated = 0, unchanged = 0, errors = 0
 
   for (const r of records) {

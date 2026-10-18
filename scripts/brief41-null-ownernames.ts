@@ -1,5 +1,7 @@
 // Brief 41 (H8) — erase stored PLUTO owner names.
 //
+// Retired: it ran on 2026-10-16 and is kept only for the record.
+//
 // DealFlow used to save PLUTO's `ownername` in NycParcelCache and to write it
 // into the property-type reason ("…+ownername_corp:<name>") on the cache and
 // on ExtractedOpportunity. The code no longer does either; this clears what is
@@ -15,9 +17,14 @@
 //   npx tsx scripts/brief41-null-ownernames.ts --apply    # null the names, strip them from reasons
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
+import { maintenanceApply } from '../lib/dbGuard'
 
-// Roughly the words lib/extraction/personalCircumstances.ts filters (Postgres
-// regex; "estate" only when not "real estate").
+// Brief 41.2 (engineering precaution): --apply on a live database also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/brief41-null-ownernames.ts (DATABASE_URL)')
+
+// Roughly the words the Brief 41 (H9) life-events filter dropped before saving;
+// Ryan's decision of 2026-10-17 removed that filter. A Postgres regex; "estate"
+// only when not "real estate".
 const PERSONAL_SQL =
   '\\m(probat\\w*|divorc\\w*|ex-(wife|husband|spouse)|passed\\s+away|deceased|deaths?|died|dies|funeral|widow\\w*|heirs?|inherit\\w*|' +
   'executors?|executrix|(?<!real[ -])estates?|terminally ill|illness|cancer|hospice|nursing home|assisted living|dementia|alzheimer\\w*)\\M'
@@ -42,7 +49,7 @@ async function counts() {
 }
 
 async function main() {
-  const apply = process.argv.includes('--apply')
+  const apply = APPLY
   const before = await counts()
   console.log(JSON.stringify({ before }, null, 2))
   if (!apply) {

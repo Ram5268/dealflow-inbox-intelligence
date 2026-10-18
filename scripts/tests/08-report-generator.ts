@@ -7,6 +7,12 @@ import 'dotenv/config'
 import { prisma } from '@/lib/prisma'
 import Anthropic from '@anthropic-ai/sdk'
 import { generateBuyerMatchReport, generateBuyerMatchSection } from '@/lib/reports/generators/buyer-match'
+import { refuseLiveDatabase } from '@/lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a spot check against seed data that
+// spends Anthropic money, so it refuses any database but a *_perf or *_test
+// one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/tests/08-report-generator.ts (DATABASE_URL)')
 
 // Default: [TEST_10] SE Buyer ISO — 2BR Soho (1 HOT, 3 WARM, 1 POSSIBLE).
 const BUYER_ID = process.argv[2] ?? 'cmsp7l5he001qloo89haui4u2'

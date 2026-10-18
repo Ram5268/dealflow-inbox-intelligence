@@ -7,13 +7,19 @@
 //
 //   npx tsx scripts/brief41-delete-outlook-token.ts            # dry run (default): report only
 //   npx tsx scripts/brief41-delete-outlook-token.ts --apply    # delete the row + an AuditLog entry
+// (Brief 41.2: on the live database --apply also needs --i-mean-live.)
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/brief41-delete-outlook-token.ts (DATABASE_URL)')
 
 const ID = 'runtime-token'
 
 async function main() {
-  const apply = process.argv.includes('--apply')
+  const apply = APPLY
   const row = await prisma.connectedMailbox.findUnique({
     where: { id: ID },
     select: {

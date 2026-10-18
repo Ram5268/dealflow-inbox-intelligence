@@ -8,7 +8,12 @@ import { register } from 'tsconfig-paths'
 register({ baseUrl: process.cwd(), paths: { '@/*': ['./*'] } })
 import { prisma } from '../lib/prisma'
 import { Category } from '@prisma/client'
+import { refuseLiveDatabase } from '../lib/dbGuard'
 const { scoreMatch, qualifiesAsMatch } = require('../lib/matchmaking') as typeof import('../lib/matchmaking')
+
+// Brief 41.2 (engineering precaution): it scores seed rows, so it refuses any
+// database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/eval-seed-matches.ts (DATABASE_URL)')
 
 // Brief 2.5, Step 4d — BEFORE/AFTER seed-match comparison ($0, read-only except
 // for writing the results doc).

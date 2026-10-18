@@ -1,5 +1,5 @@
 // Backfill all StreetEasy hotsheets from 90 days ago up to yesterday.
-// Run: npx tsx --no-cache scripts/backfill-hotsheets.ts
+// Run: npx tsx --no-cache scripts/backfill-hotsheets.ts --apply   (without --apply: a dry run listing the days)
 //
 // Fetches both sale + rental hotsheets for every day.
 // Already-stored listings are updated (not duplicated) via streetEasyId upsert.
@@ -7,6 +7,12 @@
 
 import { runHotsheetSync } from '../lib/streetEasyHotsheet'
 import { prisma } from '../lib/prisma'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+// The dry run fetches nothing (no ScrapingBee calls).
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/backfill-hotsheets.ts (DATABASE_URL)')
 
 async function main() {
   const today    = new Date()
@@ -24,7 +30,11 @@ async function main() {
     cur.setDate(cur.getDate() + 1)
   }
 
-  console.log(`\nBackfilling ${dates.length} days: ${dates[0]} → ${dates[dates.length - 1]}`)
+  console.log(`\n${APPLY ? 'Backfilling' : 'Dry run: would backfill'} ${dates.length} days: ${dates[0]} → ${dates[dates.length - 1]}`)
+  if (!APPLY) {
+    console.log('Nothing fetched or saved. Re-run with --apply to scrape them through ScrapingBee and save the listings (~20-30 minutes).')
+    return
+  }
   console.log('This will take ~20-30 minutes. Do not interrupt.\n')
 
   let totalSales   = 0

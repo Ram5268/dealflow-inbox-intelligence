@@ -19,7 +19,6 @@
 import { z } from 'zod'
 import type Anthropic from '@anthropic-ai/sdk'
 import type { Category } from '@prisma/client'
-import { safeLeadText, safeStatus, safeConversationText, leadFallbackTitle } from './personalCircumstances'
 
 // ── The row shape every mapItem produces (subset of ExtractedOpportunity that
 //    an extractor sets; extractEmailV2 adds organizationId/rawEmailId/status). ─
@@ -688,7 +687,7 @@ EXTRACTION RULES:
 - address: the property address they want to list, if stated
 - price: their asking price or estimated value if mentioned
 - beds/baths/squareFeet: the property's details if stated
-- motivation: brief note on why they're selling if mentioned (relocation, downsizing, upsizing, investment, timing). Never record personal circumstances (estate, probate, inheritance, divorce, death, illness, family matters): use null instead, and leave them out of every other field too
+- motivation: brief note on why they're selling if mentioned (estate, divorce, relocation, downsizing, etc.)
 - availabilityDate: when they're thinking of listing ("YYYY-MM-DD" or null)
 - sourceAgentName/Email: the person who sent the email (seller or referring agent)
 - propertyType: condo, co-op, townhouse, multi-family, etc.
@@ -707,14 +706,14 @@ const SELLER_ITEM_PROPS = {
 }
 const SELLER_ITEM_REQUIRED = ['address', 'neighborhood', 'borough', 'city', 'state', 'zip', 'price', 'beds', 'baths', 'squareFeet', 'propertyType', 'availabilityDate', 'status', 'sourceAgentName', 'sourceAgentEmail', 'sourceBrokerage', 'motivation', ...textTailRequired]
 
+// The motivation is saved with the summary, and every free-text field is saved
+// as the model returned it, estate, probate, divorce, death, illness or age
+// details included. Ryan's decision, 2026-10-17: saved seller notes may keep
+// these details. Buyer-facing text still never names motivation (engineering
+// precaution, Brief 41 H7). The decision covers landlord leads and client
+// conversations too (mapLandlord, mapConversation).
 function mapSeller(raw: unknown): OppRowData {
   const l = raw as SellerT
-  // Brief 41 (H9): personal circumstances are dropped from the title, summary,
-  // motivation and reason before saving, even if the model returns them.
-  const text = safeLeadText({
-    title: l.extractedTitle, summary: l.extractedSummary, reason: l.classificationReason, motivation: l.motivation,
-    fallbackTitle: leadFallbackTitle('SELLER_LEAD', l.address ?? l.neighborhood),
-  })
   return {
     category: 'SELLER_LEAD', transactionType: 'SALE', propertyType: l.propertyType ?? null,
     address: l.address ?? null, neighborhood: l.neighborhood ?? null, borough: l.borough ?? null,
@@ -723,11 +722,10 @@ function mapSeller(raw: unknown): OppRowData {
     beds: l.beds ?? null, baths: l.baths ?? null, units: (l.units ?? null) as number | null,
     squareFeet: l.squareFeet ?? null, availabilityDate: l.availabilityDate ?? null,
     sourceAgentName: l.sourceAgentName ?? null, sourceAgentEmail: l.sourceAgentEmail ?? null,
-    // Brief 41.1: the status is free text from the model too.
-    sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'seller', status: safeStatus(l.status),
-    extractedTitle: text.title,
-    extractedSummary: text.summary,
-    classificationReason: text.reason, confidenceScore: l.confidenceScore,
+    sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'seller', status: l.status ?? null,
+    extractedTitle: l.extractedTitle,
+    extractedSummary: l.motivation ? `${l.extractedSummary} Motivation: ${l.motivation}` : l.extractedSummary,
+    classificationReason: l.classificationReason, confidenceScore: l.confidenceScore,
   }
 }
 
@@ -798,15 +796,9 @@ const LANDLORD_ITEM_PROPS = {
 }
 const LANDLORD_ITEM_REQUIRED = ['address', 'neighborhood', 'borough', 'city', 'state', 'zip', 'price', 'minPrice', 'maxPrice', 'beds', 'baths', 'squareFeet', 'propertyType', 'availabilityDate', 'status', 'sourceAgentName', 'sourceAgentEmail', 'sourceBrokerage', 'leaseType', ...textTailRequired]
 
+// Saved as the model returned it (Ryan's decision, 2026-10-17; see mapSeller).
 function mapLandlord(raw: unknown): OppRowData {
   const l = raw as LandlordT
-  // Brief 41 (H9): the same filter as seller leads.
-  const text = safeLeadText({
-    title: l.extractedTitle,
-    summary: l.leaseType ? `${l.extractedSummary} Lease: ${l.leaseType}` : l.extractedSummary,
-    reason: l.classificationReason,
-    fallbackTitle: leadFallbackTitle('LANDLORD_LEAD', l.address ?? l.neighborhood),
-  })
   return {
     category: 'LANDLORD_LEAD', transactionType: 'RENTAL', propertyType: l.propertyType ?? null,
     address: l.address ?? null, neighborhood: l.neighborhood ?? null, borough: l.borough ?? null,
@@ -815,10 +807,10 @@ function mapLandlord(raw: unknown): OppRowData {
     beds: l.beds ?? null, baths: l.baths ?? null, units: (l.units ?? null) as number | null,
     squareFeet: l.squareFeet ?? null, availabilityDate: l.availabilityDate ?? null,
     sourceAgentName: l.sourceAgentName ?? null, sourceAgentEmail: l.sourceAgentEmail ?? null,
-    sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'landlord', status: safeStatus(l.status),
-    extractedTitle: text.title,
-    extractedSummary: text.summary,
-    classificationReason: text.reason, confidenceScore: l.confidenceScore,
+    sourceBrokerage: l.sourceBrokerage ?? null, clientSide: 'landlord', status: l.status ?? null,
+    extractedTitle: l.extractedTitle,
+    extractedSummary: l.leaseType ? `${l.extractedSummary} Lease: ${l.leaseType}` : l.extractedSummary,
+    classificationReason: l.classificationReason, confidenceScore: l.confidenceScore,
   }
 }
 
@@ -947,7 +939,6 @@ EXTRACTION RULES:
 - keyTopics: brief summary of the main topics discussed (2–3 phrases max)
 - nextStep: any explicit follow-up action or next step mentioned
 - extractedSummary: 1–2 sentences capturing who this is and what they need
-- Never record personal circumstances (estate, probate, inheritance, divorce, death, illness, family matters) of a seller, landlord or property owner: leave them out of every field
 - confidenceScore: 0.9+ clear, 0.7–0.9 probable
 
 Return ONLY valid JSON: { "conversations": [...] }`
@@ -959,17 +950,10 @@ const CONVERSATION_ITEM_PROPS = {
 }
 const CONVERSATION_ITEM_REQUIRED = ['clientName', 'clientEmail', 'agentName', 'agentEmail', 'brokerage', 'clientSide', 'neighborhood', 'borough', 'price', 'beds', 'propertyType', 'address', 'keyTopics', 'nextStep', ...textTailRequired]
 
+// Saved as the model returned it, whichever side the client is on (Ryan's
+// decision, 2026-10-17; see mapSeller).
 function mapConversation(raw: unknown, ctx: MapCtx): OppRowData {
   const c = raw as ConversationT
-  // Brief 41.1: a seller's or landlord's conversation (or one whose side isn't
-  // clear) never stores their personal circumstances, like a seller lead.
-  const text = safeConversationText({
-    clientSide: c.clientSide,
-    title: c.extractedTitle,
-    summary: [c.extractedSummary, c.nextStep ? `Next: ${c.nextStep}` : null].filter(Boolean).join(' '),
-    reason: c.classificationReason,
-    fallbackTitle: leadFallbackTitle('CLIENT_CONVERSATION', c.address ?? c.neighborhood),
-  })
   return {
     category: 'CLIENT_CONVERSATION', transactionType: 'UNKNOWN', propertyType: c.propertyType ?? null,
     address: c.address ?? null, neighborhood: c.neighborhood ?? null, borough: c.borough ?? null,
@@ -979,9 +963,9 @@ function mapConversation(raw: unknown, ctx: MapCtx): OppRowData {
     sourceAgentName: c.agentName ?? ctx.senderName ?? null,
     sourceAgentEmail: c.agentEmail ?? ctx.senderEmail ?? null,
     sourceBrokerage: c.brokerage ?? null, clientSide: c.clientSide ?? null, status: null,
-    extractedTitle: text.title,
-    extractedSummary: text.summary,
-    classificationReason: text.reason, confidenceScore: c.confidenceScore,
+    extractedTitle: c.extractedTitle,
+    extractedSummary: [c.extractedSummary, c.nextStep ? `Next: ${c.nextStep}` : null].filter(Boolean).join(' '),
+    classificationReason: c.classificationReason, confidenceScore: c.confidenceScore,
   }
 }
 

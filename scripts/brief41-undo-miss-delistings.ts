@@ -26,6 +26,7 @@
 //
 //   npx tsx scripts/brief41-undo-miss-delistings.ts                         # dry run (default): the split and the --expect number
 //   npx tsx scripts/brief41-undo-miss-delistings.ts --apply --expect <n>    # apply exactly that plan + an AuditLog entry
+// (Brief 41.2: on the live database --apply also needs --i-mean-live.)
 import 'dotenv/config'
 import { resolve } from 'node:path'
 import { prisma } from '../lib/prisma'
@@ -33,12 +34,17 @@ import {
   MISSED, MissRepairRefusal, applyMissRepair, formatMissRepairTable, missRepairSummary, parseExpect, planMissRepair,
 } from '../lib/streetEasyMissRepair'
 import { PrivateDirRefusal, assertPrivateDir, privateDirFrom, privateFileName, writePrivateJson } from '../lib/privateRecord'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/brief41-undo-miss-delistings.ts (DATABASE_URL)')
 
 const ORG_SLUG = 'dealflow-ryan'
 const REPO_ROOT = resolve(__dirname, '..')
 
 async function main() {
-  const apply = process.argv.includes('--apply')
+  const apply = APPLY
   const expect = parseExpect(process.argv)
   const privateDir = privateDirFrom(process.argv)
   if (apply) assertPrivateDir(privateDir, REPO_ROOT) // refuse a bad --preimage-dir before reading anything

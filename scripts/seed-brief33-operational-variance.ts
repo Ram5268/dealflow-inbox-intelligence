@@ -8,10 +8,16 @@
 // scoring inputs — the scorer's recency reads ExtractedOpportunity.createdAt, not
 // Match.createdAt. Idempotent enough for re-runs (re-randomizes).
 //
-// Run:  npx tsx scripts/seed-brief33-operational-variance.ts
+// Run:  npx tsx scripts/seed-brief33-operational-variance.ts   (test databases only)
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { getCurrentOrgId } from '../lib/auth/orgContext'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): the Match update has no test-data
+// filter, so on the live database it would rewrite the dates on real CRM
+// matches. It refuses any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/seed-brief33-operational-variance.ts (DATABASE_URL)')
 
 async function main() {
   const orgId = await getCurrentOrgId()
