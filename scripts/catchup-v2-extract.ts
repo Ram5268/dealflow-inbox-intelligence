@@ -7,11 +7,11 @@
 //   - chunks exist → extractEmailV2 only (cheap, non-destructive)
 //   - chunks absent → ingestEmailV2 end-to-end (full pipeline)
 //
-// Usage:
-//   INGEST_V2=true npx tsx scripts/catchup-v2-extract.ts --dry-run
-//   INGEST_V2=true npx tsx scripts/catchup-v2-extract.ts --confirm
-//   INGEST_V2=true npx tsx scripts/catchup-v2-extract.ts --confirm --limit 10
-//   INGEST_V2=true npx tsx scripts/catchup-v2-extract.ts --confirm --max-cost 25 --concurrency 5
+// Usage (a dry run unless --apply; Brief 41.2 replaced --confirm with --apply):
+//   INGEST_V2=true npx tsx scripts/catchup-v2-extract.ts
+//   INGEST_V2=true npx tsx scripts/catchup-v2-extract.ts --apply
+//   INGEST_V2=true npx tsx scripts/catchup-v2-extract.ts --apply --limit 10
+//   INGEST_V2=true npx tsx scripts/catchup-v2-extract.ts --apply --max-cost 25 --concurrency 5
 import 'dotenv/config'
 process.env.INGEST_V2 = 'true'
 import PQueue from 'p-queue'
@@ -21,6 +21,11 @@ import { sourceClassifier } from '../lib/ingestion/sourceClassifier'
 import { ingestEmailV2 } from '../lib/ingestion/ingestEmailV2'
 import { extractEmailV2 } from '../lib/extraction/extractEmailV2'
 import { runMatchmaking } from '../lib/matchmaking'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/catchup-v2-extract.ts (DATABASE_URL)')
 
 // Gate landed 2026-06-04 21:07 EDT (commit 3cccde1). UTC = 2026-06-05T01:07:16Z.
 const GATE_TS = new Date('2026-06-05T01:07:16.000Z')
@@ -31,16 +36,13 @@ function flagValue(name: string): string | undefined {
   const i = argv.indexOf(name)
   return i >= 0 ? argv[i + 1] : undefined
 }
-const DRY_RUN     = argv.includes('--dry-run')
-const CONFIRM     = argv.includes('--confirm')
+const DRY_RUN     = !APPLY
 const LIMIT       = flagValue('--limit')      ? parseInt(flagValue('--limit')!, 10)        : undefined
 const MAX_COST    = flagValue('--max-cost')   ? parseFloat(flagValue('--max-cost')!)       : undefined
 const CONCURRENCY = flagValue('--concurrency')? parseInt(flagValue('--concurrency')!, 10)  : 5
 
-if (!DRY_RUN && !CONFIRM) {
-  console.error('Refusing to run without --dry-run or --confirm. Pass one explicitly.')
-  process.exit(1)
-}
+// Brief 41.2: the old write flag --confirm no longer writes on its own.
+if (DRY_RUN && argv.includes('--confirm')) console.log('Note: --confirm is now --apply. This run is a dry run.')
 
 interface Candidate {
   id:                 string
@@ -178,7 +180,7 @@ async function main() {
     for (const c of cohort.slice(0, 10)) {
       console.log(`    • ${c.id}  cat=${c.classifierCategory ?? 'NULL'}  chunks=${c.chunkCount}  ${c.subject.slice(0, 70)}`)
     }
-    console.log('\n  DRY RUN — no work performed. Re-run with --confirm to execute.')
+    console.log('\n  DRY RUN — no work performed. Re-run with --apply to execute.')
     await prisma.$disconnect()
     return
   }

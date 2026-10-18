@@ -1,7 +1,13 @@
 // Generates embeddings for all ExtractedOpportunity records that are missing them.
 // Run this once to make your full dataset searchable via semantic search.
+// A dry run (the count, no OpenAI calls) unless --apply.
 import { prisma } from '../lib/prisma'
 import { embedText, buildOpportunityText } from '../lib/embeddings'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/embed-missing.ts (DATABASE_URL)')
 
 async function main() {
   // Find all IDs missing embeddings via raw query (embedding is Unsupported type)
@@ -14,6 +20,7 @@ async function main() {
 
   console.log(`Found ${missing.length} opportunities missing embeddings.`)
   if (missing.length === 0) { console.log('Nothing to do.'); return }
+  if (!APPLY) { console.log('Dry run: nothing embedded. Re-run with --apply to embed them (OpenAI calls).'); return }
 
   // Fetch full records in batches of 50
   const BATCH = 50

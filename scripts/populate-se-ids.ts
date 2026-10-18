@@ -1,8 +1,14 @@
 // Populates streetEasyId for all active listings that don't have one yet.
 // Uses the StreetEasy RapidAPI to find each listing by address.
-// Run: DATABASE_URL="..." RAPIDAPI_KEY="..." npx tsx --no-cache scripts/populate-se-ids.ts
+// Run: DATABASE_URL="..." RAPIDAPI_KEY="..." npx tsx --no-cache scripts/populate-se-ids.ts --apply
+// (without --apply: a dry run that only counts them, no API calls)
 import { prisma } from '../lib/prisma'
 import { syncOpportunityStatus } from '../lib/streetEasySync'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/populate-se-ids.ts (DATABASE_URL)')
 
 const BATCH = 5   // concurrent lookups per batch
 const DELAY = 400 // ms between batches (rate limit)
@@ -27,6 +33,7 @@ async function main() {
 
   console.log(`\nFound ${records.length} records missing streetEasyId\n`)
   if (records.length === 0) { console.log('Nothing to do.'); return }
+  if (!APPLY) { console.log('Dry run: nothing looked up or written. Re-run with --apply to look them up on StreetEasy (RapidAPI calls).'); return }
 
   let found = 0, notFound = 0, failed = 0
 

@@ -7,6 +7,11 @@
 //
 // Run: DATABASE_URL="..." npx tsx --no-cache scripts/reset-seed-active.ts
 import { prisma } from '../lib/prisma'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): test or seed data only, so it refuses
+// any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/reset-seed-active.ts (DATABASE_URL)')
 
 async function main() {
   const { count } = await prisma.extractedOpportunity.updateMany({

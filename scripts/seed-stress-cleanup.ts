@@ -7,6 +7,11 @@
 // Delete:   npx tsx scripts/seed-stress-cleanup.ts
 import { TAG } from './seed-stress-common'
 import { prisma } from '../lib/prisma'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): test or seed data only, so it refuses
+// any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/seed-stress-cleanup.ts (DATABASE_URL)')
 
 const DRY = process.argv.includes('--dry-run')
 

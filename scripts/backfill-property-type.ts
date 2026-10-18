@@ -17,12 +17,17 @@
 // address) are excluded from that denominator; they are correct, not failures.
 // In-script hard stops abort the run if the NYC-bearing FAILURE rate is too high.
 //
-// Usage:
-//   npx tsx scripts/backfill-property-type.ts [--limit N] [--category CAT] [--dry-run] [--ids id1,id2] [--all]
+// Usage (a dry run unless --apply; --dry-run is still accepted):
+//   npx tsx scripts/backfill-property-type.ts [--limit N] [--category CAT] [--apply] [--ids id1,id2] [--all]
 import 'dotenv/config'
 import PQueue from 'p-queue'
 import { prisma } from '../lib/prisma'
 import { resolvePropertyType } from '../lib/enrichment/nyc'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/backfill-property-type.ts (DATABASE_URL)')
 
 // ── Arg parsing (space-separated, matching reprocess-v2-extraction.ts) ─────────
 const argv = process.argv.slice(2)
@@ -32,7 +37,7 @@ function flagValue(name: string): string | undefined {
 }
 const LIMIT    = flagValue('--limit') ? parseInt(flagValue('--limit')!, 10) : undefined
 const CATEGORY = flagValue('--category')
-const DRY_RUN  = argv.includes('--dry-run')
+const DRY_RUN  = !APPLY
 const ALL      = argv.includes('--all')
 const IDS      = flagValue('--ids')?.split(',').map(s => s.trim()).filter(Boolean)
 // Phase 4.6.1 — re-evaluate NYC-bearing nulls (unknown_class / ancillary /
@@ -148,7 +153,7 @@ async function main() {
     }
     if (cohort.length > 20) console.log(`  … and ${cohort.length - 20} more`)
     console.log(`\n  categoryBreakdown: ${JSON.stringify(byCat)}`)
-    console.log('\n  DRY RUN — no enrichment performed.')
+    console.log('\n  DRY RUN — no enrichment performed. Re-run with --apply to enrich them.')
     await prisma.$disconnect()
     return
   }

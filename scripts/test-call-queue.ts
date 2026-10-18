@@ -6,6 +6,12 @@ import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { buildCallQueue } from '../lib/ranking/queueBuilder'
 import { getCurrentOrgId } from '../lib/auth/orgContext'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a spot check of seed data that prints
+// contact names, so it refuses any database but a *_perf or *_test one, with
+// no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/test-call-queue.ts (DATABASE_URL)')
 
 async function main() {
   const orgId = await getCurrentOrgId()

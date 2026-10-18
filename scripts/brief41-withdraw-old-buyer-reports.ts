@@ -16,12 +16,18 @@
 //
 //   npx tsx scripts/brief41-withdraw-old-buyer-reports.ts --before 2026-10-06T05:55:00Z            # dry run (default): counts and ids only
 //   npx tsx scripts/brief41-withdraw-old-buyer-reports.ts --before 2026-10-06T05:55:00Z --apply    # withdraw them + an AuditLog entry
+// (Brief 41.2: on the live database --apply also needs --i-mean-live.)
 import 'dotenv/config'
 import { resolve } from 'node:path'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { NOTE, RECOMMENDATION, RECOMMENDED_CUTOFF, TEMPLATE, applyWithdrawal, parseCutoff } from '../lib/reports/withdrawOldReports'
 import { PrivateDirRefusal, assertPrivateDir, privateDirFrom, privateFileName, writePrivateJson } from '../lib/privateRecord'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/brief41-withdraw-old-buyer-reports.ts (DATABASE_URL)')
 
 const ORG_SLUG = 'dealflow-ryan'
 const REPO_ROOT = resolve(__dirname, '..')
@@ -35,7 +41,7 @@ async function main() {
     return
   }
   const { before } = cutoff
-  const apply = process.argv.includes('--apply')
+  const apply = APPLY
   const privateDir = privateDirFrom(process.argv)
   if (apply) assertPrivateDir(privateDir, REPO_ROOT) // refuse a bad --preimage-dir before reading anything
   console.log(RECOMMENDATION)

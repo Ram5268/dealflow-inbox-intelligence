@@ -5,13 +5,15 @@
 // the hallucination guard never lets a fabricated fact reach the user.
 //
 // Requires the dev server (localhost:3002) running with TEST_MODE_ONLY=true and
-// HALLUCINATION_GUARD_ENABLED unset/true. Spends real API (~$0.30–0.60).
+// HALLUCINATION_GUARD_ENABLED unset/true, on a *_perf or *_test database (it
+// saves the chat rows). Spends real API (~$0.30–0.60).
 //
 // Run: npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/hallucination-adversarial-test.ts
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { scanForStructuralHallucinations } from '../lib/chat/guards/regexGuard'
 import { CANNED_FALLBACK } from '../lib/chat/guards/retry'
+import { refuseLiveDatabase, refuseRemoteServer } from '../lib/dbGuard'
 
 interface Q { id: string; prompt: string; kind: 'baseline' | 'external' }
 
@@ -31,6 +33,12 @@ const QUERIES: Q[] = [
 ]
 
 const CHAT_URL = process.env.CHAT_URL ?? 'http://localhost:3002/api/chat'
+
+// Brief 41.2 (engineering precaution): a test, so it refuses any database but a
+// *_perf or *_test one, with no override, and any chat server that isn't on
+// this machine. The server's own database can't be checked from here.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/hallucination-adversarial-test.ts (DATABASE_URL)')
+refuseRemoteServer(CHAT_URL, 'scripts/hallucination-adversarial-test.ts (CHAT_URL)')
 
 async function fire(prompt: string): Promise<{ interactionId: string; response: string; error?: string }> {
   try {

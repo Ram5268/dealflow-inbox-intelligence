@@ -7,6 +7,12 @@ import { readFileSync, writeFileSync } from 'fs'
 import { prisma } from '../lib/prisma'
 import { normalizeAddress } from '../lib/domain/Address'
 import { stripBareUnitSuffix } from '../lib/enrichment/nyc'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a finished one-off (Phase 4.6.2) that
+// deletes cache rows, so it refuses any database but a *_perf or *_test one,
+// with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/step4-snapshot-and-invalidate.ts (DATABASE_URL)')
 
 interface CohortRow { oppId: string; originalAddress: string | null; currentBbl: string | null; currentLabel: string | null; borough: string | null }
 

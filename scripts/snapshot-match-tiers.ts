@@ -1,5 +1,11 @@
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): it measures the seed Match regenerations
+// (test databases only), so it refuses any database but a *_perf or *_test
+// one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/snapshot-match-tiers.ts (DATABASE_URL)')
 
 // Brief 30.2 — match-tier distribution snapshot. Run before/after regenerating the
 // Match table to measure the scoring-fix impact. Read-only (SELECT/groupBy only).
