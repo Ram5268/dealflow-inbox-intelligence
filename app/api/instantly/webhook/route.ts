@@ -3,10 +3,34 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { isTestModeOnly } from '@/lib/config/testMode'
+import { checkInstantlyWebhookToken } from '@/lib/auth/instantlyWebhook'
 
 // Receives webhook events from Instantly AI
 // Events: reply_received, lead_marked_as_interested, email_opened, email_bounced, lead_unsubscribed, link_clicked
+//
+// Brief 41.2 (PR C): fails closed. Until all three of these hold, it reads no
+// body and touches no database:
+//   1. INSTANTLY_ENROLL_ENABLED is exactly 'true' (the Brief 34 Instantly
+//      switch). Otherwise 503. Instantly stays off: Ryan's instruction is that
+//      nothing contacts a lead.
+//   2. INSTANTLY_WEBHOOK_SECRET is set. Otherwise 503.
+//   3. The request has the header `Authorization: Bearer <INSTANTLY_WEBHOOK_SECRET>`.
+//      Otherwise 401. A token in the URL is not accepted.
+// The secret and these refusals are an engineering precaution from the Oct 16,
+// 2026 system-map review. Setup, only if Instantly is ever switched on: set
+// INSTANTLY_WEBHOOK_SECRET in Vercel to a long random value, and give the
+// Instantly webhook (API v2 POST /api/v2/webhooks, or PATCH an existing one)
+// target_hook_url <app>/api/instantly/webhook and
+// headers { "Authorization": "Bearer <the same value>" }.
 export async function POST(req: NextRequest) {
+  if (process.env.INSTANTLY_ENROLL_ENABLED !== 'true') {
+    return NextResponse.json({ ok: false, error: 'Instantly is switched off (INSTANTLY_ENROLL_ENABLED), so this webhook accepts nothing.' }, { status: 503 })
+  }
+  const auth = checkInstantlyWebhookToken(req.headers.get('authorization'), process.env.INSTANTLY_WEBHOOK_SECRET)
+  if (auth !== 200) {
+    const error = auth === 503 ? 'INSTANTLY_WEBHOOK_SECRET is not set, so this webhook accepts nothing.' : 'Missing or wrong webhook token.'
+    return NextResponse.json({ ok: false, error }, { status: auth })
+  }
   if (isTestModeOnly()) return NextResponse.json({ ok: false, reason: 'TEST_MODE_ONLY is on' })
   let body: Record<string, unknown>
   try { body = await req.json() } catch {
