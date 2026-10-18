@@ -139,9 +139,10 @@ export type SwitchCheck = {
 }
 
 // Brief 44 V4's rollback rules, checked on every night the switch is on (engineering
-// precautions): scoring with our values failed, or gave a score that isn't a number (that
-// would fail the night's write); HOT matches with our values fell below half of those
-// without; more than 10% of the CRM sellers with matches without our values have none.
+// precautions): scoring with our values failed (a score that isn't a number counts as a
+// failure too; a harmless guard, since such a pair can't be kept today); HOT matches with our
+// values fell below half of those without; more than 10% of the CRM sellers with matches
+// without our values have none.
 export const MIN_HOT_SHARE = 0.5
 export const MAX_SELLERS_LOST_SHARE = 0.1
 
