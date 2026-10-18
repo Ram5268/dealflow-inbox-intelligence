@@ -1,6 +1,7 @@
 import type { ListingData, BuyerData, FeatureResult } from '../scorerTypes'
 import { isAbsenteeOwner } from '../absentee'
 import { listingPropertyClasses } from '../propertyTypes'
+import { chancePriceUnder, sellerPrice } from '../sellerPrice'
 
 const MS_PER_YEAR = 365.25 * 24 * 60 * 60 * 1000
 
@@ -16,6 +17,7 @@ interface SituationProfile {
   isCondoCoop: boolean
   isExpired: boolean
   price: number | null
+  ourValue: number | null // Brief 44 (PR 4): price is our own value: read as a chance (below)
 }
 
 function profileOf(listing: ListingData, now: Date): SituationProfile {
@@ -47,7 +49,30 @@ function profileOf(listing: ListingData, now: Date): SituationProfile {
     isCondoCoop,
     isExpired: listing.priorListingStatus === 'EXPIRED',
     price: listing.price,
+    ourValue: listing.ourEstimate === true ? ourValueOf(listing) : null,
   }
+}
+
+// Brief 44 (PR 4): a CRM seller priced by our own published value (ourEstimates.ts) isn't
+// held to the $1.5M / $2M / $5M lines as if that value were an exact price. It scores
+// what the lines would give on average over how real prices spread around our estimates
+// (sellerPrice.ts): each side's score weighted by the chance the real price lands there.
+// An asking or last asking price, and any other estimate, keep the exact lines. (Brief 44
+// §6's design, an engineering choice, as PR #14 made for the price fit.)
+function ourValueOf(listing: ListingData): number | null {
+  const sp = sellerPrice(listing)
+  return sp?.basis === 'estimate' ? sp.price : null
+}
+
+function firstTimeChance(value: number): number {
+  const under = chancePriceUnder(value, 1_500_000)
+  return 0.9 * under + 0.3 * (1 - under)
+}
+
+function luxuryChance(value: number): number {
+  const under2m = chancePriceUnder(value, 2_000_000)
+  const under5m = chancePriceUnder(value, 5_000_000)
+  return 1.0 * (1 - under5m) + 0.6 * (under5m - under2m) + 0.2 * under2m
 }
 
 // Maps (buyer archetype × listing situation) → fit. See brief's compatibility
@@ -89,11 +114,13 @@ export function computeBuyerArchetypeSituation(listing: ListingData, buyer: Buye
 
     case 'FIRST_TIME_FHA':
       if (prof.hasDistress) return mk(0.2)
+      if (prof.ourValue != null) return mk(firstTimeChance(prof.ourValue))
       if (prof.price != null && prof.price < 1_500_000) return mk(0.9)
       if (prof.price != null && prof.price >= 1_500_000) return mk(0.3)
       return mk(0.5)
 
     case 'LUXURY_ALL_CASH':
+      if (prof.ourValue != null) return mk(luxuryChance(prof.ourValue))
       if (prof.price == null) return mk(0.5)
       if (prof.price >= 5_000_000) return mk(1.0)
       if (prof.price >= 2_000_000) return mk(0.6)
@@ -103,7 +130,7 @@ export function computeBuyerArchetypeSituation(listing: ListingData, buyer: Buye
       // Same price tiers as LUXURY_ALL_CASH, minus the distress affinity (a
       // financed luxury buyer can't chase a foreclosure clock).
       if (prof.price == null) return mk(0.5)
-      let base = prof.price >= 5_000_000 ? 1.0 : prof.price >= 2_000_000 ? 0.6 : 0.2
+      let base = prof.ourValue != null ? luxuryChance(prof.ourValue) : prof.price >= 5_000_000 ? 1.0 : prof.price >= 2_000_000 ? 0.6 : 0.2
       if (prof.hasDistress) base = Math.min(base, 0.5)
       return mk(base)
     }

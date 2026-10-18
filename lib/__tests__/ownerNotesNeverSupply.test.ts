@@ -76,6 +76,7 @@ const created: Array<Record<string, unknown>> = []
   mojoContact: { findMany: async ({ where }: { where: Record<string, unknown> }) => [CONTACT].filter(c => fits(c, where)) },
   matchDismissal: { findMany: async () => [] },
   match: { create: async ({ data }: { data: Record<string, unknown> }) => { created.push(data); return data } },
+  featureFlag: { findUnique: async () => null }, // Brief 44: the USE_OUR_ESTIMATES switch has no row (off)
 }
 const ai = installFakeAiFetch()
 ai.reply(() => anthropicTool('score_match', { tier: 'Hot', reason: 'Exact neighborhood, price fits.' }))

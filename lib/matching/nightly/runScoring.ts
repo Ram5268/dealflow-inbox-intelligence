@@ -5,6 +5,7 @@ import { mojoContactToBuyerData, mojoContactToListingData, opportunityToBuyerDat
 import { precomputeCompsMedians, precomputeSubstitutionCounts } from '../compsCache'
 import { resolveDismissKey } from '../dismissKey'
 import { scorePair } from '../scorer'
+import { pickTonight, recordRollback, withOurEstimates, type SwitchCheck } from '../ourEstimates'
 import { boroughFromLabel } from '../borough'
 import { fromRaw } from '../../domain/Neighborhood'
 import type { BuyerData, ListingData, ScoringContext } from '../scorerTypes'
@@ -38,6 +39,7 @@ export type ScoringResult = {
   confidence: Record<string, number>
   topUnknownFactors: Record<string, number>
   ms: number
+  ourEstimates?: SwitchCheck // Brief 44 (PR 4): only on a night the USE_OUR_ESTIMATES switch is on
 }
 
 class DryRunRollback extends Error {
@@ -69,7 +71,9 @@ export async function loadScoringInputs(orgId: string) {
     ryanRepresentedBuyerIds: tagged(mojoBuyers, 'ryan_buyer'),
   }
   const dismissed = new Set(dismissals.map(d => `${d.partyId}|${d.listingId}`))
-  return { sellers, listings, buyers, ctx, dismissed, demandExcludedNoLocation: demand.length - buyers.length }
+  // Brief 44 (PR 4): the USE_OUR_ESTIMATES switch, read once per run. Off: these inputs as
+  // they are. On: CRM sellers priced by our published values (lib/matching/ourEstimates.ts).
+  return withOurEstimates(prisma, orgId, { sellers, listings, buyers, ctx, dismissed, demandExcludedNoLocation: demand.length - buyers.length })
 }
 
 // Pure CPU: score every (seller, buyer) pair and keep each seller's top pairs.
@@ -105,8 +109,13 @@ const top = (counts: Record<string, number>, n: number) => Object.fromEntries(Ob
 export async function runNightlyScoring({ dryRun = false } = {}): Promise<ScoringResult> {
   const started = Date.now()
   const org = await prisma.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG }, select: { id: true } })
-  const { listings, buyers, ctx, dismissed, demandExcludedNoLocation } = await loadScoringInputs(org.id)
-  const { kept, ...stats } = scoreAll(listings, buyers, ctx, dismissed)
+  const { listings, buyers, ctx, dismissed, demandExcludedNoLocation, ourEstimates } = await loadScoringInputs(org.id)
+  // Brief 44 (PR 4): with the switch on, the night is also scored without our values, and
+  // those results are kept if ours fail the rollback checks (lib/matching/ourEstimates.ts).
+  const night = ourEstimates
+    ? pickTonight(ourEstimates, () => scoreAll(listings, buyers, ctx, dismissed), () => scoreAll(ourEstimates.without.listings, buyers, ourEstimates.without.ctx, dismissed))
+    : { result: scoreAll(listings, buyers, ctx, dismissed), check: undefined }
+  const { kept, ...stats } = night.result
   if (kept.length > MAX_KEPT_PER_SELLER * listings.length) {
     throw new Error(`scoring kept ${kept.length} pairs for ${listings.length} sellers; aborting before any write`)
   }
@@ -123,6 +132,7 @@ export async function runNightlyScoring({ dryRun = false } = {}): Promise<Scorin
         updated += ret.filter(r => !r.inserted).length
       }
       const deleted = await tx.$executeRawUnsafe(DELETE_STALE_MATCHES_SQL, org.id, JSON.stringify(keys))
+      if (night.check?.rolledBack) await recordRollback(tx, org.id, night.check)
       const result: ScoringResult = {
         dryRun,
         includeTestBuyers: process.env.SCORING_INCLUDE_TEST_BUYERS === 'true',
@@ -139,6 +149,7 @@ export async function runNightlyScoring({ dryRun = false } = {}): Promise<Scorin
         confidence: tally(rows.map(r => r.matchFitConfidence)),
         topUnknownFactors: top(tally(rows.flatMap(r => r.unknownFactors)), 5),
         ms: Date.now() - started,
+        ...(night.check && { ourEstimates: night.check }),
       }
       if (dryRun) throw new DryRunRollback(result)
       await tx.auditLog.create({ data: { organizationId: org.id, action: 'NIGHTLY_SCORING', detailsJson: result } })
