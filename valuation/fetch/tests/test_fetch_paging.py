@@ -90,7 +90,7 @@ def test_a_connection_error_stops_the_run(server, session, helpers, tmp_path, no
         return None
 
     server.hooks.append(drop)
-    with pytest.raises(FetchError, match=f"{SALES}.*no HTTP status"):
+    with pytest.raises(FetchError, match=f"{SALES}.*no HTTP status.*ConnectionError: connection reset"):
         _download(session, tmp_path)
     assert len(_data_calls(session)) == 2
     assert _no_files_left(tmp_path)

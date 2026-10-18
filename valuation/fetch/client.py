@@ -58,7 +58,10 @@ class Client:
         try:
             resp = self._session.get(url, params=params, auth=auth, timeout=TIMEOUT, allow_redirects=False)
         except requests.RequestException as exc:
-            raise FetchError(f"{label}: request failed with no HTTP status ({type(exc).__name__})") from exc
+            # The reason (e.g. "Remote end closed connection", "Read timed out") helps tell a
+            # network drop from a server problem. It never carries the key pair.
+            raise FetchError(f"{label}: request failed with no HTTP status "
+                             f"({type(exc).__name__}: {str(exc)[:300]})") from exc
         if resp.status_code != 200:
             raise FetchError(f"{label}: HTTP {resp.status_code}{_detail(resp)}")
         self.bytes_received += len(resp.content)
