@@ -30,7 +30,11 @@ class DealFlow:
         if not key:
             raise RuntimeError(f"{config.SECRET_ENV} is not set")
         self.base = base_url.rstrip("/")
-        self.http = session or requests.Session()
+        # A new connection for every request: requests' own get/post open and close one per call.
+        # A connection kept open from the targets request sits idle while the model runs (about
+        # 6 minutes), the server closes it, and with no retries the first publish request then
+        # fails ("Remote end closed connection without response", seen 2026-10-18). Tests pass a fake.
+        self.http = session or requests
         self._headers = {"Authorization": f"Bearer {key}", "User-Agent": config.USER_AGENT, "Content-Type": "application/json"}
 
     def _check(self, r: requests.Response) -> dict:
