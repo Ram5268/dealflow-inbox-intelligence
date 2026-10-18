@@ -117,6 +117,9 @@ export function dealflowWorld() {
       // Old csv copies: one twin of the ambiguous pair, one the nightly would re-key.
       mojoContact('csv_amb', 'csv_900', { fullName: 'Test Owner Twin', address: '300 Example St', state: 'NY', zipCode: '11216', metadata: null }),
       mojoContact('csv_rekey', 'csv_901', { fullName: 'Test Owner Rekey', address: '108 Example St', state: 'NY', zipCode: '11216', metadata: null }),
+      // A broken csv copy of each: lead_new1's is marked a duplicate of its row; lead_rekey's is the nightly's job.
+      mojoContact('csv_new1_twin', 'csv_902', { fullName: 'Test Owner lead_new1', address: '101 Example St', metadata: null }),
+      mojoContact('csv_rekey_twin', 'csv_903', { fullName: 'Test Owner Rekey', address: '108 Example St', metadata: null }),
       // A Mojo buyer contact (demand side).
       mojoContact('b_mojo', '7700200', { intent: 'BUYER', metadata: { source: 'crm' }, neighborhood: 'Crown Heights', bedsMin: 2, bedsMax: 4 }),
       // A test seller: never scored, never ranked.

@@ -11,7 +11,8 @@ import { ORG_SLUG } from '../crm-sync/runSync'
 //   1. the import exists in Ryan's organization       else 404 not_found
 //   2. the token's SHA-256 equals the stored hash     else 403 bad_token
 //   3. the import is completed                         else 403 not_completed
-//   4. it finished less than 60 minutes ago           else 403 expired
+//   4. it finished less than 60 minutes ago, and not
+//      more than 5 minutes in the future (clock skew)  else 403 expired
 //   5. it isn't marked scored yet                      else 403 already_scored
 // The token is checked before any state, so a caller without it learns
 // nothing about the import's progress. Pure: no I/O.
@@ -20,6 +21,8 @@ import { ORG_SLUG } from '../crm-sync/runSync'
 // precaution: a chunk must finish inside Vercel's 300-second limit].
 export const MAX_LEADS_PER_REQUEST = 500
 export const SCORE_WINDOW_MS = 60 * 60 * 1000
+// How far ahead of DealFlow's clock the CRM's may run [engineering precaution].
+export const CLOCK_SKEW_MS = 5 * 60 * 1000
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/
 const scoreImportBody = z.strictObject({
@@ -65,7 +68,10 @@ export function checkImportBatch(batch: ImportBatchState | null, token: string, 
   if (batch.status !== 'completed') return { status: 403, error: 'not_completed' }
   // "Finished less than 60 minutes ago" (brief §5.8): exactly 60 minutes is too
   // late, and a completed import with no completion time can't be shown recent.
-  if (!batch.completedAt || now.getTime() - batch.completedAt.getTime() >= SCORE_WINDOW_MS) return { status: 403, error: 'expired' }
+  // A completion more than 5 minutes in the future is more than clock skew, so
+  // it can't be shown recent either [engineering precaution].
+  const age = batch.completedAt ? now.getTime() - batch.completedAt.getTime() : NaN
+  if (!(age < SCORE_WINDOW_MS && age >= -CLOCK_SKEW_MS)) return { status: 403, error: 'expired' }
   if (batch.scoredAt) return { status: 403, error: 'already_scored' }
   return null
 }

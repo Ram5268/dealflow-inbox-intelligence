@@ -25,6 +25,7 @@ test('unreadable, oversized or wrongly shaped bodies get 400 invalid_request and
   for (const body of [
     'not json', '', '[1,2]', JSON.stringify({ importId: 'imp_1', token, leadIds: [] }),
     JSON.stringify({ importId: 'imp_1', token, leadIds: ['a'], pad: 'x'.repeat(70_000) }), // over the 64 KB cap
+    JSON.stringify({ importId: 'imp_1', token, leadIds: ['a'] }) + ' '.repeat(70_000), // a valid body, only too big
   ]) {
     const res = await POST(post(body))
     assert.equal(res.status, 400, body.slice(0, 40))

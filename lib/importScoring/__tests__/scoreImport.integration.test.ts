@@ -19,13 +19,20 @@ import { closeCrmPool } from '../../crm-sync/roClient'
 import { CRM_ORG, DF_ORG, IMPORT_EXPIRED, IMPORT_OK, IMPORT_RUNNING, cleanup, seed, type Seeded, type Sizes } from './seedTestDbs'
 
 const crmUrl = process.env.CRM_TEST_DATABASE_URL
-if (!isTestDatabase(crmUrl)) throw new Error('REFUSING: CRM_TEST_DATABASE_URL must name a *_test or *_perf database')
-// The handler's read-only CRM link goes to the test database this file seeds,
-// whatever the environment held. roClient.ts reads the setting at its first
-// query, which comes after this line (the imports above open no connection).
-process.env.DATABASE_URL_CRM_RO = crmUrl
+// Without a CRM test database this file is skipped (the rest of npm run
+// test:integration still runs); a set one must be a *_test or *_perf database.
+const SKIP = !crmUrl
+if (SKIP) {
+  console.log('skipped: set CRM_TEST_DATABASE_URL (a CRM *_test database) to run the import-scoring DB test')
+} else {
+  if (!isTestDatabase(crmUrl)) throw new Error('REFUSING: CRM_TEST_DATABASE_URL must name a *_test or *_perf database')
+  // The handler's read-only CRM link goes to the test database this file seeds,
+  // whatever the environment held. roClient.ts reads the setting at its first
+  // query, which comes after this line (the imports above open no connection).
+  process.env.DATABASE_URL_CRM_RO = crmUrl
+}
 
-// Count round trips per database (Railway adds about 90 ms each).
+// Count round trips per database (each cost about 0.1 s on Railway).
 const trips: Record<string, number> = {}
 const realQuery = pg.Client.prototype.query
 pg.Client.prototype.query = function (this: pg.Client & { connectionParameters?: { database?: string } }, ...args: unknown[]) {
@@ -44,6 +51,7 @@ const crm = new pg.Client({ connectionString: crmUrl })
 let s: Seeded
 
 before(async () => {
+  if (SKIP) return
   await df.connect()
   await crm.connect()
   const [{ d }] = (await df.query('SELECT current_database() AS d')).rows
@@ -54,6 +62,7 @@ before(async () => {
 })
 
 after(async () => {
+  if (SKIP) return
   await cleanup(df, crm)
   await df.end()
   await crm.end()
@@ -75,7 +84,7 @@ async function snapshot() {
   }
 }
 
-test('refusals read one ImportBatch row and write nothing', { skip: TIMING }, async () => {
+test('refusals read one ImportBatch row and write nothing', { skip: SKIP || TIMING }, async () => {
   const before = await snapshot()
   const wrong = Buffer.alloc(32, 7).toString('base64url')
   for (const [over, status, error] of [
@@ -90,7 +99,7 @@ test('refusals read one ImportBatch row and write nothing', { skip: TIMING }, as
   assert.deepEqual(await snapshot(), before)
 })
 
-test('the upload\'s new leads are copied, scored and ranked; nothing else changes', async () => {
+test('the upload\'s new leads are copied, scored and ranked; nothing else changes', { skip: SKIP }, async () => {
   const before = await snapshot()
   for (const k of Object.keys(trips)) delete trips[k]
   const t0 = Date.now()
@@ -165,7 +174,7 @@ test('the upload\'s new leads are copied, scored and ranked; nothing else change
   }
 })
 
-test('asking again (same token, still within the hour) changes nothing more', { skip: TIMING }, async () => {
+test('asking again (same token, still within the hour) changes nothing more', { skip: SKIP || TIMING }, async () => {
   const first = await snapshot()
   const res = await call()
   assert.equal(res.status, 200)

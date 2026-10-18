@@ -9,8 +9,8 @@ import { copyImportLeads, rankImportSellers, scoreImportSellers } from './steps'
 import { SIGNALS_SQL, toScoredLead, type ScoredLead, type SignalRow } from './signals'
 
 // Brief 45 (PR E): score one CRM upload's new leads on request, so a new list
-// is ranked within minutes instead of the next morning [Ryan, 2026-10-18: "no
-// list ever sits unranked"]. Called by the CRM (POST /api/crm/score-import)
+// is ranked within minutes instead of the next morning [Ryan, 2026-10-18: no
+// list ever sits unranked]. Called by the CRM (POST /api/crm/score-import)
 // in chunks of at most 500 leads. Nothing here contacts anyone: it copies the
 // leads, scores them against buyer demand and returns their call-priority
 // fields; the CRM writes those onto the same leads.

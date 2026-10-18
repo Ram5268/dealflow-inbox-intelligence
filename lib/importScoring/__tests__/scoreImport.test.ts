@@ -4,8 +4,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { PrismaClient } from '@prisma/client'
 import { scoreImport, type ScoreImportDeps } from '../scoreImport'
-import { NEW_IMPORT_LEADS_SQL } from '../crmRead'
-import { LEGACY_SQL, REKEY_SQL, REMOVED_SQL, UPSERT_SQL } from '../../crm-sync/upsert'
+import { IMPORT_BATCH_SQL, NEW_IMPORT_LEADS_SQL } from '../crmRead'
+import { DUPLICATES_SQL, LEGACY_SQL, REKEY_SQL, REMOVED_SQL, UPSERT_SQL } from '../../crm-sync/upsert'
 import { DELETE_STALE_MATCHES_OF_SELLERS_SQL, DELETE_STALE_MATCHES_SQL, UPSERT_MATCHES_SQL } from '../../matching/nightly/sql'
 import { memoryDb, type Row } from '../../__tests__/memoryDb'
 import {
@@ -156,6 +156,8 @@ test('the lead copy covers only these new leads; duplicate decisions are taken o
   // lead_rekey's csv copy would be re-keyed by the nightly; not by this path.
   assert.deepEqual(mem.calls.filter(c => c.sql === REKEY_SQL).map(c => JSON.parse(c.params![0] as string)), [[]])
   assert.ok(mem.data.mojoContact.some(c => c.id === 'csv_rekey' && c.mojoId === 'csv_901'))
+  // Duplicate marks: only the ones whose keeper is this upload's lead (lead_rekey's twin is the nightly's job).
+  assert.deepEqual(mem.calls.filter(c => c.sql === DUPLICATES_SQL).map(c => JSON.parse(c.params![0] as string)), [[{ id: 'csv_new1_twin', keeper_id: 's_new1' }]])
   // lead_other (new to DealFlow, not in this upload) was not copied.
   assert.ok(!mem.data.mojoContact.some(c => c.mojoId === '7700007'))
   for (const sql of [REMOVED_SQL, LEGACY_SQL]) assert.ok(!mem.calls.some(c => c.sql === sql))
@@ -261,4 +263,16 @@ test('a failed step returns 500 scoring_failed with no details, and an empty CRM
   e.deps.readCrmLeads = async () => []
   assert.deepEqual(await scoreImport(request(), e.deps), { status: 500, body: { error: 'scoring_failed' } })
   assert.deepEqual(e.mem.writes(), [])
+})
+
+// CI has no database, so the two CRM reads' rules are pinned here too (the DB
+// test checks what they do): this organization, this upload's new leads only,
+// and UTC instants from the CRM's timestamp-without-time-zone columns.
+test('the CRM reads keep the organization, the new-lead rule and UTC times', () => {
+  const flat = (s: string) => s.replace(/\s+/g, ' ').trim()
+  assert.equal(flat(NEW_IMPORT_LEADS_SQL), 'SELECT l.id, l."mojoId" FROM "ImportBatch" b JOIN "Lead" l ON l."organizationId" = b."organizationId" ' +
+    'AND l.source = \'import:\' || b.id AND l."createdAt" >= b."createdAt" WHERE b.id = $1 AND l.id = ANY($2::text[])')
+  assert.equal(flat(IMPORT_BATCH_SQL), 'SELECT o.slug AS "orgSlug", b.status, b."completedAt" AT TIME ZONE \'UTC\' AS "completedAt", ' +
+    'b."dealflowScoreTokenHash" AS "tokenHash", b."dealflowScoredAt" AT TIME ZONE \'UTC\' AS "scoredAt" ' +
+    'FROM "ImportBatch" b JOIN "Organization" o ON o.id = b."organizationId" WHERE b.id = $1')
 })

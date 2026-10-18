@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'crypto'
 import {
-  MAX_LEADS_PER_REQUEST, SCORE_WINDOW_MS, checkImportBatch, parseScoreImportBody, sha256Hex, tokenMatches,
+  CLOCK_SKEW_MS, MAX_LEADS_PER_REQUEST, SCORE_WINDOW_MS, checkImportBatch, parseScoreImportBody, sha256Hex, tokenMatches,
   type ImportBatchState,
 } from '../request'
 
@@ -108,4 +108,14 @@ test('expired at the 60-minute boundary: under 60 minutes is fine, 60 minutes or
   assert.deepEqual(check(batch({ completedAt: null })), { status: 403, error: 'expired' })
   // A clock a little ahead on the CRM's side is still "recent".
   assert.equal(check(batch({ completedAt: new Date(NOW.getTime() + 30_000) })), null)
+})
+
+test('a completion time more than 5 minutes in the future is expired (clock skew allowance)', () => {
+  assert.equal(CLOCK_SKEW_MS, 5 * 60_000)
+  const ahead = (ms: number) => batch({ completedAt: new Date(NOW.getTime() + ms) })
+  assert.equal(check(ahead(CLOCK_SKEW_MS)), null)
+  assert.deepEqual(check(ahead(CLOCK_SKEW_MS + 1)), { status: 403, error: 'expired' })
+  assert.deepEqual(check(ahead(24 * 60 * 60_000)), { status: 403, error: 'expired' })
+  // Still checked after the token: a wrong token learns only bad_token.
+  assert.deepEqual(check(ahead(24 * 60 * 60_000), 'B'.repeat(43)), { status: 403, error: 'bad_token' })
 })
