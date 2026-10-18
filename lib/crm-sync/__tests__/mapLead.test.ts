@@ -10,7 +10,7 @@ const d = (v: string): CrmFieldValue => ({ t: null, n: null, d: v })
 const full: CrmLeadRow = {
   id: 'lead_1', mojoId: '14359', name: 'Alexander M Balme', displayName: 'Alexander M Balme',
   primaryAddressFull: '361 Degraw St # 3', updatedAt: '2026-09-10 18:08:56.823', contactName: 'Jane Balme',
-  phones: ['+13302342085', '+19173312047', '+13302342085'], emails: ['ABalme2010@gmail.com ', 'second@x.com'],
+  phones: ['+13302342085', '+19175550123', '+13302342085'], emails: ['ABalme2010@gmail.com ', 'second@x.com'],
   fields: {
     'Property City': t('Brooklyn'), 'Property State': t('NY'), 'Property Zip Code': t('11231-0959'),
     'Property Type': t('Duplex'), Bedrooms: n(7), Bathrooms: n(4), 'Square Footage': n(2848), 'Year Built': n(1899),
@@ -31,7 +31,7 @@ test('full row maps every field', () => {
   assert.equal(c.mojoId, '14359')
   assert.equal(c.fullName, 'Alexander M Balme')
   assert.equal(c.coOwnerFullName, 'Jane Balme')
-  assert.deepEqual(c.phones, ['3302342085', '9173312047'])
+  assert.deepEqual(c.phones, ['3302342085', '9175550123'])
   assert.deepEqual(c.emails, ['abalme2010@gmail.com', 'second@x.com'])
   assert.equal(c.address, '361 Degraw St # 3')
   assert.equal(c.city, 'Brooklyn')
@@ -118,7 +118,7 @@ test('lastCalled falls back to Last Dial Date; split ZIPs stay unmapped', () => 
 })
 
 test('phoneKey keeps the last 10 digits', () => {
-  assert.equal(phoneKey('+19173312047'), '9173312047')
-  assert.equal(phoneKey('(917) 331-2047'), '9173312047')
+  assert.equal(phoneKey('+19175550123'), '9175550123')
+  assert.equal(phoneKey('(917) 555-0123'), '9175550123')
   assert.equal(phoneKey('12345'), null)
 })
