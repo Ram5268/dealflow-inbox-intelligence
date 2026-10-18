@@ -115,7 +115,8 @@ def test_index_uses_only_pairs_before_the_cutoff():
 
 def test_comps_use_only_earlier_sales_on_other_lots():
     S = pd.DataFrame([_sale(f"30000400{k:02d}", f"2024-0{1 + k % 5}-10", 1_000_000 + 10_000 * k) for k in range(12)]
-                     + [_sale("3000040099", "2024-07-01", 9_000_000)])  # later than the subject: never a comp
+                     + [_sale("3000040099", "2024-07-01", 9_000_000),   # later than the subject: never a comp
+                        _sale("3000040098", "2024-06-15", 9_000_000)])  # the subject's own day: never a comp
     S = S.assign(clean=True, grp="2F", sqft=2000.0, lat=40.68, lon=-73.95)
     X = pd.DataFrame([{**_sale("3000040000", "2024-06-15", np.nan), "grp": "2F", "sqft": 2000.0, "lat": 40.68, "lon": -73.95,
                        "month": pd.Timestamp("2024-06-01"), "is_seller": True}])
@@ -128,6 +129,7 @@ def test_comps_use_only_earlier_sales_on_other_lots():
                       pd.DataFrame({"lat": [40.69], "lon": [-73.95]}), pd.DataFrame({"bbl": [], "d": [], "major": []}), out)
     used = out[0]
     assert len(used) == 11 and (used["date"] < "2024-06-15").all() and "3000040000" not in set(S.loc[used.index, "bbl"])
+    assert not (used["price"] == 9_000_000).any()
     assert R.loc[0, "comps_n"] == 11 and R.loc[0, "comps_est"] < 1_200_000
 
 

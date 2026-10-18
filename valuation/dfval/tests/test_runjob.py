@@ -3,6 +3,7 @@ would accept, never posts, and publishing follows start -> rows -> publish."""
 import json
 import os
 
+import pandas as pd
 import pytest
 
 from valuation.dfval import config, contract
@@ -66,6 +67,21 @@ def test_dry_run_values_sellers_and_writes_only_a_summary(dry):
     # The summary carries counts and accuracy only: no contact ids, addresses or per-home values.
     text = json.dumps(s).upper()
     assert "C001" not in text and "EXAMPLE" not in text and "SPARE" not in text
+
+
+def test_ranges_come_from_the_range_months_and_gates_from_the_gate_months(dry):
+    from valuation.dfval.runjob import size_ranges
+    _, captured, _ = dry
+    k = captured["ranges"]
+    ts = lambda xs: {pd.Timestamp(x) for x in xs}  # noqa: E731
+    rng_m, gate_m = ts(k["rng_months"]), ts(k["gate_months"])
+    assert not rng_m & gate_m and max(rng_m) < min(gate_m)
+    assert ts(k["month"][k["in_rng"]]) <= rng_m and ts(k["month"][k["in_gate"]]) <= gate_m
+    r = size_ranges(k["pred"], k["y"], k["top"], k["in_rng"], k["in_gate"])
+    rng = captured["run"]["metrics"]["range"]
+    assert rng["halfwidth_other"] == round(r["w_other"], 4) and rng["coverage_gate"] == round(r["cover"], 4)
+    swapped = size_ranges(k["pred"], k["y"], k["top"], k["in_gate"], k["in_rng"])
+    assert round(swapped["w_other"], 4) != rng["halfwidth_other"]  # the test can tell range months from gate months
 
 
 def test_payload_follows_the_contract(dry):
@@ -134,6 +150,11 @@ def test_sellers_dealflow_no_longer_lists_are_dropped_and_the_run_restarted():
     sent = [r["contactId"] for c in fake.calls if c["action"] == "rows" for r in c["rows"]]
     assert "c5" not in sent and "c250" not in sent and len(sent) == 1448
     assert fake.calls[-1]["action"] == "publish"
+    final = {}
+    fake2 = FakeDealFlow(unknown={"c5"})
+    run2, rows2 = _payload()
+    runjob.publish(fake2, run2, rows2, True, log=lambda m: None, final=final)
+    assert final["counts"]["valued"] == 1449  # what the run's summary.json then reports
 
 
 def test_dropping_refused_sellers_below_the_minimum_publishes_nothing():

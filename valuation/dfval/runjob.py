@@ -142,6 +142,9 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
     in_rng = X["month"].isin(rng_months).to_numpy() & scored
     in_gate = X["month"].isin(gate_months).to_numpy() & scored
     rs = size_ranges(pred, y, top, in_rng, in_gate)
+    if keep is not None:  # tests only: what the ranges and gates were computed from
+        keep["ranges"] = {"pred": pred, "y": y, "top": top, "in_rng": in_rng, "in_gate": in_gate, "month": X["month"].to_numpy(),
+                          "rng_months": rng_months, "gate_months": gate_months}
     w_top, w_other, inside, cover = rs["w_top"], rs["w_other"], rs["inside"], rs["cover"]
     gm = {k: MD.metrics(pred, price, in_gate & m) for k, m in seg.items()}
 
@@ -227,7 +230,10 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
 
     # ---- publish (never in a dry run; never when a gate fails)
     if not dry_run:
-        summary["published"] = publish(client or DealFlow(), run_payload, rows, passed, log)
+        final: dict = {}
+        summary["published"] = publish(client or DealFlow(), run_payload, rows, passed, log, final)
+        if final:  # sellers DealFlow no longer lists were dropped: report what DealFlow actually got
+            summary.update(counts=final["counts"], gates=final["gates"])
     with open(os.path.join(out_dir, "summary.json"), "w") as fh:
         json.dump(summary, fh, indent=1, default=float)
     log(f"done in {time.time() - t0:.0f}s: valued {counts_all['valued']:,} of {counts_all['targets']:,}; published {summary['published']}")
@@ -243,7 +249,7 @@ def recount(run_payload: dict, rows: list[dict]) -> dict:
     return dict(run_payload, counts=counts, expectedRows=len(rows), gates={"passed": all(c["pass"] for c in checks), "checks": checks})
 
 
-def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool, log) -> bool:
+def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool, log, final: dict | None = None) -> bool:
     """start -> rows (200 at a time) -> publish. A seller DealFlow no longer counts as a CRM seller
     is dropped and the run restarted with the smaller row count (CONTRACT.md §3)."""
     r = client.post({"action": "start", "run": run_payload})
@@ -264,6 +270,8 @@ def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool,
             log(f"DealFlow no longer lists {len(unknown)} seller(s); dropping them and restarting the run's row count")
             rows = [x for x in rows if x["contactId"] not in unknown]
             run_payload = recount(run_payload, rows)
+            if final is not None:
+                final.update(counts=run_payload["counts"], gates=run_payload["gates"])
             r = client.post({"action": "start", "run": run_payload})
             if not (run_payload["gates"]["passed"] and r.get("gatesPassed")):
                 log("after dropping them a gate fails: nothing published; DealFlow keeps the last published values")
