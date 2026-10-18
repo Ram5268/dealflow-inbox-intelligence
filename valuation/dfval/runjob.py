@@ -171,7 +171,9 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
         "range": {"halfwidth_top8_two_to_four": round(w_top, 4), "halfwidth_other": round(w_other, 4), "coverage_gate": round(cover, 4),
                   "coverage_gate_top8_two_to_four": round(float(inside[in_gate & top].mean()), 4) if (in_gate & top).any() else None,
                   "range_months": len(rng_months)},
-        "spread_q_top8_two_to_four": spread_quantiles(pred, y, in_rng & top),
+        "spread_q_top8_two_to_four": (own_q := spread_quantiles(pred, y, in_rng & top)),
+        # The same scoreboard with this model's own spread table, to show whether the live table still fits (PR 4).
+        "scoreboard_own_spread_top8_two_to_four": scoreboard(pred, y, in_gate & top, spread_q=own_q) if own_q else None,
         "training_sales": int(tr.sum()),
         "screen_min_price_to_market_value": config.MIN_PRICE_TO_MARKET_VALUE,
         "sales_gap_months": inp.sales_info.get("gap_months"),

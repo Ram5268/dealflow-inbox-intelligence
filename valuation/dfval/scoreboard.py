@@ -50,8 +50,10 @@ def rank_auc(score: np.ndarray, truth: np.ndarray) -> float:
 
 
 def scoreboard(log_value: np.ndarray, log_price: np.ndarray, mask: np.ndarray, seed: int = config.SCOREBOARD_SEED,
-               n_buyers: int = config.SCOREBOARD_BUYERS) -> dict:
-    """The three numbers for each budget style, on the homes in `mask`."""
+               n_buyers: int = config.SCOREBOARD_BUYERS, spread_q: list[float] | None = None) -> dict:
+    """The three numbers for each budget style, on the homes in `mask`. `spread_q` swaps in another
+    spread table (default: the live one in lib/matching/sellerPrice.ts)."""
+    q = spread_q or config.SPREAD_Q
     m = mask & np.isfinite(log_value) & np.isfinite(log_price)
     E, P = log_value[m], log_price[m]
     out = {"homes": int(m.sum()), "buyers": n_buyers}
@@ -64,7 +66,7 @@ def scoreboard(log_value: np.ndarray, log_price: np.ndarray, mask: np.ndarray, s
         lo = np.full(n_buyers, -np.inf) if band is None else np.log(0.85 * band * U)
         hi = np.log(1.15 * U)
         truth = (P[:, None] >= lo[None]) & (P[:, None] <= hi[None])
-        prob = spread_cdf(hi[None] - E[:, None]) - spread_cdf(lo[None] - E[:, None])
+        prob = spread_cdf(hi[None] - E[:, None], q=q) - spread_cdf(lo[None] - E[:, None], q=q)
         kept = prob >= config.MIN_FIT_PROBABILITY
         tp = int((kept & truth).sum())
         out[name] = {"found": round(tp / max(int(truth.sum()), 1), 4), "real": round(tp / max(int(kept.sum()), 1), 4),

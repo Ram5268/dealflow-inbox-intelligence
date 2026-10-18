@@ -41,3 +41,14 @@ def test_spread_quantiles_shape():
     q = spread_quantiles(p, p + rng.normal(0, 0.2, 500), np.ones(500, bool))
     assert len(q) == 17 and q == sorted(q)
     assert spread_quantiles(p, p, np.zeros(500, bool)) is None
+
+
+def test_scoreboard_can_use_another_spread_table():
+    rng = np.random.default_rng(4)
+    price = np.log(rng.uniform(6e5, 3e6, 300))
+    est = price + rng.normal(0, 0.1, 300)
+    m = np.ones(300, bool)
+    wide = [x * 3 for x in config.SPREAD_Q]
+    assert scoreboard(est, price, m)["up_to"] != scoreboard(est, price, m, spread_q=wide)["up_to"]
+    assert scoreboard(est, price, m, spread_q=list(config.SPREAD_Q)) == scoreboard(est, price, m)
+
