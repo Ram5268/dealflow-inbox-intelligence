@@ -18,7 +18,6 @@ import { Category, TransactionType, type ExtractedOpportunity } from '@prisma/cl
 import { EXTRACTION_SPEC_BY_CATEGORY, type MapCtx, type OppRowData, type ExtractionSpec } from './schemas'
 import { extractWithSonnet, type SonnetUsage } from './sonnetExtractor'
 import { buildOpportunityText, upsertOpportunityEmbedding } from '../embeddings'
-import { LEAD_CATEGORIES, leadFallbackTitle, safeLeadText } from './personalCircumstances'
 
 const VALID_CATEGORY = new Set<string>(Object.values(Category))
 const VALID_TX = new Set<string>(Object.values(TransactionType))
@@ -441,12 +440,10 @@ export async function recoverAndPersistBuriedLead(
     where: { organizationId, rawEmailId, provenance: { in: ['buried_recovery', 'comp_reference'] } },
   }).catch(() => {})
 
-  // Brief 41 (H9): a recovered seller or landlord lead never stores personal
-  // circumstances (estate, probate, divorce, a death, illness).
-  const text = { title: lead.summary || `Recovered ${lead.category}`, summary: lead.summary, reason: `[lead-recovery second pass] ${lead.reason}` }
-  const safe = LEAD_CATEGORIES.has(lead.category)
-    ? safeLeadText({ ...text, fallbackTitle: leadFallbackTitle(lead.category, lead.address ?? lead.neighborhood) })
-    : text
+  // A recovered lead keeps its own words, estate, probate or divorce details
+  // included. Ryan's decision, 2026-10-17: saved seller notes may keep these
+  // details. Buyer-facing text still never names motivation (engineering
+  // precaution, Brief 41 H7).
   const created = await prisma.extractedOpportunity.create({
     data: {
       organizationId, rawEmailId,
@@ -459,9 +456,9 @@ export async function recoverAndPersistBuriedLead(
       beds:                 lead.beds,
       clientSide:           lead.clientSide,
       provenance,
-      extractedTitle:       safe.title,
-      extractedSummary:     safe.summary,
-      classificationReason: safe.reason,
+      extractedTitle:       lead.summary || `Recovered ${lead.category}`,
+      extractedSummary:     lead.summary,
+      classificationReason: `[lead-recovery second pass] ${lead.reason}`,
       confidenceScore:      lead.confidence,
       processingStatus:     'active',
     },
