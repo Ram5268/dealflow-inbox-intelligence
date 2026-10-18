@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { getMessageAttachments } from '../lib/microsoftGraph'
 import { maintenanceApply, scriptArgs } from '../lib/dbGuard'
@@ -38,21 +39,24 @@ async function main() {
 
   // Targets: emails whose Graph payload said hasAttachments=true AND that
   // currently have zero Attachment rows. (Pre-Phase-3D emails.)
+  const where: Prisma.RawEmailWhereInput = {
+    rawJson:     { path: ['hasAttachments'], equals: true },
+    attachments: { none: {} },
+  }
+  if (!APPLY) {
+    const total = await prisma.rawEmail.count({ where })
+    console.log(`[backfill] Dry run: ${total} candidate emails in all; --apply would backfill the ${Math.min(total, limit)} most recent. Nothing fetched or written.`)
+    console.log('[backfill] Re-run with --apply to fetch their attachments from Outlook and save them.')
+    return
+  }
   const candidates = await prisma.rawEmail.findMany({
-    where: {
-      rawJson:     { path: ['hasAttachments'], equals: true },
-      attachments: { none: {} },
-    },
+    where,
     select: { id: true, graphMessageId: true, subject: true, organizationId: true, receivedDateTime: true },
     orderBy: { receivedDateTime: 'desc' },
     take:    limit,
   })
 
   console.log(`[backfill] ${candidates.length} candidate emails`)
-  if (!APPLY) {
-    console.log('[backfill] Dry run: nothing fetched or written. Re-run with --apply to fetch their attachments from Outlook and save them.')
-    return
-  }
 
   let attachmentsWritten = 0
   let emailsWithBytes    = 0

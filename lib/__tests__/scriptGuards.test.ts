@@ -6,8 +6,10 @@
 // A script that isn't on READ_ONLY must import a database guard from
 // lib/dbGuard and call it at the top level, right after its imports: before
 // any function, class, database client use or fetch, so it runs before
-// anything can touch a database or a paid API. The lists below are PR B's
-// classification; a new script needs no entry here, only a guard (or a
+// anything can touch a database or a paid API. The call is a statement of its
+// own (a top-level try is fine), so no condition can skip it, and it is given
+// process.env.DATABASE_URL, the URL lib/prisma uses. The lists below are PR
+// B's classification; a new script needs no entry here, only a guard (or a
 // READ_ONLY entry with its reason).
 //
 // Scope: every TypeScript and JavaScript file under scripts/, in any subfolder
@@ -95,7 +97,7 @@ const MAINTENANCE = [
   'scripts/reprocess-v2-extraction.ts',
 ]
 
-const DB_GUARDS = ['refuseLiveDatabase', 'maintenanceApply', 'assertTestDatabase']
+const DB_GUARDS = ['refuseLiveDatabase', 'maintenanceApply']
 const OVERRIDABLE = ['maintenanceApply', 'assertTestDatabase'] // these accept --i-mean-live
 
 const SCRIPT_FILE = /\.(ts|mts|cts|js|mjs|cjs)$/
@@ -146,19 +148,34 @@ function isFirstUse(n: ts.Node): boolean {
 
 // Source positions of the first call of one of `guards` (by its local name)
 // and of the first possible database or network use; -1 when there is none.
-function positions(f: string, guards: string[]): { call: number; use: number } {
+// The guard call is a statement of its own at the top level (or in a top-level
+// try block), so no condition can skip it, and it checks the URL lib/prisma
+// uses: process.env.DATABASE_URL.
+function unconditional(n: ts.Node): boolean {
+  for (let p = n.parent; p && !ts.isSourceFile(p); n = p, p = p.parent) {
+    const ok = ts.isExpressionStatement(p) || ts.isVariableDeclaration(p) || ts.isVariableDeclarationList(p) ||
+      ts.isVariableStatement(p) || (ts.isBlock(p) && ts.isTryStatement(p.parent) && p.parent.tryBlock === p) ||
+      (ts.isTryStatement(p) && p.tryBlock === n)
+    if (!ok) return false
+  }
+  return true
+}
+const checksDatabaseUrl = (c: ts.CallExpression) => c.arguments[0]?.getText() === 'process.env.DATABASE_URL'
+
+function positions(f: string, guards: string[]): { call: number; use: number; callNode?: ts.CallExpression } {
   const imported = guardImports(f)
   const locals = guards.filter(g => imported.has(g)).map(g => imported.get(g)!)
   const sf = parse(f)
   let call = -1
   let use = -1
+  let callNode: ts.CallExpression | undefined
   const visit = (n: ts.Node): void => {
-    if (call < 0 && ts.isCallExpression(n) && ts.isIdentifier(n.expression) && locals.includes(n.expression.text)) call = n.getStart(sf)
+    if (call < 0 && ts.isCallExpression(n) && ts.isIdentifier(n.expression) && locals.includes(n.expression.text)) { call = n.getStart(sf); callNode = n }
     if (use < 0 && isFirstUse(n)) use = n.getStart(sf)
     ts.forEachChild(n, visit)
   }
   visit(sf)
-  return { call, use }
+  return { call, use, callNode }
 }
 const calls = (f: string, guards: string[]) => positions(f, guards).call >= 0
 
@@ -167,8 +184,8 @@ const calls = (f: string, guards: string[]) => positions(f, guards).call >= 0
 const WRITES = [
   /\.(create|createMany|createManyAndReturn|update|updateMany|upsert|delete|deleteMany)\s*\(/,
   /\$executeRaw/,
-  /\b(INSERT\s+INTO|DELETE\s+FROM|TRUNCATE)\b/,
-  /\bUPDATE\s+["\w]+\s+SET\b/,
+  /\b(INSERT\s+INTO|DELETE\s+FROM|TRUNCATE)\b/i,
+  /\bUPDATE\s+["\w.]+(\s+(AS\s+)?\w+)?\s+SET\b/i,
   /method:\s*['"](POST|PUT|PATCH|DELETE)['"]/i,
 ]
 
@@ -176,9 +193,11 @@ test('every script outside READ_ONLY imports a database guard from lib/dbGuard a
   const problems: string[] = []
   for (const f of listScripts()) {
     if (f in READ_ONLY) continue
-    const { call, use } = positions(f, DB_GUARDS)
+    const { call, use, callNode } = positions(f, DB_GUARDS)
     if (call < 0) problems.push(`${f}: imports and calls no database guard from lib/dbGuard`)
     else if (use >= 0 && use < call) problems.push(`${f}: call the guard at the top level right after the imports, before any function, class, prisma use or fetch`)
+    else if (!unconditional(callNode!)) problems.push(`${f}: call the guard as a statement of its own, not under a condition`)
+    else if (!checksDatabaseUrl(callNode!)) problems.push(`${f}: give the guard process.env.DATABASE_URL, the URL lib/prisma uses`)
   }
   assert.deepEqual(problems, [])
 })

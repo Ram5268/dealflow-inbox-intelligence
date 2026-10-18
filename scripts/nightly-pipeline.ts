@@ -4,6 +4,10 @@
 //   npx tsx scripts/nightly-pipeline.ts                           # dry run (default): all steps; SQL rolled back, list not saved
 //   npx tsx scripts/nightly-pipeline.ts --step=scoring            # one step, dry run: crm | scoring | queue
 //   npx tsx scripts/nightly-pipeline.ts --apply                   # writes (on the live database also --i-mean-live)
+// The dry run of steps 1-2 runs the real statements, each step in one
+// transaction, and rolls back, so it briefly takes the same row locks as a real
+// run: don't run it around the nightly job at 09:00 UTC (5 am ET in summer, 4 am
+// in winter).
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { closeCrmPool } from '../lib/crm-sync/roClient'
