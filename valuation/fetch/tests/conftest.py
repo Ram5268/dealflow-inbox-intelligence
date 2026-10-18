@@ -58,6 +58,11 @@ def excel_files():
     return {f.path: OLE2 + f"made-up sheet {f.name}".encode() for f in allowlist.DOF_FILES}
 
 
+def fake_id(i):
+    """A made-up Socrata row id for row i. Like the real ones, ids don't sort alphabetically in row order."""
+    return f"row-{(i * 7919 + 13) % 10000:04d}.test~{i:04x}"
+
+
 @dataclass
 class Call:
     url: str
@@ -112,8 +117,18 @@ class FakeServer:
                 "rowsUpdatedAt": stamps.pop(0) if stamps else 1_790_000_000,
                 "columns": self.columns.get(ds.id) or [{"fieldName": c, "dataTypeName": "text"} for c in ds.columns],
             })
-        offset, limit = int(call.params["$offset"]), int(call.params["$limit"])
-        return response(200, self.rows.get(ds.id, [])[offset:offset + limit])
+        # Keyset paging, parsed independently of the code under test: rows after the
+        # one whose id follows ":id > '" at the end of $where.
+        rows = self.rows.get(ds.id, [])
+        ids = [fake_id(i) for i in range(len(rows))]
+        start = 0
+        where = call.params.get("$where", "")
+        if ":id > '" in where:
+            cursor = where.rsplit(":id > '", 1)[1][:-1]
+            start = ids.index(cursor) + 1 if cursor in ids else len(rows)
+        stop = min(start + int(call.params["$limit"]), len(rows))
+        with_id = call.params["$select"].startswith(":id,")
+        return response(200, [({":id": ids[i]} if with_id else {}) | rows[i] for i in range(start, stop)])
 
 
 @pytest.fixture
@@ -129,7 +144,7 @@ def session(server):
 @pytest.fixture
 def helpers():
     return SimpleNamespace(response=response, tiny_rows=tiny_rows, excel_files=excel_files, OLE2=OLE2,
-                           FakeSession=FakeSession, today=TODAY)
+                           fake_id=fake_id, FakeSession=FakeSession, today=TODAY)
 
 
 @pytest.fixture

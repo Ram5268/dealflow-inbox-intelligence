@@ -74,9 +74,14 @@ def _table():
 TABLE = _table()
 
 
-def test_same_datasets_in_the_same_order():
-    assert [r["id"] for r in TABLE] == list(allowlist.DATASETS)
-    assert [r["number"] for r in TABLE] == [d.number for d in allowlist.DATASETS.values()]
+def test_same_datasets_as_section_2():
+    assert {r["id"]: r["number"] for r in TABLE} == {d.id: d.number for d in allowlist.DATASETS.values()}
+
+
+def test_run_order_is_section_2_with_hpd_last():
+    # Revision 1 (2026-10-18): HPD (#15) moves to the end of the run order.
+    expected = [r["id"] for r in TABLE if r["id"] != "wvxf-dwi5"] + ["wvxf-dwi5"]
+    assert list(allowlist.DATASETS) == expected
 
 
 @pytest.mark.parametrize("row", TABLE, ids=lambda r: r["id"])

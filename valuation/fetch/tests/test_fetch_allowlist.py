@@ -78,21 +78,34 @@ def test_client_refuses_addresses_off_the_list(session, url):
     assert session.calls == []
 
 
+ROW_ID = "row-bkju.iehg~yk3u"  # the shape of a real Socrata row id
+
+
 def _page_params(ds, **changes):
-    params = {"$select": ",".join(ds.columns), "$where": allowlist.where_for(ds, 2027),
-              "$order": ":id", "$limit": "50000", "$offset": "0"}
+    params = {"$select": ":id," + ",".join(ds.columns), "$where": allowlist.where_for(ds, 2027),
+              "$order": ":id", "$limit": "50000"}
     params.update(changes)
     return {k: v for k, v in params.items() if v is not None}
 
 
 @pytest.mark.parametrize("changes", [
-    {"$select": ",".join(PLUTO.columns + ("ownername",))},
+    {"$select": ":id," + ",".join(PLUTO.columns + ("ownername",))},
+    {"$select": ",".join(PLUTO.columns)},  # paging needs :id first
+    {"$select": ",".join(PLUTO.columns) + ",:id"},
+    {"$select": "ownername," + ",".join(PLUTO.columns)},  # the first slot is for :id only
     {"$where": "borough in ('MN')"},
     {"$where": None},
+    {"$where": f":id > '{ROW_ID}'"},  # the dataset's own filter dropped
+    {"$where": f"(borough in ('MN')) AND :id > '{ROW_ID}'"},
+    {"$where": f"{PLUTO.where} AND :id > '{ROW_ID}'"},  # not the exact shape
+    {"$where": f"({PLUTO.where}) AND :id > '{ROW_ID}' OR 1=1"},
+    {"$where": f"({PLUTO.where}) AND :id > 'x'' OR ''1''=''1'"},
+    {"$where": f"({PLUTO.where}) AND :id >= '{ROW_ID}'"},
+    {"$where": f"({PLUTO.where}) AND bbl = '3012340001'"},  # one property: never
     {"$order": "bbl"},
     {"$limit": "50001"},
     {"$limit": "0"},
-    {"$offset": "-1"},
+    {"$offset": "0"},  # replaced by keyset paging (Revision 1)
     {"$q": "test"},
     {"$group": "borough"},
 ])
@@ -100,6 +113,22 @@ def test_client_refuses_parameters_off_the_list(session, changes):
     with pytest.raises(NotAllowed):
         Client(session, 2027).get(PLUTO.resource_url, "test", _page_params(PLUTO, **changes))
     assert session.calls == []
+
+
+def test_first_and_later_pages_are_allowed():
+    base = allowlist.where_for(PLUTO, 2027)
+    allowlist.check_request(PLUTO.resource_url, _page_params(PLUTO), 2027)
+    allowlist.check_request(PLUTO.resource_url, _page_params(PLUTO, **{"$where": f"({base}) AND :id > '{ROW_ID}'"}),
+                            2027)
+    mta = DATASETS["39hk-dx4f"]
+    allowlist.check_request(mta.resource_url, _page_params(mta, **{"$where": None}), 2027)
+    allowlist.check_request(mta.resource_url, _page_params(mta, **{"$where": f":id > '{ROW_ID}'"}), 2027)
+
+
+@pytest.mark.parametrize("cursor", ["x' OR '1'='1", "row-ab'cd", "row-", "", "row-abcd efgh", 7])
+def test_a_cursor_that_is_not_a_row_id_is_never_put_in_a_filter(cursor):
+    with pytest.raises(NotAllowed):
+        allowlist.page_where(PLUTO.where, cursor)
 
 
 def test_client_refuses_parameters_on_metadata_and_dof_addresses(session):

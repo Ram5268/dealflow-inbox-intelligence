@@ -6,12 +6,18 @@ the model's tables does the typing; the manifest records each column's type
 from the city's metadata to help it.
 
 Where each rule comes from (all engineering precautions):
-- Pages of 50,000 rows with $limit and $offset, ordered by :id, one request
-  at a time, until a page comes back short.
+- Keyset paging (Brief 44.1 Revision 1, 2026-10-18): pages of 50,000 rows
+  ordered by :id, one request at a time. After the first page, each request
+  adds `:id > '<last :id>'` to the dataset's own filter, so every page is
+  equally quick for the city's server at any depth. It stops at a short page.
+  :id is requested for paging only and never saved.
+- A page that doesn't move past the previous cursor, or a row id that
+  doesn't look like a Socrata row id, stops the run.
 - The file is written to <id>.parquet.partial and renamed only when every
   check has passed, so a failed run never leaves a file that looks complete.
 - The city's metadata is read before and after the pages. If the dataset was
-  updated in between, its pages may not line up, so the run stops.
+  updated in between (a full reload would give its rows new ids), the run
+  stops.
 - A row with any column outside the allow-list stops the run.
 """
 from __future__ import annotations
@@ -25,7 +31,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from .allowlist import ORDER, PAGE_SIZE, Dataset, check_query
+from .allowlist import CURSOR, ID, ORDER, PAGE_SIZE, Dataset, check_query, page_where
 from .client import Client, FetchError
 from .manifest import sha256_file, utc_now
 
@@ -44,15 +50,16 @@ def download_dataset(client: Client, dataset_id: str, columns, where: str | None
     final.parent.mkdir(parents=True, exist_ok=True)
     partial = final.with_name(final.name + ".partial")
     schema = pa.schema([(c, pa.string()) for c in ds.columns])
-    params = {"$select": ",".join(ds.columns), "$order": ORDER, "$limit": str(page_size)}
-    if where is not None:
-        params["$where"] = where
-    offset = rows = pages = 0
+    params = {"$select": ",".join((ID,) + ds.columns), "$order": ORDER, "$limit": str(page_size)}
+    cursor = None
+    rows = pages = 0
     try:
         with pq.ParquetWriter(partial, schema, compression="zstd") as writer:
             while True:
                 page_started = time.monotonic()
-                resp = client.get(ds.resource_url, ds.label, {**params, "$offset": str(offset)})
+                this_where = page_where(where, cursor)
+                resp = client.get(ds.resource_url, ds.label,
+                                  params if this_where is None else {**params, "$where": this_where})
                 page = _rows(ds, resp, page_size)
                 if page:
                     writer.write_table(_table(ds, page, schema))
@@ -62,7 +69,9 @@ def download_dataset(client: Client, dataset_id: str, columns, where: str | None
                     f"{time.monotonic() - page_started:.1f}s ({rows:,} so far)")
                 if len(page) < page_size:
                     break
-                offset += page_size
+                if cursor is not None and cursor in (page[0][ID], page[-1][ID]):
+                    raise FetchError(f"{ds.label}: page {pages} didn't move past the last :id, so paging stopped")
+                cursor = page[-1][ID]
         after = _metadata(client, ds)
         if after.get("rowsUpdatedAt") != before.get("rowsUpdatedAt"):
             raise FetchError(f"{ds.label}: the city updated this dataset during the download, "
@@ -119,11 +128,14 @@ def _rows(ds: Dataset, resp, page_size: int) -> list[dict]:
         raise FetchError(f"{ds.label}: a page was not a list of rows")
     if len(data) > page_size:
         raise FetchError(f"{ds.label}: a page had {len(data):,} rows, more than the {page_size:,} asked for")
-    allowed = set(ds.columns)
+    allowed = set(ds.columns) | {ID}  # :id is for paging only; _table leaves it out
     for row in data:
         if not allowed.issuperset(row):
             extra = ", ".join(sorted(set(row) - allowed))
             raise FetchError(f"{ds.label}: a page had column(s) outside the allow-list: {extra}")
+        row_id = row.get(ID)
+        if not isinstance(row_id, str) or not CURSOR.fullmatch(row_id):
+            raise FetchError(f"{ds.label}: a row came back without a normal :id, so paging can't continue")
     return data
 
 

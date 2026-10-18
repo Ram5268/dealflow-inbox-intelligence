@@ -73,13 +73,28 @@ manifest records why; `2` refused before any request.
 
 The exact columns and filters are in `allowlist.py`.
 
+## Running it monthly
+
+Give the scheduled job a 4-hour timeout (Brief 44.1 Revision 1), and the
+NYC Open Data key pair as the secrets `NYC_SOCRATA_KEY_ID` and
+`NYC_SOCRATA_KEY_SECRET`. The 26 DOF files can be cached between runs:
+with the previous `manifest.json`, unchanged ones are skipped.
+
 ## Rules, and where each comes from
 
 - **Engineering precaution:** whole datasets or whole-borough extracts only.
   No request is about a particular property; all lookups happen later,
   inside the saved files.
-- **Engineering precaution:** one request at a time, in order: pages of
-  50,000 rows, ordered by `:id`. No threads and no parallel requests.
+- **Engineering precaution:** one request at a time, in order. No threads
+  and no parallel requests.
+- **Engineering precaution (Brief 44.1 Revision 1, 2026-10-18), keyset
+  paging:** pages of 50,000 rows ordered by `:id`. After the first page,
+  each request adds `:id > '<last :id>'` to the dataset's own filter, so
+  every page is equally quick for the city's server. `$offset` paging
+  made deep pages slow until the city's server cut them off. `:id` is
+  requested for paging only and never saved.
+- **Run order (Revision 1):** section 2 order, except HPD (#15) last, so
+  the biggest dataset can't hold up the others.
 - **Engineering precaution:** no retry or back-off code. A failed request
   stops the run with an error naming the dataset and the HTTP status. The
   monthly schedule has a backup run three days later.

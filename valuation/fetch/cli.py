@@ -1,7 +1,7 @@
 """python -m valuation.fetch --out <folder>
 
-Downloads every source in the allow-list, in Brief 44.1 section 2 order, one
-request at a time. The manifest is rewritten after each file, so it always
+Downloads every source in the allow-list, one request at a time, in run order:
+Brief 44.1 section 2 order, except HPD (#15) last (Revision 1, 2026-10-18). The manifest is rewritten after each file, so it always
 describes what is on disk. A failure stops the run (exit code 1) and is
 recorded in the manifest; a refusal (exit code 2) happens before any request.
 """
@@ -24,7 +24,7 @@ from .client import Client, FetchError
 from .socrata import download_dataset
 from .static_files import download_static_files
 
-# Every file the manifest may describe, in section 2 order.
+# Every file the manifest may describe, in run order.
 _ORDER = [f.out_path for f in DOF_FILES] + [d.out_path for d in DATASETS.values()]
 
 

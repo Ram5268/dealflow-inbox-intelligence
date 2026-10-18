@@ -20,6 +20,11 @@ Where each rule comes from:
     written for a number column.
   - #12 spells the boroughs two ways ('Brooklyn' and 'BROOKLYN'); both are
     kept.
+- Engineering precaution (Brief 44.1 Revision 1, 2026-10-18, relayed by
+  Ryan): keyset paging. After the first page, each request adds
+  `:id > '<last :id>'` to the dataset's own filter. :id is requested for
+  paging only and never saved. HPD (#15) runs last, so the biggest dataset
+  can't hold up the others.
 
 Never downloaded (engineering precautions, except PLUTO `ownername` above):
 ACRIS Real Property Parties (636b-3b5g); any ACRIS mortgage, loan,
@@ -34,6 +39,7 @@ downloader can't ask for them.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from dataclasses import dataclass
 from typing import Mapping
 from urllib.parse import urlsplit
@@ -42,9 +48,17 @@ NYC_OPEN_DATA = "data.cityofnewyork.us"
 NY_STATE_OPEN_DATA = "data.ny.gov"
 NYC_GOV = "www.nyc.gov"
 
-# Engineering precaution: one 50,000-row page per request, ordered by :id.
+# Engineering precaution (Revision 1): pages of 50,000 rows ordered by :id,
+# each starting after the last :id of the page before. $offset made the
+# city's server re-scan to the offset on every page, so deep pages slowed
+# down and were cut off.
 PAGE_SIZE = 50_000
-ORDER = ":id"
+ID = ":id"
+ORDER = ID
+# A Socrata row id, such as row-bkju.iehg~yk3u. A value that doesn't look
+# like this is never put into a filter.
+CURSOR = re.compile(r"row-[A-Za-z0-9._~-]{1,60}")
+_BOUND = re.compile(r"(?:\((?P<base>.*)\) AND )?:id > '(?P<cursor>[^']*)'", re.DOTALL)
 
 
 class NotAllowed(ValueError):
@@ -201,13 +215,6 @@ _DATASET_LIST = (
         min_rows=520_000,
     ),
     Dataset(
-        15, "wvxf-dwi5", NYC_OPEN_DATA, "Housing Maintenance Code Violations",
-        "bbl >= '3' AND bbl < '5'",
-        _cols("bbl, violationid, class, inspectiondate, novissueddate, currentstatus, currentstatusdate, "
-              "violationstatus, rentimpairing"),
-        min_rows=2_800_000,
-    ),
-    Dataset(
         16, "5zhs-2jue", NYC_OPEN_DATA, "BUILDING",  # the building footprints dataset
         "base_bbl >= '3' AND base_bbl < '5'",
         _cols("bin, base_bbl, mappluto_bbl, shape_area, height_roof, ground_elevation, construction_year, "
@@ -226,9 +233,16 @@ _DATASET_LIST = (
         _cols("station_id, complex_id, stop_name, borough, daytime_routes, gtfs_latitude, gtfs_longitude"),
         min_rows=240,
     ),
+    Dataset(
+        15, "wvxf-dwi5", NYC_OPEN_DATA, "Housing Maintenance Code Violations",
+        "bbl >= '3' AND bbl < '5'",
+        _cols("bbl, violationid, class, inspectiondate, novissueddate, currentstatus, currentstatusdate, "
+              "violationstatus, rentimpairing"),
+        min_rows=2_800_000,
+    ),
 )
 
-# In section 2 order.
+# In run order: section 2 order, except HPD (#15) last (Revision 1).
 DATASETS: dict[str, Dataset] = {d.id: d for d in _DATASET_LIST}
 
 
@@ -345,12 +359,39 @@ def check_request(url: str, params: Mapping[str, str] | None, newest_roll_year: 
         if params:
             raise NotAllowed(f"{ds.label}: the metadata address takes no parameters")
         return
-    allowed_keys = {"$select", "$order", "$limit", "$offset"} | ({"$where"} if ds.where is not None else set())
-    if set(params) != allowed_keys:
-        raise NotAllowed(f"{ds.label}: parameters must be exactly {', '.join(sorted(allowed_keys))}")
-    check_query(ds.id, params["$select"].split(","), params.get("$where"), newest_roll_year)
+    base = where_for(ds, newest_roll_year)
+    keys = {"$select", "$order", "$limit"} | ({"$where"} if "$where" in params else set())
+    if set(params) != keys or (base is not None and "$where" not in params):
+        raise NotAllowed(f"{ds.label}: a page takes exactly $select, $order, $limit and its $where")
+    where = params.get("$where")
+    if where != base:  # a later page: its own filter plus one :id bound
+        cursor = cursor_in(where, base)
+        if cursor is None or page_where(base, cursor) != where:
+            raise NotAllowed(f"{ds.label}: $where is not its allow-listed filter (plus one :id bound)")
+    select = params["$select"].split(",")
+    if select[:1] != [ID]:
+        raise NotAllowed(f"{ds.label}: $select must start with {ID}, which paging needs")
+    check_query(ds.id, select[1:], base, newest_roll_year)
     if params["$order"] != ORDER:
         raise NotAllowed(f"{ds.label}: pages must be ordered by {ORDER}")
-    limit, offset = params["$limit"], params["$offset"]
-    if not (limit.isdigit() and 0 < int(limit) <= PAGE_SIZE and offset.isdigit()):
-        raise NotAllowed(f"{ds.label}: $limit must be 1-{PAGE_SIZE} and $offset a whole number")
+    limit = params["$limit"]
+    if not (limit.isdigit() and 0 < int(limit) <= PAGE_SIZE):
+        raise NotAllowed(f"{ds.label}: $limit must be 1-{PAGE_SIZE}")
+
+
+def page_where(where: str | None, cursor: str | None) -> str | None:
+    """A page's $where: the dataset's own filter, plus `:id > '<cursor>'` after the first page."""
+    if cursor is None:
+        return where
+    if not isinstance(cursor, str) or not CURSOR.fullmatch(cursor):
+        raise NotAllowed(f"not a Socrata row id: {cursor!r}")
+    bound = f"{ID} > '{cursor}'"
+    return bound if where is None else f"({where}) AND {bound}"
+
+
+def cursor_in(where: str | None, base: str | None) -> str | None:
+    """The cursor in a page's $where, if it is exactly `base` plus one :id bound."""
+    match = _BOUND.fullmatch(where or "")
+    if match is None or match.group("base") != base or not CURSOR.fullmatch(match.group("cursor")):
+        return None
+    return match.group("cursor")
