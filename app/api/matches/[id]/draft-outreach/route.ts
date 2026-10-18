@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { formatPriceRange } from '@/lib/utils'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { resolveSupply } from '@/lib/matching/supplyResolver'
+import { buyerFacingSupply } from '@/lib/buyerFacingSupply'
 import { draftOutreachSystemPrompt } from '@/lib/matching/draftPrompt'
 import { MIXED_TEST_PAIR, isMixedTestPair, matchSides } from '@/lib/matching/pairSafety'
 
@@ -154,9 +155,14 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!party) return NextResponse.json({ error: 'no counterpart party to draft to' }, { status: 400 })
 
   // Brief 32 — supply may be an ExtractedOpportunity or a MojoContact seller.
-  const opp = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
-  if (!opp) return NextResponse.json({ error: 'listing side not found' }, { status: 404 })
+  const found = await resolveSupply(prisma, match.opportunityId, match.opportunityType)
+  if (!found) return NextResponse.json({ error: 'listing side not found' }, { status: 404 })
   // Brief 41 (H7): never a homeowner's name, our estimate or a seller-circumstance reason.
+  // Ryan's decision, 2026-10-17: saved seller notes may keep these details.
+  // Buyer-facing text still never names motivation (engineering precaution,
+  // Brief 41 H7): a lead or a client conversation here (an old or odd row; no
+  // matcher writes one) is drafted exactly like a homeowner.
+  const opp = buyerFacingSupply(found)
   const listingAddress = opp.address ?? opp.extractedTitle
   const system = draftOutreachSystemPrompt({ channel, party, supply: opp, matchReason: match.reason, counterpartType: match.counterpartType })
 

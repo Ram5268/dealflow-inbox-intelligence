@@ -9,6 +9,7 @@ import { Category } from '@prisma/client'
 import type { PrismaClient } from '@prisma/client'
 import type { GenContext, BuyerRecord, MatchedListing } from '../types'
 import { resolveSupplies } from '../../../matching/supplyResolver'
+import { buyerFacingSupply } from '../../../buyerFacingSupply'
 
 const BUYER_SELECT = {
   id: true, category: true, extractedTitle: true, neighborhoods: true, neighborhood: true,
@@ -74,8 +75,13 @@ export async function gatherContext({
     // record is missing (deleted opp/contact) are dropped.
     const supplies = await resolveSupplies(prisma, rows)
     cache = rows.flatMap(m => {
-      const s = supplies.get(m.opportunityId)
-      if (!s) return []
+      const found = supplies.get(m.opportunityId)
+      if (!found) return []
+      // Ryan's decision, 2026-10-17: saved seller notes may keep these details.
+      // Buyer-facing text still never names motivation (engineering precaution,
+      // Brief 41 H7): a lead or a client conversation here (an old or odd row;
+      // no matcher writes one) is shown exactly like a homeowner.
+      const s = buyerFacingSupply(found)
       return [{
         matchId: m.id,
         tier: m.tier,
