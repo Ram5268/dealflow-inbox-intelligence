@@ -7,8 +7,12 @@ import { join, relative, sep } from 'node:path'
 // in lib/crm-sync/roClient.ts, so every CRM read goes through its one-statement,
 // READ ONLY wrapper. Engineering precaution from the Oct 16, 2026 system-map
 // review. No database: it only reads source files. It scans every .ts, .tsx,
-// .js, .mjs and .cjs file outside node_modules, .next and .git. .env.example
-// and docs aren't code.
+// .mts, .cts, .js, .jsx, .mjs and .cjs file outside node_modules, .next, .git
+// and .vercel; in other runnable or config files (Python, shell, YAML, JSON,
+// TOML, SQL) any mention counts as a read. .env files and docs (.md) aren't code.
+// A static scan catches mistakes, not deliberate obfuscation: a name built
+// from pieces ('DATABASE_URL_' + 'CRM_RO'), an interpolated template, or nested
+// or parameter destructuring stay out of its reach.
 
 const ROOT = join(__dirname, '..', '..', '..')
 const NAME = 'DATABASE_URL_CRM_RO'
@@ -19,8 +23,10 @@ const SETS_ONLY: Record<string, string> = {
   'lib/crm-sync/__tests__/roClient.test.ts':
     'points crmQuery at a placeholder address (pg is faked, nothing connects) and deletes it afterwards',
 }
-const SKIP_DIRS = new Set(['node_modules', '.next', '.git'])
-const CODE = /\.(ts|tsx|js|mjs|cjs)$/
+const SKIP_DIRS = new Set(['node_modules', '.next', '.git', '.vercel'])
+const CODE = /\.[cm]?[jt]sx?$/
+// No JS-style comments to exempt here, so any mention is a read.
+const OTHER = /\.(py|sh|bash|zsh|ya?ml|json|toml|sql)$|^(Dockerfile|Makefile|Procfile)$/
 
 // The ways code can read the setting: a property access (process.env.X,
 // process.env?.X, env.X on an alias), a string literal ('X', "X", `X`: covers
@@ -52,7 +58,7 @@ function codeFiles(dir = ROOT): string[] {
     if (e.isSymbolicLink()) continue
     const p = join(dir, e.name)
     if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) out.push(...codeFiles(p)) }
-    else if (e.isFile() && CODE.test(e.name)) out.push(relative(ROOT, p).split(sep).join('/'))
+    else if (e.isFile() && (CODE.test(e.name) || OTHER.test(e.name))) out.push(relative(ROOT, p).split(sep).join('/'))
   }
   return out
 }
@@ -93,6 +99,7 @@ test('only lib/crm-sync/roClient.ts reads DATABASE_URL_CRM_RO', () => {
     if (f === READER || f === SELF) continue
     const source = readFileSync(join(ROOT, f), 'utf8')
     if (!source.includes(NAME)) continue
+    if (!CODE.test(f)) { offenders.push(`${f} (mentions it)`); continue }
     for (const hit of readsIn(f in SETS_ONLY ? withoutSets(source) : source)) offenders.push(`${f}:${hit.line} (${hit.form})`)
   }
   assert.deepEqual(offenders, [], `Read ${NAME} only in ${READER}; elsewhere go through crmQuery. Found:\n${offenders.join('\n')}`)
