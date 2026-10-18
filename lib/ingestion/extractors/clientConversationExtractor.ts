@@ -2,7 +2,6 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import type { ExtractorInput, ExtractionResult } from '../types'
-import { safeConversationText, leadFallbackTitle, mentionsPersonalCircumstances } from '../../extraction/personalCircumstances'
 
 export const EXTRACTOR_VERSION = '1.0'
 
@@ -52,7 +51,6 @@ EXTRACTION RULES:
 - keyTopics: brief summary of the main topics discussed (2–3 phrases max)
 - nextStep: any explicit follow-up action or next step mentioned
 - extractedSummary: 1–2 sentences capturing who this is and what they need
-- Never record personal circumstances (estate, probate, inheritance, divorce, death, illness, family matters) of a seller, landlord or property owner: leave them out of every field
 - confidenceScore: 0.9+ clear, 0.7–0.9 probable
 
 Return ONLY valid JSON: { "conversations": [...] }`
@@ -127,17 +125,13 @@ export default async function extract(input: ExtractorInput): Promise<Extraction
     sourceBrokerage:      c.brokerage ?? null,
     clientSide:           c.clientSide ?? null,
     status:               null,
-    // Brief 41.1: a seller's or landlord's conversation (or one whose side isn't
-    // clear) never stores their personal circumstances (the same helper as V2).
-    ...(({ title, summary, reason }) => ({ extractedTitle: title, extractedSummary: summary, classificationReason: reason }))(
-      safeConversationText({
-        clientSide: c.clientSide,
-        title: c.extractedTitle,
-        summary: [c.extractedSummary, c.nextStep ? `Next: ${c.nextStep}` : null].filter(Boolean).join(' '),
-        reason: c.classificationReason,
-        fallbackTitle: leadFallbackTitle('CLIENT_CONVERSATION', c.address ?? c.neighborhood),
-      }),
-    ),
+    // Saved as the model returned them, whichever side the client is on.
+    // Ryan's decision, 2026-10-17: saved seller notes may keep these details.
+    // Buyer-facing text still never names motivation (engineering precaution,
+    // Brief 41 H7). The decision covers client conversations too.
+    extractedTitle:       c.extractedTitle,
+    extractedSummary:     [c.extractedSummary, c.nextStep ? `Next: ${c.nextStep}` : null].filter(Boolean).join(' '),
+    classificationReason: c.classificationReason,
     confidenceScore:      c.confidenceScore,
   }))
 }
@@ -167,7 +161,7 @@ function schemaFailed(input: ExtractorInput, reason: string): ExtractionResult {
     sourceBrokerage:      null,
     clientSide:           null,
     status:               null,
-    extractedTitle:       input.subject && !mentionsPersonalCircumstances(input.subject) ? input.subject : '(client conversation)',
+    extractedTitle:       input.subject ?? '(client conversation)',
     extractedSummary:     'Extraction failed — requires manual review.',
     classificationReason: reason,
     confidenceScore:      0,
