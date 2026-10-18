@@ -16,9 +16,9 @@ const row = (id: string, mojoId: string, fullName: string, address: string, inta
 })
 
 test('exact mojoId row is the keeper; its csv twin becomes a duplicate', () => {
-  const plan = planSync([contact('13628', 'Shawn Martin', '194 33rd St')], [
-    row('num', '13628', 'Shawn Martin', '194 33rd St'),
-    row('csv', 'csv_shawn_martin_9139', 'SHAWN MARTIN', '194 33rd Street', false),
+  const plan = planSync([contact('13628', 'Chris Example', '12 500th St')], [
+    row('num', '13628', 'Chris Example', '12 500th St'),
+    row('csv', 'csv_chris_example_9139', 'CHRIS EXAMPLE', '12 500th Street', false),
   ])
   assert.equal(plan.upserts[0].keeper?.id, 'num')
   assert.deepEqual(plan.duplicates, [{ id: 'csv', keeper_id: 'num' }])
@@ -26,21 +26,21 @@ test('exact mojoId row is the keeper; its csv twin becomes a duplicate', () => {
 })
 
 test('csv-only person: the intact copy is re-keyed to the CRM mojoId, the scrambled copy is a duplicate', () => {
-  const plan = planSync([contact('14592', 'Arnold Championsmith', '824 Jefferson Ave')], [
-    row('scrambled', 'csv_arnold_championsmith_1919', 'Arnold Championsmith', '824 Jefferson Ave', false),
-    row('intact', 'csv_arnold_championsmith_0274', 'Arnold Championsmith', '824 Jefferson Ave'),
+  const plan = planSync([contact('14592', 'Robin Sample', '40 Sample Ave')], [
+    row('scrambled', 'csv_robin_sample_1919', 'Robin Sample', '40 Sample Ave', false),
+    row('intact', 'csv_robin_sample_0274', 'Robin Sample', '40 Sample Ave'),
   ])
   assert.equal(plan.upserts[0].keeper?.id, 'intact')
-  assert.deepEqual(plan.rekeys, [{ id: 'intact', old_id: 'csv_arnold_championsmith_0274', new_id: '14592' }])
+  assert.deepEqual(plan.rekeys, [{ id: 'intact', old_id: 'csv_robin_sample_0274', new_id: '14592' }])
   assert.deepEqual(plan.duplicates, [{ id: 'scrambled', keeper_id: 'intact' }])
 })
 
 test('csv-only person with no single intact copy is skipped, never inserted', () => {
   for (const rows of [
-    [row('a', 'csv_a', 'Ben Vardi', '546 Chauncey St', false), row('b', 'csv_b', 'Ben Vardi', '546 Chauncey St', false)],
-    [row('a', 'csv_a', 'Ben Vardi', '546 Chauncey St'), row('b', 'csv_b', 'Ben Vardi', '546 Chauncey St')],
+    [row('a', 'csv_a', 'Dana Placeholder', '50 Placeholder St', false), row('b', 'csv_b', 'Dana Placeholder', '50 Placeholder St', false)],
+    [row('a', 'csv_a', 'Dana Placeholder', '50 Placeholder St'), row('b', 'csv_b', 'Dana Placeholder', '50 Placeholder St')],
   ]) {
-    const plan = planSync([contact('14428', 'Ben Vardi', '546 Chauncey St')], rows)
+    const plan = planSync([contact('14428', 'Dana Placeholder', '50 Placeholder St')], rows)
     assert.deepEqual([plan.upserts, plan.rekeys, plan.duplicates], [[], [], []])
     assert.equal(plan.skipped.length, 1)
     assert.deepEqual(plan.skipped[0].rowIds, ['a', 'b'])
@@ -65,9 +65,9 @@ test('a genuinely new lead is an insert; numeric rows are never grouped by name'
 })
 
 test('second run after re-key: same keeper, no re-key, same duplicates', () => {
-  const plan = planSync([contact('14592', 'Arnold Championsmith', '824 Jefferson Ave')], [
-    row('scrambled', 'csv_arnold_championsmith_1919', 'Arnold Championsmith', '824 Jefferson Ave', false),
-    row('intact', '14592', 'Arnold Championsmith', '824 Jefferson Ave'),
+  const plan = planSync([contact('14592', 'Robin Sample', '40 Sample Ave')], [
+    row('scrambled', 'csv_robin_sample_1919', 'Robin Sample', '40 Sample Ave', false),
+    row('intact', '14592', 'Robin Sample', '40 Sample Ave'),
   ])
   assert.equal(plan.upserts[0].keeper?.id, 'intact')
   assert.deepEqual(plan.rekeys, [])
