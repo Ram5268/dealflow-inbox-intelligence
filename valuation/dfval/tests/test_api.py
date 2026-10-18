@@ -48,3 +48,25 @@ def test_no_key_refuses(monkeypatch):
     monkeypatch.delenv(config.SECRET_ENV, raising=False)
     with pytest.raises(RuntimeError):
         api.DealFlow()
+
+
+def test_publish_logs_each_request_and_where_it_stopped():
+    from valuation.dfval import runjob
+
+    sent = []
+
+    class DropsThirdRequest:
+        def post(self, payload):
+            sent.append(payload["action"])
+            if len(sent) == 3:
+                raise requests.ConnectionError("Remote end closed connection without response")
+            return {"ok": True, "gatesPassed": True}
+
+    logs = []
+    rows = [{"contactId": f"c{i}"} for i in range(450)]
+    with pytest.raises(requests.ConnectionError):
+        runjob.publish(DropsThirdRequest(), {"runId": "r1"}, rows, True, logs.append)
+    assert sent == ["start", "rows", "rows"]  # no retry after the failure
+    assert [line.split(":")[0].strip() for line in logs[:3]] == ["send start", "send rows 1-200", "send rows 201-400"]
+    assert len(logs) == 4 and logs[3].strip().startswith("rows 201-400 failed after ") and logs[3].endswith("s: ConnectionError")
+    assert all("c1" not in line for line in logs)  # sizes and steps only, never the rows
