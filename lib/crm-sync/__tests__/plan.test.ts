@@ -75,12 +75,12 @@ test('second run after re-key: same keeper, no re-key, same duplicates', () => {
 })
 
 test('appendNew: existing phones keep their order, new ones append (last 10 digits)', () => {
-  assert.deepEqual(appendNew('9175550123', ['7185550100'], ['3302342085', '9175550123', '17185550100'], phoneKey),
-    { first: '9175550123', rest: ['7185550100', '3302342085'] })
-  assert.deepEqual(appendNew(null, [], ['3302342085', '9175550123'], phoneKey),
-    { first: '3302342085', rest: ['9175550123'] })
-  assert.deepEqual(appendNew(null, ['7185550100'], ['7185550100', '3302342085'], phoneKey),
-    { first: '3302342085', rest: ['7185550100'] })
+  assert.deepEqual(appendNew('9175550123', ['7185550100'], ['3305550142', '9175550123', '17185550100'], phoneKey),
+    { first: '9175550123', rest: ['7185550100', '3305550142'] })
+  assert.deepEqual(appendNew(null, [], ['3305550142', '9175550123'], phoneKey),
+    { first: '3305550142', rest: ['9175550123'] })
+  assert.deepEqual(appendNew(null, ['7185550100'], ['7185550100', '3305550142'], phoneKey),
+    { first: '3305550142', rest: ['7185550100'] })
   assert.deepEqual(appendNew('9175550123', null, [], phoneKey), { first: '9175550123', rest: [] })
 })
 

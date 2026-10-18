@@ -48,7 +48,7 @@ test('metadata markers use COALESCE and skip test data', () => {
   for (const s of [REKEY_SQL, DUPLICATES_SQL, LEGACY_SQL, REMOVED_SQL]) assert.ok(s.includes('NOT m."isTestData"') || s.includes('NOT "isTestData"'))
 })
 
-const contact = { mojoId: '14359', phones: ['3302342085', '9175550123'], emails: ['a@x.com'], neighborhood: null } as unknown as CrmContact
+const contact = { mojoId: '14359', phones: ['3305550142', '9175550123'], emails: ['a@x.com'], neighborhood: null } as unknown as CrmContact
 const keeper: ExistingRow = {
   id: 'keep', mojoId: '14359', fullName: 'A', address: null, state: null, zipCode: null,
   phone: '9175550123', additionalPhones: [], email: null, additionalEmails: null,
@@ -57,7 +57,7 @@ const keeper: ExistingRow = {
 test('toUpsertRow: keeper keeps its id and phone; new numbers append; blank email filled', () => {
   const r = toUpsertRow({ contact, keeper })
   assert.equal(r.id, 'keep')
-  assert.deepEqual([r.phone, r.additionalPhones], ['9175550123', ['3302342085']])
+  assert.deepEqual([r.phone, r.additionalPhones], ['9175550123', ['3305550142']])
   assert.deepEqual([r.email, r.additionalEmails], ['a@x.com', []])
   assert.ok(!('phones' in r) && !('emails' in r))
 })
@@ -65,7 +65,7 @@ test('toUpsertRow: keeper keeps its id and phone; new numbers append; blank emai
 test('toUpsertRow: a new lead gets a fresh id and the CRM lists as-is', () => {
   const r = toUpsertRow({ contact, keeper: null })
   assert.match(r.id, /^[0-9a-f-]{36}$/)
-  assert.deepEqual([r.phone, r.additionalPhones], ['3302342085', ['9175550123']])
+  assert.deepEqual([r.phone, r.additionalPhones], ['3305550142', ['9175550123']])
 })
 
 test('diffUpdates counts filled blanks and flags any changed existing value', () => {
