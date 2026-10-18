@@ -1,0 +1,25 @@
+# Brief 44 valuation job (valuation/dfval). Python 3.12.
+# Pinned to the exact versions the valuation research ran with, so the model reproduces: on the
+# research's saved tables this code gives the research's predictions bit for bit (Brief 44 PR 2).
+numpy==2.0.2
+pandas==2.3.3
+pyarrow==21.0.0
+scipy==1.13.1
+scikit-learn==1.6.1
+requests==2.32.5
+xlrd==2.0.2
+pytest==8.3.5
+# Their dependencies, pinned too so every run installs the same thing.
+joblib==1.6.0
+threadpoolctl==3.7.0
+python-dateutil==2.9.0.post0
+pytz==2026.5
+tzdata==2026.5
+six==1.17.0
+certifi==2026.10.18
+charset-normalizer==3.5.2
+idna==3.20
+urllib3==2.8.0
+iniconfig==2.3.1
+packaging==26.3
+pluggy==1.7.0
