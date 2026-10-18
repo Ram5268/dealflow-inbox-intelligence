@@ -24,6 +24,11 @@ import { findMatchesForListing } from '../lib/matching/engine'
 import { SOURCE_BOOST } from '../lib/matching/ranking'
 import { MatchingCostAbort } from '../lib/matching/cost'
 import type { SourceBadge, Tier } from '../lib/matching/types'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a test harness, so it refuses any
+// database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/matching-fixture-harness.ts (DATABASE_URL)')
 
 const FIXTURE_ROOT = join(process.cwd(), 'test', 'fixtures', 'matches')
 const REPORT_PATH = join(FIXTURE_ROOT, 'last-run-report.json')

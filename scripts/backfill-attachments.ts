@@ -1,6 +1,12 @@
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { getMessageAttachments } from '../lib/microsoftGraph'
+import { maintenanceApply, scriptArgs } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+// The dry run counts the candidates and calls nothing.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/backfill-attachments.ts (DATABASE_URL)')
 
 // One-shot Phase 3D bootstrap. Finds RawEmail rows that flagged
 // hasAttachments=true upstream but have no Attachment rows persisted (the
@@ -8,8 +14,9 @@ import { getMessageAttachments } from '../lib/microsoftGraph'
 // Microsoft Graph. Strictly GET — read-only-rule compliant.
 //
 // Usage:
-//   tsx scripts/backfill-attachments.ts          # backfill 10 most recent
-//   tsx scripts/backfill-attachments.ts 25       # backfill N most recent
+//   tsx scripts/backfill-attachments.ts                  # dry run: count the candidates
+//   tsx scripts/backfill-attachments.ts --apply          # backfill 10 most recent
+//   tsx scripts/backfill-attachments.ts --apply 25       # backfill N most recent
 
 const MAX_FETCH_BYTES = 30 * 1024 * 1024   // 30MB — matches processAttachments PDF cap
 
@@ -22,9 +29,10 @@ function toPrismaBytes(b64: string): Uint8Array<ArrayBuffer> {
 }
 
 async function main() {
-  const limit = process.argv[2] ? parseInt(process.argv[2], 10) : 10
+  const [count] = scriptArgs()
+  const limit = count ? parseInt(count, 10) : 10
   if (Number.isNaN(limit) || limit <= 0) {
-    console.error('Usage: tsx scripts/backfill-attachments.ts [count=10]')
+    console.error('Usage: tsx scripts/backfill-attachments.ts [--apply [--i-mean-live]] [count=10]')
     process.exit(1)
   }
 
@@ -41,6 +49,10 @@ async function main() {
   })
 
   console.log(`[backfill] ${candidates.length} candidate emails`)
+  if (!APPLY) {
+    console.log('[backfill] Dry run: nothing fetched or written. Re-run with --apply to fetch their attachments from Outlook and save them.')
+    return
+  }
 
   let attachmentsWritten = 0
   let emailsWithBytes    = 0

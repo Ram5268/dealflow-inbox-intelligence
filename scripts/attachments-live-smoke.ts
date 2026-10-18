@@ -14,7 +14,8 @@
 //
 // This deliberately runs the pipeline COMPONENTS directly; it does NOT go through
 // the gated ingestEmailV2/sync path, and it re-verifies that the Outlook path is
-// still blocked. Requires --yes-write-db (it writes to the live DB then cleans up).
+// still blocked. Requires --yes-write-db (it writes throwaway rows to the
+// database, then cleans up). Brief 41.2: only a *_perf or *_test database.
 //
 //   npx tsx scripts/attachments-live-smoke.ts --yes-write-db
 import 'dotenv/config'
@@ -26,6 +27,12 @@ import { processAttachments } from '../lib/ingestion/processAttachments'
 import { extractEmailV2 } from '../lib/extraction/extractEmailV2'
 import { ingestEmailV2 } from '../lib/ingestion/ingestEmailV2'
 import { isIngestionTestModeOnly } from '../lib/config/ingestionTestMode'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a smoke test, so it refuses any database
+// but a *_perf or *_test one, with no override. The LlamaParse and Sonnet path
+// it proves is the same on a test database.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/attachments-live-smoke.ts (DATABASE_URL)')
 
 const FIXTURE_ROOT = join(process.cwd(), 'test', 'fixtures', 'emails')
 const ATTACH_ROOT = join(process.cwd(), 'test', 'fixtures', 'attachments')
@@ -33,7 +40,7 @@ const GRAPH_PREFIX = 'fixture-live-smoke:'
 const HARD_CAP_USD = 5
 
 if (!process.argv.includes('--yes-write-db')) {
-  console.log('This script writes throwaway rows to the LIVE DB (then deletes them).')
+  console.log('This script writes throwaway rows to the test database (then deletes them).')
   console.log('Re-run with --yes-write-db to proceed.')
   process.exit(0)
 }

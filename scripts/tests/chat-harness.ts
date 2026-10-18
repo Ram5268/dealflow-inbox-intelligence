@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { refuseLiveDatabase, refuseRemoteServer } from '../../lib/dbGuard'
 // Integration test #8 — Chat framework
 // POSTs prompts to /api/chat on the local dev server. Requires the dev server
 // to already be running at http://localhost:3000 (see README below for how the
@@ -27,6 +28,14 @@ interface ChatResponse {
 }
 
 const BASE = process.env.CHAT_TEST_BASE_URL ?? 'http://localhost:3000'
+
+// Brief 41.2 (engineering precaution): the dev server saves the chat rows (and
+// a report) to its own database, which can't be checked from here. So it only
+// talks to a server on this machine, and refuses unless this checkout's .env
+// DATABASE_URL (which a dev server started here also reads, unless .env.local
+// overrides it) is a *_perf or *_test database, with no override.
+refuseRemoteServer(BASE, 'scripts/tests/chat-harness.ts (CHAT_TEST_BASE_URL)')
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/tests/chat-harness.ts (DATABASE_URL)')
 
 async function waitForServer(timeoutMs = 60_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs

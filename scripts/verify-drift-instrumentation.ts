@@ -1,5 +1,10 @@
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): it inserts synthetic chat-log rows, so
+// it refuses any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/verify-drift-instrumentation.ts (DATABASE_URL)')
 
 // Brief 2.5 — $0 verification of the Drift instrumentation pipeline.
 //

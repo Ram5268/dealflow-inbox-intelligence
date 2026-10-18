@@ -13,6 +13,12 @@ import 'dotenv/config'
 import { Category, TransactionType } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { buildOpportunityText, embedText, upsertOpportunityEmbedding } from '../lib/embeddings'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): these helpers write seed rows, so any
+// script that imports them refuses any database but a *_perf or *_test one,
+// with no override, as soon as it loads them.
+refuseLiveDatabase(process.env.DATABASE_URL, 'the seed helpers in scripts/seed-stress-common.ts (DATABASE_URL)')
 
 export const TAG = '[TEST_10]'
 export const SEED_DOMAIN = 'seed-test-10.dealflow.local' // sentinel sourceAgentEmail domain

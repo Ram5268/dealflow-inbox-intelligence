@@ -19,6 +19,11 @@ import { precomputeCompsMedians, precomputeSubstitutionCounts } from '../lib/mat
 import type { ListingData, BuyerData } from '../lib/matching/scorerTypes'
 import { reasonOf } from '../lib/matching/nightly/select'
 import type { Prisma } from '@prisma/client'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): test or seed data only, so it refuses
+// any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/regenerate-match-table-brief32.ts (DATABASE_URL)')
 
 const SALE_LISTING_CATS = ['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'ACTIVE_SALE_LISTING', 'PRICE_DROP', 'BACK_ON_MARKET', 'DEVELOPMENT_INVENTORY', 'SPONSOR_UNIT', 'COMING_SOON_DEVELOPMENT']
 

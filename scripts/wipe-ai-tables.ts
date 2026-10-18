@@ -1,6 +1,12 @@
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): it deletes every chunk, match and
+// AI-made listing, so it refuses any database but a *_perf or *_test one, with
+// no override. CONFIRM_WIPE=yes is still needed there.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/wipe-ai-tables.ts (DATABASE_URL)')
 
 // Brief 2.5, Step 2 — selective wipe of V1-buggy AI-generated tables.
 //

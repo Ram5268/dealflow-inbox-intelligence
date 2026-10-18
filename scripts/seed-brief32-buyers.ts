@@ -6,6 +6,11 @@ import 'dotenv/config'
 import { getOrgAndAnchor, ensureConnected, makeRng, HOODS, brokerName, emailFrom } from './seed-stress-common'
 import { prisma } from '../lib/prisma'
 import type { Prisma } from '@prisma/client'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): test or seed data only, so it refuses
+// any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/seed-brief32-buyers.ts (DATABASE_URL)')
 
 const TAG = '[TEST_32]'
 const rng = makeRng(0x32B)

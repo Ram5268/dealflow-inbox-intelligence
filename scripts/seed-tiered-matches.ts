@@ -28,6 +28,11 @@ import { findMatchesForListing } from '../lib/matching/engine'
 import { MatchingCostAbort } from '../lib/matching/cost'
 import { isMatchingTestModeOnly } from '../lib/config/matchingTestMode'
 import type { SourceBadge, Tier } from '../lib/matching/types'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): test or seed data only, so it refuses
+// any database but a *_perf or *_test one, with no override.
+refuseLiveDatabase(process.env.DATABASE_URL, 'scripts/seed-tiered-matches.ts (DATABASE_URL)')
 
 const FIXTURE_ROOT = join(process.cwd(), 'test', 'fixtures', 'matches')
 const RENTAL_CATS = new Set<Category>(SUPPLY_RENTAL)

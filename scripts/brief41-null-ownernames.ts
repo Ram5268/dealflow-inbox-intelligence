@@ -15,6 +15,10 @@
 //   npx tsx scripts/brief41-null-ownernames.ts --apply    # null the names, strip them from reasons
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): --apply on a live database also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/brief41-null-ownernames.ts (DATABASE_URL)')
 
 // Roughly the words lib/extraction/personalCircumstances.ts filters (Postgres
 // regex; "estate" only when not "real estate").
@@ -42,7 +46,7 @@ async function counts() {
 }
 
 async function main() {
-  const apply = process.argv.includes('--apply')
+  const apply = APPLY
   const before = await counts()
   console.log(JSON.stringify({ before }, null, 2))
   if (!apply) {

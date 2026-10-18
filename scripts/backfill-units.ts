@@ -3,11 +3,16 @@
 // extractedSummary, or propertyType. Pure DB work — no external API spend.
 //
 // Run:
-//   npx tsx scripts/backfill-units.ts --dry-run
-//   npx tsx scripts/backfill-units.ts
+//   npx tsx scripts/backfill-units.ts            # dry run (default; --dry-run still works)
+//   npx tsx scripts/backfill-units.ts --apply    # write (on the live database also --i-mean-live)
 
 import 'dotenv/config'
 import { prisma } from '../lib/prisma'
+import { maintenanceApply } from '../lib/dbGuard'
+
+// Brief 41.2 (engineering precaution): a dry run unless --apply, and --apply
+// on a database that isn't *_perf / *_test also needs --i-mean-live.
+const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/backfill-units.ts (DATABASE_URL)')
 
 const WORD_NUM: Record<string, number> = {
   two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
@@ -27,7 +32,7 @@ function extractUnits(text: string | null | undefined): number | null {
 }
 
 async function main() {
-  const dryRun = process.argv.includes('--dry-run')
+  const dryRun = !APPLY
 
   const candidates = await prisma.extractedOpportunity.findMany({
     where: {
@@ -81,7 +86,7 @@ async function main() {
       .map(([units, count]) => ({ units: parseInt(units), count }))
   )
 
-  if (dryRun) console.log('[backfill-units] DRY RUN — no DB writes performed')
+  if (dryRun) console.log('[backfill-units] DRY RUN — no DB writes performed. Re-run with --apply to write them.')
 }
 
 main().then(() => process.exit(0)).catch(e => { console.error(e); process.exit(1) })
