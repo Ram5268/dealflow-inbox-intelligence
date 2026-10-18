@@ -1,3 +1,5 @@
+SET lock_timeout = '5s'; -- Brief 44 (engineering precaution): fail within 5 s instead of queueing behind the nightly run or the CRM sync for a lock.
+
 -- CreateTable
 CREATE TABLE "ValuationRun" (
     "id" TEXT NOT NULL,
@@ -38,6 +40,16 @@ CREATE TABLE "PropertyValuation" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "PropertyValuation_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ServiceKey" (
+    "id" TEXT NOT NULL,
+    "sha256" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "rotatedAt" TIMESTAMP(3),
+
+    CONSTRAINT "ServiceKey_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex

@@ -1,10 +1,12 @@
 import type { PrismaClient } from '@prisma/client'
-import { GATE_KEYS, recheckGates } from './contract'
+import { GATE_KEYS, MODEL_VERSION, recheckGates } from './contract'
+import { LATEST_PUBLISHED_FIRST } from './importRun'
 
 // Brief 44 — GET /api/valuations/status (public, like /api/debug/health): when the
 // monthly job last ran, whether it published, its counts and its gate results.
-// It never shows a value, an address, a tax lot or a contact: every field below is
-// rebuilt from a fixed list, so nothing else stored on a run can reach it.
+// It never shows a value, an address, a tax lot, a contact, the metrics or the
+// scoreboard: every field below is rebuilt from a fixed list, so nothing else stored
+// on a run can reach it (engineering precaution).
 
 const COUNT_KEYS = [
   'targets', 'valued', 'five_plus_units', 'condo_without_unit', 'not_found', 'other_property_type', 'trainingSales', 'gateSales',
@@ -39,7 +41,8 @@ function publicRun(r: RunRow) {
     runAt: r.runAt.toISOString(),
     asOf: dayOf(r.asOf),
     dataThrough: dayOf(r.dataThrough),
-    modelVersion: r.modelVersion.slice(0, 80),
+    // A code by the import's rules; anything else stored is not shown.
+    modelVersion: MODEL_VERSION.test(r.modelVersion) ? r.modelVersion : null,
     published: r.published,
     publishedAt: r.publishedAt?.toISOString() ?? null,
     gatesPassed: r.gatesPassed,
@@ -50,8 +53,8 @@ function publicRun(r: RunRow) {
 
 export async function buildStatus(db: PrismaClient, organizationId: string) {
   const [latest, latestPublished] = await Promise.all([
-    db.valuationRun.findFirst({ where: { organizationId }, orderBy: { runAt: 'desc' }, select: RUN_SELECT }),
-    db.valuationRun.findFirst({ where: { organizationId, published: true }, orderBy: { publishedAt: 'desc' }, select: RUN_SELECT }),
+    db.valuationRun.findFirst({ where: { organizationId }, orderBy: [{ runAt: 'desc' }, { createdAt: 'desc' }], select: RUN_SELECT }),
+    db.valuationRun.findFirst({ where: { organizationId, published: true }, orderBy: LATEST_PUBLISHED_FIRST, select: RUN_SELECT }),
   ])
   return {
     ok: true,

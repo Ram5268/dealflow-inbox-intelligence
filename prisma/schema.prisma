@@ -1006,7 +1006,7 @@ model CallLog {
 // ── Brief 44 — the valuation estimator ──────────────────────────────────────
 // A monthly job (valuation/, run on GitHub Actions) values every CRM seller's home
 // from free public records and sends the results through POST
-// /api/valuations/import. These two tables are its only storage; Property and its
+// /api/valuations/import. These tables are its only storage; Property and its
 // currentOwner column are not used. The values are DealFlow's own estimates: they
 // appear only on Ryan's CRM lead page and never on anything a buyer or homeowner
 // could see (Ryan's decision, 2026-10-17). No owner or party names are stored
@@ -1062,4 +1062,15 @@ model PropertyValuation {
   @@unique([runId, contactId])
   @@index([contactId, createdAt])
   @@index([organizationId])
+}
+
+// Fingerprints of service keys. The key itself is never stored anywhere in DealFlow:
+// the valuation job's key lives only in GitHub's secret store, and DealFlow keeps its
+// SHA-256 (lib/valuations/auth.ts). No row is created by the migration; Brief 44's
+// data step V2 writes it (scripts/valuation-service-key.ts). Engineering precaution.
+model ServiceKey {
+  id        String    @id          // "valuation-import"
+  sha256    String                 // lowercase hex SHA-256 of the key (64 chars)
+  createdAt DateTime  @default(now())
+  rotatedAt DateTime?
 }

@@ -1,10 +1,10 @@
 import type { PrismaClient } from '@prisma/client'
-import { crmSellerWhere } from './importRun'
+import { crmSellerWhere, LATEST_PUBLISHED_FIRST } from './importRun'
 
 // Brief 44 — GET /api/valuations/targets (protected): the CRM sellers the monthly job
 // values. Only what valuing a home needs: the property address, the lead's own unit
 // count and size (for the "lead says vs city says" facts) and the tax lot an earlier
-// run matched. No name, phone, email or mailing address.
+// published run matched. No name, phone, email or mailing address.
 
 export interface Target {
   contactId: string
@@ -24,9 +24,10 @@ export async function buildTargets(db: PrismaClient, organizationId: string) {
       select: { id: true, address: true, city: true, state: true, zipCode: true, unitCount: true, buildingSqft: true },
       orderBy: { id: 'asc' },
     }),
-    // The newest matched tax lot per seller, from any earlier run.
+    // The newest matched tax lot per seller, from published runs only: a run that
+    // failed its checks may have matched the wrong lot (engineering precaution).
     db.propertyValuation.findMany({
-      where: { organizationId, bbl: { not: null } },
+      where: { organizationId, bbl: { not: null }, run: { published: true } },
       orderBy: [{ contactId: 'asc' }, { createdAt: 'desc' }],
       distinct: ['contactId'],
       select: { contactId: true, bbl: true },
@@ -34,7 +35,7 @@ export async function buildTargets(db: PrismaClient, organizationId: string) {
     // The last published run's numbers, so this run's report can show the change.
     db.valuationRun.findFirst({
       where: { organizationId, published: true },
-      orderBy: { publishedAt: 'desc' },
+      orderBy: LATEST_PUBLISHED_FIRST,
       select: { id: true, asOf: true, publishedAt: true, metricsJson: true, scoreboardJson: true, countsJson: true },
     }),
   ])
