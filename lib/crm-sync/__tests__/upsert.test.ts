@@ -48,9 +48,9 @@ test('metadata markers use COALESCE and skip test data', () => {
   for (const s of [REKEY_SQL, DUPLICATES_SQL, LEGACY_SQL, REMOVED_SQL]) assert.ok(s.includes('NOT m."isTestData"') || s.includes('NOT "isTestData"'))
 })
 
-const contact = { mojoId: '14359', phones: ['3305550142', '9175550123'], emails: ['a@x.com'], neighborhood: null } as unknown as CrmContact
+const contact = { mojoId: '90001', phones: ['3305550142', '9175550123'], emails: ['a@x.com'], neighborhood: null } as unknown as CrmContact
 const keeper: ExistingRow = {
-  id: 'keep', mojoId: '14359', fullName: 'A', address: null, state: null, zipCode: null,
+  id: 'keep', mojoId: '90001', fullName: 'A', address: null, state: null, zipCode: null,
   phone: '9175550123', additionalPhones: [], email: null, additionalEmails: null,
 }
 

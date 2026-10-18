@@ -8,7 +8,7 @@ const n = (v: number): CrmFieldValue => ({ t: null, n: v, d: null })
 const d = (v: string): CrmFieldValue => ({ t: null, n: null, d: v })
 
 const full: CrmLeadRow = {
-  id: 'lead_1', mojoId: '14359', name: 'Sam Q Example', displayName: 'Sam Q Example',
+  id: 'lead_1', mojoId: '90001', name: 'Sam Q Example', displayName: 'Sam Q Example',
   primaryAddressFull: '100 Example St # 3', updatedAt: '2026-09-10 18:08:56.823', contactName: 'Morgan Example',
   phones: ['+13305550142', '+19175550123', '+13305550142'], emails: ['Owner2010@Example.com ', 'second@x.com'],
   fields: {
@@ -21,14 +21,14 @@ const full: CrmLeadRow = {
   },
 }
 const sparse: CrmLeadRow = {
-  id: 'lead_2', mojoId: '13191', name: 'Pat Doe', displayName: 'Pat Doe', primaryAddressFull: '200 Sample St',
+  id: 'lead_2', mojoId: '90002', name: 'Pat Doe', displayName: 'Pat Doe', primaryAddressFull: '200 Sample St',
   updatedAt: '2026-09-09 19:20:38', contactName: null, phones: [], emails: [], fields: {},
 }
 const withType = (type: string) => mapLead({ ...sparse, fields: { 'Property Type': t(type) } })
 
 test('full row maps every field', () => {
   const c = mapLead(full)
-  assert.equal(c.mojoId, '14359')
+  assert.equal(c.mojoId, '90001')
   assert.equal(c.fullName, 'Sam Q Example')
   assert.equal(c.coOwnerFullName, 'Morgan Example')
   assert.deepEqual(c.phones, ['3305550142', '9175550123'])
