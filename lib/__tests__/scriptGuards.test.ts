@@ -151,11 +151,13 @@ function isFirstUse(n: ts.Node): boolean {
 // The guard call is a statement of its own at the top level (or in a top-level
 // try block), so no condition can skip it, and it checks the URL lib/prisma
 // uses: process.env.DATABASE_URL.
+// A catch that swallows the refusal would defeat the guard.
+const rethrowsOrExits = (c?: ts.CatchClause) => !c || /\bthrow\b|process\.exit\(\s*[1-9]/.test(c.block.getText())
 function unconditional(n: ts.Node): boolean {
   for (let p = n.parent; p && !ts.isSourceFile(p); n = p, p = p.parent) {
     const ok = ts.isExpressionStatement(p) || ts.isVariableDeclaration(p) || ts.isVariableDeclarationList(p) ||
       ts.isVariableStatement(p) || (ts.isBlock(p) && ts.isTryStatement(p.parent) && p.parent.tryBlock === p) ||
-      (ts.isTryStatement(p) && p.tryBlock === n)
+      (ts.isTryStatement(p) && p.tryBlock === n && rethrowsOrExits(p.catchClause))
     if (!ok) return false
   }
   return true
