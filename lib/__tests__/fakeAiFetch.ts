@@ -11,7 +11,8 @@ export function installFakeAiFetch() {
   let answer: ((req: AiRequest) => unknown) | null = null
   globalThis.fetch = (async (input: unknown, init?: { body?: unknown }) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as { url: string }).url
-    if (!/^https:\/\/api\.(openai|anthropic)\.com\//.test(url)) throw new Error(`test: unexpected network call to ${url}`)
+    // Named without its query string, which can carry a key (FRED's api_key).
+    if (!/^https:\/\/api\.(openai|anthropic)\.com\//.test(url)) throw new Error(`test: unexpected network call to ${url.split(/[?#]/)[0]}`)
     const req: AiRequest = { url, body: JSON.parse(String(init?.body ?? '{}')) }
     requests.push(req)
     if (!answer) throw new Error('test: no AI reply set')

@@ -161,10 +161,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   // Ryan's decision, 2026-10-17: saved seller notes may keep these details.
   // Buyer-facing text still never names motivation (engineering precaution,
   // Brief 41 H7): a lead or a client conversation here (an old or odd row; no
-  // matcher writes one) is drafted exactly like a homeowner.
-  const opp = buyerFacingSupply(found)
-  const listingAddress = opp.address ?? opp.extractedTitle
-  const system = draftOutreachSystemPrompt({ channel, party, supply: opp, matchReason: match.reason, counterpartType: match.counterpartType })
+  // matcher writes one) is drafted exactly like a homeowner. `shown` is for
+  // the draft's text only, never a lookup: it can say 'contact' for an
+  // ExtractedOpportunity id.
+  const shown = buyerFacingSupply(found)
+  const listingAddress = shown.address ?? shown.extractedTitle
+  const system = draftOutreachSystemPrompt({ channel, party, supply: shown, matchReason: match.reason, counterpartType: match.counterpartType })
 
   let resp: Anthropic.Messages.Message
   try {

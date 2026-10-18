@@ -24,6 +24,11 @@ import { gatherContext } from '../context'
 import { curatedMatchesSection, HOMEOWNER_PRICE_LABEL } from '../sections/curated-matches'
 import { nearMissesSection } from '../sections/near-misses'
 import { generateBuyerMatchReport } from '../index'
+import { installFakeAiFetch } from '../../../../__tests__/fakeAiFetch'
+
+// No network: the Anthropic client is injected below, and the budget section's
+// FRED lookup (made only when FRED_API_KEY is set) is refused by the stand-in.
+installFakeAiFetch()
 
 const ESTATE = 'Estate sale, the executor is handling it'
 // What the model returns for the seller (V2 tool input).
@@ -174,4 +179,5 @@ test('the whole report (every section, the markdown, the AI-written recommendati
   // Price per square foot comes from the ordinary listing alone ($1.75M / 2,400 SF).
   const budget = report.sections.find(s => s.key === 'budget-reality')!
   assert.equal(budget.content.metrics![0].value, '$729')
+  assert.match(budget.content.prose!, /mortgage rate is unavailable/) // no FRED lookup reached the network
 })
