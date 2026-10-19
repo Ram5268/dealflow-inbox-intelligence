@@ -113,9 +113,11 @@ test('every correctable field is a real listing column of the right type', () =>
   const schema = readFileSync(join(__dirname, '..', '..', '..', 'prisma', 'schema.prisma'), 'utf8')
   const model = /\nmodel ExtractedOpportunity \{\n([\s\S]*?)\n\}/.exec(schema)?.[1] ?? ''
   const columns = new Map<string, string>()
+  const nullable = new Set<string>()
   for (const line of model.split('\n')) {
-    const m = /^ {2}(\w+) +(\w+)/.exec(line)
+    const m = /^ {2}(\w+) +(\w+)(\?)?/.exec(line)
     if (m) columns.set(m[1], m[2])
+    if (m?.[3]) nullable.add(m[1])
   }
   assert.ok(columns.size > 40, 'the model was read')
   const types: Record<string, string[]> = { text: ['String'], money: ['Float'], count: ['Float', 'Int'], category: ['Category'] }
@@ -124,6 +126,8 @@ test('every correctable field is a real listing column of the right type', () =>
     assert.ok(type, `${field} is an ExtractedOpportunity column`)
     assert.ok(types[rule.kind].includes(type), `${field} is ${type}, read as ${rule.kind}`)
     if (type === 'Int') assert.equal('step' in rule && rule.step, 1, `${field} is an Int, so whole numbers only`)
+    // An emptied box writes null, so only a column that may be null can be emptied.
+    assert.equal('required' in rule, !nullable.has(field), `${field} is ${nullable.has(field) ? 'nullable' : 'required'} in the schema`)
   }
   // The same 16 fields the route has always allowed; `status` is the listing's own status column.
   assert.deepEqual(Object.keys(CORRECTABLE_FIELDS).sort(), [
