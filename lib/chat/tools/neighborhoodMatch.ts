@@ -6,9 +6,25 @@
 // so Williamsburg pulled in East Williamsburg, Harlem East Harlem and Flatbush
 // East Flatbush. Now a row matches only when one of its neighborhood strings
 // resolves (lib/domain/Neighborhood fromRaw) to exactly a wanted canonical name.
-// Spellings of the same area still match ("Bed-Stuy", "Stuyvesant Heights").
+// Spellings of the same area still match ("Bed-Stuy", "Stuyvesant Heights"), and
+// a whole area includes its parts (SUB_AREAS: Harlem includes Central Harlem).
 // The areas next door come in only when Drift asks with nearby: true.
 import { fromRaw, getAdjacent, NEIGHBORHOODS } from '@/lib/domain/Neighborhood'
+
+// The parts of a named area that lib/domain/Neighborhood keeps as their own
+// canonical names. Asking for the whole area includes them (asking for a part
+// never includes the whole). Each pair was joined by the old substring rule;
+// only the "East X" pairs were wrong (Q13), so these stay [engineering
+// precaution: no shrink beyond what Q13 asked for].
+export const SUB_AREAS: Readonly<Record<string, readonly string[]>> = {
+  'Harlem': ['Central Harlem', 'South Harlem', 'West Harlem'],
+  'Midtown': ['Midtown East', 'Midtown West', 'Midtown South'],
+  'Chelsea': ['West Chelsea'],
+  'Williamsburg': ['South Williamsburg'],
+  // One area under two names (Greenwood lists "Greenwood Heights" as a spelling).
+  'Greenwood': ['Greenwood Heights'],
+  'Greenwood Heights': ['Greenwood'],
+}
 
 // Canonical name, or the trimmed lowercase text for an area the map doesn't know
 // (keeps unknown areas matchable against the same text).
@@ -17,13 +33,14 @@ export function canonHood(n: string | null | undefined): string | null {
   return fromRaw(n) ?? n.trim().toLowerCase()
 }
 
-// The asked areas as canonical names, plus their adjacent areas when nearby.
+// The asked areas as canonical names with their parts, plus their adjacent
+// areas when nearby.
 export function wantedHoods(names: readonly string[] | undefined, nearby = false): string[] {
   const out: string[] = []
   for (const n of names ?? []) {
     const c = canonHood(n)
     if (!c) continue
-    for (const h of [c, ...(nearby ? getAdjacent(c) : [])]) if (!out.includes(h)) out.push(h)
+    for (const h of [c, ...(SUB_AREAS[c] ?? []), ...(nearby ? getAdjacent(c) : [])]) if (!out.includes(h)) out.push(h)
   }
   return out
 }

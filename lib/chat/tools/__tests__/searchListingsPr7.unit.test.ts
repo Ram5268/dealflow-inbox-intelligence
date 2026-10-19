@@ -73,6 +73,23 @@ test('an area means that area: Harlem is not East Harlem, Flatbush is not East F
   assert.deepEqual(hoods(await search({ neighborhoods: ['East Flatbush'] })), ['East Flatbush'])
 })
 
+test('review: a whole area includes its parts (Central Harlem, Midtown East, West Chelsea, South Williamsburg), never East X', async () => {
+  load([
+    listing({ neighborhood: 'Harlem' }), listing({ neighborhood: 'Central Harlem' }), listing({ neighborhood: 'South Harlem' }),
+    listing({ neighborhood: 'East Harlem' }), listing({ neighborhood: 'Midtown' }), listing({ neighborhood: 'Midtown East' }),
+    listing({ neighborhood: 'Midtown West' }), listing({ neighborhood: 'Midtown South' }), listing({ neighborhood: 'Chelsea' }),
+    listing({ neighborhood: 'West Chelsea' }), listing({ neighborhood: 'Williamsburg' }), listing({ neighborhood: 'South Williamsburg' }),
+    listing({ neighborhood: 'East Williamsburg' }),
+  ])
+  assert.deepEqual(hoods(await search({ neighborhoods: ['Harlem'] })), ['Harlem', 'Central Harlem', 'South Harlem'])
+  assert.deepEqual(hoods(await search({ neighborhoods: ['Midtown'] })), ['Midtown', 'Midtown East', 'Midtown West', 'Midtown South'])
+  assert.deepEqual(hoods(await search({ neighborhoods: ['Chelsea'] })), ['Chelsea', 'West Chelsea'])
+  assert.deepEqual(hoods(await search({ neighborhoods: ['Williamsburg'] })), ['Williamsburg', 'South Williamsburg'])
+  // A part never brings in the whole.
+  assert.deepEqual(hoods(await search({ neighborhoods: ['Midtown East'] })), ['Midtown East'])
+  assert.deepEqual(hoods(await search({ neighborhoods: ['Central Harlem'] })), ['Central Harlem'])
+})
+
 test('spellings of the same area still match (Bed-Stuy, Bedford-Stuyvesant, Stuyvesant Heights)', async () => {
   load([
     listing({ neighborhood: 'Bed-Stuy' }), listing({ neighborhood: 'Stuyvesant Heights' }),
@@ -120,6 +137,55 @@ test('L-04: an address search still reaches a listing older than the newest 500'
   load([...filler, listing({ address: '88 Example Ave', createdAt: new Date(T0 - 10 ** 10) })])
   const r = await search({ address: '88 Example Ave' })
   assert.deepEqual(r.cards.map(c => c.address), ['88 Example Ave'])
+})
+
+test('review: words before the house number keep it ("PH 88 ...", "The Example Building - 88 ...", "Apt 2 88 ...")', async () => {
+  load([
+    listing({ address: 'PH 88 Example Ave' }),
+    listing({ address: 'The Example Building - 88 Example Ave' }),
+    listing({ address: 'Apt 2 88 Example Ave' }),
+    listing({ address: 'PH 188 Example Ave' }),
+    listing({ address: 'W 88 St' }), // a street named 88th, not house 88
+  ])
+  const r = await search({ address: '88 Example Ave' })
+  assert.deepEqual(r.cards.map(c => c.address), ['PH 88 Example Ave', 'The Example Building - 88 Example Ave', 'Apt 2 88 Example Ave'])
+})
+
+test('review: a building stored as a short range ("88-90 Example Ave") answers either end, never the numbers around it', async () => {
+  load([
+    listing({ address: '88-90 Example Ave' }),
+    listing({ address: '21-36 Example Ave' }), // Queens style: one house number
+    listing({ address: '86 Example Ave' }),
+  ])
+  assert.deepEqual((await search({ address: '90 Example Ave' })).cards.map(c => c.address), ['88-90 Example Ave'])
+  assert.deepEqual((await search({ address: '88 Example Ave' })).cards.map(c => c.address), ['88-90 Example Ave'])
+  assert.deepEqual((await search({ address: '36 Example Ave' })).cards.map(c => c.address), [])
+  assert.deepEqual((await search({ address: '21-36 Example Ave' })).cards.map(c => c.address), ['21-36 Example Ave'])
+})
+
+test('review: a numbered-street address is found beyond the newest 500 ("88 5th Ave" among 600 others on 5th)', async () => {
+  const filler = Array.from({ length: 600 }, (_, i) => listing({ address: `${i + 100} 5th Ave`, createdAt: new Date(T0 - i) }))
+  load([...filler, listing({ address: '88 5th Avenue', createdAt: new Date(T0 - 10 ** 10) })])
+  const r = await search({ address: '88 5th Ave' })
+  assert.deepEqual(r.cards.map(c => c.address), ['88 5th Avenue'])
+  // Queens numbers match with or without the hyphen, in the database too.
+  load([...filler, listing({ address: '31-14 5th St', createdAt: new Date(T0 - 10 ** 10) })])
+  assert.deepEqual((await search({ address: '3114 5th St' })).cards.map(c => c.address), ['31-14 5th St'])
+})
+
+test('review: "2-3 family" counts the listings left out because the unit count or type is not on file', async () => {
+  load([
+    listing({ neighborhood: 'Bedford-Stuyvesant', propertyType: 'multi-family', units: null, extractedTitle: 'multi, count unknown' }),
+    listing({ neighborhood: 'Bedford-Stuyvesant', propertyType: null, units: null, extractedTitle: 'nothing on file' }),
+    listing({ neighborhood: 'Bedford-Stuyvesant', propertyType: 'multi-family', units: 3, extractedTitle: '3 units' }),
+    listing({ neighborhood: 'Bedford-Stuyvesant', propertyType: 'condo', units: null, extractedTitle: 'condo' }),
+    listing({ neighborhood: 'Bedford-Stuyvesant', propertyType: 'multi-family', units: 6, extractedTitle: '6 units' }),
+    listing({ neighborhood: 'Bedford-Stuyvesant', propertyType: 'multi-family', units: null, price: 9_000_000, extractedTitle: 'over budget' }),
+  ])
+  const r = await search({ neighborhoods: ['Bed-Stuy'], priceMax: 2_000_000, unitsMin: 2, unitsMax: 3, propertyTypes: ['multifamily'] })
+  assert.deepEqual(r.cards.map(c => c.title), ['3 units'])
+  assert.equal(r.notOnFile, 2) // 'multi, count unknown' and 'nothing on file'; not the condo, the 6 units or the one over budget
+  assert.equal((await search({ neighborhoods: ['Bed-Stuy'] })).notOnFile, undefined)
 })
 
 test('L-05 / Q12: a condo is excluded for "2-3 family"', async () => {

@@ -39,7 +39,7 @@ import { listingPropertyClasses, type PropertyClass } from '@/lib/matching/prope
 import { isTestModeOnly } from '@/lib/config/testMode'
 import { bedsMatches } from './searchParties'
 import { hoodSqlTerms, hoodsMatch, wantedHoods } from './neighborhoodMatch'
-import { addressMatch, addressSqlTerm, parseStreetAddress } from './addressMatch'
+import { addressMatch, addressSqlTerm, houseNumberSqlTerms, parseStreetAddress } from './addressMatch'
 
 // Listing categories this tool exposes (sale + rental supply the chat surfaces).
 const SALE_CATS = ['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'ACTIVE_SALE_LISTING'] as const
@@ -103,6 +103,9 @@ export interface ListingCard {
 export interface SearchListingsResult {
   cards: ListingCard[]
   totalMatched: number
+  // Brief 43 PR 7 (Q12): with unitsMin/unitsMax or propertyTypes, the listings that
+  // passed every other filter but have no unit count or building type on file.
+  notOnFile?: number
   filtersApplied: SearchListingsInput
 }
 
@@ -190,7 +193,13 @@ export function listingsWhere(input: SearchListingsInput, organizationId: string
   const and: Prisma.ExtractedOpportunityWhereInput[] = []
   // Address: one distinctive street word, case-insensitive, parameterized by
   // Prisma (injection-safe); addressMatch below checks the number and street.
-  if (input.address) and.push({ address: { contains: addressSqlTerm(input.address) ?? input.address, mode: 'insensitive' } })
+  if (input.address) {
+    and.push({ address: { contains: addressSqlTerm(input.address) ?? input.address, mode: 'insensitive' } })
+    // And the house number, so a numbered street's short term ("5", "18") can't
+    // fill the newest-500 pool with other addresses.
+    const forms = houseNumberSqlTerms(parseStreetAddress(input.address)?.number ?? null)
+    if (forms.length > 0) and.push({ OR: forms.map(f => ({ address: { contains: f, mode: 'insensitive' as const } })) })
+  }
   // Area: any spelling of the wanted areas. Listings rarely fill the
   // `neighborhoods` array (it's buyer criteria), so a row with one goes to the
   // exact check rather than being judged here.
@@ -264,6 +273,7 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
   const wantTypes = input.propertyTypes ?? []
 
   const kept: Array<{ card: ListingCard; price: number | null; addressRank: number }> = []
+  let notOnFile = 0
   for (const o of candidates) {
     // Borough gate — derive from neighborhood when the column is null.
     if (wantBorough) {
@@ -289,14 +299,18 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
     if (!bedsMatches(input.beds ?? null, input.bedsMin ?? null, input.bedsMax ?? null, o.beds, o.minBeds, o.maxBeds)) continue
 
     // Units and type gates (Brief 43 PR 7, Q12). Asked for, they need the fact on
-    // file: a listing with no unit count or type is left out, never guessed in.
+    // file: a listing with no unit count or type is left out, never guessed in,
+    // but counted (notOnFile) so Drift can say so instead of "none".
+    let missingFact = false
     if (wantUnits) {
       const u = unitCount(o.units, o.propertyType)
-      if (u == null || (input.unitsMin != null && u < input.unitsMin) || (input.unitsMax != null && u > input.unitsMax)) continue
+      if (u == null) missingFact = true
+      else if ((input.unitsMin != null && u < input.unitsMin) || (input.unitsMax != null && u > input.unitsMax)) continue
     }
     if (wantTypes.length > 0) {
       const classes = listingPropertyClasses({ propertyType: o.propertyType, propertyTypeDetail: null, unitCount: o.units })
-      if (!wantTypes.some(t => classes.has(t))) continue
+      if (classes.size === 0) missingFact = true
+      else if (!wantTypes.some(t => classes.has(t))) continue
     }
 
     // Price gate — fractional overlap; drop only true 0-overlap when a budget was given.
@@ -310,6 +324,7 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
       overlap = priceOverlapScore(effectivePrice, budget.min, budget.max, tolerance)
       if (overlap === 0) continue
     }
+    if (missingFact) { notOnFile++; continue }
 
     kept.push({
       price: effectivePrice,
@@ -350,6 +365,7 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
   return {
     cards: cards.slice(0, limit),
     totalMatched,
+    ...(wantUnits || wantTypes.length > 0 ? { notOnFile } : {}),
     filtersApplied: input,
   }
 }

@@ -564,6 +564,8 @@ export async function POST(req: NextRequest) {
             output: {
               cards: (output.cards as Array<Record<string, unknown>>).map(trimCardForGuard),
               totalMatched: output.totalMatched,
+              // Brief 43 PR 7: "N more have no unit count on file" is grounded too.
+              ...('notOnFile' in output ? { notOnFile: output.notOnFile } : {}),
             },
           })
           for (const c of output.cards) {

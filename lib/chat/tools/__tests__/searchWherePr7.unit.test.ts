@@ -14,6 +14,7 @@ import { listingsWhere, askedBudget, searchListingsInputSchema, type SearchListi
 import { searchPartiesInputSchema, bedsMatches } from '../searchParties'
 import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL } from '../schemas'
 import { parseStreetAddress, addressMatch } from '../addressMatch'
+import { SUB_AREAS } from '../neighborhoodMatch'
 import { fromRaw, getAdjacent } from '@/lib/domain/Neighborhood'
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
 
@@ -36,16 +37,17 @@ const maybe = <T>(p: number, f: () => T): T | null => (rand() < p ? f() : null)
 
 const HOOD_STRINGS = [
   'Williamsburg', 'East Williamsburg', 'williamsburg', 'Bed-Stuy', 'Stuyvesant Heights', 'bedford stuyvesant', 'BEDFORD-STUYVESANT',
-  'Harlem', 'East Harlem', 'Central Harlem', 'Flatbush', 'East Flatbush', 'Park Slope', 'South Slope', 'Greenpoint', 'Bushwick',
+  'Harlem', 'East Harlem', 'Central Harlem', 'South Harlem', 'Midtown East', 'Midtown', 'West Chelsea', 'Greenwood Heights', 'Flatbush', 'East Flatbush', 'Park Slope', 'South Slope', 'Greenpoint', 'Bushwick',
   'Some Unknown Place', 'Williamsburg/Greenpoint', 'Cobble Hill, Carroll Garden, Boerum Hill', 'PLG', 'UWS', 'Upper West Side',
   '  Crown Heights ', 'Tribeca',
 ] as const
 const ROW_ADDRESSES = [
   '88 Example Ave', '188 Example Ave', '88 Example St', '88 Example Avenue, Brooklyn, NY 11216', '88 Example Ave #3B', 'Apt 2, 88 Example Ave',
   '12 Sample St', '12 Sample Street South', "115 St. Mark's Pl", '115 Saint Marks Place', '31-14 Example Blvd', '3114 Example Boulevard',
-  '7 W 10th St', '7 West 10 Street', 'Example Ave', null,
+  '7 W 10th St', '7 West 10 Street', 'Example Ave', '88 5th Avenue', '88-90 5th Ave', '5-49 Example Ave', '549 Example Ave', '88A Example Ave',
+  'PH 88 Example Ave', 'The Example Building - 88 Example Ave', 'Apt 2 88 Example Ave', '88-90 Example Ave', '86-90 Example Ave', 'W 88 St', null,
 ] as const
-const ASKED_ADDRESSES = ['88 Example Ave', '88 example', '88 Example Avenue, Brooklyn', '115 St Marks Place', '31-14 Example Boulevard', 'Example Ave', '7 West 10th St', '12 Sample St'] as const
+const ASKED_ADDRESSES = ['88 Example Ave', '88 example', '88 Example Avenue, Brooklyn', '115 St Marks Place', '31-14 Example Boulevard', 'Example Ave', '7 West 10th St', '12 Sample St', '88 5th Ave', '8890 5th Ave', '549 Example Ave', '5-49 Example Ave', '88a Example Ave', '3114 Example Blvd', '90 Example Ave', 'PH 88 Example Ave', 'W 88 St'] as const
 
 function genRow(): Record<string, unknown> {
   const price = maybe(0.7, () => Math.round(500_000 + rand() * 4_500_000))
@@ -89,6 +91,7 @@ function exactKeeps(row: Record<string, unknown>, input: SearchListingsInput): b
       const c = canon(n)
       if (!c) continue
       want.add(c)
+      for (const a of SUB_AREAS[c] ?? []) want.add(a)
       if (input.nearby) for (const a of getAdjacent(c)) want.add(a)
     }
     const rowHoods = [row.neighborhood as string | null, ...(row.neighborhoods as string[])].map(canon)
@@ -170,4 +173,6 @@ test('the guard keep-list grounds the new card fields (route.ts trimCardForGuard
   assert.ok(m, 'keep-list not found')
   const keep = m[1].split(',').map(s => s.trim().replace(/^'|'$/g, ''))
   for (const f of ['units', 'propertyType', 'squareFeet', 'availabilityDate', 'sourceBrokerage']) assert.ok(keep.includes(f), f)
+  // The not-on-file count reaches the fact-checker, so saying it isn't flagged.
+  assert.match(route, /toolResultsForGuard\.push\(\{[\s\S]{0,400}?notOnFile: output\.notOnFile/)
 })

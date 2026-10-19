@@ -15,7 +15,8 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
   description:
     'Search the broker\'s property inventory (sale and rental listings). Filter by borough, neighborhoods, address, beds, price, units and property type. ' +
     'priceMin/priceMax set the budget; each result carries a priceOverlapScore (1.0 = squarely in range, fractional = near-miss, 0 = filtered out). ' +
-    'Cards carry units, propertyType, squareFeet, availabilityDate (the timeline) and sourceBrokerage; null means not on file, so say so plainly. Seed test data is included by default.',
+    'Cards carry units, propertyType, squareFeet, availabilityDate (the timeline) and sourceBrokerage; null means not on file, so say so plainly. ' +
+    'With unitsMin/unitsMax or propertyTypes, notOnFile counts listings that fit every other filter but have no unit count or building type on file; when it is above 0, say so (e.g. "4 more in Bed-Stuy have no unit count on file") rather than "none". Seed test data is included by default.',
   input_schema: {
     type: 'object',
     properties: {
@@ -27,7 +28,7 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
       neighborhoods: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Neighborhood names, e.g. ["Park Slope", "Chelsea"]. Each means exactly that area: "Williamsburg" never includes East Williamsburg, "Harlem" never East Harlem, "Flatbush" never East Flatbush. Name every area you want.',
+        description: 'Neighborhood names, e.g. ["Park Slope", "Chelsea"]. Each means exactly that area and its parts ("Harlem" includes Central Harlem, "Midtown" includes Midtown East): "Williamsburg" never includes East Williamsburg, "Harlem" never East Harlem, "Flatbush" never East Flatbush. Name every area you want.',
       },
       nearby: {
         type: 'boolean',
@@ -143,7 +144,7 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
         description: 'buyer -> buyers, renter -> renters. Omit for both.',
       },
       borough: { type: 'string', description: 'NYC borough.' },
-      neighborhoods: { type: 'array', items: { type: 'string' }, description: 'Neighborhood names. Each means exactly that area: "Williamsburg" never includes East Williamsburg.' },
+      neighborhoods: { type: 'array', items: { type: 'string' }, description: 'Neighborhood names. Each means exactly that area and its parts ("Harlem" includes Central Harlem): "Williamsburg" never includes East Williamsburg.' },
       nearby: { type: 'boolean', description: 'Also include the areas next to the named neighborhoods. Only when Ryan asks for nearby areas.' },
       beds: { type: 'number', description: 'Exact bedrooms the party wants. 0 = studio.' },
       bedsMin: { type: 'number', description: 'Minimum bedrooms the party wants.' },
