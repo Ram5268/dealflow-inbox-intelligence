@@ -4,10 +4,16 @@ import type { GenContext, SectionResult, SourceRef, MatchedListing } from '../..
 import { nowISO } from '../../types'
 import { money, bedsLabel } from './_format'
 import { plainFitReason } from '../../../../matching/fitReason'
+import { PRICE_ON_REQUEST } from '../../../../matching/outreachPrice'
 
 // Brief 41 (H7): a homeowner has no asking price (our estimate never shows) and
 // is never named; its fit line never mentions the seller's circumstances.
-export const HOMEOWNER_PRICE_LABEL = 'off-market, price not set'
+// Brief 43 PR 3b: its price reads "price on request", as in a /matches draft
+// (our values stay out of buyer-facing text [Ryan, 2026-10-17]). Its row names
+// area and type, never the street address until the homeowner has agreed to
+// sell [Ryan, 2026-10-19] (lib/buyerFacingSupply.ts, applied in context.ts, so
+// `address` below is null for them and the title is area and type).
+export const HOMEOWNER_PRICE_LABEL = PRICE_ON_REQUEST
 export function priceOf(m: MatchedListing): { price: number | null; priceLabel: string } {
   return m.listing.isHomeowner
     ? { price: null, priceLabel: HOMEOWNER_PRICE_LABEL }
