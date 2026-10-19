@@ -34,7 +34,9 @@ export function draftOutreachSystemPrompt(args: {
   // counterpart quote that contact's estimated value as a "budget".
   const reason = plainFitReason(args.matchReason, { homeowner: supply.opportunityType === 'contact' || args.counterpartType === 'mojo' })
 
-  return `You are drafting a brief outreach ${channel} from a NYC real estate broker (Ryan Martin, Douglas Elliman) to a prospect. Match context:
+  // Brief 43 PR 1: sign "Ryan Martin" only, D2 [Brief 42 default]; no brokerage
+  // name or job title in anything sent [planner, 2026-10-19].
+  return `You are drafting a brief outreach ${channel} from a NYC real estate broker, Ryan Martin, to a prospect. Sign off "Ryan Martin" only, with no brokerage name or job title. Match context:
 
 Prospect: ${party.name} — ${party.role}
 Their criteria: ${[party.budget, party.beds, party.neighborhood].filter(Boolean).join(' · ') || 'unspecified'}

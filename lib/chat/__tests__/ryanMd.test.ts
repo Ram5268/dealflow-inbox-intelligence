@@ -18,7 +18,8 @@ test('RYAN_MD is a non-empty string with the expected section headers', () => {
   assert.equal(typeof RYAN_MD, 'string')
   assert.ok(RYAN_MD.length > 0, 'RYAN_MD should not be empty')
   // Brief 30.0 — v2 restructure: title + 10 numbered sections.
-  assert.match(RYAN_MD, /# RYAN\.md — Ryan's playbook for Jarvis/)
+  // Brief 43 PR 1: Drift, never "Jarvis" (D3, Brief 42 default).
+  assert.match(RYAN_MD, /# RYAN\.md — Ryan's playbook for Drift/)
   assert.match(RYAN_MD, /HARD RULES/)
   assert.match(RYAN_MD, /ROUTING META-RULES/)
   assert.match(RYAN_MD, /CONTEXT-RESOLUTION PROCEDURE/)
