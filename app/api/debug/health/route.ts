@@ -5,11 +5,17 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { isIngestionTestModeOnly } from '@/lib/config/ingestionTestMode'
+import { readStatusWindow } from '@/lib/status/lastNight'
 
 // GET /api/debug/health — Brief 8.0-lite Fix #4. Instrumentation for post-deploy
 // dogfooding: flag posture, Graph token freshness (read from the DB row — NEVER
 // calls Graph), and last-24h activity per subsystem. No auth (localhost + solo
 // prod). Every subsystem is best-effort so one failing query can't blank the page.
+//
+// Brief 47 (PR 4), Brief 46's DF-3: also the status window anyone can read, "what
+// happened last night": lastNight, valuationSwitch, switches and rapidApi
+// (lib/status/lastNight.ts: counts, times, booleans and reason codes only). Never
+// cached. The retired Zapier ingest block (recentIngest) is gone.
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -111,17 +117,6 @@ export async function GET() {
     })
   }, [] as Array<Record<string, unknown>>)
 
-  const recentIngest = await safe('recentIngest', async () => {
-    const rows = await prisma.zapierIngestLog.findMany({
-      orderBy: { receivedAt: 'desc' }, take: 10,
-      select: { receivedAt: true, resultStatus: true, resultReason: true },
-    })
-    return rows.map(r => ({
-      receivedAt: r.receivedAt.toISOString(),
-      resultStatus: r.resultStatus, resultReason: r.resultReason,
-    }))
-  }, [] as Array<Record<string, unknown>>)
-
   const subsystemLastSuccess = await safe('subsystemLastSuccess', async () => {
     const [matcher, extraction] = await Promise.all([
       prisma.match.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
@@ -133,6 +128,9 @@ export async function GET() {
     }
   }, { matcher: null, extraction: null })
 
+  // ── Last night, the switches and RapidAPI (Brief 47 PR 4) ─────────────────────
+  const status = await readStatusWindow(prisma, safe)
+
   return NextResponse.json({
     orgId: orgId || null,
     flags,
@@ -141,7 +139,7 @@ export async function GET() {
     recentMatches,
     recentDismissals,
     recentPush,
-    recentIngest,
     subsystemLastSuccess,
-  })
+    ...status,
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }

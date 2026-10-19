@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react'
 
 // Brief 8.0-lite Fix #4 — phone-friendly view of /api/debug/health. Pure
 // instrumentation (green/red dots per subsystem), not a product surface. Fetches
-// client-side; no auth.
+// client-side; no auth. Brief 47 (PR 4): the retired Zapier "Recent ingest" list is
+// gone, as the API no longer returns it.
 
 interface Health {
   flags: Record<string, boolean>
@@ -12,7 +13,6 @@ interface Health {
   recentMatches: Array<{ id: string; score: number; tier: string | null; counterpartType: string; createdAt: string }>
   recentDismissals: Array<{ partyId: string; listingId: string; reason: string | null; createdAt: string }>
   recentPush: Array<{ title: string; body: string; deliveredAt: string; success: boolean | null }>
-  recentIngest: Array<{ receivedAt: string; resultStatus: string; resultReason: string | null }>
   subsystemLastSuccess: { matcher: string | null; extraction: string | null }
 }
 
@@ -117,21 +117,6 @@ export default function HealthPage() {
               </tr>
             ))}
             {data.recentMatches.length === 0 && <tr><td className="py-1 text-gray-400">none</td></tr>}
-          </tbody>
-        </table>
-      </section>
-
-      <section>
-        <h2 className="font-medium mb-2 text-gray-700">Recent ingest ({data.recentIngest.length})</h2>
-        <table className="w-full text-xs">
-          <tbody>
-            {data.recentIngest.map((r, i) => (
-              <tr key={i} className="border-b border-gray-100">
-                <td className="py-1">{r.resultStatus}{r.resultReason ? ` · ${r.resultReason}` : ''}</td>
-                <td className="py-1 text-right">{fmt(r.receivedAt)}</td>
-              </tr>
-            ))}
-            {data.recentIngest.length === 0 && <tr><td className="py-1 text-gray-400">none</td></tr>}
           </tbody>
         </table>
       </section>
