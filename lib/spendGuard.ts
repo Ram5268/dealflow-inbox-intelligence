@@ -14,8 +14,12 @@ import { getCurrentOrgId } from './auth/orgContext'
 // Counting, with no migration: every request a guard lets through writes one
 // small AuditLog row (action SPEND_GUARD_REQUEST, detailsJson { route, ipHash },
 // plus `chars` for speech), because serverless copies share no memory. Only a
-// salted HMAC of the address is stored, never the address. A refusal writes no
+// salted HMAC of the address is stored, never the address. A refusal keeps no
 // counter row, only one counts-only SPEND_GUARD_REFUSED row: { route, reason }.
+// The row is written first and the window counted after (reserve, then check),
+// so requests sent all at once can't each read "under the limit" before any of
+// them is counted [engineering precaution]; a refused request's row becomes its
+// refusal row.
 // AuditLog is indexed on organizationId only (no action/createdAt index, and
 // this PR adds none), so a check is one scan of a small table; the rows it
 // reads back are bounded by the day's global caps. Normal use adds roughly 75
@@ -58,14 +62,21 @@ export const LIMIT_DEFAULTS = {
   // About 110 minutes of speech a day (≈ $1.70 at gpt-4o-mini-tts's ≈ 1.5¢ a
   // minute). A 10-turn voice conversation is about 6,000 characters.
   TTS_DAILY_CHAR_CAP: 100_000,
+  // Per address, so one address can't drain the shared day in minutes: about
+  // 45 minutes of speech an hour, above 300 short clips (300 × 100 = 30,000).
+  // (The chat page's LISTEN button uses the browser's own voice, not this.)
+  TTS_PER_IP_CHARS_PER_HOUR: 40_000,
   TRANSCRIBE_PER_IP_PER_HOUR: 30,
   // Dictation is one call per take; Ryan's day is a handful.
   TRANSCRIBE_DAILY_CAP: 200,
-  // The JSON body (base64 audio): about 90 seconds of dictation at 128 kbps.
-  // (Vercel refuses bodies over 4.5 MB whatever this says.)
+  // A size limit, not a time limit: 2 MiB of JSON body, about 1.5 MiB of audio
+  // once the base64 is decoded. How many seconds that holds depends on the
+  // phone's recording bitrate. (Vercel refuses bodies over 4.5 MB anyway.)
   TRANSCRIBE_MAX_BYTES: 2 * 1024 * 1024,
   // Inside the existing global 60 an hour (lib/voice/session.ts).
   VOICE_SESSIONS_PER_IP_PER_HOUR: 10,
+  // All addresses, New York day. Ryan opens voice mode a few times a day.
+  VOICE_SESSIONS_DAILY_CAP: 100,
   RETITLE_MAX_PER_CALL: 20,
 }
 export type LimitName = keyof typeof LIMIT_DEFAULTS
@@ -167,7 +178,7 @@ export function hashAddress(address: string, env: Env = process.env): string {
 
 // ── windows (pure) ──────────────────────────────────────────────────────────
 
-export interface CounterRow { createdAt: Date; ipHash: string | null; chars: number }
+export interface CounterRow { id?: string; createdAt: Date; ipHash: string | null; chars: number }
 export interface WindowRule {
   reason: string
   message: string
@@ -208,6 +219,7 @@ export function ttsRules(now: Date, env: Env = process.env): WindowRule[] {
   return [
     { reason: 'daily_chars', message: TTS_DAY_MESSAGE, max: limit('TTS_DAILY_CHAR_CAP', env), since: startOfNewYorkDay(now), perIp: false, measure: 'chars' },
     { reason: 'ip_per_hour', message: TTS_HOUR_MESSAGE, max: limit('TTS_PER_IP_PER_HOUR', env), since: ago(now, HOUR), perIp: true, measure: 'count' },
+    { reason: 'ip_chars_per_hour', message: TTS_HOUR_MESSAGE, max: limit('TTS_PER_IP_CHARS_PER_HOUR', env), since: ago(now, HOUR), perIp: true, measure: 'chars' },
   ]
 }
 
@@ -231,7 +243,10 @@ const ttsCharge = (text: string) => Math.max(TTS_MIN_CHARGE, Math.min(text.lengt
 export interface SpendGuardStore {
   recentRows(route: GuardedRoute, since: Date): Promise<CounterRow[]>
   chatSpendUsdSince(since: Date): Promise<number>
-  record(route: GuardedRoute, ipHash: string, chars?: number): Promise<void>
+  // Writes this request's counter row and returns its id.
+  record(route: GuardedRoute, ipHash: string, chars?: number): Promise<string>
+  // Turns this request's counter row into its counts-only refusal row.
+  refuseRecorded(id: string, route: GuardedRoute, reason: string): Promise<void>
   refused(route: GuardedRoute, reason: string): Promise<void>
 }
 
@@ -239,11 +254,12 @@ export const prismaSpendStore: SpendGuardStore = {
   async recentRows(route, since) {
     const rows = await prisma.auditLog.findMany({
       where: { action: SPEND_GUARD_REQUEST, createdAt: { gte: since }, detailsJson: { path: ['route'], equals: route } },
-      select: { createdAt: true, detailsJson: true },
+      select: { id: true, createdAt: true, detailsJson: true },
     })
     return rows.map(r => {
       const d = (r.detailsJson ?? {}) as { ipHash?: unknown; chars?: unknown }
       return {
+        id: r.id,
         createdAt: r.createdAt,
         ipHash: typeof d.ipHash === 'string' ? d.ipHash : null,
         chars: typeof d.chars === 'number' ? d.chars : 0,
@@ -255,13 +271,18 @@ export const prismaSpendStore: SpendGuardStore = {
     return agg._sum.costUsd ?? 0
   },
   async record(route, ipHash, chars) {
-    await prisma.auditLog.create({
+    const row = await prisma.auditLog.create({
       data: {
         organizationId: await getCurrentOrgId(),
         action: SPEND_GUARD_REQUEST,
         detailsJson: chars == null ? { route, ipHash } : { route, ipHash, chars },
       },
+      select: { id: true },
     })
+    return row.id
+  },
+  async refuseRecorded(id, route, reason) {
+    await prisma.auditLog.update({ where: { id }, data: { action: SPEND_GUARD_REFUSED, detailsJson: { route, reason } } })
   },
   async refused(route, reason) {
     await prisma.auditLog.create({
@@ -297,10 +318,32 @@ export async function logSpendRefusal(route: GuardedRoute, reason: string, store
   }
 }
 
-async function refuse(store: SpendGuardStore, route: GuardedRoute, reason: string, message: string, extra?: Record<string, unknown>) {
-  await logSpendRefusal(route, reason, store)
+// `reservedId` is this request's own row (its counter row, or a voice
+// session's VOICE_SESSION row), when it got that far: it becomes the refusal
+// row, so a refused request stops counting against anyone. If that write
+// fails, a fresh refusal row is tried instead. Best effort.
+export async function recordRefusal(
+  route: GuardedRoute, reason: string, reservedId?: string, store: SpendGuardStore = prismaSpendStore,
+): Promise<void> {
+  if (!reservedId) return logSpendRefusal(route, reason, store)
+  try {
+    await store.refuseRecorded(reservedId, route, reason)
+  } catch {
+    await logSpendRefusal(route, reason, store)
+  }
+}
+
+async function refuse(
+  store: SpendGuardStore, route: GuardedRoute, reason: string, message: string,
+  extra?: Record<string, unknown>, reservedId?: string,
+) {
+  await recordRefusal(route, reason, reservedId, store)
   return spendLimitResponse(message, extra)
 }
+
+// The other requests in the windows: this request's own (already written)
+// row is left out, so firstBreach's "max already used" reading still holds.
+const others = (rows: CounterRow[], id: string) => rows.filter(r => r.id !== id)
 
 // ── the guards ──────────────────────────────────────────────────────────────
 
@@ -319,16 +362,16 @@ export async function guardChat(req: Request, o: GuardOptions = {}): Promise<Res
   try {
     const ipHash = hashAddress(clientAddress(req.headers), env)
     const rules = chatRules(now, env)
+    const id = await store.record('chat', ipHash)
     const [rows, spentUsd] = await Promise.all([
       store.recentRows('chat', earliest(rules)),
       store.chatSpendUsdSince(startOfNewYorkDay(now)),
     ])
     if (spentUsd >= limit('CHAT_DAILY_USD_CAP', env)) {
-      return refuse(store, 'chat', 'daily_usd', DAILY_SPEND_MESSAGE, { response: DAILY_SPEND_MESSAGE })
+      return refuse(store, 'chat', 'daily_usd', DAILY_SPEND_MESSAGE, { response: DAILY_SPEND_MESSAGE }, id)
     }
-    const hit = firstBreach(rows, ipHash, rules)
-    if (hit) return refuse(store, 'chat', hit.reason, hit.message, { response: hit.message })
-    await store.record('chat', ipHash)
+    const hit = firstBreach(others(rows, id), ipHash, rules)
+    if (hit) return refuse(store, 'chat', hit.reason, hit.message, { response: hit.message }, id)
     return null
   } catch (err) {
     console.error('[spendGuard] chat check failed; letting the message through:', errText(err))
@@ -343,19 +386,21 @@ async function guardCounted(
   route: 'tts' | 'transcribe', rules: WindowRule[], unavailable: string, req: Request, o: GuardOptions, charge?: number,
 ): Promise<Response | null> {
   const store = o.store ?? prismaSpendStore
+  let id: string | undefined
   try {
     const ipHash = hashAddress(clientAddress(req.headers), o.env ?? process.env)
-    const hit = firstBreach(await store.recentRows(route, earliest(rules)), ipHash, rules, charge ?? 0)
-    if (hit) return refuse(store, route, hit.reason, hit.message)
-    await store.record(route, ipHash, charge)
+    id = await store.record(route, ipHash, charge)
+    const hit = firstBreach(others(await store.recentRows(route, earliest(rules)), id), ipHash, rules, charge ?? 0)
+    if (hit) return refuse(store, route, hit.reason, hit.message, undefined, id)
     return null
   } catch (err) {
     console.error(`[spendGuard] ${route} check failed; refusing:`, errText(err))
-    return refuse(store, route, 'guard_unavailable', unavailable)
+    return refuse(store, route, 'guard_unavailable', unavailable, undefined, id)
   }
 }
 
-// POST /api/tts: clips an hour per address, and a daily character budget.
+// POST /api/tts: clips and characters an hour per address, and a daily
+// character budget.
 export function guardTts(req: Request, text: string, o: GuardOptions = {}): Promise<Response | null> {
   const now = o.now ?? new Date()
   return guardCounted('tts', ttsRules(now, o.env ?? process.env), TTS_UNAVAILABLE_MESSAGE, req, o, ttsCharge(text))

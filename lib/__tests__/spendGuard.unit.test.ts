@@ -46,7 +46,11 @@ test('defaults sit well above Ryan’s normal day and the planned test runs', ()
   assert.ok(LIMIT_DEFAULTS.CHAT_DAILY_MESSAGE_CAP >= 2 * (70 + 10))
   assert.ok(LIMIT_DEFAULTS.TRANSCRIBE_MAX_BYTES >= 2_000_000 && LIMIT_DEFAULTS.TRANSCRIBE_MAX_BYTES < 3_000_000)
   assert.equal(LIMIT_DEFAULTS.VOICE_SESSIONS_PER_IP_PER_HOUR, 10)
+  assert.equal(LIMIT_DEFAULTS.VOICE_SESSIONS_DAILY_CAP, 100)
   assert.equal(LIMIT_DEFAULTS.RETITLE_MAX_PER_CALL, 20)
+  // Speech: 300 short clips an hour fit inside the per-address characters.
+  assert.ok(LIMIT_DEFAULTS.TTS_PER_IP_PER_HOUR * TTS_MIN_CHARGE <= LIMIT_DEFAULTS.TTS_PER_IP_CHARS_PER_HOUR)
+  assert.ok(LIMIT_DEFAULTS.TTS_PER_IP_CHARS_PER_HOUR < LIMIT_DEFAULTS.TTS_DAILY_CHAR_CAP)
 })
 
 // ── the New York day ────────────────────────────────────────────────────────
@@ -153,6 +157,13 @@ test('tts windows: per-address clips an hour, and a daily character budget acros
   const spent = [{ createdAt: new Date(NOW.getTime() - 2 * HOUR), ipHash: 'other', chars: cap - 500 }]
   assert.equal(firstBreach(spent, 'me', rules, 500), null, 'exactly at the budget is allowed')
   assert.equal(firstBreach(spent, 'me', rules, 501)?.reason, 'daily_chars')
+  // Per address, 40,000 characters an hour: one address can't drain the day in minutes.
+  const hourCap = LIMIT_DEFAULTS.TTS_PER_IP_CHARS_PER_HOUR
+  const mine = [{ createdAt: new Date(NOW.getTime() - 30 * MIN), ipHash: 'me', chars: hourCap - 4000 }]
+  assert.equal(firstBreach(mine, 'me', rules, 4000), null)
+  assert.equal(firstBreach(mine, 'me', rules, 4001)?.reason, 'ip_chars_per_hour')
+  assert.equal(firstBreach(mine, 'other', rules, 4001), null)
+  assert.equal(firstBreach([{ ...mine[0], createdAt: new Date(NOW.getTime() - 61 * MIN) }], 'me', rules, 4001), null)
 })
 
 test('transcription windows: 30 an hour per address, and a daily count across all addresses', () => {
@@ -166,12 +177,15 @@ test('transcription windows: 30 an hour per address, and a daily count across al
 // ── the guards, with an injected store ──────────────────────────────────────
 
 function store(seed: CounterRow[] = [], spentUsd = 0, fail?: 'read' | 'write') {
-  const recorded: Array<{ route: string; ipHash: string; chars?: number }> = []
+  const recorded: Array<{ id: string; route: string; ipHash: string; chars?: number }> = []
   const refused: Array<{ route: string; reason: string }> = []
+  let n = 0
   const s: SpendGuardStore = {
     async recentRows(_route, since) {
       if (fail === 'read') throw new Error('db down')
-      return seed.filter(r => r.createdAt >= since)
+      // This request's own row comes back too, as it would from the database.
+      const mine = recorded.map(r => ({ id: r.id, createdAt: NOW, ipHash: r.ipHash, chars: r.chars ?? 0 }))
+      return [...seed, ...mine].filter(r => r.createdAt >= since)
     },
     async chatSpendUsdSince() {
       if (fail === 'read') throw new Error('db down')
@@ -179,7 +193,13 @@ function store(seed: CounterRow[] = [], spentUsd = 0, fail?: 'read' | 'write') {
     },
     async record(route, ipHash, chars) {
       if (fail === 'write') throw new Error('db down')
-      recorded.push({ route, ipHash, chars })
+      const id = `row_${++n}`
+      recorded.push({ id, route, ipHash, chars })
+      return id
+    },
+    async refuseRecorded(id, route, reason) {
+      recorded.splice(recorded.findIndex(r => r.id === id), 1)
+      refused.push({ route, reason })
     },
     async refused(route, reason) { refused.push({ route, reason }) },
   }
@@ -205,7 +225,7 @@ test('guardChat: over the daily dollar cap → 429 with the stock text, nothing 
 test('guardChat: under every limit → null, and the request is counted under the hashed address', async () => {
   const { s, recorded, refused } = store([], 4.99)
   assert.equal(await guardChat(req('203.0.113.7'), { store: s, now: NOW, env: SALT }), null)
-  assert.deepEqual(recorded, [{ route: 'chat', ipHash: ME, chars: undefined }])
+  assert.deepEqual(recorded, [{ id: 'row_1', route: 'chat', ipHash: ME, chars: undefined }])
   assert.equal(refused.length, 0)
   assert.ok(!JSON.stringify(recorded).includes('203.0.113.7'))
 })
@@ -240,7 +260,7 @@ test('guardTts: counts characters (at least a short sentence each) and refuses p
   const cap = LIMIT_DEFAULTS.TTS_DAILY_CHAR_CAP
   const ok = store()
   assert.equal(await guardTts(req('203.0.113.7'), 'Hi.', { store: ok.s, now: NOW, env: SALT }), null)
-  assert.deepEqual(ok.recorded, [{ route: 'tts', ipHash: ME, chars: TTS_MIN_CHARGE }])
+  assert.deepEqual(ok.recorded, [{ id: 'row_1', route: 'tts', ipHash: ME, chars: TTS_MIN_CHARGE }])
   const long = store()
   await guardTts(req('203.0.113.7'), 'x'.repeat(9000), { store: long.s, now: NOW, env: SALT })
   assert.equal(long.recorded[0].chars, 4000, 'the provider reads at most 4,000 characters')
@@ -276,6 +296,39 @@ test('refusal JSON is plain: no address, no hash, no limit numbers', async () =>
   // Neither action name may contain "SYNC": the health page's last-sync lookup
   // matches any action containing it.
   assert.ok(!/SYNC/.test(SPEND_GUARD_REFUSED + SPEND_GUARD_REQUEST))
+})
+
+// Review (Brief 43 PR 17): requests sent all at once. Each one's row is written
+// before the window is counted, so a burst can't all read "under the limit".
+function sharedSlowStore(ms: number) {
+  const rows: Array<CounterRow & { route: string }> = []
+  let n = 0
+  const wait = () => new Promise(r => setTimeout(r, ms))
+  const s: SpendGuardStore = {
+    async recentRows(route, since) { await wait(); return rows.filter(r => r.route === route && r.createdAt >= since).map(r => ({ ...r })) },
+    async chatSpendUsdSince() { await wait(); return 0 },
+    async record(route, ipHash, chars) { await wait(); const id = `row_${++n}`; rows.push({ id, route, ipHash, chars: chars ?? 0, createdAt: NOW }); return id },
+    async refuseRecorded(id) { await wait(); rows.splice(rows.findIndex(r => r.id === id), 1) },
+    async refused() { await wait() },
+  }
+  return s
+}
+
+test('a burst from one address can’t slip past the limits (each request is counted before it checks)', async () => {
+  const chat = sharedSlowStore(5)
+  const c = await Promise.all(Array.from({ length: 50 }, () => guardChat(req('203.0.113.7'), { store: chat, now: NOW, env: SALT })))
+  assert.ok(c.filter(r => r === null).length <= LIMIT_DEFAULTS.CHAT_PER_IP_PER_MINUTE, 'at most 10 in a minute')
+  const tts = sharedSlowStore(5)
+  const t = await Promise.all(Array.from({ length: 60 }, () => guardTts(req('203.0.113.7'), 'x'.repeat(4000), { store: tts, now: NOW, env: SALT })))
+  assert.ok(t.filter(r => r === null).length * 4000 <= LIMIT_DEFAULTS.TTS_DAILY_CHAR_CAP, 'the day’s character budget holds')
+  const dict = sharedSlowStore(5)
+  const d = await Promise.all(Array.from({ length: 60 }, () => guardTranscribe(req('203.0.113.7'), { store: dict, now: NOW, env: SALT })))
+  assert.ok(d.filter(r => r === null).length <= LIMIT_DEFAULTS.TRANSCRIBE_PER_IP_PER_HOUR, 'at most 30 an hour')
+  // One after another, exactly the limit gets through.
+  const seq = sharedSlowStore(0)
+  let passed = 0
+  for (let i = 0; i < 15; i++) if ((await guardChat(req('203.0.113.7'), { store: seq, now: NOW, env: SALT })) === null) passed++
+  assert.equal(passed, 10)
 })
 
 // ── reading a capped body ───────────────────────────────────────────────────

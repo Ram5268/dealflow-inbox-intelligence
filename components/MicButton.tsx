@@ -54,9 +54,11 @@ export default function MicButton({ onText, disabled }: Props) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ audio: { mimeType: type, content: await toBase64(new Blob(chunks, { type })) } }),
         })
-        const text = res.ok ? String((await res.json()).transcript ?? '').trim() : ''
+        const data = await res.json().catch(() => null)
+        const text = res.ok ? String(data?.transcript ?? '').trim() : ''
         if (text) onText(text)
-        else if (!res.ok) showToast('Couldn’t transcribe that. Try again.')
+        // Brief 43 PR 17: a too-long recording (413) or a limit (429) says what to do.
+        else if (!res.ok) showToast((res.status === 413 || res.status === 429) && typeof data?.message === 'string' ? data.message : 'Couldn’t transcribe that. Try again.')
       } catch {
         showToast('Couldn’t transcribe that. Try again.')
       } finally {

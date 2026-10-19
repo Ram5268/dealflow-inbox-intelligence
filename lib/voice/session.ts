@@ -10,9 +10,10 @@ export const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls'
 export const VOICE_SESSION_ACTION = 'VOICE_SESSION'
 export const SESSIONS_PER_HOUR = 60
 export const MAX_SDP_BYTES = 20_000
-// Brief 43 PR 17: the per-address refusal, in lib/spendGuard.ts's shape (kept
-// here so this module stays free of Prisma).
+// Brief 43 PR 17: the new refusals, in lib/spendGuard.ts's shape (kept here so
+// this module stays free of Prisma).
 export const ADDRESS_LIMIT_MESSAGE = 'Voice mode has reached its hourly limit. Try again in a little while.'
+export const DAILY_LIMIT_MESSAGE = 'Voice mode has reached its daily limit. It resets at midnight.'
 
 const RE_TERMS = ['two-family', 'three-family', 'duplex', 'triplex', 'co-op', 'condo', 'multifamily']
 
@@ -27,15 +28,23 @@ export function transcriptionSession() {
 
 export interface VoiceSessionDeps {
   enabled: boolean; apiKey: string | undefined; fetchImpl?: typeof fetch; now?: () => number
-  countSessionsSince: (since: Date) => Promise<number>
-  logSession: () => Promise<unknown>
-  // Brief 43 PR 17 [engineering precaution]: a per-address cap inside the
-  // global one, so a stranger can't use up the shared 60 and lock Ryan out of
-  // voice mode (no login [Ryan, 2026-09-24]). Optional so the Brief 36 tests
-  // run unchanged; the route always passes them.
-  countAddressSessionsSince?: (since: Date) => Promise<number>
+  // Sessions since `since`, leaving out `exceptId` (this request's own row).
+  countSessionsSince: (since: Date, exceptId?: string) => Promise<number>
+  // Writes this request's VOICE_SESSION row and returns its id. Brief 43 PR 17
+  // [engineering precaution]: it's written before anything is counted (reserve,
+  // then count), so sessions opened all at once can't each read "under the
+  // limit"; a refused request's row becomes its refusal row.
+  logSession: () => Promise<string | void>
+  // Brief 43 PR 17 [engineering precaution]: no login [Ryan, 2026-09-24], so
+  // also a per-address cap inside the global 60 (one address can't use the
+  // shared hour up by itself) and a daily total. Optional so the Brief 36
+  // tests need no new fakes; the route always passes them.
+  countAddressSessionsSince?: (since: Date, exceptId?: string) => Promise<number>
   sessionsPerAddressPerHour?: number
-  logRefusal?: (reason: string) => Promise<unknown>
+  dayStart?: Date // midnight New York time
+  sessionsPerDay?: number // all addresses
+  // Turns this request's row into its counts-only refusal row (or writes one).
+  refuseSession?: (id: string | undefined, reason: string) => Promise<unknown>
 }
 
 const json = (body: object, status: number) =>
@@ -52,15 +61,28 @@ export async function handleVoiceSession(req: Request, deps: VoiceSessionDeps): 
   if (!sdp.trim()) return json({ error: 'Empty offer' }, 400)
 
   const now = deps.now?.() ?? Date.now()
-  if ((await deps.countSessionsSince(new Date(now - 3_600_000))) >= SESSIONS_PER_HOUR) {
-    return json({ error: 'Voice mode has hit its hourly limit. Try again later.' }, 429)
+  const hourAgo = new Date(now - 3_600_000)
+  const id = (await deps.logSession()) || undefined
+  let refusal: { reason: string; body: object; status: number } | null = null
+  try {
+    if ((await deps.countSessionsSince(hourAgo, id)) >= SESSIONS_PER_HOUR) {
+      refusal = { reason: 'global_per_hour', body: { error: 'Voice mode has hit its hourly limit. Try again later.' }, status: 429 }
+    } else if (deps.dayStart && deps.sessionsPerDay != null &&
+        (await deps.countSessionsSince(deps.dayStart, id)) >= deps.sessionsPerDay) {
+      refusal = { reason: 'daily_count', body: { error: 'spend_limit', message: DAILY_LIMIT_MESSAGE }, status: 429 }
+    } else if (deps.countAddressSessionsSince && deps.sessionsPerAddressPerHour != null &&
+        (await deps.countAddressSessionsSince(hourAgo, id)) >= deps.sessionsPerAddressPerHour) {
+      refusal = { reason: 'ip_per_hour', body: { error: 'spend_limit', message: ADDRESS_LIMIT_MESSAGE }, status: 429 }
+    }
+  } catch (err) {
+    // Fails closed, as before (a count error used to be a 500).
+    console.error('[voice/session] limit check failed; refusing:', err instanceof Error ? err.message : err)
+    refusal = { reason: 'guard_unavailable', body: { error: 'Voice service unavailable' }, status: 503 }
   }
-  if (deps.countAddressSessionsSince && deps.sessionsPerAddressPerHour != null &&
-      (await deps.countAddressSessionsSince(new Date(now - 3_600_000))) >= deps.sessionsPerAddressPerHour) {
-    await deps.logRefusal?.('ip_per_hour')
-    return json({ error: 'spend_limit', message: ADDRESS_LIMIT_MESSAGE }, 429)
+  if (refusal) {
+    await deps.refuseSession?.(id, refusal.reason)
+    return json(refusal.body, refusal.status)
   }
-  await deps.logSession()
 
   const form = new FormData()
   form.set('sdp', sdp)

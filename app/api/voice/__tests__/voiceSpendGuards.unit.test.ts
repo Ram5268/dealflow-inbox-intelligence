@@ -3,7 +3,7 @@ import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 import { installFakeAiFetch } from '../../../../lib/__tests__/fakeAiFetch'
-import { hashAddress, LIMIT_DEFAULTS, SPEND_GUARD_REQUEST, SPEND_GUARD_REFUSED } from '../../../../lib/spendGuard'
+import { hashAddress, startOfNewYorkDay, LIMIT_DEFAULTS, SPEND_GUARD_REQUEST, SPEND_GUARD_REFUSED } from '../../../../lib/spendGuard'
 import { VOICE_SESSION_ACTION } from '../../../../lib/voice/session'
 
 // Brief 43 PR 17 [engineering precaution] (DealFlow has no login [Ryan,
@@ -49,7 +49,9 @@ async function tts(text: string) {
 }
 
 test('tts: the daily character budget refuses before any OpenAI call', async () => {
-  current.fake.data.auditLog.push(counter('tts', 'someone_else', HOUR, LIMIT_DEFAULTS.TTS_DAILY_CHAR_CAP))
+  // Earlier today (an hour ago is yesterday between midnight and 1 am New York time).
+  const today = Math.min(HOUR, (Date.now() - startOfNewYorkDay().getTime()) / 2)
+  current.fake.data.auditLog.push(counter('tts', 'someone_else', today, LIMIT_DEFAULTS.TTS_DAILY_CHAR_CAP))
   const res = await tts('Three sellers in Bed-Stuy fit.')
   assert.equal(res.status, 429)
   assert.equal((await res.json()).error, 'spend_limit')
@@ -64,6 +66,30 @@ test('tts: too many clips in an hour from one address refuses before any OpenAI 
   assert.equal(res.status, 429)
   assert.equal(outside.length, 0)
   assert.deepEqual(refusals(), [{ route: 'tts', reason: 'ip_per_hour' }])
+})
+
+test('tts: one address can’t drain the shared day: 40,000 characters an hour each', async () => {
+  const me = hashAddress(IP)
+  for (let i = 0; i < 10; i++) current.fake.data.auditLog.push(counter('tts', me, 20 * 60_000, 4000))
+  const res = await tts('One more sentence.')
+  assert.equal(res.status, 429)
+  assert.equal(outside.length, 0)
+  assert.deepEqual(refusals(), [{ route: 'tts', reason: 'ip_chars_per_hour' }])
+  // The same characters from other addresses don't count against this one.
+  current.fake = fakePrisma()
+  for (let i = 0; i < 10; i++) current.fake.data.auditLog.push(counter('tts', `other_${i}`, 20 * 60_000, 4000))
+  assert.equal((await tts('One more sentence.')).status, 200)
+})
+
+test('tts: a burst of long clips from one address all at once can’t pass the hourly characters', async () => {
+  const results = await Promise.all(Array.from({ length: 20 }, () => tts('x'.repeat(4000))))
+  const spoken = results.filter(r => r.status === 200).length
+  assert.ok(spoken * 4000 <= LIMIT_DEFAULTS.TTS_PER_IP_CHARS_PER_HOUR, `${spoken} clips spoken`)
+  assert.equal(outside.length, spoken)
+  // Refused clips no longer count: their rows became refusal rows.
+  const counted = current.fake.data.auditLog.filter(r => r.action === SPEND_GUARD_REQUEST)
+  assert.equal(counted.length, spoken)
+  assert.ok(refusals().length === 20 - spoken && refusals().every(d => (d as { reason: string }).reason === 'ip_chars_per_hour'))
 })
 
 test('tts: under the limits it speaks, and the clip is counted with its characters', async () => {
@@ -200,4 +226,38 @@ test('voice session: the global 60 an hour still applies (older rows without a h
   const res = await session()
   assert.equal(res.status, 429)
   assert.equal(outside.length, 0)
+  assert.deepEqual(refusals(), [{ route: 'voice_session', reason: 'global_per_hour' }], 'its own row became the refusal')
+  assert.equal(current.fake.data.auditLog.filter(r => r.action === VOICE_SESSION_ACTION).length, 60)
+})
+
+test('voice session: a daily total across all addresses (VOICE_SESSIONS_DAILY_CAP)', async () => {
+  // Earlier today, whatever the time (an hour ago is yesterday just after midnight).
+  const today = Math.min(10 * 60_000, (Date.now() - startOfNewYorkDay().getTime()) / 2)
+  process.env.VOICE_SESSIONS_DAILY_CAP = '5' // this test process only
+  try {
+    for (let i = 0; i < 5; i++) current.fake.data.auditLog.push(voiceRow(`someone_${i}`, today))
+    const res = await session()
+    assert.equal(res.status, 429)
+    const body = await res.json()
+    assert.equal(body.error, 'spend_limit')
+    assert.equal(body.message, 'Voice mode has reached its daily limit. It resets at midnight.')
+    assert.equal(outside.length, 0)
+    assert.deepEqual(refusals(), [{ route: 'voice_session', reason: 'daily_count' }])
+    // Yesterday's sessions don't count.
+    current.fake = fakePrisma()
+    for (let i = 0; i < 5; i++) current.fake.data.auditLog.push(voiceRow(`someone_${i}`, 25 * HOUR))
+    const ok = await withStub('https://api.openai.com/v1/realtime/calls', () => new Response('v=0\r\ns=answer\r\n', { status: 201 }), () => session())
+    assert.equal(ok.status, 200)
+  } finally { delete process.env.VOICE_SESSIONS_DAILY_CAP }
+  assert.equal(LIMIT_DEFAULTS.VOICE_SESSIONS_DAILY_CAP, 100)
+})
+
+test('voice session: 15 opened at once from one address → at most 10 handshakes', async () => {
+  const results = await withStub('https://api.openai.com/v1/realtime/calls', () => new Response('v=0\r\ns=answer\r\n', { status: 201 }),
+    () => Promise.all(Array.from({ length: 15 }, () => session())))
+  const opened = results.filter(r => r.status === 200).length
+  assert.ok(opened <= 10, `${opened} opened`)
+  assert.equal(outside.length, opened)
+  assert.equal(current.fake.data.auditLog.filter(r => r.action === VOICE_SESSION_ACTION).length, opened, 'refused rows no longer count')
+  assert.ok(refusals().length === 15 - opened && refusals().every(d => (d as { reason: string }).reason === 'ip_per_hour'))
 })

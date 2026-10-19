@@ -75,6 +75,12 @@ export function fakePrisma() {
         data.auditLog.push(row)
         return row
       }),
+      update: (a: { where: { id: string }; data: Row }) => op('auditLog.update', () => {
+        const row = data.auditLog.find(r => r.id === a.where.id)
+        if (!row) throw new Error('test: no such audit row')
+        Object.assign(row, a.data)
+        return row
+      }),
     },
     driftInteraction: {
       aggregate: (a: { where?: Row; _sum: { costUsd: true } }) => op('driftInteraction.aggregate', () => {

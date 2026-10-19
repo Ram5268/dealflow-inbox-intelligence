@@ -3,7 +3,7 @@ import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 import { installFakeAiFetch } from '../../../../lib/__tests__/fakeAiFetch'
-import { hashAddress, SPEND_GUARD_REQUEST, SPEND_GUARD_REFUSED } from '../../../../lib/spendGuard'
+import { hashAddress, startOfNewYorkDay, SPEND_GUARD_REQUEST, SPEND_GUARD_REFUSED } from '../../../../lib/spendGuard'
 
 // Brief 43 PR 17 [engineering precaution] (DealFlow has no login [Ryan,
 // 2026-09-24]): POST /api/chat refuses at the very top, before the
@@ -42,7 +42,9 @@ function assertRefusedCleanly(reason: string) {
 }
 
 test('daily dollar cap reached → plain 429 with the stock text, before any paid call or session', async () => {
-  current.fake.data.driftInteraction.push({ id: 'd1', createdAt: ago(60_000), costUsd: 3.1 }, { id: 'd2', createdAt: ago(30_000), costUsd: 2.0 })
+  // Earlier today, whatever the time (a minute ago is yesterday just after midnight).
+  const today = Math.min(60_000, (Date.now() - startOfNewYorkDay().getTime()) / 2)
+  current.fake.data.driftInteraction.push({ id: 'd1', createdAt: ago(today), costUsd: 3.1 }, { id: 'd2', createdAt: ago(today / 2), costUsd: 2.0 })
   const res = await post({ message: 'any coming soon in bedstuy?' })
   assert.equal(res.status, 429)
   const body = await res.json()
@@ -68,7 +70,9 @@ test('the 11th message in a minute from one address → 429, before any paid cal
 })
 
 test('the daily message backstop (all addresses) → 429 with the stock text', async () => {
-  for (let i = 0; i < 200; i++) current.fake.data.auditLog.push(counter(`someone_${i}`, 3_600_000))
+  // Earlier today (an hour ago is yesterday between midnight and 1 am New York time).
+  const today = Math.min(3_600_000, (Date.now() - startOfNewYorkDay().getTime()) / 2)
+  for (let i = 0; i < 200; i++) current.fake.data.auditLog.push(counter(`someone_${i}`, today))
   const res = await post({ message: 'any coming soon in bedstuy?' })
   assert.equal(res.status, 429)
   assert.equal((await res.json()).message, "Drift's daily spending limit is reached. It resets at midnight.")

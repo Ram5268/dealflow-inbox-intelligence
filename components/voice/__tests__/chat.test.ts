@@ -65,3 +65,8 @@ test('network failure → offline error; the session is kept', async () => {
   assert.deepEqual(await sendVoiceTurn('hi', session, impl), { ok: false, error: CHAT_OFFLINE })
   assert.equal(session.current, 's')
 })
+
+test('a spending-limit refusal shows its own words (it says what to do)', async () => {
+  const { impl } = fakeFetch([{ status: 429, json: { error: 'spend_limit', message: "Drift's daily spending limit is reached. It resets at midnight.", response: "Drift's daily spending limit is reached. It resets at midnight." } }])
+  assert.deepEqual(await sendVoiceTurn('hi', { current: 's' }, impl), { ok: false, error: "Drift's daily spending limit is reached. It resets at midnight." })
+})
