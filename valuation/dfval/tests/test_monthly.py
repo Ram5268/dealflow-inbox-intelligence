@@ -185,3 +185,27 @@ def test_the_summary_command(tmp_path, capsys):
     assert cli.main(["summary", "--out", out, "--publish", "false"]) == 0
     assert "Gates: PASS" in capsys.readouterr().out
     assert cli.main(["summary", "--out", out, "--publish", "true"]) == 1  # a publish run that didn't publish
+
+
+# ---- review fixes ------------------------------------------------------------------------------------
+def test_a_hand_started_publish_run_only_from_main():
+    assert monthly.should_publish("workflow_dispatch", "true", "refs/heads/main") is True
+    assert monthly.should_publish("workflow_dispatch", "false", "refs/heads/feature") is False  # a dry run from any branch
+    with pytest.raises(RuntimeError, match="only be started from main"):
+        monthly.should_publish("workflow_dispatch", "true", "refs/heads/feature")
+    with pytest.raises(RuntimeError):
+        monthly.should_publish("workflow_dispatch", "true", "")  # no branch given: refuse, don't guess
+
+
+def test_the_plan_command_refuses_a_publish_run_off_main(capsys):
+    with pytest.raises(RuntimeError):
+        cli.main(["plan", "--event", "workflow_dispatch", "--publish-input", "true", "--ref", "refs/heads/x", "--today", "2026-11-05"])
+    assert capsys.readouterr().out == ""  # nothing reaches $GITHUB_OUTPUT
+    assert cli.main(["plan", "--event", "workflow_dispatch", "--publish-input", "true", "--ref", "refs/heads/main", "--today", "2026-11-05"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["publish=true", "skip=false"]
+
+
+def test_a_run_that_stopped_early_still_reports_its_download_disk_and_memory(tmp_path):
+    lines = []
+    assert monthly.summarize(str(tmp_path), publish=True, extra={"Valuation step, peak memory": "7.9 GB"}, log=lines.append) == 1
+    assert "nothing was published" in lines[0] and "Valuation step, peak memory: 7.9 GB" in lines

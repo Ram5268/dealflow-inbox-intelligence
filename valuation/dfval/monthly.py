@@ -22,15 +22,21 @@ import requests
 from . import config
 
 BACKUP_DAY = 23  # the cron runs on the 20th and the 23rd at 10:00 UTC
+MAIN_REF = "refs/heads/main"  # a hand-started publish run uses main's reviewed code only (engineering precaution)
 STATUS_PATH = "/api/valuations/status"  # public: counts, dates and gate results only
 
 
-def should_publish(event: str, publish_input: str | None) -> bool:
-    """The schedule publishes (when every gate passes); a hand-started run only when asked."""
+def should_publish(event: str, publish_input: str | None, ref: str = MAIN_REF) -> bool:
+    """The schedule publishes (when every gate passes); a hand-started run only when asked, and
+    only from main. Asking to publish from another branch stops the run (red) instead of
+    quietly turning it into a dry run."""
     if event == "schedule":
         return True
     if event == "workflow_dispatch":
-        return (publish_input or "").strip().lower() == "true"
+        asked = (publish_input or "").strip().lower() == "true"
+        if asked and ref != MAIN_REF:
+            raise RuntimeError("a publish run can only be started from main; nothing was downloaded or published")
+        return asked
     return False
 
 
@@ -61,9 +67,9 @@ def fetch_status(base_url: str = config.DEALFLOW_URL, http=requests) -> dict:
     return body
 
 
-def plan(event: str, publish_input: str | None, today: dt.date, status_reader=None, log=print) -> dict[str, str]:
+def plan(event: str, publish_input: str | None, today: dt.date, status_reader=None, log=print, ref: str = MAIN_REF) -> dict[str, str]:
     """The workflow's outputs: publish=true|false and skip=true|false. Only the backup run reads the status page."""
-    publish = should_publish(event, publish_input)
+    publish = should_publish(event, publish_input, ref)
     skip = False
     if is_backup_run(event, today):
         if month_already_published((status_reader or fetch_status)(), today):
@@ -143,6 +149,8 @@ def summarize(out_dir: str, publish: bool, extra: dict | None = None, log=print)
     path = os.path.join(out_dir, "summary.json")
     if not os.path.exists(path):
         log("no summary.json: the run stopped before the valuation step finished, so nothing was published")
+        for k, v in (extra or {}).items():  # the download, disk and GNU time numbers matter most on a failed run
+            log(f"{k}: {v}")
         return 1
     with open(path) as fh:
         s = json.load(fh)

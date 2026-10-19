@@ -65,25 +65,28 @@ jobs:
         # The downloaded files take about 0.6 GB and the two Python environments about 1 GB
         # (engineering precaution: stop early, not halfway). A rehearsal on Ryan's Mac on
         # 2026-10-19 peaked at about 8.3 GB of memory, more than a standard runner's 7 GB, so 8 GB
-        # of swap on the runner's spare disk keeps a peak from killing the run.
+        # more swap keeps a peak from killing the run. On a 2-core runner /mnt is a ~14 GB disk
+        # that already holds a 4 GB swap file (~9-10 GB free), so the swap goes there when 9 GB is
+        # free, else on the run's own disk when it has 16 GB free. Adding swap is never fatal.
         run: |
           avail_gb=$(df -BG --output=avail "$RUNNER_TEMP" | tail -1 | tr -dc '0-9')
-          echo "Free disk for the run: ${avail_gb} GB; memory: $(free -g | awk '/^Mem:/{print $2}') GB; CPUs: $(nproc)"
+          echo "Free disk for the run: ${avail_gb} GB; memory: $(free -m | awk '/^Mem:/{printf "%.1f", $2/1024}') GB; CPUs: $(nproc)"
           if [ "${avail_gb:-0}" -lt 8 ]; then
             echo "::error::Only ${avail_gb} GB of disk is free; the run needs at least 8 GB. Nothing was downloaded or published."
             exit 1
           fi
           spare_gb=$(df -BG --output=avail /mnt 2>/dev/null | tail -1 | tr -dc '0-9')
-          if [ "${spare_gb:-0}" -ge 12 ]; then
-            sudo fallocate -l 8G /mnt/valuation-swap
-            sudo chmod 600 /mnt/valuation-swap
-            sudo mkswap /mnt/valuation-swap > /dev/null
-            sudo swapon /mnt/valuation-swap
-            echo "Added 8 GB of swap on /mnt"
-          else
-            echo "::warning::No room on /mnt for extra swap (${spare_gb:-0} GB free); the valuation step may run short of memory."
+          swap=
+          if [ "${spare_gb:-0}" -ge 9 ]; then swap=/mnt/valuation-swap
+          elif [ "${avail_gb:-0}" -ge 16 ]; then swap=/valuation-swap
           fi
-          free -g
+          if [ -n "$swap" ] && sudo fallocate -l 8G "$swap" && sudo chmod 600 "$swap" && sudo mkswap "$swap" > /dev/null && sudo swapon "$swap"; then
+            echo "Added 8 GB of swap at $swap"
+          else
+            echo "::warning::No extra swap was added (/mnt ${spare_gb:-0} GB free, run disk ${avail_gb} GB free); the valuation step may run short of memory."
+          fi
+          swapon --show
+          free -m
 
       - name: Install the pinned versions
         # Two environments, each with exactly the versions its package was tested with: the
@@ -104,8 +107,9 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           PUBLISH_INPUT: ${{ inputs.publish }}
+          REF: ${{ github.ref }}
         run: |
-          "$RUNNER_TEMP/venv-dfval/bin/python" -m valuation.dfval plan --event "$EVENT" --publish-input "$PUBLISH_INPUT" >> "$GITHUB_OUTPUT"
+          "$RUNNER_TEMP/venv-dfval/bin/python" -m valuation.dfval plan --event "$EVENT" --publish-input "$PUBLISH_INPUT" --ref "$REF" >> "$GITHUB_OUTPUT"
 
       - name: Download the public records (valuation/fetch)
         if: steps.plan.outputs.skip != 'true'

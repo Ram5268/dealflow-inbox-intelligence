@@ -28,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--event", required=True, help="the workflow's trigger (github.event_name)")
     p.add_argument("--publish-input", default="", help="the hand-started run's publish box ('true' or 'false')")
     p.add_argument("--today", help="UTC date, YYYY-MM-DD (tests only; default today)")
+    p.add_argument("--ref", default="", help="the workflow's branch (github.ref); a hand-started publish run must be on main")
     s = sub.add_parser("summary", help="the monthly workflow: print counts and gate results; non-zero unless the gates passed")
     s.add_argument("--out", required=True, help="the run's --out folder (summary.json)")
     s.add_argument("--data", help="the downloaded data folder, to report the download and its size on disk")
@@ -47,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
 
         from .monthly import plan
         today = dt.date.fromisoformat(a.today) if a.today else dt.datetime.now(dt.timezone.utc).date()
-        for k, v in plan(a.event, a.publish_input, today, log=lambda m: print(m, file=sys.stderr, flush=True)).items():
+        for k, v in plan(a.event, a.publish_input, today, log=lambda m: print(m, file=sys.stderr, flush=True), ref=a.ref).items():
             print(f"{k}={v}")
     elif a.cmd == "summary":
         from .monthly import disk_notes, summarize, timing_notes

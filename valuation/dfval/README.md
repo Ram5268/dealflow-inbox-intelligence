@@ -40,8 +40,12 @@ VALUATION_IMPORT_SECRET=... python -m valuation.dfval run --data <folder> --out 
   (`python -m valuation.dfval plan`); download into the runner's temp folder (`valuation/fetch`,
   with the NYC Open Data key pair); `run` (with `--publish` on a publish run); print the summary
   (`python -m valuation.dfval summary`: counts and gate results only).
-- **Red means nothing was published:** a failed download, a failed gate (on a dry run too), or a
-  publish run that didn't publish. DealFlow keeps the last published values.
+- **Red means the run needs a look.** A failed download, a failed gate (on a dry run too) or a
+  failed request publishes nothing, and DealFlow keeps the last published values. Values are
+  published only after every gate passed and every request succeeded; the summary says
+  "Published: yes" when they were.
+- **A publish run started by hand must use main** (engineering precaution: only reviewed code
+  publishes); asked from another branch, it stops red before downloading anything.
 - **What it keeps:** `summary.json` and the download's `manifest.json`, for 90 days: counts,
   accuracy numbers and one median rounded to $10,000. No home's value, address, tax lot or contact.
 - **Secrets:** `NYC_SOCRATA_KEY_ID` and `NYC_SOCRATA_KEY_SECRET` go only to the download step
