@@ -1,6 +1,6 @@
 import { prisma } from '../prisma'
-import { readCrmLeads } from './crmReader'
-import { mapLead } from './mapLead'
+import { readCrmLeads, readCrmOptOutLeadIds } from './crmReader'
+import { mapLead, markOptOut } from './mapLead'
 import { planSync, type ExistingRow, type SyncPlan } from './plan'
 import {
   DUPLICATES_SQL, LEGACY_SQL, REKEY_SQL, REMOVED_SQL, UPSERT_SQL, diffUpdates, toUpsertRow, type UpsertReturn,
@@ -23,6 +23,7 @@ export type CrmSyncResult = {
   legacyMarked: number
   removedMarked: number
   neighborhoodsResolved: number
+  optOutLeads: number | null // Brief 43 PR 5: CRM leads on the CRM's opt-out list; null = not read this run
   filled: Record<string, number>
   skipped: SyncPlan['skipped']
   ms: number
@@ -45,7 +46,10 @@ export const MARKED_CRM_SQL =
 export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncResult> {
   const started = Date.now()
   const org = await prisma.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG }, select: { id: true } })
-  const contacts = (await readCrmLeads(ORG_SLUG)).map(mapLead)
+  // Brief 43 PR 5: the CRM's own opt-out list, read on its own so a failure only
+  // skips new do-not-contact marks (crmReader.ts readCrmOptOutLeadIds).
+  const optOuts = await readCrmOptOutLeadIds(ORG_SLUG)
+  const contacts = (await readCrmLeads(ORG_SLUG)).map(mapLead).map(c => markOptOut(c, optOuts))
 
   // Removal guard: an empty or shrunken CRM read must never mark everyone removed.
   const [{ n: markedCrm }] = await prisma.$queryRawUnsafe<{ n: number }[]>(MARKED_CRM_SQL, org.id)
@@ -77,6 +81,7 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
         legacyMarked: await tx.$executeRawUnsafe(LEGACY_SQL, org.id),
         removedMarked: await tx.$executeRawUnsafe(REMOVED_SQL, org.id, JSON.stringify(contacts.map(c => c.mojoId))),
         neighborhoodsResolved: rows.filter(r => insertedIds.has(r.mojoId) && r.neighborhood).length,
+        optOutLeads: optOuts ? contacts.filter(c => c.metadata.crmOptOut).length : null,
         filled,
         skipped: plan.skipped,
         ms: Date.now() - started,

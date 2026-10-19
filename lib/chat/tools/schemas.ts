@@ -107,19 +107,22 @@ export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
   } as Anthropic.Messages.Tool.InputSchema,
 }
 
+// Brief 43 PR 5 (D11 [Ryan, 2026-10-18]): search_parties is buyers and renters
+// only. Ryan's CRM sellers are never listed or searched; find_seller gives one
+// named seller's contact and count_sellers a count.
 export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
   name: 'search_parties',
   description:
-    'Search the demand + lead side: other agents\' buyers/renters (co-broke opportunities from the inbox) and the broker\'s Mojo CRM seller/landlord leads. ' +
-    'role="buyer" -> buyer ISOs, role="renter" -> renter inquiries, role="seller"/"landlord" -> Mojo CRM leads. Omit role to search all. Mojo results carry name + phone. ' +
+    'Search the demand side: buyers and renters, from other agents (co-broke requests in the inbox) and the ones stored in Ryan\'s CRM. ' +
+    'role="buyer" -> buyers, role="renter" -> renters. Omit role for both. ' +
     'Use priceRangeOverlaps={min,max} to find parties whose budget overlaps a given price. Seed test data is included by default.',
   input_schema: {
     type: 'object',
     properties: {
       role: {
         type: 'string',
-        enum: ['buyer', 'renter', 'seller', 'landlord'],
-        description: 'buyer/renter -> inbox demand (ISOs). seller/landlord -> Mojo CRM leads. Omit to search all.',
+        enum: ['buyer', 'renter'],
+        description: 'buyer -> buyers, renter -> renters. Omit for both.',
       },
       borough: { type: 'string', description: 'NYC borough.' },
       neighborhoods: { type: 'array', items: { type: 'string' }, description: 'Neighborhood names.' },
@@ -140,6 +143,37 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
         description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
       limit: { type: 'number', description: 'Max cards to return (default 50, max 200).' },
+    },
+    required: [],
+  } as Anthropic.Messages.Tool.InputSchema,
+}
+
+// Brief 43 PR 5 (D11 [Ryan, 2026-10-18]; by address D13 [Ryan, 2026-10-19]).
+export const FIND_SELLER_TOOL: Anthropic.Messages.Tool = {
+  name: 'find_seller',
+  description:
+    'Look up ONE of Ryan\'s CRM sellers, by the name or the street address Ryan gives, to show him that one contact. ' +
+    'Use it only when Ryan names a specific seller or gives an address. Never use it to list, browse or search sellers by area, situation or anything else. ' +
+    'Returns { match } (one seller: Ryan sees it as a contact card with an Open in CRM button), { candidates } (up to 3 names; ask Ryan which one) or { none: true } (no seller by that name or address in his CRM). ' +
+    'doNotContact true means the homeowner asked not to be contacted.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'The seller\'s name as Ryan gave it, e.g. "Pat Example".' },
+      address: { type: 'string', description: 'The street address as Ryan gave it, e.g. "88 Example Ave". The house number must match exactly.' },
+    },
+    required: [],
+  } as Anthropic.Messages.Tool.InputSchema,
+}
+
+export const COUNT_SELLERS_TOOL: Anthropic.Messages.Tool = {
+  name: 'count_sellers',
+  description:
+    'Count Ryan\'s CRM sellers, in one neighborhood or borough or in total. Counts are fine to share; never list the sellers. Returns { count, neighborhood }.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      neighborhood: { type: 'string', description: 'A neighborhood or borough, e.g. "Bed-Stuy" or "Brooklyn". Omit for all sellers.' },
     },
     required: [],
   } as Anthropic.Messages.Tool.InputSchema,
