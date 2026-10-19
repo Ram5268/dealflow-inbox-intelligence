@@ -35,6 +35,16 @@ WHERE m."organizationId" = $1 AND m."opportunityType" = 'contact'
     WHERE k."opportunityId" = m."opportunityId" AND k."counterpartId" = m."counterpartId"
       AND k."counterpartType" = m."counterpartType")`
 
+// Brief 47 (PR 1): $1 = organizationId. The size check's yardstick: how many
+// matches, and how many sellers with one, the database holds now, counted over
+// exactly the rows the delete above can remove (the same WHERE). Engineering
+// precaution (lib/matching/nightly/guard.ts).
+export const EXISTING_MATCH_COUNTS_SQL = `
+SELECT count(*)::int AS matches, count(DISTINCT m."opportunityId")::int AS sellers
+FROM "Match" AS m, "MojoContact" AS c
+WHERE m."organizationId" = $1 AND m."opportunityType" = 'contact'
+  AND c.id = m."opportunityId" AND NOT c."isTestData"`
+
 // Brief 45 (PR E): the same delete, narrowed to the sellers one import-scoring
 // request scored ($3 = jsonb array of their MojoContact ids). That route scores
 // a few new sellers between nightly runs, and the statement above would delete

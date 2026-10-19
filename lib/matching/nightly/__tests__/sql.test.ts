@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { DELETE_STALE_MATCHES_OF_SELLERS_SQL, DELETE_STALE_MATCHES_SQL, UPSERT_MATCHES_SQL } from '../sql'
+import { DELETE_STALE_MATCHES_OF_SELLERS_SQL, DELETE_STALE_MATCHES_SQL, EXISTING_MATCH_COUNTS_SQL, UPSERT_MATCHES_SQL } from '../sql'
 
 const flat = (s: string) => s.replace(/\s+/g, ' ')
 const upsert = flat(UPSERT_MATCHES_SQL)
@@ -42,4 +42,14 @@ test('the nightly stale-row delete is unchanged by Brief 45', () => {
     'AND m."opportunityType" = \'contact\' AND c.id = m."opportunityId" AND NOT c."isTestData" AND NOT EXISTS ( SELECT 1 FROM ' +
     'jsonb_to_recordset($2::jsonb) AS k("opportunityId" text, "counterpartId" text, "counterpartType" text) WHERE k."opportunityId" = ' +
     'm."opportunityId" AND k."counterpartId" = m."counterpartId" AND k."counterpartType" = m."counterpartType")')
+})
+
+// Brief 47 (PR 1): the size check compares tonight with exactly the rows the
+// stale-row delete could remove (same WHERE, word for word).
+test('the size check counts exactly the rows the stale-row delete can remove', () => {
+  const del = flat(DELETE_STALE_MATCHES_SQL)
+  const scope = del.slice(del.indexOf(' WHERE ') + ' WHERE '.length, del.indexOf(' AND NOT EXISTS'))
+  assert.equal(scope, 'm."organizationId" = $1 AND m."opportunityType" = \'contact\' AND c.id = m."opportunityId" AND NOT c."isTestData"')
+  assert.equal(flat(EXISTING_MATCH_COUNTS_SQL).trim(), 'SELECT count(*)::int AS matches, count(DISTINCT m."opportunityId")::int AS sellers ' +
+    `FROM "Match" AS m, "MojoContact" AS c WHERE ${scope}`)
 })
