@@ -38,7 +38,15 @@ export interface Clause {
   question: boolean
 }
 
-/** The clause around text[start, end). Breaks inside the match are ignored. */
+// How far a clause is read on each side of a match. A clause longer than this
+// is a run-on (or a pasted list); reading all of it for every match made a
+// 20 KB reply with hundreds of matches slow.
+const CLAUSE_WINDOW = 300
+
+/**
+ * The clause around text[start, end), read at most CLAUSE_WINDOW characters
+ * either side. Breaks inside the match are ignored.
+ */
 export function clauseAround(text: string, start: number, end: number, breaks: Breaks = clauseBreaks(text)): Clause {
   // Last break that ends at or before the match.
   let lo = 0
@@ -50,13 +58,14 @@ export function clauseAround(text: string, start: number, end: number, breaks: B
   }
   let next = prev + 1
   while (next < breaks.length && breaks[next][0] < end) next++
-  const cs = prev >= 0 ? breaks[prev][1] : 0
   const ce = next < breaks.length ? breaks[next][0] : text.length
+  const cs = Math.max(prev >= 0 ? breaks[prev][1] : 0, start - CLAUSE_WINDOW)
+  const ceRead = Math.min(ce, end + CLAUSE_WINDOW)
   return {
     start: cs,
-    end: ce,
+    end: ceRead,
     before: text.slice(cs, start),
-    after: text.slice(end, ce),
+    after: text.slice(end, ceRead),
     question: text[ce] === '?',
   }
 }

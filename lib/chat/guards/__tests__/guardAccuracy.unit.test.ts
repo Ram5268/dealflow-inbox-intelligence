@@ -106,6 +106,11 @@ test('the scan and the binding stay fast on 20 KB inputs', () => {
   const inputs = [
     'Zillow. '.repeat(2_500),
     "I can't check Zillow, ".repeat(900),
+    // One long clause with hundreds of matches (CI took 266 ms before the
+    // clause window).
+    'Zillow, StreetEasy, MLS, ACRIS '.repeat(640),
+    'it last sold, '.repeat(1_400),
+    'owner is Pat '.repeat(1_500),
     'Example Holdings LLC '.repeat(1_000),
     'The owner is Pat Example and '.repeat(700),
     'It last sold in 2019 for $1,200,000; '.repeat(550),
