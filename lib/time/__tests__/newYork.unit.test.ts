@@ -115,24 +115,24 @@ test('DIGEST_CRON_UTC_HOUR matches vercel.json\'s daily schedule for /api/push/d
 
 // [what, now, label]. The label describes the next digest at or after now.
 const LABELS: Array<[string, string, string]> = [
-  ['summer', '2026-07-15T10:00:00.000Z', 'Daily at 8:00 AM New York time'],
-  ['winter', '2026-01-15T10:00:00.000Z', 'Daily at 7:00 AM New York time'],
-  ['today, Oct 19 (daylight time)', '2026-10-19T15:00:00.000Z', 'Daily at 8:00 AM New York time'],
-  ['the moment the digest runs', '2026-07-15T12:00:00.000Z', 'Daily at 8:00 AM New York time'],
-  ['1 ms before New York midnight (summer)', '2026-10-19T03:59:59.999Z', 'Daily at 8:00 AM New York time'],
-  ['1 ms after New York midnight (summer)', '2026-10-19T04:00:00.001Z', 'Daily at 8:00 AM New York time'],
-  ['1 ms before New York midnight (winter)', '2026-12-01T04:59:59.999Z', 'Daily at 7:00 AM New York time'],
-  ['1 ms after New York midnight (winter)', '2026-12-01T05:00:00.001Z', 'Daily at 7:00 AM New York time'],
+  ['summer', '2026-07-15T10:00:00.000Z', 'Daily around 8:00 AM New York time'],
+  ['winter', '2026-01-15T10:00:00.000Z', 'Daily around 7:00 AM New York time'],
+  ['today, Oct 19 (daylight time)', '2026-10-19T15:00:00.000Z', 'Daily around 8:00 AM New York time'],
+  ['the moment the digest runs', '2026-07-15T12:00:00.000Z', 'Daily around 8:00 AM New York time'],
+  ['1 ms before New York midnight (summer)', '2026-10-19T03:59:59.999Z', 'Daily around 8:00 AM New York time'],
+  ['1 ms after New York midnight (summer)', '2026-10-19T04:00:00.001Z', 'Daily around 8:00 AM New York time'],
+  ['1 ms before New York midnight (winter)', '2026-12-01T04:59:59.999Z', 'Daily around 7:00 AM New York time'],
+  ['1 ms after New York midnight (winter)', '2026-12-01T05:00:00.001Z', 'Daily around 7:00 AM New York time'],
   // Clocks go forward on Mar 8: that morning's digest is the first at 8:00.
-  ['Mar 7, 6 AM EST, before that day\'s 7:00 digest', '2026-03-07T11:00:00.000Z', 'Daily at 7:00 AM New York time'],
-  ['Mar 7, 3 PM EST, the next digest is Mar 8 at 8:00', '2026-03-07T20:00:00.000Z', 'Daily at 8:00 AM New York time'],
-  ['Mar 8, 12:30 AM EST, before the change', '2026-03-08T05:30:00.000Z', 'Daily at 8:00 AM New York time'],
-  ['Mar 8, 1 PM EDT', '2026-03-08T17:00:00.000Z', 'Daily at 8:00 AM New York time'],
+  ['Mar 7, 6 AM EST, before that day\'s 7:00 digest', '2026-03-07T11:00:00.000Z', 'Daily around 7:00 AM New York time'],
+  ['Mar 7, 3 PM EST, the next digest is Mar 8 at 8:00', '2026-03-07T20:00:00.000Z', 'Daily around 8:00 AM New York time'],
+  ['Mar 8, 12:30 AM EST, before the change', '2026-03-08T05:30:00.000Z', 'Daily around 8:00 AM New York time'],
+  ['Mar 8, 1 PM EDT', '2026-03-08T17:00:00.000Z', 'Daily around 8:00 AM New York time'],
   // Clocks go back on Nov 1: that morning's digest is the first at 7:00.
-  ['Oct 31, 7 AM EDT, before that day\'s 8:00 digest', '2026-10-31T11:00:00.000Z', 'Daily at 8:00 AM New York time'],
-  ['Oct 31, 2 PM EDT, the next digest is Nov 1 at 7:00', '2026-10-31T18:00:00.000Z', 'Daily at 7:00 AM New York time'],
-  ['Nov 1, 12:30 AM EDT, still daylight time', '2026-11-01T04:30:00.000Z', 'Daily at 7:00 AM New York time'],
-  ['Nov 1, 1 PM EST', '2026-11-01T18:00:00.000Z', 'Daily at 7:00 AM New York time'],
+  ['Oct 31, 7 AM EDT, before that day\'s 8:00 digest', '2026-10-31T11:00:00.000Z', 'Daily around 8:00 AM New York time'],
+  ['Oct 31, 2 PM EDT, the next digest is Nov 1 at 7:00', '2026-10-31T18:00:00.000Z', 'Daily around 7:00 AM New York time'],
+  ['Nov 1, 12:30 AM EDT, still daylight time', '2026-11-01T04:30:00.000Z', 'Daily around 7:00 AM New York time'],
+  ['Nov 1, 1 PM EST', '2026-11-01T18:00:00.000Z', 'Daily around 7:00 AM New York time'],
 ]
 
 test('digestScheduleLabel: 8:00 AM in daylight time, 7:00 AM in winter, right around both changes and midnight', () => {

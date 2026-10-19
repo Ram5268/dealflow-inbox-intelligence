@@ -56,8 +56,21 @@ export const minuteClock = {
   subscribe: (onChange: () => void): (() => void) => {
     let timer: ReturnType<typeof setTimeout> | undefined
     const wait = () => { timer = setTimeout(() => { onChange(); wait() }, MINUTE_MS - (Date.now() % MINUTE_MS)) }
+    // A phone that puts the page to sleep can hold its timer back, so the clock is read again as soon as
+    // the page is shown, rather than at the next minute [engineering precaution].
+    const onShow = () => {
+      if (document.visibilityState !== 'visible') return
+      clearTimeout(timer)
+      onChange()
+      wait()
+    }
+    const hasDocument = typeof document !== 'undefined'
     wait()
-    return () => clearTimeout(timer)
+    if (hasDocument) document.addEventListener('visibilitychange', onShow)
+    return () => {
+      clearTimeout(timer)
+      if (hasDocument) document.removeEventListener('visibilitychange', onShow)
+    }
   },
   getSnapshot: (): number | null => {
     const now = Date.now()

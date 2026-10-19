@@ -96,3 +96,35 @@ test('minuteClock: nothing on the server; in the browser the current minute, tic
     assert.equal(ticks, 2, 'no ticks after the page unsubscribes')
   } finally { mock.timers.reset() }
 })
+
+test('minuteClock: reads the clock again as soon as the page is shown, and stops listening when unsubscribed', () => {
+  const listeners = new Set<() => void>()
+  const fakeDocument = {
+    visibilityState: 'hidden',
+    addEventListener: (type: string, fn: () => void) => { if (type === 'visibilitychange') listeners.add(fn) },
+    removeEventListener: (type: string, fn: () => void) => { if (type === 'visibilitychange') listeners.delete(fn) },
+  }
+  const g = globalThis as unknown as { document?: unknown }
+  const before = g.document
+  g.document = fakeDocument
+  mock.timers.enable({ apis: ['Date', 'setTimeout'], now: new Date('2026-10-19T18:05:30.000Z') })
+  try {
+    let ticks = 0
+    const stop = minuteClock.subscribe(() => { ticks++ })
+    assert.equal(listeners.size, 1)
+    for (const fn of listeners) fn() // hidden: nothing
+    assert.equal(ticks, 0)
+    fakeDocument.visibilityState = 'visible'
+    for (const fn of listeners) fn()
+    assert.equal(ticks, 1, 'shown: read the clock at once')
+    mock.timers.tick(30_000)
+    assert.equal(ticks, 2, 'and still ticks at the next minute, once')
+    stop()
+    assert.equal(listeners.size, 0)
+    mock.timers.tick(5 * 60_000)
+    assert.equal(ticks, 2)
+  } finally {
+    mock.timers.reset()
+    g.document = before
+  }
+})

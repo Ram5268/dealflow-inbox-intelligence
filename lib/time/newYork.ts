@@ -47,13 +47,14 @@ export function startOfNewYorkDay(now: Date): Date {
 }
 
 // When the push digest reaches New York, in words that stay true across daylight saving [planner]:
-// "Daily at 8:00 AM New York time" in daylight time, "Daily at 7:00 AM New York time" in winter,
-// worked out from DIGEST_CRON_UTC_HOUR. It describes the next digest at or after `now`, so once the
+// "Daily around 8:00 AM New York time" in daylight time, "Daily around 7:00 AM New York time" in
+// winter, worked out from DIGEST_CRON_UTC_HOUR. "Around", because Vercel starts a daily job some
+// time within its scheduled hour (last night's 9:00 UTC nightly ran at 9:17) [engineering precaution]. It describes the next digest at or after `now`, so once the
 // last digest before the clocks change has gone, it already shows the new time [engineering precaution].
 export function digestScheduleLabel(now: Date): string {
   let run = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), DIGEST_CRON_UTC_HOUR)
   if (run < now.getTime()) run += DAY_MS // today's digest has gone: tomorrow's (a UTC day is always 24 hours)
   const { hour, minute } = newYorkWallClock(run)
   const hour12 = hour % 12 === 0 ? 12 : hour % 12
-  return `Daily at ${hour12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'} New York time`
+  return `Daily around ${hour12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'} New York time`
 }
