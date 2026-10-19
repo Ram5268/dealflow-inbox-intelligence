@@ -8,11 +8,14 @@
 //     circumstances (fitReason's SELLER_CIRCUMSTANCES) [engineering precaution];
 //   - no street address of a homeowner's home until the homeowner has agreed to
 //     sell: the home is described by area and type (D12) [Ryan, 2026-10-19];
-//   - no estimate of ours or any other dollar figure for a homeowner's home: it
-//     reads "price on request", as /matches drafts say (outreachPrice.ts)
-//     [Ryan, 2026-10-17]. A listing's own asking price, as on its card, stays;
-//   - to a homeowner: no dollar figure at all [Ryan, 2026-10-17], nothing about
-//     how we found them and no pressure [engineering precaution];
+//   - no estimate of ours: our values stay out of anything a buyer or homeowner
+//     could see [Ryan, 2026-10-17]. No other dollar figure, range or price hint
+//     for a homeowner's home either: it reads "price on request", as the brief
+//     and /matches drafts say (outreachPrice.ts) [engineering precaution]. A
+//     listing's own asking price, as on its card, stays;
+//   - to a homeowner: none of our values [Ryan, 2026-10-17], and no dollar figure
+//     at all, nothing about how we found them and no pressure [engineering
+//     precaution];
 //   - signed "Ryan Martin" (D2, Brief 42 default), with no brokerage name or job
 //     title [planner, 2026-10-19].
 // The homeowners are the CRM sellers in this turn's tool results (collectHomeowners)
@@ -43,6 +46,18 @@ export interface DraftContext {
   // PR 3's one addition to the contract's shape (optional): the prices on this
   // turn's listing cards, so a listing's own asking price can stay in a draft.
   listingPrices?: number[]
+  // Review r1 (optional): CRM sellers Drift was shown in its context block (up
+  // to 20 at once until Brief 43 PR 5 makes that block counts only). Checked for
+  // their name, phone, notes and address like `homeowners`, but they don't on
+  // their own make a draft "about a homeowner" (that would flag every figure in
+  // any draft written after a neighborhood question).
+  contextHomeowners?: HomeownerRef[]
+  // Review r1 (optional): Ryan asked for a message to a homeowner ("text the
+  // owner"), so a draft not labelled buyer_side gets the homeowner rules.
+  toHomeownerAsked?: boolean
+  // Review r1 (optional): Ryan's message is about a homeowner's home ("about her
+  // house", "one of my sellers"), so figures in the draft get the homeowner rule.
+  homeownerHomeAsked?: boolean
 }
 
 export type DraftFlagKind =
@@ -107,7 +122,9 @@ const NB = '(?<![A-Za-z0-9])'
 const NE = '(?![A-Za-z0-9])'
 const GREETING = '(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))'
 // `find` flags the name; `greeting` (the clean-up) turns "Hi Pat," into "Hi,".
-function namePatterns(name: string): { find: RegExp[]; greeting: RegExp | null } {
+// `byFirstName: false` (review r1) leaves out the first name in a greeting: for the
+// CRM sellers Drift only had in its context, a buyer's agent may share one.
+function namePatterns(name: string, byFirstName = true): { find: RegExp[]; greeting: RegExp | null } {
   const tokens = name.trim().split(/[\s,]+/).filter(Boolean)
   if (!tokens.length) return { find: [], greeting: null }
   const t = tokens.map(esc)
@@ -118,8 +135,17 @@ function namePatterns(name: string): { find: RegExp[]; greeting: RegExp | null }
   let greeting: RegExp | null = null
   if (tokens.length >= 2 || tokens[0].length >= 4) find.push(new RegExp(`${NB}${t.join(SEP)}${NE}`, 'gi'))
   if (tokens.length >= 2) find.push(new RegExp(`${NB}${first}${SEP}${last}${NE}`, 'gi'), new RegExp(`${NB}${last}${SEP}${first}${NE}`, 'gi'))
+  // Review r1: a middle name or initial the record doesn't carry ("Pat Q. Example").
+  if (tokens.length >= 2) find.push(new RegExp(`${NB}${first}[ \\t]+[A-Za-z]{1,12}\\.?[ \\t]+${last}${NE}`, 'gi'))
+  // Review r1: a person's last name as a family or possessive ("the Examples",
+  // "Example's", "the Example family"), capitalised, at least four letters.
+  const L = tokens[tokens.length - 1]
+  if (tokens.length >= 2 && !ENTITY_WORD.test(name) && /^[A-Za-z][A-Za-z'-]{3,}$/.test(L)) {
+    const forms = uniq([L[0].toUpperCase() + L.slice(1).toLowerCase(), L.toUpperCase()]).map(esc).join('|')
+    find.push(new RegExp(`${NB}(?:[Tt]he[ \\t]+(?:${forms})s|(?:${forms})(?:['’]s|[ \\t]+(?:family|household)))${NE}`, 'g'))
+  }
   if (!ENTITY_WORD.test(name) && /^[A-Za-z][A-Za-z'-]+$/.test(tokens[0])) {
-    find.push(new RegExp(`^[ \\t]*${GREETING}[ \\t,]+${first}${NE}`, 'gim'))
+    if (byFirstName) find.push(new RegExp(`^[ \\t]*${GREETING}[ \\t,]+${first}${NE}`, 'gim'))
     if (tokens.length >= 2) find.push(new RegExp(`${NB}(?:mr|mrs|ms|miss|mx|dr)\\.?[ \\t]+${last}${NE}`, 'gi'))
     greeting = new RegExp(`^([ \\t]*)${GREETING}[ \\t,]+(?:${t.join(SEP)}|${first})${NE}`, 'gim')
   }
@@ -128,7 +154,7 @@ function namePatterns(name: string): { find: RegExp[]; greeting: RegExp | null }
 
 // ── Phones ───────────────────────────────────────────────────────────────────
 // CRM phones are stored as 10 raw digits; a draft may write them any way.
-const PHONE = /(?<!\d)(?:\+?1[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?!\d)|(?<!\d)\d{3}[ .-]\d{4}(?!\d)/g
+const PHONE = /(?<!\d)(?:\+?1[ .\-\u2010-\u2014]?)?(?:\(\d{3}\)|\d{3})[ .\-\u2010-\u2014]?\d{3}[ .\-\u2010-\u2014]?\d{4}(?!\d)|(?<!\d)\d{3}[ .\-\u2010-\u2014]\d{4}(?!\d)/g
 function phoneDigits(s: string): string {
   const d = s.replace(/\D/g, '')
   return d.length === 11 && d.startsWith('1') ? d.slice(1) : d
@@ -164,12 +190,12 @@ export function addressCore(address: string | null | undefined): string | null {
   const n = normalizeStreet((address ?? '').split(',')[0])
   if (!n) return null
   const t = n.split(' ')
-  if (!/^\d+$/.test(t[0]) || t.length < 2) return null
+  if (!/^\d+[a-z]?$/.test(t[0]) || t.length < 2) return null
   if (t.length > 2 && STREET_TYPES.has(t[t.length - 1])) t.pop()
   return t.join(' ')
 }
 // A house number: digits after a space or line start, not inside a figure.
-const HOUSE_NUMBER = /(?<![\w$.,-])\d+(?:-\d+)?(?=[ \t])/g
+const HOUSE_NUMBER = /(?<![\w$.,-])\d+(?:-\d+)?[A-Za-z]?(?=[ \t])/g
 
 type Hit = { kind: DraftFlagKind; match: string; index: number }
 
@@ -179,6 +205,8 @@ function addressHits(text: string, cores: string[]): Hit[] {
   for (const m of text.matchAll(HOUSE_NUMBER)) {
     const index = m.index ?? 0
     const window = text.slice(index, index + 120).split('\n')[0].split(/[ \t]+/).slice(0, 7)
+    // Review r1: "#88 on Example Ave", "88 of Example Ave".
+    if (/^(?:on|of)$/i.test(window[1] ?? '')) window.splice(1, 1)
     const n = normalizeStreet(window.join(' '))
     const core = n ? cores.find(c => `${n} `.startsWith(`${c} `)) : undefined
     if (core) hits.push({ kind: 'street_address', match: window.slice(0, core.split(' ').length + 1).join(' ').replace(/[.,;:!?]+$/, ''), index })
@@ -196,7 +224,7 @@ const MONEY = new RegExp(MONEY_SRC, 'gi')
 // "price on request". A figure mid-clause ("your buyer's $2M budget") isn't
 // replaced; its sentence is dropped instead.
 const LEAD_IN = '(?:(?:at[ \\t]+)?(?:a[ \\t]+|the[ \\t]+)?(?:asking[ \\t]+)?price(?:[ \\t]+(?:is|of))?:?|(?:the[ \\t]+)?asking(?:[ \\t]+(?:of|is))?|list(?:ed|ing) at|priced(?:[ \\t]+(?:at|around))?|offered at|valued at|value of|worth(?:[ \\t]+(?:about|around|roughly))?|(?:is|are|was)(?:[ \\t]+(?:about|around|roughly))?|costs?|(?:goes|going|selling|sells|sold) for|around|about|roughly|approximately|near|in|within|between|at|for|under|over)'
-const PRICE_PHRASE = new RegExp(`(?:\\b${LEAD_IN}[ \\t]+)?(?:the[ \\t]+)?${MONEY_SRC}(?:[ \\t]?(?:-|–|—|to|and)[ \\t]?${MONEY_SRC})?(?:[ \\t]+(?:[A-Za-z-]+[ \\t]+)?range\\b)?(?=[ \\t]?(?:[.,;:!?)]|$))`, 'gi')
+const PRICE_PHRASE = new RegExp(`(?:\\b${LEAD_IN}[ \\t]+)?(?:the[ \\t]+)?${MONEY_SRC}(?:[ \\t]?(?:-|–|—|to|and)[ \\t]?${MONEY_SRC})?(?:[ \\t]+(?:[A-Za-z-]+[ \\t]+)?range\\b)?(?=[ \\t]?(?:[.,;:!?)](?!\\d)|$))`, 'gi')
 
 function moneyValue(s: string): number | null {
   const m = /(\d[\d,]*(?:\.\d+)?)[ \t]?([a-z]+)?/i.exec(s)
@@ -212,10 +240,43 @@ function moneyValue(s: string): number | null {
 // A listing's own price, allowing for rounding ("$1.3M" for $1,295,000).
 const isListingPrice = (v: number | null, prices: number[]) => v != null && prices.some(p => p > 0 && Math.abs(v - p) <= p * 0.01)
 
+// Review r1: a price hint with no "$" figure, in a draft about a homeowner's home
+// [engineering precaution; the brief's "price on request"]: "about two million",
+// "two and a half million", "a million", "in the low 2s", "mid-900s", "high twos",
+// "seven figures". One digit (or three) before the "s", so "the mid 80s" or "the
+// 1920s" (a building's era) isn't one.
+const SPELLED = '(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)'
+const PRICE_HINT = new RegExp([
+  `\\b${SPELLED}(?:[ \\t-]+(?:point[ \\t]+${SPELLED}|and[ \\t]+a[ \\t]+half))?[ \\t]+(?:million|mil)\\b`,
+  '(?<!thanks )\\b(?:half a|a)[ \\t]+million\\b',
+  "\\b(?:low|mid|high|upper)[ \\t-]+(?:\\$?(?:\\d(?:\\.\\d+)?|\\d{3})[mk]?['’]?s|ones|twos|threes|fours|fives|sixes|sevens|eights|nines|tens)\\b",
+  '\\b(?:six|seven|eight)[ \\t-]+figures?\\b',
+].join('|'), 'gi')
+// "around 2.1" or "about 2" with no unit after it ("around 2 blocks", "about 3
+// beds" and "around 2pm" aren't), counted only in a sentence about the price.
+const BARE_FIGURE = /\b(?:around|about|roughly|approximately|approx\.?|maybe|close to|north of|south of|upwards of|at least|over|under|near)[ \t]+\d{1,2}(?:\.\d{1,2})?(?!\d|[.,]\d|[ \t]{0,3}(?:%|percent|[A-Za-z]))/gi
+const PRICE_WORD = /\b(?:worth|take|accept\w*|bids?|valu\w*|price\w*|sell\w*|sale|sold|go(?:es|ing)? for|fetch\w*|get for|list\w*|asking|ask|offers?|market|trade\w*|apprais\w*|number)\b/i
+// The sentence around a match (at most 200 characters each way, so it stays linear).
+function sentenceAround(text: string, at: number, len: number): string {
+  const back = Math.max(0, at - 200)
+  const from = back + text.slice(back, at).lastIndexOf('\n') + 1
+  let start = from
+  for (const m of text.slice(from, at).matchAll(/[.!?][ \t]+/g)) start = from + (m.index ?? 0) + m[0].length
+  const after = text.slice(at + len, at + len + 200)
+  const end = after.search(/[.!?](?:[ \t]|$)|\n/)
+  return text.slice(start, at + len + (end < 0 ? after.length : end))
+}
+
 // ── Words ────────────────────────────────────────────────────────────────────
 const CIRCUMSTANCES = new RegExp(SELLER_CIRCUMSTANCES.source, 'gi')
 const HOW_WE_FOUND = /\b(?:public records?|property records?|city records?|ACRIS|PLUTO|records show|(?:our|my) (?:records|data|database|system|lists?|crm)|the crm|DealFlow|Drift|Mojo|(?:we|I) (?:found|came across|pulled up) (?:you|your)|on (?:a|our|my) list)\b/gi
 const PRESSURE = /\b(?:act (?:now|fast|quickly)|urgent(?:ly)?|limited time|don[’']?t miss|before it[’']?s too late|time is running out|now is the (?:best |right )?time|must sell|need to sell|you should sell|last chance|asap)\b/gi
+// Review r1: a homeowner's motivation in words fitReason's list doesn't have, for a
+// draft about a homeowner's home, to anyone (buyer-facing text never names a
+// homeowner's motivation [engineering precaution]).
+const MOTIVATION = /\b(?:must sell|needs? to sell|has to sell|have to sell|eager to sell|anxious to sell|wants? out|quick sale|sell(?:ing)? (?:fast|quickly)|priced to sell|below market|desperate|needs? (?:the )?(?:cash|money)|ill(?:ness)?|sick|health (?:issues?|problems?|reasons)|elderly|assisted living|nursing home|hospice|lost (?:his|her|their) job|job loss|(?:owner|seller|family)s? (?:is |are )?relocating)\b/gi
+// Review r1: a draft that talks to the reader about their own home.
+const YOUR_HOME = /\byour (?:home|house|property|building|brownstone|townhouse|place|[1-6]-family)\b/i
 // The brokerage name the old prompt used (N10), and Ryan describing himself by a job title.
 const BROKERAGE = /\bDouglas[ \t]+Elliman\b(?:[ \t]+Real[ \t]+Estate)?/gi
 const BROKERAGE_PHRASE = /[ \t]*(?:,[ \t]*|\b(?:with|from|at|of|here at)[ \t]+)?\bDouglas[ \t]+Elliman\b(?:[ \t]+Real[ \t]+Estate)?/gi
@@ -271,6 +332,9 @@ export function fixSignoff(body: string, channel: DraftChannel): { body: string;
 // ── The check ────────────────────────────────────────────────────────────────
 interface Prepared {
   homeowners: HomeownerRef[]
+  // A homeowner seen this turn, a typed address, or Ryan asking about a
+  // homeowner's home: the draft is taken to be about a homeowner's home.
+  anchored: boolean
   names: RegExp[]
   greetings: RegExp[]
   phones: string[]
@@ -281,25 +345,42 @@ interface Prepared {
 
 function prepare(ctx: DraftContext): Prepared {
   const homeowners = ctx.homeowners ?? []
+  // Review r1: sellers from the context block or an earlier turn are checked for
+  // their details too (identity), without anchoring the draft.
+  const identity = [...homeowners, ...(ctx.contextHomeowners ?? [])]
   const listingCores = new Set((ctx.listingAddresses ?? []).map(addressCore).filter((c): c is string => !!c))
   const homeownerCores = homeowners.map(h => addressCore(h.address)).filter((c): c is string => !!c)
+  const contextCores = (ctx.contextHomeowners ?? []).map(h => addressCore(h.address)).filter((c): c is string => !!c)
   // A typed address may stay when it's a listing found this turn (public),
   // unless it's also a homeowner's.
   const typedCores = (ctx.typedAddresses ?? []).map(addressCore).filter((c): c is string => !!c && !listingCores.has(c))
-  const names = homeowners.map(h => (h.name ? namePatterns(h.name) : { find: [], greeting: null }))
+  const names = identity.map((h, i) => (h.name ? namePatterns(h.name, i < homeowners.length) : { find: [], greeting: null }))
   return {
     homeowners,
+    anchored: homeowners.length > 0 || homeownerCores.length > 0 || typedCores.length > 0 || !!ctx.homeownerHomeAsked,
     names: names.flatMap(n => n.find),
     greetings: names.map(n => n.greeting).filter((g): g is RegExp => !!g),
-    phones: homeowners.map(h => h.phone ?? '').filter(Boolean),
-    notes: homeowners.map(h => h.notes ?? '').filter(Boolean),
-    cores: uniq([...homeownerCores, ...typedCores]),
+    phones: identity.map(h => h.phone ?? '').filter(Boolean),
+    notes: identity.map(h => h.notes ?? '').filter(Boolean),
+    cores: uniq([...homeownerCores, ...typedCores, ...contextCores]),
     prices: ctx.listingPrices ?? [],
   }
 }
 
 const aboutHomeowner = (d: Draft, p: Prepared) =>
-  p.homeowners.length > 0 || p.cores.length > 0 || HOMEOWNER_CUE.test(`${d.subject ?? ''}\n${d.body}`)
+  p.anchored || HOMEOWNER_CUE.test(`${d.subject ?? ''}\n${d.body}`)
+const IDENTITY = new Set<DraftFlagKind>(['homeowner_name', 'homeowner_phone', 'homeowner_notes', 'street_address'])
+
+// Review r1: the homeowner rules don't rest on Drift's label alone. A draft
+// labelled "other" that talks about the reader's home, or one Ryan asked to send
+// a homeowner ("text the owner"), is checked as one to a homeowner; so is a
+// "buyer_side" one when both are true [engineering precaution].
+export function effectiveAudience(d: Draft, ctx: Pick<DraftContext, 'toHomeownerAsked'>): DraftAudience {
+  if (d.audience === 'homeowner') return 'homeowner'
+  const yours = YOUR_HOME.test(`${d.subject ?? ''}\n${d.body}`)
+  if (d.audience === 'other') return yours || ctx.toHomeownerAsked ? 'homeowner' : 'other'
+  return yours && ctx.toHomeownerAsked ? 'homeowner' : d.audience
+}
 
 function scan(text: string, audience: DraftAudience, p: Prepared, homeowner: boolean): Hit[] {
   const hits: Hit[] = []
@@ -315,9 +396,16 @@ function scan(text: string, audience: DraftAudience, p: Prepared, homeowner: boo
     if (shingle) hits.push({ kind: 'homeowner_notes', match: shingle, index: -1 })
   }
   hits.push(...addressHits(text, p.cores))
+  if (homeowner) all('seller_circumstance', MOTIVATION)
   for (const m of text.matchAll(MONEY)) {
     if (audience === 'homeowner' || (homeowner && !isListingPrice(moneyValue(m[0]), p.prices))) {
       hits.push({ kind: 'homeowner_price', match: m[0].trim(), index: m.index ?? 0 })
+    }
+  }
+  if (audience === 'homeowner' || homeowner) {
+    all('homeowner_price', PRICE_HINT)
+    for (const m of text.matchAll(BARE_FIGURE)) {
+      if (PRICE_WORD.test(sentenceAround(text, m.index ?? 0, m[0].length))) hits.push({ kind: 'homeowner_price', match: m[0].trim(), index: m.index ?? 0 })
     }
   }
   all('seller_circumstance', CIRCUMSTANCES)
@@ -345,16 +433,21 @@ function dedupeFlags(flags: DraftFlag[]): DraftFlag[] {
  * every rule it breaks; `cleaned` is the deterministic clean-up (the draft itself
  * when nothing is flagged), or null when no safe draft is left.
  */
-export function checkDraft(draft: Draft, ctx: DraftContext): DraftCheck {
+export function checkDraft(original: Draft, ctx: DraftContext): DraftCheck {
   const p = prepare(ctx)
-  const homeowner = aboutHomeowner(draft, p)
+  // Checked with the audience it really has; the label shown stays Drift's.
+  const draft: Draft = { ...original, audience: effectiveAudience(original, ctx) }
+  const all = `${draft.subject ?? ''}\n${draft.body}`
+  // A draft that names a homeowner (or gives their phone or address) is about them.
+  const homeowner = aboutHomeowner(draft, p) || scan(all, draft.audience, p, false).some(h => IDENTITY.has(h.kind))
   const signed = fixSignoff(draft.body, draft.channel)
   const hits = [...(draft.subject ? scan(draft.subject, draft.audience, p, homeowner) : []), ...scan(signed.body, draft.audience, p, homeowner)]
   const flags = dedupeFlags(hits.map(({ kind, match }) => ({ kind, match })))
   if (signed.changed) flags.push({ kind: 'signoff', match: signed.match })
-  if (!flags.length) return { flags, cleaned: draft }
-  if (!hits.length) return { flags, cleaned: { ...draft, body: signed.body } }
-  return { flags, cleaned: cleanDraft({ ...draft, body: signed.body }, p, homeowner) }
+  const label = (d: Draft | null): Draft | null => (d ? { ...d, audience: original.audience } : null)
+  if (!flags.length) return { flags, cleaned: original }
+  if (!hits.length) return { flags, cleaned: label({ ...draft, body: signed.body }) }
+  return { flags, cleaned: label(cleanDraft({ ...draft, body: signed.body }, p, homeowner)) }
 }
 
 // ── The clean-up ─────────────────────────────────────────────────────────────
@@ -505,6 +598,33 @@ function addressesIn(text: string): string[] {
   return out
 }
 
+// Review r1: the listing categories search_listings returns (the rows a reply's
+// dealsJson keeps), so a buyer's budget never passes as a listing's price.
+const LISTING_CATEGORIES = new Set(['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'ACTIVE_SALE_LISTING', 'COMING_SOON_RENTAL', 'RENTAL_LISTING'])
+// Review r1: Ryan asks for a message to a homeowner, or about a homeowner's home.
+const TO_HOMEOWNER_ASK = /\b(?:text|email|e-mail|message|write|letter|note|reach out|draft)\b[^.?!\n]{0,40}\b(?:home ?owners?|owners?)\b(?!['’]s)/i
+const ABOUT_HOMEOWNER_ASK = /\b(?:(?:her|his|their|the (?:home ?)?owner['’]?s?|the seller['’]?s?)[ \t]+(?:house|home|place|property|building)|(?:one of )?(?:my|your) (?:crm )?sellers?)\b/i
+
+// Review r1: today's CRM context block (lib/chat/context/mojo.ts) lists up to 20
+// sellers as "[MOJO:id] name | street, city | area | ... | ph: phone | notes: ...".
+// Drift can draft from it with no tool call, so its sellers are checked too. Brief
+// 43 PR 5 makes the block counts only; this then finds nothing.
+export function homeownersInContextBlock(block: string | null | undefined): HomeownerRef[] {
+  const out: HomeownerRef[] = []
+  for (const line of (block ?? '').split('\n')) {
+    const m = /^\[MOJO:[^\]]*\][ \t]*(.*)$/.exec(line.trim())
+    if (!m) continue
+    const parts = m[1].split(' | ')
+    out.push({
+      name: str(parts[0]),
+      address: str((parts[1] ?? '').split(',')[0]),
+      phone: str(parts.find(x => x.startsWith('ph: '))?.slice(4)),
+      notes: str(parts.find(x => x.startsWith('notes: '))?.slice(7)),
+    })
+  }
+  return out
+}
+
 /**
  * What a draft is checked against this turn: the CRM homeowners in the tool
  * outputs, the street addresses Ryan typed (this message and his earlier turns
@@ -514,10 +634,28 @@ function addressesIn(text: string): string[] {
 export function buildDraftContext(input: {
   toolResults: ReadonlyArray<ToolOutput>
   userMessage: string
-  history: ReadonlyArray<{ role: string; content: string }>
+  // Review r1: the stored rows, with each reply's dealsJson.
+  history: ReadonlyArray<{ role: string; content: string; dealsJson?: unknown }>
+  // Review r1: the turn's context block (the CRM sellers it lists are checked too).
+  contextBlock?: string | null
 }): DraftContext {
   const listingAddresses: string[] = []
   const listingPrices: number[] = []
+  // Review r1: listings and CRM seller cards shown earlier in this chat (each
+  // reply's dealsJson: the listing rows the page showed, and Brief 43 PR 5's seller
+  // cards). A listing discussed a turn ago keeps its address and price; a seller
+  // looked up a turn ago is still checked for their details.
+  const earlier = input.history
+    .filter(m => m.role === 'assistant' && Array.isArray(m.dealsJson))
+    .flatMap(m => m.dealsJson as unknown[])
+  for (const c of earlier) {
+    if (!c || typeof c !== 'object') continue
+    const row = c as Record<string, unknown>
+    if (!LISTING_CATEGORIES.has(String(row.category))) continue
+    const address = str(row.address)
+    if (address) listingAddresses.push(address)
+    for (const k of ['price', 'minPrice', 'maxPrice']) if (typeof row[k] === 'number') listingPrices.push(row[k] as number)
+  }
   for (const r of input.toolResults) {
     if (r.name !== 'search_listings') continue
     const cards = (r.output as { cards?: unknown } | null)?.cards
@@ -534,6 +672,9 @@ export function buildDraftContext(input: {
     typedAddresses: uniq(typed.flatMap(t => addressesIn(t ?? ''))),
     listingAddresses: uniq(listingAddresses),
     listingPrices,
+    contextHomeowners: [...collectHomeowners([{ output: earlier }]), ...homeownersInContextBlock(input.contextBlock)],
+    toHomeownerAsked: TO_HOMEOWNER_ASK.test(input.userMessage ?? ''),
+    homeownerHomeAsked: ABOUT_HOMEOWNER_ASK.test(input.userMessage ?? ''),
   }
 }
 
@@ -543,7 +684,7 @@ const FLAG_TEXT: Record<Exclude<DraftFlagKind, 'signoff'>, (m: string) => string
   homeowner_phone: () => "the homeowner's phone number",
   homeowner_notes: m => `the homeowner's notes ("${m}")`,
   street_address: m => `the street address ("${m}")`,
-  homeowner_price: m => `the dollar figure "${m}"`,
+  homeowner_price: m => `the price or value "${m}"`,
   seller_circumstance: m => `"${m}" (the seller's circumstances)`,
   how_we_found: m => `"${m}" (how we found them)`,
   pressure: m => `"${m}" (pressure)`,
@@ -579,6 +720,43 @@ function repeatsDraft(response: string, drafts: Draft[]): boolean {
   return said.size > 0 && drafts.some(d => eightWordRuns(d.body).some(run => said.has(run)))
 }
 
+// Review r1: a draft written into the reply instead of the draft field (Stage 1's
+// #17 shape). From a "Subject:" or greeting line to Ryan's sign-off, it's lifted
+// out and checked like any draft, so the rules don't rest on Drift using the
+// field [engineering precaution]. Both ends are needed: a greeting with no
+// sign-off (or the reverse) is ordinary reply text.
+const INLINE_START = /^[ \t]*(?:subject[ \t]*:|(?:hi|hello|hey|dear|good (?:morning|afternoon|evening))\b(?![ \t,]*ryan\b))/i
+// Only "Ryan" or "Ryan Martin", maybe with a short brokerage or title after it.
+// Case-sensitive, and never "I ...", so a reply that addresses Ryan ("Good
+// morning. Ryan, three listings came in." / "Ryan, I have news.") isn't a sign-off.
+const LIFT_TAIL = /^(?:[ \t]+[Mm]artin\b)?[ \t]*[.!]?(?:[ \t]*[,|][ \t]*(?!I\b|I['’])[A-Z][A-Za-z&.' ]{0,40})?[ \t]*$/
+// A one-line text needs a closing ("Thanks, Ryan") or the full name to count.
+const ONE_LINE_SIGNED = (closing: string, tail: string) => !!closing.trim() || /^[ \t]+[Mm]artin\b/.test(tail)
+export function liftInlineDraft(response: string, ctx?: Pick<DraftContext, 'toHomeownerAsked'>): { draft: Draft; reply: string } | null {
+  const lines = response.replace(/\r\n?/g, '\n').split('\n')
+  const start = lines.findIndex(l => INLINE_START.test(l))
+  if (start < 0) return null
+  let end = -1
+  for (let i = lines.length - 1; i > start && end < 0; i--) {
+    const m = SIGNOFF_LINE.exec(lines[i])
+    const im = INLINE_SIGNOFF.exec(lines[i])
+    if ((m && LIFT_TAIL.test(m[2])) || (im && LIFT_TAIL.test(im[3]))) end = i
+  }
+  if (end < 0) {
+    // A one-line text: "Hi, this is Ryan Martin. ... Thanks, Ryan"
+    const im = INLINE_SIGNOFF.exec(lines[start])
+    if (im && LIFT_TAIL.test(im[3]) && ONE_LINE_SIGNED(im[2], im[3]) && !/^[ \t]*subject/i.test(lines[start])) end = start
+    else return null
+  }
+  const sm = /^[ \t]*subject[ \t]*:[ \t]*(.*)$/i.exec(lines[start])
+  const subject = sm ? sm[1].trim() || undefined : undefined
+  const body = lines.slice(sm ? start + 1 : start, end + 1).join('\n').trim()
+  const draft = normalizeDraft({ channel: subject ? 'email' : 'text', audience: ctx?.toHomeownerAsked ? 'homeowner' : 'other', subject, body })
+  if (!draft) return null
+  const reply = [...lines.slice(0, start), ...lines.slice(end + 1)].join('\n').replace(/\n{3,}/g, '\n\n').trim()
+  return { draft, reply: reply || DRAFT_READY_LINE }
+}
+
 export type DraftOutcome = 'none' | 'clean' | 'signoff_fixed' | 'rewritten' | 'cleaned' | 'declined'
 export interface DraftPrivacyResult {
   draft: Draft | null
@@ -605,8 +783,15 @@ export async function enforceDraftPrivacy(input: {
   rewrite?: (feedback: string, previous: Draft) => Promise<unknown>
   allowRewrite?: boolean
 }): Promise<DraftPrivacyResult> {
-  const first = normalizeDraft(input.draft)
-  if (!first) return { draft: null, response: input.response, outcome: 'none', flagKinds: [], rewrote: false }
+  let first = normalizeDraft(input.draft)
+  let response = input.response
+  if (!first) {
+    const lifted = liftInlineDraft(input.response, input.ctx)
+    if (!lifted) return { draft: null, response: input.response, outcome: 'none', flagKinds: [], rewrote: false }
+    first = lifted.draft
+    response = lifted.reply
+  }
+  const firstDraft = first
   const c1 = checkDraft(first, input.ctx)
   const flagKinds = uniq(c1.flags.map(f => f.kind))
   const done = (draft: Draft | null, outcome: DraftOutcome, rewrote: boolean): DraftPrivacyResult => ({
@@ -614,7 +799,7 @@ export async function enforceDraftPrivacy(input: {
     outcome,
     flagKinds,
     rewrote,
-    response: !draft ? DRAFT_DECLINED_REPLY : repeatsDraft(input.response, [first, draft]) ? DRAFT_READY_LINE : input.response,
+    response: !draft ? DRAFT_DECLINED_REPLY : repeatsDraft(response, [firstDraft, draft]) ? DRAFT_READY_LINE : response,
   })
   if (!needsRewrite(c1.flags)) return done(c1.cleaned, c1.flags.length ? 'signoff_fixed' : 'clean', false)
 
@@ -624,7 +809,7 @@ export async function enforceDraftPrivacy(input: {
     rewrote = true
     let raw: unknown = null
     try {
-      raw = await input.rewrite(buildDraftFeedbackPrompt(c1.flags, first.audience), first)
+      raw = await input.rewrite(buildDraftFeedbackPrompt(c1.flags, effectiveAudience(first, input.ctx)), first)
     } catch (err) {
       console.error('[chat] draft rewrite failed (using the clean-up):', err instanceof Error ? err.message : err)
     }

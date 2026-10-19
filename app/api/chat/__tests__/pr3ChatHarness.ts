@@ -52,11 +52,16 @@ const anyModel: Record<string, (args: Args) => Promise<unknown>> = {
 export const ai = installFakeAiFetch()
 export const script: unknown[] = []
 export const driftCalls: AiRequest[] = []
+// Review r1: the fact-check's requests, and its verdict (grounded unless a test says otherwise).
+export const verifierCalls: AiRequest[] = []
+const GROUNDED = () => ({ isGrounded: true, flags: [] as Array<{ claim: string; reason: string }> })
+let verifier: (req: AiRequest) => unknown = GROUNDED
+export function setVerifier(fn: (req: AiRequest) => unknown) { verifier = fn }
 ai.reply(req => {
   if (req.url.includes('openai.com')) {
     return systemPromptOf(req).includes('Generate a 4-7 word title') ? openAiChat('Draft Test Chat') : openAiChat({})
   }
-  if (systemPromptOf(req).startsWith('You are a fact-checker')) return anthropicText('{"isGrounded": true, "flags": []}')
+  if (systemPromptOf(req).startsWith('You are a fact-checker')) { verifierCalls.push(req); return anthropicText(JSON.stringify(verifier(req))) }
   driftCalls.push(req)
   const next = script.shift()
   if (!next) throw new Error('test: no scripted Drift reply left')
@@ -65,7 +70,7 @@ ai.reply(req => {
 
 export function reset() {
   db.mojoContacts = []; db.messages = []; db.interactions = []
-  script.length = 0; driftCalls.length = 0
+  script.length = 0; driftCalls.length = 0; verifierCalls.length = 0; verifier = GROUNDED
 }
 
 export async function postChat(body: Record<string, unknown>) {

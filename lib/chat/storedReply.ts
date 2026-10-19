@@ -30,3 +30,12 @@ export function readStoredReply(content: string): { response: string; draft: Dra
   }
   return { response: content, draft: null }
 }
+
+// Brief 43 PR 3 (review r1): the stored reply as the model's history turn: the
+// reply text, and the draft after it as "Draft (email, buyer_side): ..." (the way
+// the draft rewrite shows it), never the JSON.
+export function storedReplyForModel(content: string): string {
+  const { response, draft } = readStoredReply(content)
+  if (!draft) return response
+  return [response, '', `Draft (${draft.channel}, ${draft.audience}):`, ...(draft.subject ? [`Subject: ${draft.subject}`] : []), draft.body].join('\n').trim()
+}

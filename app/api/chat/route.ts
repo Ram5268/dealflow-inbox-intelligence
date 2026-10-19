@@ -34,7 +34,8 @@ import {
   type GuardTelemetry,
 } from '@/lib/chat/guards/retry'
 import { DRAFT_FIELD_SCHEMA, buildDraftContext, draftAsText, enforceDraftPrivacy } from '@/lib/chat/guards/draftPrivacy'
-import { encodeStoredReply, readStoredReply } from '@/lib/chat/storedReply'
+import { encodeStoredReply, readStoredReply, storedReplyForModel } from '@/lib/chat/storedReply'
+import { normalizeDraft } from '@/lib/chat/draft'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -335,9 +336,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Brief 41: the model's conversation must start with a user turn.
+    // Brief 43 PR 3 (review r1): a reply stored as JSON (a draft) goes to the model
+    // as its text plus the draft, the way the draft rewrite shows it, not as JSON.
     const anthropicHistory: Anthropic.Messages.MessageParam[] = startAtUserTurn(history).map(m => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content,
+      content: m.role === 'assistant' ? storedReplyForModel(m.content) : m.content,
     }))
 
     // ── Sonnet 4.6 tool_use loop ─────────────────────────────────────────────
@@ -536,6 +539,14 @@ export async function POST(req: NextRequest) {
     const guardEnabled = process.env.HALLUCINATION_GUARD_ENABLED !== 'false'
     const guardApplies = guardEnabled && !aiResult.pendingEvent
     let currentResponse = aiResult.response ?? ''
+    // Brief 43 PR 3 (review r1): the draft goes through the fact-check with the
+    // reply (the verifier only; the regex scan and PR 2's never-sent check read
+    // the reply alone), and a guard rewrite may correct it.
+    let currentDraft: unknown = (aiResult as { draft?: unknown }).draft
+    const withDraft = (response: string, draft: unknown) => {
+      const d = normalizeDraft(draft)
+      return d ? draftAsText(response, d) : response
+    }
     // Brief 11.0 Fix #2 — the first thing Sonnet tried to say, before any guard
     // correction/fallback overwrites currentResponse. Logged for guard-fire audit.
     const assistantAttempt = currentResponse
@@ -573,10 +584,11 @@ export async function POST(req: NextRequest) {
           groundingCorpus,
         )
         // Brief 43 PR 2: a repeated action claim gets NEVER_SENT_REPLY whatever
-        // the fact-check says, so skip that paid call.
+        // the fact-check says, so skip that paid call. Brief 43 PR 3: the
+        // fact-check reads the reply plus its draft.
         const verifier = skipVerifierForRepeatClaim(guardHistory, regexFlags)
           ? skippedVerification()
-          : await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
+          : await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, withDraft(currentResponse, currentDraft))
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
         if (regexFlags.length === 0 && verifier.isGrounded) break
 
@@ -601,7 +613,7 @@ export async function POST(req: NextRequest) {
         const flagLines = formatFlagLines(regexFlags, verifier.flags)
         const retryMessages: Anthropic.Messages.MessageParam[] = [
           ...messages,
-          { role: 'assistant', content: currentResponse },
+          { role: 'assistant', content: withDraft(currentResponse, currentDraft) },
           { role: 'user', content: buildFeedbackPrompt(flagLines) },
         ]
         const retry = await anthropic.messages.create({
@@ -620,6 +632,7 @@ export async function POST(req: NextRequest) {
         const retryResult = retryUse?.input as AiResult | undefined
         if (retryResult) {
           currentResponse   = retryResult.response ?? currentResponse
+          currentDraft      = (retryResult as { draft?: unknown }).draft ?? currentDraft
           latestSuggestions = retryResult.suggestions ?? latestSuggestions
           latestReferenced  = retryResult.referencedDeals ?? latestReferenced
         }
@@ -672,9 +685,9 @@ export async function POST(req: NextRequest) {
     // the draft along with the reply it came with.
     const replyBeforeDraftCheck = aiResult.response ?? ''
     const draftResult = await enforceDraftPrivacy({
-      draft:    fellbackToCanned ? null : (aiResult as { draft?: unknown }).draft,
+      draft:    fellbackToCanned ? null : currentDraft,
       response: replyBeforeDraftCheck,
-      ctx:      buildDraftContext({ toolResults: toolResultsForGuard, userMessage, history }),
+      ctx:      buildDraftContext({ toolResults: toolResultsForGuard, userMessage, history, contextBlock: dynamicSystemBlock }),
       rewrite:  async (feedback, previous) => {
         const redo = await anthropic.messages.create({
           model: CHAT_MODEL,
