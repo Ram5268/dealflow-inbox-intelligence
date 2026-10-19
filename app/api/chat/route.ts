@@ -19,6 +19,7 @@ import { CRM_SELLER_TOOL_NAMES, newCrmSellerTurn, runCrmSellerTool } from '@/lib
 import type { SellerCard } from '@/lib/chat/sellerCard'
 import { getTemplate } from '@/lib/reports/templates'
 import { getGenerator, type SectionResult } from '@/lib/reports/generators'
+import { unresolvedBuyer } from '@/lib/chat/tools/reportBuyerGate'
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
 import { buildGroundingCorpus, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
@@ -63,7 +64,8 @@ export const maxDuration = 60
 // claim could reference (address, price, beds, category, neighborhood, and for
 // parties name/phone/title).
 function trimCardForGuard(card: Record<string, unknown>): Record<string, unknown> {
-  const keep = ['id', 'category', 'title', 'address', 'neighborhood', 'beds', 'price', 'priceRange', 'name', 'phone', 'role', 'units', 'propertyType', 'squareFeet', 'availabilityDate', 'sourceBrokerage'] as const
+  // Brief 43 PR 9: a party's agent and buyer type (Q41) are facts Drift may cite.
+  const keep = ['id', 'category', 'title', 'address', 'neighborhood', 'beds', 'price', 'priceRange', 'name', 'phone', 'role', 'units', 'propertyType', 'squareFeet', 'availabilityDate', 'sourceBrokerage', 'agentName', 'archetype'] as const
   const out: Record<string, unknown> = {}
   for (const k of keep) {
     if (card[k] !== undefined && card[k] !== null) out[k] = card[k]
@@ -421,6 +423,10 @@ export async function POST(req: NextRequest) {
       const generator = getGenerator(templateId)
       if (!generator) return { error: `No generator registered for ${templateId}` }
       const buyerId = typeof params.buyerId === 'string' ? params.buyerId : null
+      // Brief 43 PR 9 (Q15): only for a buyer a search_parties call returned
+      // earlier this turn; otherwise a tool error: search first, or ask Ryan.
+      const unresolved = unresolvedBuyer(buyerId, allToolCalls)
+      if (unresolved) return unresolved
 
       if (tu.name === 'generate_report') {
         const generated = await generator.full({ ...params, prisma, anthropic })
