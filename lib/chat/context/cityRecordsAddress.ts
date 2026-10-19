@@ -6,7 +6,7 @@
 // and the block tells Drift it was assumed, so it can say so or ask (DRIFT_SCRIPT
 // #21, #22). The note has no link and no tool or system names: Drift may
 // repeat it [engineering precaution].
-import { findAddressInText, ASSUMED_BOROUGH, BOROUGH_NAMES, type BoroughCode, type AddressInText } from '@/lib/acris'
+import { findAddressInText, boroughInText, ASSUMED_BOROUGH, BOROUGH_NAMES, type BoroughCode, type AddressInText } from '@/lib/acris'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 
 export interface CityRecordsAddress {
@@ -34,9 +34,9 @@ export function boroughNote(from: AddressInText['boroughFrom'], boroughName: str
   // Brief 43 PR 11 review: two boroughs named ("Brooklyn or Queens") is not
   // "no borough" [engineering precaution].
   if (from === 'conflict') {
-    return `\nBOROUGH NOTE: The message named more than one borough, so ${boroughName} was searched. Say so in one short line, and ask Ryan which borough he meant.`
+    return `\nBOROUGH NOTE: The message named more than one borough, so ${boroughName} was searched. Say so in one short line, and ask Ryan which borough he meant; he can send the address again with it.`
   }
-  return `\nBOROUGH NOTE: Borough assumed: ${boroughName}, because the message didn't name a borough, zip or neighborhood. Say so in one short line, and ask Ryan if he meant another borough.`
+  return `\nBOROUGH NOTE: Borough assumed: ${boroughName}, because the message didn't name a borough, zip or neighborhood. Say so in one short line, and ask Ryan if he meant another borough; if so, he can send the address again with it.`
 }
 
 // Brief 43 PR 11 review (L4; DRIFT_SCRIPT #22): a follow-up that points back
@@ -49,8 +49,15 @@ export function cityRecordsAddress(userMessage: string, parsed: Pick<ParsedQuery
   let found = findAddressInText(userMessage, { boroughs: parsed.boroughs })
   let fromEarlier = false
   if (!found && previousUserMessage && REFERS_BACK.test(userMessage)) {
-    found = findAddressInText(previousUserMessage)
-    fromEarlier = found !== null
+    const earlier = findAddressInText(previousUserMessage)
+    if (earlier) {
+      // Brief 43 PR 11 review r2: a borough Ryan names now ("it's in Queens,
+      // who owns it?", "sorry, I meant Queens") beats the earlier message's,
+      // which is often the one Drift said it assumed [engineering precaution].
+      const now = boroughInText(userMessage, { boroughs: parsed.boroughs })
+      found = now.boroughFrom ? { ...earlier, ...now } : earlier
+      fromEarlier = true
+    }
   }
   if (!found) return null
   const boroughCode = found.boroughCode ?? ASSUMED_BOROUGH

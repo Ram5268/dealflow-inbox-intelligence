@@ -138,6 +138,23 @@ test('the borough can come from elsewhere in the message, or from the parsed que
   assert.deepEqual([find('who owns 418 Example St, Brooklyn or is it a condo?')?.boroughCode], ['3'])
   assert.deepEqual([find('who owns 418 Example St, Queens, for my Brooklyn buyer')?.boroughCode, find('who owns 418 Example St, Queens, for my Brooklyn buyer')?.boroughFrom], ['4', 'address'])
   assert.deepEqual([find('who owns 418 Example St, Brooklyn for my Queens buyer')?.boroughCode, find('who owns 418 Example St, Brooklyn for my Queens buyer')?.boroughFrom], ['3', 'address'])
+  // Brief 43 PR 11 review r2: other ways of offering a second borough, and a
+  // borough and zip that disagree, are not a silent pick.
+  for (const msg of [
+    'who owns 418 Example St, Brooklyn (or Queens?)',
+    'who owns 418 Example St, Brooklyn or maybe Queens?',
+    'who owns 418 Example St, Brooklyn, maybe Queens',
+    'who owns 418 Example St, Brooklyn? Or is it Queens?',
+    'who owns 418 Example St, Brooklyn - or Queens',
+    'who owns 418 Example St, Brooklyn & Queens',
+    'who owns 418 Example St, Brooklyn, NY 11101',
+    'who owns 418 Example St, Queens 11221',
+  ]) assert.equal(find(msg)?.boroughFrom, 'conflict', msg)
+  for (const msg of [
+    'who owns 418 Example St, Brooklyn and what is the zoning',
+    'who owns 418 Example St, Brooklyn? And who owns 45 Sample Ave?',
+    'who owns 418 Example St, Brooklyn, NY 11221',
+  ]) assert.deepEqual([find(msg)?.boroughCode, find(msg)?.boroughFrom], ['3', 'address'], msg)
   // parsed.boroughs is the last resort, unless the borough word is the street's own.
   const c = find('who owns 12 Example Park West', { boroughs: ['Manhattan'] })
   assert.deepEqual([c?.boroughCode, c?.boroughFrom], ['1', 'hint'])

@@ -163,3 +163,27 @@ test('"any permits or violations there?" uses the previous message\'s address, a
   assert.equal((await dobFetcher({ parsed: plain('any permits?'), userMessage: 'any permits?', queryText: 'any permits?', isConfirmMessage: false, previousUserMessage: 'who owns 418 Marigold Street?' })).block, null)
   assert.equal(city.urls.length, 0)
 })
+
+test('a follow-up that names a borough uses it for the earlier address (review r2)', async () => {
+  // Drift said it assumed Brooklyn; Ryan answers with the borough.
+  const msg = "it's in Queens. who owns it?"
+  const out = await acrisFetcher({ parsed: plain(msg.toLowerCase(), { boroughs: ['Queens'] }), userMessage: msg, queryText: msg.toLowerCase(), isConfirmMessage: false, previousUserMessage: 'who owns 418 Marigold Street?' })
+  assert.match(out.block ?? '', /BBL: Queens Block 04444 Lot 0044/)
+  assert.doesNotMatch(out.block ?? '', /didn't name a borough/)
+  assert.match(out.block ?? '', /the address in Ryan's previous message/)
+  // A correction beats the borough typed in the earlier message.
+  city.reset()
+  const fix = 'sorry, I meant Queens. any permits there?'
+  await dobFetcher({ parsed: plain(fix.toLowerCase()), userMessage: fix, queryText: fix.toLowerCase(), isConfirmMessage: false, previousUserMessage: 'who owns 418 Marigold Street, Brooklyn?' })
+  assert.match(city.whereFor('ipu4-2q9a')[0] ?? '', /borough='QUEENS'/)
+  // Nothing named now: the earlier message's borough stands.
+  city.reset()
+  const plainFollowUp = 'any permits or violations there?'
+  await dobFetcher({ parsed: plain(plainFollowUp), userMessage: plainFollowUp, queryText: plainFollowUp, isConfirmMessage: false, previousUserMessage: 'who owns 418 Marigold Street, Queens?' })
+  assert.match(city.whereFor('ipu4-2q9a')[0] ?? '', /borough='QUEENS'/)
+})
+
+test('the assumed-borough note tells Drift how Ryan can correct it (review r2)', async () => {
+  const out = await run(acrisFetcher, 'who owns 418 Marigold Street?')
+  assert.match(out.block ?? '', /send the address again/)
+})

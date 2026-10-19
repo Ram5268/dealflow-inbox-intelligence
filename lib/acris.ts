@@ -243,7 +243,12 @@ function findPlace(text: string, opts: { strict: boolean }): Place | 'conflict' 
     const distinct = [...new Set(codes)]
     return distinct.length === 0 ? null : distinct.length === 1 ? distinct[0] : 'conflict'
   }
-  const code = one(named) ?? one(zips.map(z => z.code)) ?? one(hoods.map(h => h.code)) ?? (NEW_YORK.test(s) ? '1' : null)
+  // Brief 43 PR 11 review r2: a borough and a zip that disagree ("Brooklyn,
+  // NY 11101") mean a typo in one of them, so neither is trusted
+  // [engineering precaution].
+  const byName = one(named), byZip = one(zips.map(z => z.code))
+  if (byName && byZip && byName !== 'conflict' && byZip !== 'conflict' && byName !== byZip) return 'conflict'
+  const code = byName ?? byZip ?? one(hoods.map(h => h.code)) ?? (NEW_YORK.test(s) ? '1' : null)
   if (code === null || code === 'conflict') return code
 
   // A label for the address string: "Bushwick, Brooklyn", "Brooklyn, NY 11221".
@@ -291,7 +296,10 @@ const PLACE_JOIN = /^(?:\s*,\s*|\s+(?:in|at)\s+|\s+)(?:the\s+)?/i
 const UNIT_AT_START = /^\s*,?\s*(?:(?:apt|apartment|unit|suite|ste|fl|floor|ph)(?![a-z])\.?\s*#?\s*[a-z0-9-]{1,6}|#\s*[a-z0-9-]{1,6})(?![a-z0-9])/i
 
 // "or Queens", "and Brooklyn", "/ Queens", "vs. the Bronx" right after the place run.
-const PLACE_ALTERNATIVE = /^\s*,?\s*(?:or|and|vs\.?|\/)\s*(?:the\s+)?/i
+// Brief 43 PR 11 review r2: also "& Queens", "(or Queens?)", "- or Queens",
+// "or maybe Queens", "maybe Queens", and "? Or is it Queens?" just after the
+// sentence ends [engineering precaution].
+const PLACE_ALTERNATIVE = /^\s*[,(\-–—]?\s*(?:[?.!]\s*)?(?:or|and|&|vs\.?|versus|\/|maybe|possibly|perhaps)(?:\s+(?:maybe|possibly|perhaps|is it|it's|it is|was it))?\s*(?:in\s+)?(?:the\s+)?/i
 
 function placeAlternativeAfter(rest: string): ReturnType<typeof findPlace> {
   const join = PLACE_ALTERNATIVE.exec(rest)?.[0]
@@ -351,7 +359,7 @@ export function findAddressInText(text: string, hints: { boroughs?: string[] } =
   const lead = placeRunAfter(tail)
   const atAddress = lead ? findPlace(lead, { strict: m[0].endsWith('.') && !/^\s*,/.test(tail) }) : null
   // "…, Brooklyn or Queens?": a second borough offered as an alternative.
-  const alternative = atAddress && atAddress !== 'conflict' ? placeAlternativeAfter(tail.slice(lead.length)) : null
+  const alternative = atAddress && atAddress !== 'conflict' ? placeAlternativeAfter(text.slice(end + lead.length, end + lead.length + 60)) : null
   if (atAddress === 'conflict' || (atAddress && alternative && alternative !== 'conflict' && alternative.code !== atAddress.code) || alternative === 'conflict') {
     return { street, address: street, boroughCode: null, boroughFrom: 'conflict' }
   }
@@ -371,6 +379,22 @@ export function findAddressInText(text: string, hints: { boroughs?: string[] } =
     .filter((c): c is BoroughCode => Boolean(c)))]
   if (hinted.length === 1) return { street, address: street, boroughCode: hinted[0], boroughFrom: 'hint' }
   return { street, address: street, boroughCode: null, boroughFrom: null }
+}
+
+/**
+ * Brief 43 PR 11 review r2: the borough a message names on its own, with no
+ * street address in it ("it's in Queens, who owns it?"), for a follow-up about
+ * an earlier message's address. Same order as findAddressInText: named in the
+ * message (first-name neighborhoods don't count), else `hints.boroughs`.
+ */
+export function boroughInText(text: string, hints: { boroughs?: string[] } = {}): Pick<AddressInText, 'boroughCode' | 'boroughFrom'> {
+  const place = findPlace(text, { strict: true })
+  if (place === 'conflict') return { boroughCode: null, boroughFrom: 'conflict' }
+  if (place) return { boroughCode: place.code, boroughFrom: 'message' }
+  const hinted = [...new Set((hints.boroughs ?? [])
+    .map(b => BOROUGH_CODE_BY_NAME[b.toLowerCase()])
+    .filter((c): c is BoroughCode => Boolean(c)))]
+  return hinted.length === 1 ? { boroughCode: hinted[0], boroughFrom: 'hint' } : { boroughCode: null, boroughFrom: null }
 }
 
 // Extract the first street address found in a block of text, with the
