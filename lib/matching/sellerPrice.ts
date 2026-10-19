@@ -37,6 +37,10 @@ export function sellerPrice(listing: PricedListing): SellerPrice | null {
 // Hill, Greenpoint and Sunset Park, Sep 2024-Aug 2025 (DealFlow's valuation model, each
 // month valued only from earlier sales). 1 in 10 sold 26% or more below the estimate and
 // 1 in 10 sold 34% or more above it.
+// SPREAD_Q is the one fitted constant: a refit replaces it (the 17 shares in SPREAD_P stay),
+// and everything here reads it, so the gate, the price score, the tier cap and the
+// buyer-type factor all move together. The valuation job keeps a copy for its matching
+// scoreboard (valuation/dfval/config.py, Brief 44 PR 2).
 const SPREAD_P = [0.005, 0.01, 0.025, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.975, 0.99, 0.995]
 const SPREAD_Q = [-1.7143, -0.9961, -0.7201, -0.4395, -0.3039, -0.166, -0.0877, -0.0294, 0.0221, 0.0757, 0.1314, 0.19, 0.2925, 0.38, 0.5121, 0.6464, 0.7273]
 
@@ -61,6 +65,15 @@ export function fitProbability(estimate: number, priceMin: number | null, priceM
   const upper = priceMax != null ? spreadCdf(Math.log((priceMax * 1.15) / estimate)) : 1
   const lower = priceMin != null && priceMin > 0 ? spreadCdf(Math.log((priceMin * 0.85) / estimate)) : 0
   return Math.max(0, upper - lower)
+}
+
+// Brief 44 (PR 4): chance that the real price of a home we estimate at `estimate` is under
+// `line`, read off the same table. The buyer-type factor uses it for a seller priced by
+// our own value (features/buyerArchetypeSituation.ts). An unusable estimate gives 0, like
+// fitProbability.
+export function chancePriceUnder(estimate: number, line: number): number {
+  if (!(Number.isFinite(estimate) && estimate > 0 && line > 0)) return 0
+  return spreadCdf(Math.log(line / estimate))
 }
 
 // A seller known only by our estimate stays matched with a buyer when there is at least a

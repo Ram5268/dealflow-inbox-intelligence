@@ -80,6 +80,10 @@ export interface ListingData {
   hasOutdoorSpace: boolean | null
   amenities: string[]
   createdAt: Date
+  // Brief 44 (PR 4): price and estimatedValue are DealFlow's own published value for this
+  // CRM seller's home. Set only by applyOurEstimates (ourEstimates.ts), with the
+  // USE_OUR_ESTIMATES switch on; absent everywhere else.
+  ourEstimate?: boolean
 }
 
 // The scorer's normalized demand (buyer) shape.
