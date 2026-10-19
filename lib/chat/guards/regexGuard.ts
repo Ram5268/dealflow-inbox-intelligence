@@ -10,6 +10,11 @@
 // This runs BEFORE the LLM verifier (cheap gate first). A clean pass here does
 // not mean grounded — the semantic verifier still runs; a match here does mean
 // the response is rejected and retried regardless of what the verifier thinks.
+//
+// Brief 43 PR 2 (Q2) adds Drift's "never sent" check (compliance.ts) to the
+// same scan: a reply claiming it sent, texted, called or booked something is
+// flagged `action_claim` [Ryan, 2026-09-24: nothing contacts anyone].
+import { scanActionClaims, type ActionClaimOptions } from './compliance'
 
 export interface RegexFlag {
   pattern: string // named pattern that triggered (e.g. 'external_url')
@@ -73,8 +78,11 @@ const PATTERNS: NamedPattern[] = [
  * Scan a candidate response for structural hallucination signatures.
  * Returns one RegexFlag per matched substring (a pattern can fire multiple
  * times). Empty array = structurally clean.
+ *
+ * `opts.userMessage` (Brief 43 PR 2) lets the never-sent check read a bare
+ * "Done" right after a send request ("send it") as a claim.
  */
-export function scanForStructuralHallucinations(response: string): RegexFlag[] {
+export function scanForStructuralHallucinations(response: string, opts: ActionClaimOptions = {}): RegexFlag[] {
   if (!response) return []
   const flags: RegexFlag[] = []
   for (const { name, regex } of PATTERNS) {
@@ -85,5 +93,6 @@ export function scanForStructuralHallucinations(response: string): RegexFlag[] {
       flags.push({ pattern: name, match: m[0].trim() })
     }
   }
+  flags.push(...scanActionClaims(response, opts))
   return flags
 }

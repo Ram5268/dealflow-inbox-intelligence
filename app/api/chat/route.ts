@@ -24,6 +24,7 @@ import { buildSystemBlocks, RYAN_MD } from '@/lib/chat/systemBlocks'
 import {
   MAX_GUARD_RETRIES,
   selectCannedFallback,
+  repeatedActionClaim,
   buildFeedbackPrompt,
   formatFlagLines,
   type GuardAttempt,
@@ -623,7 +624,9 @@ export async function POST(req: NextRequest) {
       let attempt = 0
       while (attempt <= MAX_GUARD_RETRIES) {
         const regexFlags = filterToolBoundFlags(
-          scanForStructuralHallucinations(currentResponse),
+          // Brief 43 PR 2: the user's message lets the never-sent check read
+          // "Done" after a send request ("send it") as a claim.
+          scanForStructuralHallucinations(currentResponse, { userMessage }),
           groundingCorpus,
         )
         const verifier = await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
@@ -631,10 +634,12 @@ export async function POST(req: NextRequest) {
         if (regexFlags.length === 0 && verifier.isGrounded) break
 
         attempt++
-        if (attempt > MAX_GUARD_RETRIES) {
+        // Brief 43 PR 2: a second "sent / booked / done" claim gets the fixed
+        // NEVER_SENT_REPLY now, not another rewrite [Ryan, 2026-09-24].
+        if (attempt > MAX_GUARD_RETRIES || repeatedActionClaim(guardHistory)) {
           // Contextual fallback — pick the variant matching what the final
-          // attempt actually flagged (public-records vs finance vs
-          // self-description vs generic) instead of always assuming records.
+          // attempt actually flagged (never-sent vs public-records vs finance
+          // vs self-description vs generic) instead of always assuming records.
           const finalFlags = guardHistory[guardHistory.length - 1]
           currentResponse = selectCannedFallback({
             regexFlags: finalFlags?.regexFlags ?? [],
