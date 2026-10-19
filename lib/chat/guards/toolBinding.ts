@@ -38,6 +38,9 @@ import type { ToolResultForVerify } from './llmVerifier'
 //   no corpus backing (e.g. a fabricated "per StreetEasy" when no StreetEasy
 //   block was fetched) still fires. external_url stays hard-fail: Drift has no
 //   URL-returning tool, so any URL is fabricated regardless of the corpus.
+// - action_claim (Brief 43 PR 2) is never bindable either: nothing in DealFlow
+//   sends, texts, calls or books, so no tool result can make "Sent" true
+//   [Ryan, 2026-09-24].
 export const TOOL_BINDABLE_PATTERNS = new Set<string>(['corporate_entity', 'real_estate_source_citation'])
 
 // Normalize for a forgiving substring trace: lowercase, non-alphanumerics → a
