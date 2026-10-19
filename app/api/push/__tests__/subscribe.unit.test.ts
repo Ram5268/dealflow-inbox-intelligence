@@ -92,7 +92,7 @@ test('the list shows a plain label, the date added and a fingerprint, never the 
   const { text, json } = await list()
   assert.equal(json.devices.length, 5, 'only this organization\'s devices')
   for (const d of json.devices) assert.deepEqual(Object.keys(d).sort(), ['addedAt', 'fingerprint', 'id', 'label'])
-  assert.deepEqual(json.devices.map(d => d.label), ['iPhone, iPad or Mac (Safari)', 'Chrome', 'Firefox', 'Edge', 'Browser'])
+  assert.deepEqual(json.devices.map(d => d.label), ['iPhone, iPad or Mac (Safari)', 'Chrome or Android', 'Firefox', 'Edge', 'Browser'])
   for (const [i, d] of json.devices.entries()) {
     assert.equal(d.fingerprint, createHash('sha256').update(ENDPOINTS[i]).digest('hex').slice(0, 12))
     assert.ok(!Number.isNaN(Date.parse(String(d.addedAt))), 'addedAt is a date')

@@ -1,6 +1,6 @@
 // Brief 48 (PR 5): the realtime HOT alert follows the digest's rule. Its push text
-// is a count, with no buyer's or homeowner's name and no address [planner, Brief 48
-// §3 PR 5]. It fires only from the email intake, which is paused [Ryan, 2026-09-24].
+// says only that a Hot match came in: no buyer's or homeowner's name and no address [planner, Brief 48
+// §3 PR 5]. It fires only from the email intake, which is paused [Ryan].
 // Its switch, its 5-an-hour cap and its PUSH_SENT row stay as they were. Runs on
 // stand-ins for Prisma and web-push (nothing is sent); every detail is invented.
 import { ORG, assertNoPrivateDetails, db, installFakeWebPush, resetDb, sent } from './pushFakes'
@@ -28,7 +28,7 @@ test('the HOT alert names no one and shows no address or phone number', async ()
   assertNoPrivateDetails(sent[0].title, 'title')
   assertNoPrivateDetails(sent[0].body, 'body')
   assert.equal(sent[0].title, 'New Hot match')
-  assert.equal(sent[0].body, '1 new Hot match. Open DealFlow.')
+  assert.equal(sent[0].body, 'A new Hot match. Open DealFlow.')
   assert.equal(sent[0].url, '/matches?m=match-b48-hot', 'a tap still opens the match')
 })
 

@@ -2,7 +2,7 @@
 // Counts only: push text never names a buyer or a homeowner and never shows an
 // address [planner, Brief 48 §3 PR 5; Brief 46 P4]. It shows on a lock screen, and
 // the old text put a party's name and a home's address there. A quiet morning says
-// nothing about the inbox: email reading is paused [Ryan, 2026-09-24], so the old
+// nothing about the inbox: email reading is paused [Ryan], so the old
 // "Inbox synced Xd ago" wasn't true. Pure, so it is unit-tested.
 //
 // "Overnight" is true for the digest: it runs at 12:00 UTC (vercel.json) and counts
@@ -28,7 +28,8 @@ export function digestText(counts: { hot: number; warm: number; possible: number
   }
 }
 
-// The realtime alert is for one new HOT match (lib/push/hotAlert.ts).
+// The realtime alert (lib/push/hotAlert.ts) fires for the best of the HOT matches one
+// sync made, so it doesn't claim a count.
 export function hotAlertText(): PushText {
-  return { title: 'New Hot match', body: '1 new Hot match. Open DealFlow.' }
+  return { title: 'New Hot match', body: 'A new Hot match. Open DealFlow.' }
 }

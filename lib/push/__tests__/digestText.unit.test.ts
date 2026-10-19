@@ -1,7 +1,7 @@
 // Brief 48 (PR 5): the words of the morning digest and the HOT alert. Counts only:
 // no buyer's or homeowner's name, no address, no run of 10 digits [planner, Brief 48
 // §3 PR 5]. A quiet morning says nothing about the inbox, since email reading is
-// paused [Ryan, 2026-09-24]. Pure: no database, no network.
+// paused [Ryan]. Pure: no database, no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { digestText, hotAlertText } from '../digestText'
@@ -33,8 +33,8 @@ test('large counts are grouped, so no run of digits forms', () => {
   }
 })
 
-test('the HOT alert is a count too', () => {
-  assert.deepEqual(hotAlertText(), { title: 'New Hot match', body: '1 new Hot match. Open DealFlow.' })
+test('the HOT alert names no count it cannot be sure of', () => {
+  assert.deepEqual(hotAlertText(), { title: 'New Hot match', body: 'A new Hot match. Open DealFlow.' })
 })
 
 test('calm wording: no exclamation marks, no em-dashes, no system words', () => {

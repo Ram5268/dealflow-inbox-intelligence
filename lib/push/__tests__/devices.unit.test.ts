@@ -19,8 +19,8 @@ test('the limit is 5 devices, and the refusal says so plainly', () => {
 test('a plain label from the push service, never the web address itself', () => {
   const cases: Array<[string, string]> = [
     ['https://web.push.apple.com/QFake-1', 'iPhone, iPad or Mac (Safari)'],
-    ['https://fcm.googleapis.com/fcm/send/fake-2', 'Chrome'],
-    ['https://android.googleapis.com/gcm/send/fake-3', 'Chrome'],
+    ['https://fcm.googleapis.com/fcm/send/fake-2', 'Chrome or Android'],
+    ['https://android.googleapis.com/gcm/send/fake-3', 'Chrome or Android'],
     ['https://updates.push.services.mozilla.com/wpush/v2/fake-4', 'Firefox'],
     ['https://wns2-fake.notify.windows.com/w/?token=fake-5', 'Edge'],
     ['https://push.example.invalid/fake-6', 'Browser'],

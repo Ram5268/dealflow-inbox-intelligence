@@ -440,7 +440,7 @@ export async function runIncrementalSync(): Promise<{
     // may be an ExtractedOpportunity or a MojoContact seller.
     const opp = topHot ? await resolveSupply(prisma, topHot.opportunityId, topHot.opportunityType) : null
     if (topHot && opp) {
-      // Brief 48 (PR 5): the alert's text is a count, so no name or address is looked up.
+      // Brief 48 (PR 5): the alert's text has no name or address, so none is looked up.
       await maybeFireHotAlert({ organizationId, matchId: topHot.id }).catch(() => {})
     }
 

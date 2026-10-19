@@ -26,7 +26,7 @@ export interface PushDevice {
 // is just "Browser".
 const SERVICES: Array<[domain: string, label: string]> = [
   ['push.apple.com', 'iPhone, iPad or Mac (Safari)'],
-  ['googleapis.com', 'Chrome'],
+  ['googleapis.com', 'Chrome or Android'],
   ['mozilla.com', 'Firefox'],
   ['notify.windows.com', 'Edge'],
 ]

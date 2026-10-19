@@ -1,7 +1,7 @@
 // Brief 48 (PR 5): the morning digest's push text is counts only. It never names a
 // buyer or a homeowner, never shows an address and has no run of 10 digits, whatever
 // the matched records hold [planner, Brief 48 §3 PR 5]. A quiet morning no longer
-// says "Inbox synced Xd ago": email reading is paused [Ryan, 2026-09-24], so that line
+// says "Inbox synced Xd ago": email reading is paused [Ryan], so that line
 // wasn't true. The switch, the dismissal filter, the PUSH_SENT row and the cron check
 // stay as they were. Runs on stand-ins for Prisma and web-push (nothing is sent);
 // every name, address and phone number is invented.

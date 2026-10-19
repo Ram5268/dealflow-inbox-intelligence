@@ -23,7 +23,7 @@ import { checkCronBearer } from '@/lib/auth/cronBearer'
 // Brief 48 (PR 5): the text is counts only (lib/push/digestText.ts) [planner, Brief 48
 // §3 PR 5]. It used to name the best match's buyer or homeowner and show the home's
 // address; now nothing about either side is looked up. The quiet morning no longer
-// says "Inbox synced Xd ago": email reading is paused [Ryan, 2026-09-24].
+// says "Inbox synced Xd ago": email reading is paused [Ryan].
 
 function startOfTodayUtc(): Date {
   const n = new Date()

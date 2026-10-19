@@ -13,10 +13,10 @@ import { hotAlertText } from '@/lib/push/digestText'
 // Overflow past the hourly cap is dropped from realtime and rolls into the next
 // morning digest (which re-queries top matches from scratch).
 //
-// Brief 48 (PR 5): the text is a count, never a buyer's or homeowner's name or an
+// Brief 48 (PR 5): the text never names a buyer or a homeowner and never shows an
 // address [planner, Brief 48 §3 PR 5], so callers pass only the organization and the
 // match. The match id is only in the link. It fires only from the email intake,
-// which is paused [Ryan, 2026-09-24].
+// which is paused [Ryan].
 
 const REALTIME_CAP_PER_HOUR = 5
 

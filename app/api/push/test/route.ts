@@ -11,9 +11,9 @@ import { sendPushToOrg, vapidConfigured } from '@/lib/push/send'
 // PUSH_SENT row (kind 'test') is the record, so there's no new table.
 // [engineering precaution] The row is written before the send, and a press that then
 // finds another test from the last minute takes its row back out and gets 429, so
-// presses that arrive together still send only one. A test that reached no device
-// doesn't use up the minute, so "turn notifications on, then test again" works
-// straight away.
+// presses that arrive together send at most one. A test that reached no device,
+// or whose send failed, doesn't use up the minute, so "turn notifications on, then
+// test again" works straight away.
 const TEST_WINDOW_MS = 60_000
 
 export async function POST() {
@@ -40,14 +40,20 @@ export async function POST() {
     return NextResponse.json({ ok: false, error: 'You can send one test a minute. Try again shortly.' }, { status: 429 })
   }
 
-  const delivered = await sendPushToOrg(organizationId, {
-    title: '✅ DealFlow test',
-    body:  'Push notifications are working.',
-    url:   '/',
-  })
-  await prisma.auditLog.update({
-    where: { id: mine.id }, data: { detailsJson: { kind: 'test', delivered, at } },
-  }).catch(() => {})
+  // The row always gets its count, even if the send fails, so a failed test doesn't
+  // hold the button for a minute.
+  let delivered = 0
+  try {
+    delivered = await sendPushToOrg(organizationId, {
+      title: '✅ DealFlow test',
+      body:  'Push notifications are working.',
+      url:   '/',
+    })
+  } finally {
+    await prisma.auditLog.update({
+      where: { id: mine.id }, data: { detailsJson: { kind: 'test', delivered, at } },
+    }).catch(() => {})
+  }
 
   if (delivered === 0) {
     return NextResponse.json({ ok: false, error: 'No device got the test. Turn on notifications with Check In on the Home page first.' }, { status: 200 })

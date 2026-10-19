@@ -1,7 +1,7 @@
 // Brief 48 (PR 5): Settings' "Send Test Push" sends at most one test a minute
 // [planner, Brief 48 §3 PR 5]. A second press within the minute gets 429 and a plain
 // message, which the Settings page shows; presses that arrive together still send
-// only one. The test's PUSH_SENT row (kind 'test') is the record, so no new table.
+// at most one. The test's PUSH_SENT row (kind 'test') is the record, so no new table.
 // Runs on stand-ins for Prisma and web-push (nothing is sent); every device is invented.
 import { ORG, db, installFakeWebPush, resetDb, sent, type Row } from '@/lib/push/__tests__/pushFakes'
 import { test } from 'node:test'
@@ -47,7 +47,7 @@ test('after a minute, a test goes through again', async () => {
   assert.equal(sent.length, 4)
 })
 
-test('presses that arrive together send only one test', async () => {
+test('presses that arrive together send at most one test', async () => {
   resetDb({ pushSubscription: DEVICES() })
   const results = await Promise.all(Array.from({ length: 5 }, () => press()))
   assert.ok(results.filter(r => r.status === 200).length <= 1, results.map(r => r.status).join(','))
@@ -83,4 +83,20 @@ test('with push not set up on the server, the message is plain and nothing is lo
   }
   assert.equal(sent.length, 0)
   assert.equal(testRows().length, 0)
+})
+
+test('a test whose send fails does not hold the button for a minute', async () => {
+  resetDb()
+  let reads = 0
+  // The device lookup fails once (a database blip), then works.
+  Object.defineProperty(db.tables, 'pushSubscription', {
+    configurable: true, enumerable: true,
+    get: () => { if (reads++ === 0) throw new Error('stand-in: database blip'); return DEVICES() },
+  })
+  const { POST } = await import('../test/route')
+  await assert.rejects(POST(), /database blip/)
+  assert.deepEqual(testRows().map(r => (r.detailsJson as Row).delivered), [0], 'the failed test is logged as reaching no device')
+  const next = await press()
+  assert.equal(next.status, 200)
+  assert.deepEqual(next.json, { ok: true, delivered: 2 })
 })
