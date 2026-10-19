@@ -11,7 +11,11 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 // than blanking the page. ?limit=N (default 50, max 500).
 export async function GET(req: NextRequest) {
   const orgId = await getCurrentOrgId().catch(() => '')
-  const limitParam = Number(req.nextUrl.searchParams.get('limit'))
+  // Brief 47 (PR 4): a missing or empty ?limit was Number(null) = 0, which is finite, so
+  // the default came out as 1 event, not 50. Missing, empty or not a number → 50; a
+  // fraction is cut to a whole number (Prisma's take must be one).
+  const raw = req.nextUrl.searchParams.get('limit')?.trim()
+  const limitParam = raw ? Math.trunc(Number(raw)) : NaN
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(limitParam, 1), 500) : 50
 
   try {
