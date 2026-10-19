@@ -17,8 +17,8 @@ test('true only for exactly the same text', () => {
   assert.equal(safeEqual('café', 'café'), false)
 })
 
-test('an empty key equals only an empty key, so callers refuse an unset or empty secret before comparing', () => {
-  assert.equal(safeEqual('', ''), true)
+test('an empty expected value matches nothing, not even an empty key', () => {
+  assert.equal(safeEqual('', ''), false)
   assert.equal(safeEqual('', 'x'), false)
   assert.equal(safeEqual('x', ''), false)
 })

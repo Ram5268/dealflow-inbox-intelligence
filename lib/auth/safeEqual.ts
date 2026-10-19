@@ -7,9 +7,12 @@ import { createHash, timingSafeEqual } from 'crypto'
 // differ, and the timing reveals nothing about the key's length or content.
 // Same pattern as lib/auth/instantlyWebhook.ts.
 //
-// Plain equality: an empty key equals an empty key, so callers refuse an unset
-// or empty secret before calling this.
+// Fails closed on an empty expected value, so a caller that forgets to refuse
+// an unset secret first (safeEqual(header ?? '', process.env.X ?? '')) still
+// lets nothing through. That branch depends only on the server's own setting,
+// never on the guess, so it reveals nothing [engineering precaution].
 export function safeEqual(provided: string, expected: string): boolean {
+  if (!expected) return false
   const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest()
   return timingSafeEqual(sha256(provided), sha256(expected))
 }
