@@ -179,3 +179,49 @@ export const COUNT_SELLERS_TOOL: Anthropic.Messages.Tool = {
     required: [],
   } as Anthropic.Messages.Tool.InputSchema,
 }
+
+// Brief 43 PR 6 (N1; D11 [Ryan, 2026-10-18]: buyers-for-a-seller questions are
+// allowed for one seller Ryan names; by address D13 [Ryan, 2026-10-19]).
+export const GET_SELLER_MATCHES_TOOL: Anthropic.Messages.Tool = {
+  name: 'get_seller_matches',
+  description:
+    'The buyers DealFlow matched to ONE of Ryan\'s CRM sellers, named by Ryan or given by street address. Use it for "which buyers match [a seller or an address]?". ' +
+    'Never use it to list, browse or search sellers. ' +
+    'Returns { seller, count, tiers, buyers } with the same buyers, order and HOT/WARM labels as that seller\'s CRM card and the Matches page: count is every match the seller has, buyers are the best first (each with what they want, the tier, the score and why it fits; testBuyer marks test data). ' +
+    'Ryan sees the buyers as a card with an Open in Matches link for each, so never write a link. ' +
+    'Or { candidates } (up to 3 names; ask Ryan which one), or { none: true } (no seller by that name or address in his CRM). ' +
+    'seller.doNotContact true means the homeowner asked not to be contacted.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'The seller\'s name as Ryan gave it, e.g. "Pat Example".' },
+      address: { type: 'string', description: 'The street address as Ryan gave it, e.g. "88 Example Ave". The house number must match exactly.' },
+    },
+    required: [],
+  } as Anthropic.Messages.Tool.InputSchema,
+}
+
+// Brief 43 PR 6 (Q26): the NEW MATCHES note holds only the top 20 unseen.
+export const COUNT_MATCHES_TOOL: Anthropic.Messages.Tool = {
+  name: 'count_matches',
+  description:
+    'Count all of DealFlow\'s buyer matches, for listings and Ryan\'s sellers together, by tier: HOT (fit 80 or more), WARM (65 to 79), POSSIBLE (under 65) or ALL. ' +
+    'Use it for "how many HOT matches do I have?". Returns { tier, count, unseen } (unseen = not yet opened on the Matches page).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      tier: { type: 'string', enum: ['HOT', 'WARM', 'POSSIBLE', 'ALL'], description: 'Which tier to count. Default ALL.' },
+    },
+    required: [],
+  } as Anthropic.Messages.Tool.InputSchema,
+}
+
+// Brief 43 PR 6 (S-11; D14 [Ryan, 2026-10-19]: a count, plus "they're ranked in
+// your CRM Queue"; never a list, D11 [Ryan, 2026-10-18]).
+export const COUNT_SELLERS_WITH_BUYERS_TOOL: Anthropic.Messages.Tool = {
+  name: 'count_sellers_with_buyers',
+  description:
+    'Count Ryan\'s CRM sellers that have at least one HOT or WARM buyer waiting. Use it for "which of my sellers have buyers waiting?". ' +
+    'Returns { count, withHot } only, never names. Answer with the count and say they\'re ranked in his CRM Queue; never list or name the sellers.',
+  input_schema: { type: 'object', properties: {}, required: [] } as Anthropic.Messages.Tool.InputSchema,
+}
