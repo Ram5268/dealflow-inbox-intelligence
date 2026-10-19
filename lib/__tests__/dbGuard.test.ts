@@ -3,8 +3,8 @@
 // every script uses (scriptGuards.test.ts checks they do). Pure: no DB, no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import {
   APPLY_FLAG, DRY_RUN_FLAG, LIVE_OVERRIDE_FLAG, applyRequested, assertTestDatabase, databaseName, isTestDatabase,
   maintenanceApply, refuseLiveDatabase, refuseRemoteServer, scriptArgs,
@@ -116,10 +116,29 @@ test('Brief 41.2: a chat harness only talks to a dev server on this machine', ()
 })
 
 const scripts = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts as Record<string, string>
+// Brief 43 (PR 0): `test:unit` names its files by glob ('lib/**/*.unit.test.ts'),
+// so a glob is expanded to the files it matches and those are checked too.
+function expandGlob(glob: string): string[] {
+  const re = new RegExp('^' + glob.split('**/').map(part =>
+    part.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')).join('(?:.*/)?') + '$')
+  const out: string[] = []
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) walk(path)
+      else if (re.test(relative(ROOT, path))) out.push(relative(ROOT, path))
+    }
+  }
+  const top = glob.split('/')[0]
+  if (existsSync(join(ROOT, top))) walk(join(ROOT, top))
+  return out
+}
 const npmTestFiles = [...new Set(
   Object.entries(scripts)
     .filter(([name]) => name !== 'test:integration')
-    .flatMap(([, cmd]) => cmd.match(/[A-Za-z0-9_/.[\]-]+\.test\.tsx?/g) ?? []),
+    .flatMap(([, cmd]) => cmd.match(/[A-Za-z0-9_/.*[\]-]+\.test\.tsx?/g) ?? [])
+    .flatMap(f => (f.includes('*') ? expandGlob(f) : [f])),
 )]
 
 test('npm test runs no database-backed file', () => {
