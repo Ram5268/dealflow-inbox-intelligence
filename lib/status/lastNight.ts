@@ -39,11 +39,16 @@ const count = (d: Details, key: string): number | null => {
 }
 const iso = (d: unknown): string | null => (d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : null)
 
-// Reason codes are lower-case words joined by underscores ('hot_halved', 'no_buyers',
-// 'empty_list'); anything else (free text, ids, addresses) is dropped.
-const REASON_CODE = /^[a-z_]+$/
+// Only the known reason codes are copied: Brief 44's rollback codes
+// (lib/matching/ourEstimates.ts RollbackReason) and Brief 47 PR 1's refusal codes
+// (CONTRACT.md). Anything else, even a lower-case word like 'jane_example', is dropped,
+// and each code shows once (engineering precaution: the page is public).
+const KNOWN_REASONS = new Set([
+  'error', 'hot_halved', 'sellers_lost_matches',
+  'no_sellers', 'no_buyers', 'matches_shrank', 'sellers_shrank', 'empty_list',
+])
 export const reasonCodes = (v: unknown): string[] =>
-  Array.isArray(v) ? v.filter((r): r is string => typeof r === 'string' && REASON_CODE.test(r)) : []
+  Array.isArray(v) ? [...new Set(v.filter((r): r is string => typeof r === 'string' && KNOWN_REASONS.has(r)))] : []
 
 // ── Pure mappers: an AuditLog row (or none) to what the page shows ─────────────
 
@@ -105,7 +110,8 @@ export function readSwitches() {
   return {
     outlook: graphEnabled(),
     maintenance: maintenanceEnabled(),
-    // As app/api/instantly/enroll/route.ts checks it (Brief 34 kill switch).
+    // As app/api/instantly/enroll/route.ts checks it (Brief 34 kill switch). The route
+    // also refuses while TEST_MODE_ONLY is on, so true here can overstate, never understate.
     instantly: process.env.INSTANTLY_ENROLL_ENABLED === 'true',
     // The gate on lib/streetEasySync.ts's sweep / stale-marking entry points: paused when
     // STREETEASY_SYNC_ENABLED is 'false' or TEST_MODE_ONLY is on. Worked out here rather

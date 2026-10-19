@@ -235,6 +235,8 @@ test('junk in detailsJson (strings, ids, objects, addresses) is never copied', a
   for (const planted of ['planted', 'Example', 'SECRET', 'Hot_Halved', 'x-y', 'org-']) assert.ok(!out.includes(planted), planted)
   // The pure pieces, on values JSON can't hold.
   assert.deepEqual(reasonCodes(['error', 'A', 'no buyers', 'no_buyers\n']), ['error'])
+  // A lower-case word that isn't a known code (a name or a street, say) is dropped too; repeats show once.
+  assert.deepEqual(reasonCodes(['jane_example', 'example_st', 'no_buyers', 'no_buyers', 'empty_list']), ['no_buyers', 'empty_list'])
   assert.equal(mapScoring({ createdAt: new Date('2026-10-19T09:02:00Z'), detailsJson: { sellers: NaN, buyers: Infinity } })?.sellers, null)
   assert.equal(mapScoring({ createdAt: new Date('2026-10-19T09:02:00Z'), detailsJson: { sellers: NaN, buyers: Infinity } })?.buyers, null)
 })
