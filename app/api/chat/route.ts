@@ -25,6 +25,9 @@ import { SYSTEM_PROMPT, VOICE_INSTRUCTION } from '@/lib/chat/systemPrompt'
 import {
   MAX_GUARD_RETRIES,
   selectCannedFallback,
+  repeatedActionClaim,
+  skipVerifierForRepeatClaim,
+  skippedVerification,
   buildFeedbackPrompt,
   formatFlagLines,
   type GuardAttempt,
@@ -559,18 +562,26 @@ export async function POST(req: NextRequest) {
       let attempt = 0
       while (attempt <= MAX_GUARD_RETRIES) {
         const regexFlags = filterToolBoundFlags(
-          scanForStructuralHallucinations(currentResponse),
+          // Brief 43 PR 2: the user's message lets the never-sent check read
+          // "Done" after a send request ("send it") as a claim.
+          scanForStructuralHallucinations(currentResponse, { userMessage }),
           groundingCorpus,
         )
-        const verifier = await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
+        // Brief 43 PR 2: a repeated action claim gets NEVER_SENT_REPLY whatever
+        // the fact-check says, so skip that paid call.
+        const verifier = skipVerifierForRepeatClaim(guardHistory, regexFlags)
+          ? skippedVerification()
+          : await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
         if (regexFlags.length === 0 && verifier.isGrounded) break
 
         attempt++
-        if (attempt > MAX_GUARD_RETRIES) {
+        // Brief 43 PR 2: a second "sent / booked / done" claim gets the fixed
+        // NEVER_SENT_REPLY now, not another rewrite [Ryan, 2026-09-24].
+        if (attempt > MAX_GUARD_RETRIES || repeatedActionClaim(guardHistory)) {
           // Contextual fallback — pick the variant matching what the final
-          // attempt actually flagged (public-records vs finance vs
-          // self-description vs generic) instead of always assuming records.
+          // attempt actually flagged (never-sent vs public-records vs finance
+          // vs self-description vs generic) instead of always assuming records.
           const finalFlags = guardHistory[guardHistory.length - 1]
           currentResponse = selectCannedFallback({
             regexFlags: finalFlags?.regexFlags ?? [],
