@@ -276,3 +276,39 @@ test('the CRM reads keep the organization, the new-lead rule and UTC times', () 
     'b."dealflowScoreTokenHash" AS "tokenHash", b."dealflowScoredAt" AT TIME ZONE \'UTC\' AS "scoredAt" ' +
     'FROM "ImportBatch" b JOIN "Organization" o ON o.id = b."organizationId" WHERE b.id = $1')
 })
+
+// Brief 44 (PR 4): with USE_OUR_ESTIMATES on, the nightly keeps the results with our
+// published values only if they pass its rollback checks (pickTonight), and turns the
+// switch off after a failed check. An import gets the same check on its own sellers,
+// but never touches the switch: that stays the nightly's job (engineering precaution).
+test('USE_OUR_ESTIMATES on: our values only when they pass the nightly\'s checks; an import never turns the switch off', async () => {
+  const valued = (value: number) => {
+    const w = dealflowWorld()
+    // Every buyer has a budget, so a value far above them leaves s_new1 with no buyer at all.
+    w.mojoContact = w.mojoContact.map(c => (c.id === 'b_mojo' ? { ...c, budgetMin: 900_000, budgetMax: 2_500_000 } : c))
+    return memoryDb({
+      ...w,
+      featureFlag: [{ id: 'USE_OUR_ESTIMATES', enabled: true }],
+      propertyValuation: [{ contactId: 's_new1', organizationId: 'org_df', value, createdAt: new Date('2026-10-17T15:00:00Z'),
+        run: { published: true, publishedAt: new Date('2026-10-17T15:00:00Z') } }],
+    }, (sql, params, _kind, data) => importRaw(data as unknown as Record<string, Row[]>)(sql, params))
+  }
+  const check = (mem: Mem) => ((mem.data.auditLog[0].detailsJson as Row).scoring as Row).ourEstimates as Row
+
+  const ok = await run({ mem: valued(1_500_000) }) // inside the buyers' budgets
+  assert.equal(ok.res.status, 200)
+  assert.equal(check(ok.mem).rolledBack, false)
+  assert.equal(check(ok.mem).sellersPricedByOurValue, 1)
+
+  const bad = await run({ mem: valued(6_000_000) }) // far above every budget
+  assert.equal(bad.res.status, 200)
+  assert.equal(check(bad.mem).rolledBack, true)
+  assert.ok((check(bad.mem).reasons as string[]).includes('sellers_lost_matches'))
+  assert.ok(bad.mem.data.match.some(m => m.opportunityId === 's_new1' && m.id !== 'm_stale_new1'), 's_new1 keeps its buyers, scored without our value')
+
+  for (const { mem } of [ok, bad]) {
+    assert.deepEqual(mem.data.featureFlag, [{ id: 'USE_OUR_ESTIMATES', enabled: true }])
+    assert.ok(mem.calls.filter(c => c.model === 'featureFlag').every(c => c.op === 'findUnique'), 'the switch is only read')
+    assert.ok(!mem.data.auditLog.some(a => a.action === 'VALUATION_SWITCH_ROLLBACK'))
+  }
+})

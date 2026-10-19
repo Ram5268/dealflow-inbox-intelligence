@@ -6,6 +6,7 @@ import { planSync, type ExistingRow, type SyncPlan } from '../crm-sync/plan'
 import { EXISTING_SQL, MARKED_CRM_SQL } from '../crm-sync/runSync'
 import { DUPLICATES_SQL, REKEY_SQL, UPSERT_SQL, diffUpdates, toUpsertRow, type UpsertReturn } from '../crm-sync/upsert'
 import { MAX_KEPT_PER_SELLER, loadScoringInputs, scoreAll } from '../matching/nightly/runScoring'
+import { pickTonight, type SwitchCheck } from '../matching/ourEstimates'
 import { toMatchRow } from '../matching/nightly/select'
 import { DELETE_STALE_MATCHES_OF_SELLERS_SQL, UPSERT_MATCHES_SQL } from '../matching/nightly/sql'
 import {
@@ -100,6 +101,7 @@ export interface ImportScoringResult {
     inserted: number
     updated: number
     deleted: number
+    ourEstimates?: SwitchCheck // only with the USE_OUR_ESTIMATES switch on (Brief 44 PR 4)
   }
 }
 
@@ -108,10 +110,23 @@ export interface ImportScoringResult {
 // sellers. Only these sellers are scored. Their stale Match rows are deleted;
 // never anyone else's (DELETE_STALE_MATCHES_OF_SELLERS_SQL).
 export async function scoreImportSellers(db: PrismaClient, orgId: string, mojoIds: Set<string>): Promise<ImportScoringResult> {
-  const { sellers, listings, buyers, ctx, dismissed, demandExcludedNoLocation } = await loadScoringInputs(orgId, db)
+  const { sellers, listings, buyers, ctx, dismissed, demandExcludedNoLocation, ourEstimates } = await loadScoringInputs(orgId, db)
   const idx = sellers.flatMap((s, i) => (mojoIds.has(s.mojoId) ? [i] : []))
   const mine = idx.map(i => sellers[i])
-  const { kept, ...stats } = scoreAll(idx.map(i => listings[i]), buyers, ctx, dismissed)
+  const myListings = idx.map(i => listings[i])
+  // Brief 44 (PR 4): with the USE_OUR_ESTIMATES switch on, the nightly scores both ways
+  // and keeps the results with our values only if they pass its rollback checks
+  // (pickTonight). These sellers get the same treatment, checked on them alone. Turning
+  // the switch off after a failed check stays the nightly's job (recordRollback): an
+  // import never changes it [engineering precaution].
+  const night = ourEstimates
+    ? pickTonight(
+      { ...ourEstimates, applied: myListings.filter(l => l.ourEstimate === true).length },
+      () => scoreAll(myListings, buyers, ctx, dismissed),
+      () => scoreAll(idx.map(i => ourEstimates.without.listings[i]), buyers, ourEstimates.without.ctx, dismissed),
+    )
+    : { result: scoreAll(myListings, buyers, ctx, dismissed), check: undefined }
+  const { kept, ...stats } = night.result
   if (kept.length > MAX_KEPT_PER_SELLER * mine.length) {
     throw new Error(`scoring kept ${kept.length} pairs for ${mine.length} sellers; aborting before any write`)
   }
@@ -131,7 +146,10 @@ export async function scoreImportSellers(db: PrismaClient, orgId: string, mojoId
   }, TX)
   return {
     sellers: new Map(mine.map(s => [s.mojoId, s.id])),
-    stats: { sellers: mine.length, buyers: buyers.length, demandExcludedNoLocation, ...stats, kept: rows.length, ...written },
+    stats: {
+      sellers: mine.length, buyers: buyers.length, demandExcludedNoLocation, ...stats, kept: rows.length, ...written,
+      ...(night.check && { ourEstimates: night.check }),
+    },
   }
 }
 

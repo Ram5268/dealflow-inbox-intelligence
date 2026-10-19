@@ -1,7 +1,8 @@
 // Brief 45 (PR E): an in-memory stand-in for the Prisma calls the nightly call
 // list and the import-scoring path make, so their tests run with no database.
 // It understands only the `where` shapes those calls use: equality, `in`,
-// `{ not: null }`, `OR`, and a JSON `path`/`equals` filter. Raw SQL goes to the
+// `{ not: null }`, `OR`, a JSON `path`/`equals` filter and a relation filter
+// (`{ run: { published: true } }`). Raw SQL goes to the
 // test's own `onRaw` handler. Every call is logged with the transaction it ran
 // in, and every model the code touches is recorded, so a test can prove a model
 // (CallQueueEntry) was never used. Not a *.test.ts file.
@@ -18,7 +19,10 @@ export interface Call {
 
 export type RawHandler = (sql: string, params: unknown[], kind: 'query' | 'execute', data: Record<ModelName, Row[]>) => unknown
 
-const MODELS = ['organization', 'mojoContact', 'match', 'matchDismissal', 'extractedOpportunity', 'auditLog', 'callQueueEntry'] as const
+const MODELS = [
+  'organization', 'mojoContact', 'match', 'matchDismissal', 'extractedOpportunity', 'auditLog', 'callQueueEntry',
+  'featureFlag', 'propertyValuation',
+] as const
 export type ModelName = (typeof MODELS)[number]
 
 function get(row: Row, path: string[]): unknown {
@@ -35,6 +39,11 @@ export function matchesWhere(row: Row, where: Row | undefined): boolean {
     }
     if (cond && typeof cond === 'object' && !Array.isArray(cond) && !(cond instanceof Date)) {
       const c = cond as Row
+      // A relation filter, e.g. { run: { published: true } }: match the related row.
+      if (!['path', 'equals', 'in', 'not'].some(op => op in c)) {
+        if (!matchesWhere((row[k] ?? {}) as Row, c)) return false
+        continue
+      }
       const v = 'path' in c ? get((row[k] ?? {}) as Row, c.path as string[]) : row[k]
       if ('equals' in c && v !== c.equals) return false
       if ('in' in c && !(c.in as unknown[]).includes(v)) return false
