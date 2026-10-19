@@ -221,6 +221,8 @@ export const MOJO_BUYER = crmSeller('buyer-mojo', 90, {
 export const SWITCH_ON = { id: 'USE_OUR_ESTIMATES', enabled: true }
 // Published two days before the test runs: matching ignores values published more than 100 days
 // before the night's clock (Brief 49, lib/matching/ourEstimates.ts), so a fixed date would age out.
+// The golden test in runScoringGuard.unit.test.ts pins Date to 2026-10-19, so there these publish
+// times lie in the future; recentEnough accepts that (a clock behind the import's).
 const RECENTLY_PUBLISHED = new Date(Date.now() - 2 * 86_400_000)
 const published = (contactId: string, value: number) => ({
   id: `pv-${contactId}`, organizationId: ORG_ID, contactId, value, createdAt: new Date('2026-10-17'),

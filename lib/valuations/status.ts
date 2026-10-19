@@ -52,8 +52,9 @@ function publicRun(r: RunRow) {
   }
 }
 
-// Brief 49 (PR 3): whole days since the newest published run was published. Matching stops
-// using values older than 100 days (lib/matching/ourEstimates.ts, MAX_VALUE_AGE_DAYS).
+// Brief 49 (PR 3): whole days since the newest published run was published, rounded down.
+// Matching stops using values more than 100 days (100 x 24 hours) old (lib/matching/ourEstimates.ts,
+// MAX_VALUE_AGE_DAYS), so on the day this shows 100 they may already be out.
 const ageInDays = (publishedAt: Date | null, now: Date) =>
   publishedAt ? Math.max(0, Math.floor((now.getTime() - publishedAt.getTime()) / 86_400_000)) : null
 

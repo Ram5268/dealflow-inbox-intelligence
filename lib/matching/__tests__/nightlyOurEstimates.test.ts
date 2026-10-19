@@ -180,3 +180,24 @@ test('a dry run reports what would happen and writes nothing', async () => {
   assert.equal(dry.result.ourEstimates?.rolledBack, true)
   assert.deepEqual(dry.committed, [])
 })
+
+// Brief 49 (PR 3), reviewer's suggestion: the monthly job has stopped and every value is past
+// the 100-day limit. The night is the switch-off night: same Match rows, no rollback, the switch
+// stays on (so a fresh run is used again with no one's help), and the check says 0 sellers priced.
+test('switch on, every value older than 100 days: the switch-off night, no rollback, the switch stays on', async () => {
+  const STALE = new Date(Date.now() - 101 * 86_400_000)
+  const stale = GOOD_VALUES.map(v => ({ ...v, run: { publishedAt: STALE } }))
+  const off = await night(null)
+  const on = await night({ enabled: true }, stale)
+  assert.deepEqual(on.reads, ['featureFlag', 'propertyValuation'])
+  assert.deepEqual(upserts(on.committed), upserts(off.committed))
+  assert.deepEqual(kinds(on.committed), ['upsert', 'audit:NIGHTLY_SCORING'])
+  assert.deepEqual(omit(on.stable, 'ourEstimates'), off.stable)
+  const check = on.result.ourEstimates!
+  assert.equal(check.rolledBack, false)
+  assert.deepEqual(check.reasons, [])
+  assert.equal(check.sellersPricedByOurValue, 0)
+  assert.equal(check.hotWith, check.hotWithout)
+  assert.equal(check.sellersLosingAllMatches, 0)
+  // Brief 47's status window then shows lastNightUsedOurValues: true with sellersPricedByOurValues: 0.
+})
