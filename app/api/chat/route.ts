@@ -23,7 +23,7 @@ import { getGenerator, type SectionResult } from '@/lib/reports/generators'
 import { unresolvedBuyer, shownIdsInChat } from '@/lib/chat/tools/reportBuyerGate'
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
-import { buildGroundingCorpus, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
+import { buildGuardGrounding, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
 import { logGuardFireEvent, timedOutGuardInput } from '@/lib/chat/guards/instrumentation'
 import { createTurnBudget, deadlineSignal, withTimeout, isTimedOut, LOOKUP_TIMEOUT_MS, TURN_SOFT_MS, TURN_HARD_MS, TURN_CEILING_MS, TIMED_OUT_REPLY } from '@/lib/chat/turnBudget'
 import { buildSystemBlocks, RYAN_MD } from '@/lib/chat/systemBlocks'
@@ -732,8 +732,13 @@ export async function POST(req: NextRequest) {
     // vocabulary Sonnet draws from the personal glossary ("hot matches",
     // "off-market", neighborhood shorthand) must not be flagged as hallucinated.
     // Fold it in ahead of the per-turn dynamic block.
+    // Brief 43 PR 10 (Q17): for the fact-check only (Brief 43 PR 15 takes it out
+    // there too). The regex guard's grounding is this turn's tool results and
+    // side-lookup blocks, not RYAN_MD: RYAN_MD names ACRIS, DOB and StreetEasy,
+    // so every invented "per ACRIS" used to look grounded. Deed facts bind to
+    // this turn's ACRIS block (toolBinding.ts) [engineering precaution].
     const sideChannelText = [RYAN_MD, dynamicSystemBlock].filter(Boolean).join('\n\n') || null
-    const groundingCorpus = buildGroundingCorpus(toolResultsForGuard, priorDealCards, sideChannelText)
+    const groundingCorpus = buildGuardGrounding(toolResultsForGuard, priorDealCards, dynamicSystemBlock || null)
 
     if (guardApplies) {
       let attempt = 0
@@ -743,6 +748,7 @@ export async function POST(req: NextRequest) {
           // "Done" after a send request ("send it") as a claim.
           scanForStructuralHallucinations(currentResponse, { userMessage }),
           groundingCorpus,
+          currentResponse,
         )
         // Brief 43 PR 2: a repeated action claim gets NEVER_SENT_REPLY whatever
         // the fact-check says, so skip that paid call. Brief 43 PR 3: the
@@ -761,6 +767,9 @@ export async function POST(req: NextRequest) {
           ? skippedVerification()
           : checked && !isTimedOut(checked) ? checked : { isGrounded: true, flags: [], costUsd: 0, latencyMs: 0 }
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
+        // Brief 43 PR 10 (Q32): a fact-check that failed or answered garbage
+        // accepts the reply (the regex check above still ran); log it here.
+        if (verifier.error) guardHistory[guardHistory.length - 1].verifierError = verifier.error
         if (regexFlags.length === 0 && verifier.isGrounded) break
 
         attempt++
