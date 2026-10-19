@@ -17,8 +17,10 @@ import BuyerPickerSheet from '@/components/BuyerPickerSheet'
 import ReportModal from '@/components/ReportModal'
 import ReportPreviewCard from '@/components/ReportPreviewCard'
 import FragmentBlock from '@/components/FragmentBlock'
+import DraftCard from '@/components/chat/DraftCard'
 import { showToast } from '@/components/Toast'
 import type { AttachedReport, AttachedFragment } from '@/lib/reports/uiTypes'
+import type { Draft } from '@/lib/chat/draft'
 
 // ─── Brief 2.5 — Drift interaction logging ────────────────
 // Fire-and-forget POST to /api/chat/interaction. Never awaited, never surfaces
@@ -105,6 +107,9 @@ interface Message {
   // Brief 28.0 — report attachments (carried through from the DB row via ...m).
   attachedReport?: AttachedReport | null
   attachedFragment?: AttachedFragment | null
+  // Brief 43 PR 3 — a draft to copy (the route's `draft`; on reload GET /api/chat
+  // reads it back out of the stored reply, carried through via ...m).
+  draft?: Draft | null
   createdAt: string
 }
 
@@ -546,6 +551,9 @@ function MemoryView({
                       }}>
                         {m.content}
                       </div>
+
+                      {/* Brief 43 PR 3 — a draft to copy; nothing sends */}
+                      {m.draft && <DraftCard draft={m.draft} />}
 
                       {/* Brief 28.0 — inline fragment (single report section) */}
                       {m.attachedFragment && <FragmentBlock fragment={m.attachedFragment} />}
@@ -1140,7 +1148,7 @@ function ChatPageInner() {
       })
       const data = await res.json()
       if (data.sessionId) setCurrentSessionId(data.sessionId)
-      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, attachedReport: data.attachedReport ?? null, attachedFragment: data.attachedFragment ?? null, createdAt: new Date().toISOString() }])
+      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, attachedReport: data.attachedReport ?? null, attachedFragment: data.attachedFragment ?? null, draft: data.draft ?? null, createdAt: new Date().toISOString() }])
     } catch {
       setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: 'Something went wrong. Try again.', createdAt: new Date().toISOString() }])
     } finally { setLoading(false) }

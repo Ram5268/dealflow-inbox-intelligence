@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { readStoredReply } from '@/lib/chat/storedReply'
 
 export async function GET(req: NextRequest) {
   const showArchived = req.nextUrl.searchParams.get('archived') === 'true'
@@ -23,7 +24,8 @@ export async function GET(req: NextRequest) {
       archived: s.archived,
       createdAt: s.createdAt,
       updatedAt: s.updatedAt,
-      preview: s.messages.find(m => m.role === 'assistant')?.content?.slice(0, 80) ?? '',
+      // Brief 43 PR 3: a reply stored as JSON (a draft) previews as its text.
+      preview: readStoredReply(s.messages.find(m => m.role === 'assistant')?.content ?? '').response.slice(0, 80),
     })),
   })
 }

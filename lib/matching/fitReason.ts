@@ -133,7 +133,8 @@ function ourWording(reason: string, homeowner: boolean): string | null {
   return composeReason(strengths.filter(shown), drawbacks.filter(shown))
 }
 
-const SELLER_CIRCUMSTANCES = new RegExp(
+// Exported for chat drafts (Brief 43 PR 3, lib/chat/guards/draftPrivacy.ts); the list is unchanged.
+export const SELLER_CIRCUMSTANCES = new RegExp(
   [
     'foreclos', 'lis pendens', 'auction', 'distress', 'equity', 'vacan', 'absentee', 'probate', '(?<!real )estate',
     'divorc', 'tax lien', 'delinquen', 'motivated', 'tenure', 'default', 'underwater', 'behind on', 'inherit',
