@@ -32,9 +32,15 @@ class DryRunRollback extends Error {
   constructor(readonly result: CrmSyncResult) { super('dry run: rolled back') }
 }
 
-const EXISTING_SQL = `
+// Exported for the import-scoring route (Brief 45, PR E), which plans its lead
+// copy with the same reads.
+export const EXISTING_SQL = `
 SELECT id, "mojoId", "fullName", address, state, "zipCode", phone, "additionalPhones", email, "additionalEmails"
 FROM "MojoContact" WHERE "organizationId" = $1 AND NOT "isTestData"`
+
+// $1 = organizationId. Rows the sync has marked as CRM leads (the removal guard).
+export const MARKED_CRM_SQL =
+  `SELECT count(*)::int AS n FROM "MojoContact" WHERE "organizationId" = $1 AND metadata->>'source' = 'crm'`
 
 export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncResult> {
   const started = Date.now()
@@ -42,8 +48,7 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
   const contacts = (await readCrmLeads(ORG_SLUG)).map(mapLead)
 
   // Removal guard: an empty or shrunken CRM read must never mark everyone removed.
-  const [{ n: markedCrm }] = await prisma.$queryRawUnsafe<{ n: number }[]>(
-    `SELECT count(*)::int AS n FROM "MojoContact" WHERE "organizationId" = $1 AND metadata->>'source' = 'crm'`, org.id)
+  const [{ n: markedCrm }] = await prisma.$queryRawUnsafe<{ n: number }[]>(MARKED_CRM_SQL, org.id)
   if (contacts.length === 0 || contacts.length < 0.9 * markedCrm) {
     throw new Error(`CRM returned ${contacts.length} leads but ${markedCrm} rows are marked crm; aborting before any write`)
   }

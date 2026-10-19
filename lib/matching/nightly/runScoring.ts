@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import type { MojoContact } from '@prisma/client'
+import type { MojoContact, PrismaClient } from '@prisma/client'
 import { prisma } from '../../prisma'
 import { mojoContactToBuyerData, mojoContactToListingData, opportunityToBuyerData } from '../adapters'
 import { precomputeCompsMedians, precomputeSubstitutionCounts } from '../compsCache'
@@ -46,15 +46,20 @@ class DryRunRollback extends Error {
   constructor(readonly result: ScoringResult) { super('dry run: rolled back') }
 }
 
-export async function loadScoringInputs(orgId: string) {
+// Brief 45 (PR E): `db` lets the import-scoring route's tests pass an
+// in-memory stand-in; the nightly and the route use the real client.
+export async function loadScoringInputs(
+  orgId: string,
+  db: Pick<PrismaClient, 'mojoContact' | 'extractedOpportunity' | 'matchDismissal' | 'featureFlag' | 'propertyValuation'> = prisma,
+) {
   // Test buyers count as demand only when this is exactly 'true' (test-data phase).
   const demandScope = process.env.SCORING_INCLUDE_TEST_BUYERS === 'true' ? {} : { isTestData: false }
   const [sellers, mojoBuyers, isoBuyers, dismissals, comps] = await Promise.all([
-    prisma.mojoContact.findMany({ where: { organizationId: orgId, isTestData: false, metadata: { path: ['source'], equals: 'crm' } } }),
-    prisma.mojoContact.findMany({ where: { organizationId: orgId, intent: 'BUYER', ...demandScope } }),
-    prisma.extractedOpportunity.findMany({ where: { organizationId: orgId, category: 'BUYER_ISO', ...demandScope } }),
-    prisma.matchDismissal.findMany({ select: { partyId: true, listingId: true } }),
-    precomputeCompsMedians(prisma, orgId),
+    db.mojoContact.findMany({ where: { organizationId: orgId, isTestData: false, metadata: { path: ['source'], equals: 'crm' } } }),
+    db.mojoContact.findMany({ where: { organizationId: orgId, intent: 'BUYER', ...demandScope } }),
+    db.extractedOpportunity.findMany({ where: { organizationId: orgId, category: 'BUYER_ISO', ...demandScope } }),
+    db.matchDismissal.findMany({ select: { partyId: true, listingId: true } }),
+    precomputeCompsMedians(db, orgId),
   ])
   const listings = sellers.map(mojoContactToListingData)
   // A cold call needs a location match: buyers with no recognized neighborhood
@@ -73,7 +78,7 @@ export async function loadScoringInputs(orgId: string) {
   const dismissed = new Set(dismissals.map(d => `${d.partyId}|${d.listingId}`))
   // Brief 44 (PR 4): the USE_OUR_ESTIMATES switch, read once per run. Off: these inputs as
   // they are. On: CRM sellers priced by our published values (lib/matching/ourEstimates.ts).
-  return withOurEstimates(prisma, orgId, { sellers, listings, buyers, ctx, dismissed, demandExcludedNoLocation: demand.length - buyers.length })
+  return withOurEstimates(db, orgId, { sellers, listings, buyers, ctx, dismissed, demandExcludedNoLocation: demand.length - buyers.length })
 }
 
 // Pure CPU: score every (seller, buyer) pair and keep each seller's top pairs.

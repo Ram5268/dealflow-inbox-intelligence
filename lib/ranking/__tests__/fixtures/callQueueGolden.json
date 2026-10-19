@@ -1,0 +1,817 @@
+{
+  "crmPersisted": {
+    "result": {
+      "entries": [
+        {
+          "rank": 1,
+          "priorityScore": 95,
+          "reason": "Top 92-scored match",
+          "contactId": "c01",
+          "primaryMatchId": "m_01",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 26,
+            "matchFitConfidenceLift": 17,
+            "captureBonus": 26,
+            "freshnessBoost": 14,
+            "cooldownPenalty": 15,
+            "reachabilityBonus": 0,
+            "motivationSummary": 2
+          },
+          "contact": {
+            "id": "c01",
+            "fullName": "Test Owner c01",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 92,
+            "captureStatus": "OWN_BOTH_SIDES",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 2,
+          "priorityScore": 89,
+          "reason": "Pre-foreclosure — high motivation",
+          "contactId": "c08",
+          "primaryMatchId": "m_08",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 25,
+            "matchFitConfidenceLift": 23,
+            "captureBonus": 3,
+            "freshnessBoost": 2,
+            "cooldownPenalty": 20,
+            "reachabilityBonus": 0,
+            "motivationSummary": 27
+          },
+          "contact": {
+            "id": "c08",
+            "fullName": "Test Owner c08",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 85,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 3,
+          "priorityScore": 85,
+          "reason": "Top 90-scored match",
+          "contactId": "c10",
+          "primaryMatchId": "m_10",
+          "contributingMatchIds": [
+            "m_12",
+            "m_13",
+            "m_14",
+            "m_15"
+          ],
+          "contributions": {
+            "matchFitLift": 37,
+            "matchFitConfidenceLift": 27,
+            "captureBonus": 3,
+            "freshnessBoost": 6,
+            "cooldownPenalty": 24,
+            "reachabilityBonus": 1,
+            "motivationSummary": 3
+          },
+          "contact": {
+            "id": "c10",
+            "fullName": "Test Owner c10",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 90,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 4,
+          "priorityScore": 81,
+          "reason": "Match: matchFitConfidenceLift + cooldownPenalty",
+          "contactId": "c07",
+          "primaryMatchId": "m_06",
+          "contributingMatchIds": [
+            "m_07"
+          ],
+          "contributions": {
+            "matchFitLift": 22,
+            "matchFitConfidenceLift": 32,
+            "captureBonus": 9,
+            "freshnessBoost": 2,
+            "cooldownPenalty": 29,
+            "reachabilityBonus": 3,
+            "motivationSummary": 3
+          },
+          "contact": {
+            "id": "c07",
+            "fullName": "Test Owner c07",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 75,
+            "captureStatus": "OWN_LISTING_ONLY",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 5,
+          "priorityScore": 77,
+          "reason": "Match: matchFitConfidenceLift + cooldownPenalty",
+          "contactId": "c09",
+          "primaryMatchId": "m_09",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 15,
+            "matchFitConfidenceLift": 36,
+            "captureBonus": 5,
+            "freshnessBoost": 2,
+            "cooldownPenalty": 33,
+            "reachabilityBonus": 1,
+            "motivationSummary": 8
+          },
+          "contact": {
+            "id": "c09",
+            "fullName": "Test Owner c09",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 66,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 6,
+          "priorityScore": 74,
+          "reason": "Match: matchFitConfidenceLift + cooldownPenalty",
+          "contactId": "c11",
+          "primaryMatchId": "m_18",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 14,
+            "matchFitConfidenceLift": 39,
+            "captureBonus": 5,
+            "freshnessBoost": 3,
+            "cooldownPenalty": 35,
+            "reachabilityBonus": 1,
+            "motivationSummary": 4
+          },
+          "contact": {
+            "id": "c11",
+            "fullName": "Test Owner c11",
+            "phone": "7185550104",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 64,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 7,
+          "priorityScore": 52,
+          "reason": "Top 70-scored match",
+          "contactId": "c02",
+          "primaryMatchId": "m_02",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 43,
+            "matchFitConfidenceLift": 7,
+            "captureBonus": 10,
+            "freshnessBoost": 5,
+            "cooldownPenalty": 21,
+            "reachabilityBonus": 5,
+            "motivationSummary": 8
+          },
+          "contact": {
+            "id": "c02",
+            "fullName": "Test Owner c02",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 70,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "MEDIUM"
+          }
+        },
+        {
+          "rank": 8,
+          "priorityScore": 50,
+          "reason": "Top 77-scored match",
+          "contactId": "c12",
+          "primaryMatchId": "m_19",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 45,
+            "matchFitConfidenceLift": 5,
+            "captureBonus": 8,
+            "freshnessBoost": 4,
+            "cooldownPenalty": 32,
+            "reachabilityBonus": 1,
+            "motivationSummary": 6
+          },
+          "contact": {
+            "id": "c12",
+            "fullName": "Test Owner c12",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 77,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "MEDIUM"
+          }
+        }
+      ],
+      "generationRunId": "RUN",
+      "stats": {
+        "totalContactsConsidered": 12,
+        "exclusionCounts": {
+          "status_do_not_call": 1,
+          "tag_or_group_opt_out": 1,
+          "all_phones_dnc": 1,
+          "no_matches": 1
+        },
+        "queueLength": 8,
+        "priorityDistribution": {
+          "top10Avg": 75.375,
+          "top50Avg": 75.375,
+          "rank1Score": 95,
+          "rank50Score": 50,
+          "spread": 45
+        }
+      }
+    },
+    "calls": [
+      {
+        "model": "mojoContact",
+        "op": "findMany",
+        "args": {
+          "where": {
+            "organizationId": "org_golden",
+            "isTestData": false,
+            "metadata": {
+              "path": [
+                "source"
+              ],
+              "equals": "crm"
+            }
+          },
+          "select": {
+            "id": true,
+            "fullName": true,
+            "phone": true,
+            "additionalPhones": true,
+            "phoneDncFlags": true,
+            "phoneTypes": true,
+            "lastCalled": true,
+            "lastDialDate": true,
+            "status": true,
+            "preForeclosureStatus": true,
+            "isVacant": true,
+            "neighborhood": true,
+            "tags": true,
+            "groups": true
+          }
+        },
+        "tx": null
+      },
+      {
+        "model": "match",
+        "op": "findMany",
+        "args": {
+          "where": {
+            "organizationId": "org_golden",
+            "OR": [
+              {
+                "opportunityType": "contact"
+              },
+              {
+                "counterpartType": "mojo"
+              }
+            ]
+          },
+          "select": {
+            "id": true,
+            "score": true,
+            "matchFitConfidence": true,
+            "captureStatus": true,
+            "createdAt": true,
+            "contributions": true,
+            "opportunityId": true,
+            "opportunityType": true,
+            "counterpartId": true,
+            "counterpartType": true
+          }
+        },
+        "tx": null
+      },
+      {
+        "model": "matchDismissal",
+        "op": "findMany",
+        "args": {
+          "select": {
+            "partyId": true,
+            "listingId": true
+          }
+        },
+        "tx": null
+      },
+      {
+        "model": "extractedOpportunity",
+        "op": "findMany",
+        "args": {
+          "where": {
+            "id": {
+              "in": [
+                "eo_listing_1",
+                "eo_listing_2"
+              ]
+            }
+          },
+          "select": {
+            "id": true,
+            "category": true
+          }
+        },
+        "tx": null
+      },
+      {
+        "model": "callQueueEntry",
+        "op": "deleteMany",
+        "args": {
+          "where": {
+            "organizationId": "org_golden"
+          }
+        },
+        "tx": null
+      },
+      {
+        "model": "callQueueEntry",
+        "op": "createMany",
+        "args": {
+          "data": [
+            {
+              "organizationId": "org_golden",
+              "contactId": "c01",
+              "rank": 1,
+              "priorityScore": 95,
+              "reason": "Top 92-scored match",
+              "primaryMatchId": "m_01",
+              "contributingMatchIds": [],
+              "contributions": {
+                "matchFitLift": 26,
+                "matchFitConfidenceLift": 17,
+                "captureBonus": 26,
+                "freshnessBoost": 14,
+                "cooldownPenalty": 15,
+                "reachabilityBonus": 0,
+                "motivationSummary": 2
+              },
+              "generationRunId": "RUN"
+            },
+            {
+              "organizationId": "org_golden",
+              "contactId": "c08",
+              "rank": 2,
+              "priorityScore": 89,
+              "reason": "Pre-foreclosure — high motivation",
+              "primaryMatchId": "m_08",
+              "contributingMatchIds": [],
+              "contributions": {
+                "matchFitLift": 25,
+                "matchFitConfidenceLift": 23,
+                "captureBonus": 3,
+                "freshnessBoost": 2,
+                "cooldownPenalty": 20,
+                "reachabilityBonus": 0,
+                "motivationSummary": 27
+              },
+              "generationRunId": "RUN"
+            },
+            {
+              "organizationId": "org_golden",
+              "contactId": "c10",
+              "rank": 3,
+              "priorityScore": 85,
+              "reason": "Top 90-scored match",
+              "primaryMatchId": "m_10",
+              "contributingMatchIds": [
+                "m_12",
+                "m_13",
+                "m_14",
+                "m_15"
+              ],
+              "contributions": {
+                "matchFitLift": 37,
+                "matchFitConfidenceLift": 27,
+                "captureBonus": 3,
+                "freshnessBoost": 6,
+                "cooldownPenalty": 24,
+                "reachabilityBonus": 1,
+                "motivationSummary": 3
+              },
+              "generationRunId": "RUN"
+            },
+            {
+              "organizationId": "org_golden",
+              "contactId": "c07",
+              "rank": 4,
+              "priorityScore": 81,
+              "reason": "Match: matchFitConfidenceLift + cooldownPenalty",
+              "primaryMatchId": "m_06",
+              "contributingMatchIds": [
+                "m_07"
+              ],
+              "contributions": {
+                "matchFitLift": 22,
+                "matchFitConfidenceLift": 32,
+                "captureBonus": 9,
+                "freshnessBoost": 2,
+                "cooldownPenalty": 29,
+                "reachabilityBonus": 3,
+                "motivationSummary": 3
+              },
+              "generationRunId": "RUN"
+            },
+            {
+              "organizationId": "org_golden",
+              "contactId": "c09",
+              "rank": 5,
+              "priorityScore": 77,
+              "reason": "Match: matchFitConfidenceLift + cooldownPenalty",
+              "primaryMatchId": "m_09",
+              "contributingMatchIds": [],
+              "contributions": {
+                "matchFitLift": 15,
+                "matchFitConfidenceLift": 36,
+                "captureBonus": 5,
+                "freshnessBoost": 2,
+                "cooldownPenalty": 33,
+                "reachabilityBonus": 1,
+                "motivationSummary": 8
+              },
+              "generationRunId": "RUN"
+            },
+            {
+              "organizationId": "org_golden",
+              "contactId": "c11",
+              "rank": 6,
+              "priorityScore": 74,
+              "reason": "Match: matchFitConfidenceLift + cooldownPenalty",
+              "primaryMatchId": "m_18",
+              "contributingMatchIds": [],
+              "contributions": {
+                "matchFitLift": 14,
+                "matchFitConfidenceLift": 39,
+                "captureBonus": 5,
+                "freshnessBoost": 3,
+                "cooldownPenalty": 35,
+                "reachabilityBonus": 1,
+                "motivationSummary": 4
+              },
+              "generationRunId": "RUN"
+            },
+            {
+              "organizationId": "org_golden",
+              "contactId": "c02",
+              "rank": 7,
+              "priorityScore": 52,
+              "reason": "Top 70-scored match",
+              "primaryMatchId": "m_02",
+              "contributingMatchIds": [],
+              "contributions": {
+                "matchFitLift": 43,
+                "matchFitConfidenceLift": 7,
+                "captureBonus": 10,
+                "freshnessBoost": 5,
+                "cooldownPenalty": 21,
+                "reachabilityBonus": 5,
+                "motivationSummary": 8
+              },
+              "generationRunId": "RUN"
+            },
+            {
+              "organizationId": "org_golden",
+              "contactId": "c12",
+              "rank": 8,
+              "priorityScore": 50,
+              "reason": "Top 77-scored match",
+              "primaryMatchId": "m_19",
+              "contributingMatchIds": [],
+              "contributions": {
+                "matchFitLift": 45,
+                "matchFitConfidenceLift": 5,
+                "captureBonus": 8,
+                "freshnessBoost": 4,
+                "cooldownPenalty": 32,
+                "reachabilityBonus": 1,
+                "motivationSummary": 6
+              },
+              "generationRunId": "RUN"
+            }
+          ],
+          "skipDuplicates": true
+        },
+        "tx": null
+      },
+      {
+        "model": "auditLog",
+        "op": "create",
+        "args": {
+          "data": {
+            "organizationId": "org_golden",
+            "action": "CALL_QUEUE_BUILD",
+            "detailsJson": {
+              "generationRunId": "RUN",
+              "totalContactsConsidered": 12,
+              "exclusionCounts": {
+                "status_do_not_call": 1,
+                "tag_or_group_opt_out": 1,
+                "all_phones_dnc": 1,
+                "no_matches": 1
+              },
+              "queueLength": 8,
+              "priorityDistribution": {
+                "top10Avg": 75.375,
+                "top50Avg": 75.375,
+                "rank1Score": 95,
+                "rank50Score": 50,
+                "spread": 45
+              }
+            }
+          }
+        },
+        "tx": null
+      }
+    ]
+  },
+  "allTop5": {
+    "result": {
+      "entries": [
+        {
+          "rank": 1,
+          "priorityScore": 95,
+          "reason": "Top 92-scored match",
+          "contactId": "c01",
+          "primaryMatchId": "m_01",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 26,
+            "matchFitConfidenceLift": 17,
+            "captureBonus": 26,
+            "freshnessBoost": 14,
+            "cooldownPenalty": 15,
+            "reachabilityBonus": 0,
+            "motivationSummary": 2
+          },
+          "contact": {
+            "id": "c01",
+            "fullName": "Test Owner c01",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 92,
+            "captureStatus": "OWN_BOTH_SIDES",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 2,
+          "priorityScore": 90,
+          "reason": "Top 99-scored match",
+          "contactId": "c13",
+          "primaryMatchId": "m_20",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 53,
+            "matchFitConfidenceLift": 21,
+            "captureBonus": 3,
+            "freshnessBoost": 1,
+            "cooldownPenalty": 19,
+            "reachabilityBonus": 0,
+            "motivationSummary": 2
+          },
+          "contact": {
+            "id": "c13",
+            "fullName": "Test Owner c13",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 99,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 3,
+          "priorityScore": 90,
+          "reason": "Top 99-scored match",
+          "contactId": "c14",
+          "primaryMatchId": "m_21",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 53,
+            "matchFitConfidenceLift": 21,
+            "captureBonus": 3,
+            "freshnessBoost": 1,
+            "cooldownPenalty": 19,
+            "reachabilityBonus": 0,
+            "motivationSummary": 2
+          },
+          "contact": {
+            "id": "c14",
+            "fullName": "Test Owner c14",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 99,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 4,
+          "priorityScore": 89,
+          "reason": "Pre-foreclosure — high motivation",
+          "contactId": "c08",
+          "primaryMatchId": "m_08",
+          "contributingMatchIds": [],
+          "contributions": {
+            "matchFitLift": 25,
+            "matchFitConfidenceLift": 23,
+            "captureBonus": 3,
+            "freshnessBoost": 2,
+            "cooldownPenalty": 20,
+            "reachabilityBonus": 0,
+            "motivationSummary": 27
+          },
+          "contact": {
+            "id": "c08",
+            "fullName": "Test Owner c08",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 85,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "HIGH"
+          }
+        },
+        {
+          "rank": 5,
+          "priorityScore": 85,
+          "reason": "Top 90-scored match",
+          "contactId": "c10",
+          "primaryMatchId": "m_10",
+          "contributingMatchIds": [
+            "m_12",
+            "m_13",
+            "m_14",
+            "m_15"
+          ],
+          "contributions": {
+            "matchFitLift": 37,
+            "matchFitConfidenceLift": 27,
+            "captureBonus": 3,
+            "freshnessBoost": 6,
+            "cooldownPenalty": 24,
+            "reachabilityBonus": 1,
+            "motivationSummary": 3
+          },
+          "contact": {
+            "id": "c10",
+            "fullName": "Test Owner c10",
+            "phone": "7185550101",
+            "neighborhood": "Crown Heights"
+          },
+          "primaryMatch": {
+            "matchFit": 90,
+            "captureStatus": "EXTERNAL_BOTH",
+            "matchFitConfidence": "HIGH"
+          }
+        }
+      ],
+      "generationRunId": "RUN",
+      "stats": {
+        "totalContactsConsidered": 14,
+        "exclusionCounts": {
+          "status_do_not_call": 1,
+          "tag_or_group_opt_out": 1,
+          "all_phones_dnc": 1,
+          "no_matches": 1
+        },
+        "queueLength": 5,
+        "priorityDistribution": {
+          "top10Avg": 89.8,
+          "top50Avg": 89.8,
+          "rank1Score": 95,
+          "rank50Score": 85,
+          "spread": 10
+        }
+      }
+    },
+    "calls": [
+      {
+        "model": "mojoContact",
+        "op": "findMany",
+        "args": {
+          "where": {
+            "organizationId": "org_golden"
+          },
+          "select": {
+            "id": true,
+            "fullName": true,
+            "phone": true,
+            "additionalPhones": true,
+            "phoneDncFlags": true,
+            "phoneTypes": true,
+            "lastCalled": true,
+            "lastDialDate": true,
+            "status": true,
+            "preForeclosureStatus": true,
+            "isVacant": true,
+            "neighborhood": true,
+            "tags": true,
+            "groups": true
+          }
+        },
+        "tx": null
+      },
+      {
+        "model": "match",
+        "op": "findMany",
+        "args": {
+          "where": {
+            "organizationId": "org_golden",
+            "OR": [
+              {
+                "opportunityType": "contact"
+              },
+              {
+                "counterpartType": "mojo"
+              }
+            ]
+          },
+          "select": {
+            "id": true,
+            "score": true,
+            "matchFitConfidence": true,
+            "captureStatus": true,
+            "createdAt": true,
+            "contributions": true,
+            "opportunityId": true,
+            "opportunityType": true,
+            "counterpartId": true,
+            "counterpartType": true
+          }
+        },
+        "tx": null
+      },
+      {
+        "model": "matchDismissal",
+        "op": "findMany",
+        "args": {
+          "select": {
+            "partyId": true,
+            "listingId": true
+          }
+        },
+        "tx": null
+      },
+      {
+        "model": "extractedOpportunity",
+        "op": "findMany",
+        "args": {
+          "where": {
+            "id": {
+              "in": [
+                "eo_listing_1",
+                "eo_listing_2"
+              ]
+            }
+          },
+          "select": {
+            "id": true,
+            "category": true
+          }
+        },
+        "tx": null
+      }
+    ]
+  }
+}
