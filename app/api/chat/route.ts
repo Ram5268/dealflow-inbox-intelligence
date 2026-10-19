@@ -62,7 +62,7 @@ export const maxDuration = 60
 // claim could reference (address, price, beds, category, neighborhood, and for
 // parties name/phone/title).
 function trimCardForGuard(card: Record<string, unknown>): Record<string, unknown> {
-  const keep = ['id', 'category', 'title', 'address', 'neighborhood', 'beds', 'price', 'priceRange', 'name', 'phone', 'role'] as const
+  const keep = ['id', 'category', 'title', 'address', 'neighborhood', 'beds', 'price', 'priceRange', 'name', 'phone', 'role', 'units', 'propertyType', 'squareFeet', 'availabilityDate', 'sourceBrokerage'] as const
   const out: Record<string, unknown> = {}
   for (const k of keep) {
     if (card[k] !== undefined && card[k] !== null) out[k] = card[k]

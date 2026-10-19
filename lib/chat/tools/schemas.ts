@@ -8,11 +8,14 @@
 // guard, this is the model-facing contract.
 import type Anthropic from '@anthropic-ai/sdk'
 
+// Brief 43 PR 7 (Q11-Q13, Q40; N6): "under" is a hard ceiling, an area is that
+// area, an address is that address, and building facts are on the card.
 export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
   name: 'search_listings',
   description:
-    'Search the broker\'s property inventory (sale and rental listings). Filter by borough, neighborhoods, beds, and price. ' +
-    'priceMin/priceMax set the budget; each result carries a priceOverlapScore (1.0 = squarely in range, fractional = near-miss, 0 = filtered out). Seed test data is included by default.',
+    'Search the broker\'s property inventory (sale and rental listings). Filter by borough, neighborhoods, address, beds, price, units and property type. ' +
+    'priceMin/priceMax set the budget; each result carries a priceOverlapScore (1.0 = squarely in range, fractional = near-miss, 0 = filtered out). ' +
+    'Cards carry units, propertyType, squareFeet, availabilityDate (the timeline) and sourceBrokerage; null means not on file, so say so plainly. Seed test data is included by default.',
   input_schema: {
     type: 'object',
     properties: {
@@ -24,17 +27,32 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
       neighborhoods: {
         type: 'array',
         items: { type: 'string' },
-        description: 'Neighborhood names, e.g. ["Park Slope", "Chelsea"].',
+        description: 'Neighborhood names, e.g. ["Park Slope", "Chelsea"]. Each means exactly that area: "Williamsburg" never includes East Williamsburg, "Harlem" never East Harlem, "Flatbush" never East Flatbush. Name every area you want.',
+      },
+      nearby: {
+        type: 'boolean',
+        description: 'Also include the areas next to the named neighborhoods. Only when Ryan asks for nearby or surrounding areas.',
       },
       address: {
         type: 'string',
-        description: 'Filter by address substring, case-insensitive. Use for direct-address queries like "is there anything at 88 Greenwich Ave?". Matches any listing whose address contains the given string.',
+        description: 'A street address, for direct-address queries like "is there anything at 88 Example Ave?". Give the full address with its street type. The house number must match exactly (88 never matches 188), and so must the street type when given (Ave never matches St). The exact address comes first.',
       },
       beds: { type: 'number', description: 'Exact bedroom count. 0 = studio.' },
       bedsMin: { type: 'number', description: 'Minimum bedrooms (inclusive).' },
       bedsMax: { type: 'number', description: 'Maximum bedrooms (inclusive).' },
-      priceMin: { type: 'number', description: 'Minimum price/rent. Monthly rent for rentals, sale price for sales.' },
-      priceMax: { type: 'number', description: 'Maximum price/rent.' },
+      priceMin: { type: 'number', description: 'Minimum price/rent. Monthly rent for rentals, sale price for sales. "over $X" = priceMin X, a hard floor.' },
+      priceMax: { type: 'number', description: 'Maximum price/rent. "under $X" = priceMax X, a hard ceiling: nothing above X comes back.' },
+      priceAround: {
+        type: 'number',
+        description: 'The price Ryan named for "around $X", "$X-ish" or "close to $X". Searches X plus or minus 15% and sorts closest to X first. Use it instead of priceMin/priceMax.',
+      },
+      unitsMin: { type: 'number', description: 'Minimum number of units. "2-3 family" = unitsMin 2, unitsMax 3, with propertyTypes ["multifamily"]. Listings with no unit count on file are left out.' },
+      unitsMax: { type: 'number', description: 'Maximum number of units.' },
+      propertyTypes: {
+        type: 'array',
+        items: { type: 'string', enum: ['multifamily', 'condo', 'coop', 'townhouse', 'single_family', 'mixed_use', 'land', 'commercial'] },
+        description: 'Building types to keep: multifamily (2+ family), condo, coop, townhouse (brownstones and row houses), single_family, mixed_use, land, commercial. Listings whose type is not on file are left out.',
+      },
       category: {
         type: 'array',
         items: {
@@ -50,7 +68,7 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
       },
       priceTolerance: {
         type: 'number',
-        description: 'Fractional price-overlap tolerance (0–0.30, default 0.05). Raise to ~0.15 for "close fits" / near-miss queries.',
+        description: 'How far past priceMin/priceMax a near-miss may fall, as a fraction (0–0.30). Default 0, so "under $X" stays a hard ceiling. Raise to ~0.15 only for "close fits" / near-miss queries.',
       },
       includeTestData: {
         type: 'boolean',
@@ -125,7 +143,8 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
         description: 'buyer -> buyers, renter -> renters. Omit for both.',
       },
       borough: { type: 'string', description: 'NYC borough.' },
-      neighborhoods: { type: 'array', items: { type: 'string' }, description: 'Neighborhood names.' },
+      neighborhoods: { type: 'array', items: { type: 'string' }, description: 'Neighborhood names. Each means exactly that area: "Williamsburg" never includes East Williamsburg.' },
+      nearby: { type: 'boolean', description: 'Also include the areas next to the named neighborhoods. Only when Ryan asks for nearby areas.' },
       beds: { type: 'number', description: 'Exact bedrooms the party wants. 0 = studio.' },
       bedsMin: { type: 'number', description: 'Minimum bedrooms the party wants.' },
       bedsMax: { type: 'number', description: 'Maximum bedrooms the party wants.' },
@@ -136,7 +155,7 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
           max: { type: 'number' },
         },
         required: ['min', 'max'],
-        description: 'Find parties whose budget overlaps this price range (e.g. a listing\'s price).',
+        description: 'Find parties whose budget fits this price or range (e.g. a listing\'s price: min = max = the price). A party is kept when the price falls inside their budget, or up to 5% past it.',
       },
       includeTestData: {
         type: 'boolean',
