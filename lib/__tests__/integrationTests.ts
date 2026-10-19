@@ -6,4 +6,6 @@ export const INTEGRATION_TESTS: ReadonlyArray<{ file: string; runner: 'tsx' | 't
   { file: 'lib/chat/tools/__tests__/searchListings.test.ts', runner: 'tsx' },
   { file: 'lib/reports/generators/buyer-match/__tests__/contactSupply.test.ts', runner: 'tsx' },
   { file: 'lib/ranking/__tests__/queueBuilder.integration.test.ts', runner: 'tsx' },
+  // Brief 45 (PR E): also needs CRM_TEST_DATABASE_URL (a CRM *_test database).
+  { file: 'lib/importScoring/__tests__/scoreImport.integration.test.ts', runner: 'tsx' },
 ]

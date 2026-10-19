@@ -80,7 +80,9 @@ export async function gatherContext({
       // Ryan's decision, 2026-10-17: saved seller notes may keep these details.
       // Buyer-facing text still never names motivation (engineering precaution,
       // Brief 41 H7): a lead or a client conversation here (an old or odd row;
-      // no matcher writes one) is shown exactly like a homeowner.
+      // no matcher writes one) is shown exactly like a homeowner. Brief 43 PR 3b
+      // [Ryan, 2026-10-19]: a homeowner's row carries no street address until
+      // they have agreed to sell (the ryan_listing tag); its title is area and type.
       const s = buyerFacingSupply(found)
       return [{
         matchId: m.id,

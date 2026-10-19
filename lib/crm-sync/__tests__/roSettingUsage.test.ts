@@ -22,6 +22,9 @@ const SELF = 'lib/crm-sync/__tests__/roSettingUsage.test.ts' // its examples bel
 const SETS_ONLY: Record<string, string> = {
   'lib/crm-sync/__tests__/roClient.test.ts':
     'points crmQuery at a placeholder address (pg is faked, nothing connects) and deletes it afterwards',
+  // Brief 45 (PR E): a database-backed test (npm run test:integration only).
+  'lib/importScoring/__tests__/scoreImport.integration.test.ts':
+    'points crmQuery at the CRM test database it seeds (CRM_TEST_DATABASE_URL, refused unless *_test or *_perf)',
 }
 const SKIP_DIRS = new Set(['node_modules', '.next', '.git', '.vercel'])
 const CODE = /\.[cm]?[jt]sx?$/
@@ -108,6 +111,7 @@ test('only lib/crm-sync/roClient.ts reads DATABASE_URL_CRM_RO', () => {
 test('the client still reads it, and every allowed test file still sets it', () => {
   assert.match(readFileSync(join(ROOT, READER), 'utf8'), new RegExp(`process\\.env\\.${NAME}\\b`))
   for (const f of Object.keys(SETS_ONLY)) {
-    assert.match(readFileSync(join(ROOT, f), 'utf8'), SETS[1], `${f} no longer sets it: drop it from SETS_ONLY`)
+    // A fresh, non-global copy: a /g regex keeps lastIndex between files (Brief 45).
+    assert.match(readFileSync(join(ROOT, f), 'utf8'), new RegExp(SETS[1].source), `${f} no longer sets it: drop it from SETS_ONLY`)
   }
 })

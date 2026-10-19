@@ -1,0 +1,593 @@
+{
+  "nights": {
+    "off": {
+      "result": {
+        "dryRun": false,
+        "includeTestBuyers": true,
+        "sellers": 6,
+        "buyers": 5,
+        "demandExcludedNoLocation": 0,
+        "pairs": 30,
+        "eligible": 30,
+        "dismissed": 0,
+        "ineligibleByReason": {},
+        "kept": 30,
+        "sellersCovered": 6,
+        "inserted": 29,
+        "updated": 1,
+        "deleted": 2,
+        "tiers": {
+          "HOT": 30
+        },
+        "confidence": {
+          "LOW": 30
+        },
+        "topUnknownFactors": {
+          "price": 30,
+          "carryingReasonableness": 30,
+          "highEquity": 30,
+          "freeAndClear": 30,
+          "goldenHandcuff": 30
+        }
+      },
+      "error": null,
+      "writes": [
+        {
+          "op": "match.upsert",
+          "args": [
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":85,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":5,\"beds\":44,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":22,\"tenure\":12,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":85,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":5,\"beds\":44,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":22,\"tenure\":12,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}"
+          ]
+        },
+        {
+          "op": "match.deleteStale",
+          "args": [
+            "legacy-00|buyer-a|opportunity",
+            "seller-00|buyer-gone|opportunity"
+          ]
+        },
+        {
+          "op": "auditLog.create",
+          "args": {
+            "organizationId": "org-test",
+            "action": "NIGHTLY_SCORING",
+            "detailsJson": {
+              "dryRun": false,
+              "includeTestBuyers": true,
+              "sellers": 6,
+              "buyers": 5,
+              "demandExcludedNoLocation": 0,
+              "pairs": 30,
+              "eligible": 30,
+              "dismissed": 0,
+              "ineligibleByReason": {},
+              "kept": 30,
+              "sellersCovered": 6,
+              "inserted": 29,
+              "updated": 1,
+              "deleted": 2,
+              "tiers": {
+                "HOT": 30
+              },
+              "confidence": {
+                "LOW": 30
+              },
+              "topUnknownFactors": {
+                "price": 30,
+                "carryingReasonableness": 30,
+                "highEquity": 30,
+                "freeAndClear": 30,
+                "goldenHandcuff": 30
+              }
+            }
+          }
+        }
+      ]
+    },
+    "again": {
+      "result": {
+        "dryRun": false,
+        "includeTestBuyers": true,
+        "sellers": 6,
+        "buyers": 5,
+        "demandExcludedNoLocation": 0,
+        "pairs": 30,
+        "eligible": 30,
+        "dismissed": 0,
+        "ineligibleByReason": {},
+        "kept": 30,
+        "sellersCovered": 6,
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "tiers": {
+          "HOT": 30
+        },
+        "confidence": {
+          "LOW": 30
+        },
+        "topUnknownFactors": {
+          "price": 30,
+          "carryingReasonableness": 30,
+          "highEquity": 30,
+          "freeAndClear": 30,
+          "goldenHandcuff": 30
+        }
+      },
+      "error": null,
+      "writes": [
+        {
+          "op": "match.upsert",
+          "args": [
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":85,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":5,\"beds\":44,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":22,\"tenure\":12,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":85,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":5,\"beds\":44,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":22,\"tenure\":12,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}"
+          ]
+        },
+        {
+          "op": "match.deleteStale",
+          "args": []
+        },
+        {
+          "op": "auditLog.create",
+          "args": {
+            "organizationId": "org-test",
+            "action": "NIGHTLY_SCORING",
+            "detailsJson": {
+              "dryRun": false,
+              "includeTestBuyers": true,
+              "sellers": 6,
+              "buyers": 5,
+              "demandExcludedNoLocation": 0,
+              "pairs": 30,
+              "eligible": 30,
+              "dismissed": 0,
+              "ineligibleByReason": {},
+              "kept": 30,
+              "sellersCovered": 6,
+              "inserted": 0,
+              "updated": 0,
+              "deleted": 0,
+              "tiers": {
+                "HOT": 30
+              },
+              "confidence": {
+                "LOW": 30
+              },
+              "topUnknownFactors": {
+                "price": 30,
+                "carryingReasonableness": 30,
+                "highEquity": 30,
+                "freeAndClear": 30,
+                "goldenHandcuff": 30
+              }
+            }
+          }
+        }
+      ]
+    },
+    "on": {
+      "result": {
+        "dryRun": false,
+        "includeTestBuyers": true,
+        "sellers": 6,
+        "buyers": 5,
+        "demandExcludedNoLocation": 0,
+        "pairs": 30,
+        "eligible": 30,
+        "dismissed": 0,
+        "ineligibleByReason": {},
+        "kept": 30,
+        "sellersCovered": 6,
+        "inserted": 0,
+        "updated": 30,
+        "deleted": 0,
+        "tiers": {
+          "HOT": 29,
+          "WARM": 1
+        },
+        "confidence": {
+          "MEDIUM": 24,
+          "LOW": 6
+        },
+        "topUnknownFactors": {
+          "carryingReasonableness": 30,
+          "highEquity": 30,
+          "freeAndClear": 30,
+          "goldenHandcuff": 30,
+          "vacancy": 30
+        },
+        "ourEstimates": {
+          "rolledBack": false,
+          "reasons": [],
+          "sellersPricedByOurValue": 6,
+          "hotWithout": 30,
+          "hotWith": 29,
+          "sellersWithMatchesWithout": 6,
+          "sellersLosingAllMatches": 0
+        }
+      },
+      "error": null,
+      "writes": [
+        {
+          "op": "match.upsert",
+          "args": [
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":14,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":88,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":4,\"price\":20,\"beds\":37,\"baths\":1,\"propertyType\":4,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":18,\"tenure\":10,\"substitutionScarcity\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":86,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":4,\"price\":19,\"beds\":36,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":18,\"tenure\":10,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":4,\"price\":19,\"beds\":35,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":17,\"tenure\":10,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":6},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":79,\"tier\":\"WARM\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":5,\"price\":0,\"beds\":42,\"baths\":1,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":21,\"tenure\":12,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":9},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":96,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":35,\"price\":14,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":13,\"tenure\":7,\"substitutionScarcity\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":14,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":13,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":33,\"price\":13,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":91,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":37,\"price\":3,\"beds\":26,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":13,\"tenure\":7,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":6},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":96,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":35,\"price\":13,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":13,\"tenure\":7,\"substitutionScarcity\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":14,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":13,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":13,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":92,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":36,\"price\":6,\"beds\":26,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":13,\"tenure\":7,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":6},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":14,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":88,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":4,\"price\":20,\"beds\":37,\"baths\":1,\"propertyType\":4,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":19,\"tenure\":10,\"substitutionScarcity\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":86,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":4,\"price\":19,\"beds\":36,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":18,\"tenure\":10,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":4,\"price\":19,\"beds\":35,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":17,\"tenure\":10,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":6},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":4,\"price\":12,\"beds\":37,\"baths\":1,\"propertyType\":4,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":19,\"tenure\":10,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":8},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":96,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":35,\"price\":13,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":13,\"tenure\":7,\"substitutionScarcity\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":14,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":13,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":10,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":5},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":13,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":96,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":35,\"price\":13,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":13,\"tenure\":7,\"substitutionScarcity\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":14,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":13,\"beds\":25,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":2},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":11,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":5},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":34,\"price\":13,\"beds\":24,\"baths\":1,\"propertyType\":2,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":12,\"tenure\":7,\"substitutionScarcity\":1,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}"
+          ]
+        },
+        {
+          "op": "match.deleteStale",
+          "args": []
+        },
+        {
+          "op": "auditLog.create",
+          "args": {
+            "organizationId": "org-test",
+            "action": "NIGHTLY_SCORING",
+            "detailsJson": {
+              "dryRun": false,
+              "includeTestBuyers": true,
+              "sellers": 6,
+              "buyers": 5,
+              "demandExcludedNoLocation": 0,
+              "pairs": 30,
+              "eligible": 30,
+              "dismissed": 0,
+              "ineligibleByReason": {},
+              "kept": 30,
+              "sellersCovered": 6,
+              "inserted": 0,
+              "updated": 30,
+              "deleted": 0,
+              "tiers": {
+                "HOT": 29,
+                "WARM": 1
+              },
+              "confidence": {
+                "MEDIUM": 24,
+                "LOW": 6
+              },
+              "topUnknownFactors": {
+                "carryingReasonableness": 30,
+                "highEquity": 30,
+                "freeAndClear": 30,
+                "goldenHandcuff": 30,
+                "vacancy": 30
+              },
+              "ourEstimates": {
+                "rolledBack": false,
+                "reasons": [],
+                "sellersPricedByOurValue": 6,
+                "hotWithout": 30,
+                "hotWith": 29,
+                "sellersWithMatchesWithout": 6,
+                "sellersLosingAllMatches": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "rolledBack": {
+      "result": {
+        "dryRun": false,
+        "includeTestBuyers": true,
+        "sellers": 6,
+        "buyers": 5,
+        "demandExcludedNoLocation": 0,
+        "pairs": 30,
+        "eligible": 30,
+        "dismissed": 0,
+        "ineligibleByReason": {},
+        "kept": 30,
+        "sellersCovered": 6,
+        "inserted": 0,
+        "updated": 30,
+        "deleted": 0,
+        "tiers": {
+          "HOT": 30
+        },
+        "confidence": {
+          "LOW": 30
+        },
+        "topUnknownFactors": {
+          "price": 30,
+          "carryingReasonableness": 30,
+          "highEquity": 30,
+          "freeAndClear": 30,
+          "goldenHandcuff": 30
+        },
+        "ourEstimates": {
+          "rolledBack": true,
+          "reasons": [
+            "hot_halved",
+            "sellers_lost_matches"
+          ],
+          "sellersPricedByOurValue": 6,
+          "hotWithout": 30,
+          "hotWith": 0,
+          "sellersWithMatchesWithout": 6,
+          "sellersLosingAllMatches": 6
+        }
+      },
+      "error": null,
+      "writes": [
+        {
+          "op": "match.upsert",
+          "args": [
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":85,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":5,\"beds\":44,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":22,\"tenure\":12,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":85,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":5,\"beds\":44,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":22,\"tenure\":12,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}",
+            "{\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"]}"
+          ]
+        },
+        {
+          "op": "match.deleteStale",
+          "args": []
+        },
+        {
+          "op": "auditLog.create",
+          "args": {
+            "organizationId": "org-test",
+            "action": "VALUATION_SWITCH_ROLLBACK",
+            "detailsJson": {
+              "rolledBack": true,
+              "reasons": [
+                "hot_halved",
+                "sellers_lost_matches"
+              ],
+              "sellersPricedByOurValue": 6,
+              "hotWithout": 30,
+              "hotWith": 0,
+              "sellersWithMatchesWithout": 6,
+              "sellersLosingAllMatches": 6
+            }
+          }
+        },
+        {
+          "op": "featureFlag.updateMany",
+          "args": {
+            "where": {
+              "id": "USE_OUR_ESTIMATES"
+            },
+            "data": {
+              "enabled": false
+            }
+          }
+        },
+        {
+          "op": "auditLog.create",
+          "args": {
+            "organizationId": "org-test",
+            "action": "NIGHTLY_SCORING",
+            "detailsJson": {
+              "dryRun": false,
+              "includeTestBuyers": true,
+              "sellers": 6,
+              "buyers": 5,
+              "demandExcludedNoLocation": 0,
+              "pairs": 30,
+              "eligible": 30,
+              "dismissed": 0,
+              "ineligibleByReason": {},
+              "kept": 30,
+              "sellersCovered": 6,
+              "inserted": 0,
+              "updated": 30,
+              "deleted": 0,
+              "tiers": {
+                "HOT": 30
+              },
+              "confidence": {
+                "LOW": 30
+              },
+              "topUnknownFactors": {
+                "price": 30,
+                "carryingReasonableness": 30,
+                "highEquity": 30,
+                "freeAndClear": 30,
+                "goldenHandcuff": 30
+              },
+              "ourEstimates": {
+                "rolledBack": true,
+                "reasons": [
+                  "hot_halved",
+                  "sellers_lost_matches"
+                ],
+                "sellersPricedByOurValue": 6,
+                "hotWithout": 30,
+                "hotWith": 0,
+                "sellersWithMatchesWithout": 6,
+                "sellersLosingAllMatches": 6
+              }
+            }
+          }
+        }
+      ]
+    },
+    "dry": {
+      "result": {
+        "dryRun": true,
+        "includeTestBuyers": true,
+        "sellers": 6,
+        "buyers": 5,
+        "demandExcludedNoLocation": 0,
+        "pairs": 30,
+        "eligible": 30,
+        "dismissed": 0,
+        "ineligibleByReason": {},
+        "kept": 30,
+        "sellersCovered": 6,
+        "inserted": 0,
+        "updated": 0,
+        "deleted": 0,
+        "tiers": {
+          "HOT": 30
+        },
+        "confidence": {
+          "LOW": 30
+        },
+        "topUnknownFactors": {
+          "price": 30,
+          "carryingReasonableness": 30,
+          "highEquity": 30,
+          "freeAndClear": 30,
+          "goldenHandcuff": 30
+        }
+      },
+      "error": null,
+      "writes": []
+    }
+  },
+  "matchTable": [
+    "{\"id\":\"old-elsewhere-01-buyer-a\",\"organizationId\":\"org-other\",\"opportunityId\":\"elsewhere-01\",\"opportunityType\":\"contact\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":61,\"tier\":\"POSSIBLE\",\"reason\":\"an earlier night\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":40},\"unknownFactors\":[],\"seen\":true,\"createdAt\":\"2026-10-10T09:00:00.000Z\"}",
+    "{\"id\":\"old-eo-listing-1-seller-03\",\"organizationId\":\"org-test\",\"opportunityId\":\"eo-listing-1\",\"opportunityType\":\"opportunity\",\"counterpartId\":\"seller-03\",\"counterpartType\":\"mojo\",\"score\":61,\"tier\":\"POSSIBLE\",\"reason\":\"an earlier night\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":40},\"unknownFactors\":[],\"seen\":true,\"createdAt\":\"2026-10-10T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":85,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-00\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":5,\"beds\":44,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":22,\"tenure\":12,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"old-seller-01-buyer-a\",\"organizationId\":\"org-test\",\"opportunityId\":\"seller-01\",\"opportunityType\":\"contact\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"],\"seen\":true,\"createdAt\":\"2026-10-10T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-01\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-02\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":85,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":82,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":6,\"beds\":46,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":23,\"tenure\":13,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-03\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":83,\"tier\":\"HOT\",\"reason\":\"Bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":5,\"beds\":44,\"baths\":2,\"propertyType\":4,\"outdoorSpace\":2,\"buildingAmenity\":2,\"absenteeOwner\":22,\"tenure\":12,\"substitutionScarcity\":3,\"buyerArchetypeSituation\":4},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-04\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":95,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\",\"buyerArchetypeSituation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-b\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-c\",\"counterpartType\":\"opportunity\",\"score\":93,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":40,\"beds\":29,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":15,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":0},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-d\",\"counterpartType\":\"opportunity\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"NEW\",\"opportunityId\":\"seller-05\",\"counterpartId\":\"buyer-mojo\",\"counterpartType\":\"mojo\",\"score\":94,\"tier\":\"HOT\",\"reason\":\"Right neighborhood, bedroom count\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"LOW\",\"contributions\":{\"neighborhood\":39,\"beds\":28,\"baths\":1,\"propertyType\":3,\"outdoorSpace\":1,\"buildingAmenity\":1,\"absenteeOwner\":14,\"tenure\":8,\"substitutionScarcity\":2,\"buyerArchetypeSituation\":3},\"unknownFactors\":[\"price\",\"carryingReasonableness\",\"highEquity\",\"freeAndClear\",\"goldenHandcuff\",\"vacancy\",\"preForeclosure\",\"foreclosureUrgency\",\"sourceListMotivation\"],\"organizationId\":\"org-test\",\"opportunityType\":\"contact\",\"seen\":false,\"createdAt\":\"2026-10-19T09:00:00.000Z\"}",
+    "{\"id\":\"old-seller-test-buyer-a\",\"organizationId\":\"org-test\",\"opportunityId\":\"seller-test\",\"opportunityType\":\"contact\",\"counterpartId\":\"buyer-a\",\"counterpartType\":\"opportunity\",\"score\":61,\"tier\":\"POSSIBLE\",\"reason\":\"an earlier night\",\"captureStatus\":\"EXTERNAL_BOTH\",\"matchFitConfidence\":\"MEDIUM\",\"contributions\":{\"neighborhood\":40},\"unknownFactors\":[],\"seen\":true,\"createdAt\":\"2026-10-10T09:00:00.000Z\"}"
+  ],
+  "switchAfter": [
+    {
+      "id": "USE_OUR_ESTIMATES",
+      "enabled": false
+    }
+  ]
+}

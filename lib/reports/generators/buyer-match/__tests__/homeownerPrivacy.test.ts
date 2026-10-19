@@ -1,7 +1,10 @@
 // Brief 41 (H7) — a homeowner (CRM/Mojo seller) never shows up in a buyer-facing
 // report or an outreach draft with our estimated value, their name, or seller
-// circumstances (distress, equity, absentee, lead lists). Pure: the real report
-// loader and sections run on a stand-in for Prisma, no DB.
+// circumstances (distress, equity, absentee, lead lists). Brief 43 PR 3b
+// [Ryan, 2026-10-19]: nor with their street address until they have agreed to
+// sell (the CRM's ryan_listing tag; homeownerNoAddress.unit.test.ts has that
+// case): the home is described by area and type. Pure: the real report loader
+// and sections run on a stand-in for Prisma, no DB. Fictional addresses only.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Category } from '@prisma/client'
@@ -21,8 +24,9 @@ import { makeListing, makeBuyer, makeContext } from '../../../../matching/__test
 import type { MatchFitResult } from '../../../../matching/scorerTypes'
 
 const HOMEOWNER = {
-  id: 'mc1', fullName: 'Jane Q Homeowner', address: '361 Degraw St', neighborhood: 'Carroll Gardens',
+  id: 'mc1', fullName: 'Jane Q Homeowner', address: '88 Example Ave', neighborhood: 'Carroll Gardens',
   estimatedValue: 1_840_000, propertyBeds: 6, buildingSqft: 2800, priorListingBrokerage: null,
+  propertyTypeDetail: 'Townhouse', unitCount: 1, tags: ['seller'],
 }
 const NO_ADDRESS = { ...HOMEOWNER, id: 'mc2', address: null }
 const BUYER = {
@@ -51,6 +55,7 @@ const prisma = {
 
 const FORBIDDEN: Array<[string, RegExp]> = [
   ['homeowner name', /Jane|Q Homeowner/],
+  ['street address', /Example Ave|\b88 Example/i], // [Ryan, 2026-10-19]
   ['estimated value', /1,?840,?000|1\.84\s?M|\$1\.84|\b657\b/i], // 657 = estimate per square foot
   ['seller circumstances', new RegExp([
     'preForeclosure', 'highEquity', 'absenteeOwner', 'freeAndClear', 'goldenHandcuff', 'sourceListMotivation', 'foreclosureUrgency',
@@ -62,12 +67,15 @@ function assertClean(label: string, text: string) {
   for (const [what, re] of FORBIDDEN) assert.doesNotMatch(text, re, `${label} leaks ${what}`)
 }
 
-test('the Buyer Match report shows no homeowner name, no estimate and no seller circumstances', async () => {
+test('the Buyer Match report shows no homeowner name, no street address, no estimate and no seller circumstances', async () => {
   const ctx = await gatherContext({ buyerId: 'b1', prisma })
   const listings = await ctx.matches()
   assert.equal(listings.length, MATCHES.length)
   assert.ok(listings.every(l => l.listing.isHomeowner && l.listing.price === null))
-  assert.equal(listings.find(l => l.listing.id === 'mc2')?.listing.extractedTitle, 'Homeowner in Carroll Gardens')
+  for (const id of ['mc1', 'mc2']) {
+    const l = listings.find(m => m.listing.id === id)?.listing
+    assert.deepEqual([l?.address, l?.extractedTitle], [null, 'Townhouse in Carroll Gardens'], id)
+  }
 
   const curated = await curatedMatchesSection(ctx)
   const near = await nearMissesSection(ctx)
@@ -75,7 +83,8 @@ test('the Buyer Match report shows no homeowner name, no estimate and no seller 
   for (const [label, section] of [['curated', curated], ['near-misses', near], ['budget', budget]] as const) {
     assertClean(label, JSON.stringify(section.content))
   }
-  assert.equal(curated.content.items?.[0].address, '361 Degraw St')
+  assert.equal(curated.content.items?.[0].address, 'Townhouse in Carroll Gardens') // area and type, not the address
+  assert.equal(curated.content.items?.[0].priceLabel, 'price on request')
   // An older row's raw keys have no direction: neutral words, never "in budget".
   assert.equal(curated.content.items?.[0].fit, 'Matched on bedrooms')
 
@@ -89,7 +98,7 @@ test('the Buyer Match report shows no homeowner name, no estimate and no seller 
   assertClean('recommendation prompt', sent[0])
 })
 
-test('an outreach draft prompt for a homeowner has the address, no name, no estimate, no circumstances', async () => {
+test('an outreach draft prompt for a homeowner has area and type, no address, no name, no estimate, no circumstances', async () => {
   for (const id of ['mc1', 'mc2']) {
     const supply = await resolveSupply(prisma, id, 'contact')
     assert.ok(supply)
@@ -103,7 +112,7 @@ test('an outreach draft prompt for a homeowner has the address, no name, no esti
         matchReason: m.reason,
       })
       assertClean(`draft ${id}/${m.id}`, prompt)
-      assert.match(prompt, id === 'mc1' ? /Property: 361 Degraw St/ : /Property: Homeowner in Carroll Gardens/)
+      assert.match(prompt, /Property: Townhouse in Carroll Gardens · 6BR · price on request/)
       assert.match(prompt, /price on request/)
     }
   }
@@ -142,7 +151,7 @@ test('a homeowner our estimate puts over budget: no "in budget", no defaults nam
   // As synced today (no estimate at all).
   assert.match(nightlyReason(crmSeller({ price: null }), buyer()), /^Right neighborhood, bedroom count$/)
   // An expired listing's last asking price inside the budget: the report shows
-  // "off-market, price not set", so the reason doesn't say "in budget" either.
+  // "price on request", so the reason doesn't say "in budget" either.
   const expired = nightlyReason(crmSeller({ price: null, priorListingStatus: 'EXPIRED', priorListingPrice: 1_800_000 }), buyer())
   assert.doesNotMatch(expired, NOT_ASKED_OR_ESTIMATE)
 })

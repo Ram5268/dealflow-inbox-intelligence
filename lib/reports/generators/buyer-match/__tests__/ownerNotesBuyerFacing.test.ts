@@ -8,8 +8,9 @@
 // never shows it, with or without an address. No matcher puts a lead or a
 // client conversation on a match's supply side (ownerNotesNeverSupply.test.ts),
 // so the report rows here are the old or odd rows the report guards against:
-// it shows them exactly like a homeowner. Pure: the real adapter, scorer,
-// report loader and sections, on a stand-in for Prisma.
+// it shows them exactly like a homeowner, so (Brief 43 PR 3b, [Ryan,
+// 2026-10-19]) by area and type, never the street address. Pure: the real
+// adapter, scorer, report loader and sections, on a stand-in for Prisma.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Category } from '@prisma/client'
@@ -18,7 +19,7 @@ import { EXTRACTION_SPEC_BY_CATEGORY } from '../../../../extraction/schemas'
 import { opportunityToListingData } from '../../../../matching/adapters'
 import { scorePair } from '../../../../matching/scorer'
 import { reasonOf } from '../../../../matching/nightly/select'
-import { plainFitReason, homeownerTitle, GENERIC_FIT_REASON } from '../../../../matching/fitReason'
+import { plainFitReason, GENERIC_FIT_REASON } from '../../../../matching/fitReason'
 import { makeBuyer, makeContext } from '../../../../matching/__tests__/fixtures'
 import { gatherContext } from '../context'
 import { curatedMatchesSection, HOMEOWNER_PRICE_LABEL } from '../sections/curated-matches'
@@ -50,6 +51,8 @@ const saved = {
 // Never in buyer-facing text: the seller's circumstances, the seller's price
 // or source, the referring agent.
 const FORBIDDEN = /(?<!real )estate|executor|probate|inherit|divorc|passed|died|hospice|1,900,000|1\.9\s?m|\$1\.9|Example Realty|Referring Agent/i
+// [Ryan, 2026-10-19]: nor the lead's street address.
+const ADDRESS = /12 Example St|Example St/i
 
 const spec = EXTRACTION_SPEC_BY_CATEGORY.SELLER_LEAD!
 const mapped = spec.mapItem((spec.responseSchema.parse({ leads: [answer] }) as { leads: unknown[] }).leads[0], { subject: 's', senderName: null, senderEmail: null })
@@ -138,7 +141,7 @@ const prisma = {
   match: { findMany: async () => MATCHES },
 } as unknown as PrismaClient
 
-test('a Buyer Match report shows those rows exactly like a homeowner, with or without an address', async () => {
+test('a Buyer Match report shows those rows exactly like a homeowner (area and type), with or without an address', async () => {
   const ctx = await gatherContext({ buyerId: BUYER.id, prisma })
   const curated = (await curatedMatchesSection(ctx)).content.items!
   const near = (await nearMissesSection(ctx)).content.items!
@@ -149,11 +152,10 @@ test('a Buyer Match report shows those rows exactly like a homeowner, with or wi
     assert.deepEqual([i.price, i.priceLabel, i.source], [null, HOMEOWNER_PRICE_LABEL, 'off-market seller'], id)
     assert.equal(i.fit ?? i.why, plainFitReason(fitWas, { homeowner: true }), id)
   }
-  homeowner('lead-addr', '12 Example St', MATCHES[0].reason)
-  homeowner('lead-no-addr', homeownerTitle(null, 'Park Slope'), MATCHES[1].reason)
-  homeowner('landlord-no-addr', 'Homeowner in Bushwick', MATCHES[2].reason)
-  homeowner('conversation-no-addr', 'Homeowner', MATCHES[3].reason)
-  assert.equal(byId.get('lead-no-addr')!.address, 'Homeowner in Park Slope')
+  homeowner('lead-addr', 'Townhouse in Park Slope', MATCHES[0].reason) // the lead's address is never shown
+  homeowner('lead-no-addr', 'Townhouse in Park Slope', MATCHES[1].reason)
+  homeowner('landlord-no-addr', 'Townhouse in Bushwick', MATCHES[2].reason)
+  homeowner('conversation-no-addr', 'Townhouse in Brooklyn', MATCHES[3].reason) // no neighborhood: the borough
   assert.equal(byId.get('lead-no-addr')!.fit, GENERIC_FIT_REASON)
   assert.equal(byId.get('landlord-no-addr')!.why, 'Matched on neighborhood, bedrooms') // never price for a homeowner
   // An ordinary listing is shown as before: its title when there's no address, its price and source.
@@ -171,11 +173,14 @@ test('the whole report (every section, the markdown, the AI-written recommendati
   const report = await generateBuyerMatchReport({ buyerId: BUYER.id, prisma, anthropic: anthropic as never })
   assert.equal(report.sections.length, 8)
   assert.equal(report.matchCount, 3)
-  assert.doesNotMatch(report.markdown, FORBIDDEN)
-  assert.doesNotMatch(JSON.stringify(report.sections), FORBIDDEN)
+  for (const re of [FORBIDDEN, ADDRESS]) {
+    assert.doesNotMatch(report.markdown, re)
+    assert.doesNotMatch(JSON.stringify(report.sections), re)
+  }
   assert.equal(sent.length, 1)
   assert.doesNotMatch(sent[0], FORBIDDEN)
-  assert.match(report.markdown, /Homeowner in Park Slope \(off-market, price not set\)/)
+  assert.doesNotMatch(sent[0], ADDRESS)
+  assert.match(report.markdown, /Townhouse in Park Slope \(price on request\)/)
   // Price per square foot comes from the ordinary listing alone ($1.75M / 2,400 SF).
   const budget = report.sections.find(s => s.key === 'budget-reality')!
   assert.equal(budget.content.metrics![0].value, '$729')

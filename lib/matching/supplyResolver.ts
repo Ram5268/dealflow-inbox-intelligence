@@ -33,6 +33,14 @@ export interface ResolvedSupply {
   sourceBrokerage: string | null
   sourceAgentName: string | null
   availabilityDate: string | null
+  // Brief 43 PR 3b [Ryan, 2026-10-19]: what buyer-facing text needs to describe
+  // a homeowner's home by area and type (lib/buyerFacingSupply.ts), and whether
+  // its street address may be shown at all: only once the homeowner has agreed
+  // to sell, which today means the CRM's ryan_listing tag (Ryan's own listing).
+  // Always false for an ExtractedOpportunity.
+  agreedToSell: boolean
+  propertyTypeText: string | null // MojoContact.propertyTypeDetail, ExtractedOpportunity.propertyType
+  unitCount: number | null // MojoContact.unitCount, ExtractedOpportunity.units
 }
 
 interface MatchRef {
@@ -58,6 +66,7 @@ export async function resolveSupplies(
         id: true, category: true, address: true, neighborhood: true, borough: true,
         price: true, minPrice: true, maxPrice: true, beds: true, squareFeet: true,
         extractedTitle: true, sourceBrokerage: true, sourceAgentName: true, availabilityDate: true,
+        propertyType: true, units: true,
       },
     })
     for (const o of opps) {
@@ -77,6 +86,9 @@ export async function resolveSupplies(
         sourceBrokerage: o.sourceBrokerage,
         sourceAgentName: o.sourceAgentName,
         availabilityDate: o.availabilityDate,
+        agreedToSell: false,
+        propertyTypeText: o.propertyType ?? null,
+        unitCount: o.units ?? null,
       })
     }
   }
@@ -87,6 +99,7 @@ export async function resolveSupplies(
       select: {
         id: true, address: true, neighborhood: true,
         propertyBeds: true, buildingSqft: true, priorListingBrokerage: true,
+        propertyTypeDetail: true, unitCount: true, tags: true,
       },
     })
     for (const c of contacts) {
@@ -107,6 +120,11 @@ export async function resolveSupplies(
         sourceBrokerage: c.priorListingBrokerage,
         sourceAgentName: null,
         availabilityDate: null,
+        // The tag is only read, as nightly scoring reads it (ryanOwnedListingIds,
+        // lib/matching/nightly/runScoring.ts). Missing tags count as not agreed.
+        agreedToSell: (c.tags ?? []).includes('ryan_listing'),
+        propertyTypeText: c.propertyTypeDetail ?? null,
+        unitCount: c.unitCount ?? null,
       })
     }
   }
