@@ -13,7 +13,6 @@ import { isMatchingTestModeOnly } from './config/matchingTestMode'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
 import { sendPushToAll } from './pushNotifications'
 import { maybeFireHotAlert } from './push/hotAlert'
-import { formatPriceRange } from './utils'
 import { checkStreetEasyStatuses } from './streetEasyStatus'
 import { Category, MatchTier, TransactionType } from '@prisma/client'
 import type { ValidationFlag } from './ingestion/types'
@@ -72,19 +71,6 @@ async function runEngineMatches(
     }
   }
   return { total, highConfidence }
-}
-
-// Brief 7.4 — resolve a HOT match's counterpart display name for the push body.
-async function hotPartyName(counterpartType: string, counterpartId: string): Promise<string | null> {
-  if (counterpartType === 'mojo') {
-    const c = await prisma.mojoContact.findUnique({ where: { id: counterpartId }, select: { fullName: true } })
-    return c?.fullName ?? null
-  }
-  if (counterpartType === 'opportunity') {
-    const c = await prisma.extractedOpportunity.findUnique({ where: { id: counterpartId }, select: { sourceAgentName: true, extractedTitle: true } })
-    return c ? (c.sourceAgentName ?? c.extractedTitle) : null
-  }
-  return null
 }
 
 async function isFeatureFlagEnabled(id: string): Promise<boolean> {
@@ -454,9 +440,8 @@ export async function runIncrementalSync(): Promise<{
     // may be an ExtractedOpportunity or a MojoContact seller.
     const opp = topHot ? await resolveSupply(prisma, topHot.opportunityId, topHot.opportunityType) : null
     if (topHot && opp) {
-      const partyName = await hotPartyName(topHot.counterpartType, topHot.counterpartId)
-      const listingLabel = [opp.address ?? opp.extractedTitle, formatPriceRange(opp.minPrice, opp.maxPrice, opp.price), opp.neighborhood].filter(Boolean).join(' ').trim()
-      await maybeFireHotAlert({ organizationId, matchId: topHot.id, partyName: partyName ?? 'New match', listingLabel }).catch(() => {})
+      // Brief 48 (PR 5): the alert's text is a count, so no name or address is looked up.
+      await maybeFireHotAlert({ organizationId, matchId: topHot.id }).catch(() => {})
     }
 
     // Check StreetEasy status on existing listings (background, non-blocking)

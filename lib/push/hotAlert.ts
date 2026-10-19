@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { sendPushToOrg } from '@/lib/push/send'
+import { hotAlertText } from '@/lib/push/digestText'
 
 // Brief 7.4 (A.2) — realtime push the moment a HOT match lands.
 //
@@ -11,14 +12,17 @@ import { sendPushToOrg } from '@/lib/push/send'
 //
 // Overflow past the hourly cap is dropped from realtime and rolls into the next
 // morning digest (which re-queries top matches from scratch).
+//
+// Brief 48 (PR 5): the text is a count, never a buyer's or homeowner's name or an
+// address [planner, Brief 48 §3 PR 5], so callers pass only the organization and the
+// match. The match id is only in the link. It fires only from the email intake,
+// which is paused [Ryan, 2026-09-24].
 
 const REALTIME_CAP_PER_HOUR = 5
 
 export interface HotAlertInput {
   organizationId: string
   matchId: string
-  partyName: string
-  listingLabel: string   // e.g. "245 W 20th $1.85M · Chelsea"
 }
 
 async function realtimeEnabled(organizationId: string): Promise<boolean> {
@@ -54,9 +58,8 @@ export async function maybeFireHotAlert(input: HotAlertInput): Promise<boolean> 
     }
 
     const delivered = await sendPushToOrg(input.organizationId, {
-      title: '🔴 New Hot match',
-      body:  `${input.partyName} ↔ ${input.listingLabel}`,
-      url:   `/matches?m=${input.matchId}`,
+      ...hotAlertText(),
+      url: `/matches?m=${input.matchId}`,
     })
 
     await prisma.auditLog.create({
