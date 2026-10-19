@@ -23,7 +23,7 @@ function stripMarkup(s: string): string {
   return s
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/[ \t]*\[DEAL:[^\]]+\]/g, '')
+    .replace(/[ \t]{0,8}\[DEAL:[^\]]+\]/g, '') // bounded: an unbounded [ \t]* is quadratic on a long run of spaces
 }
 
 // The model's (or a stored row's) draft, made safe to use: a non-empty body,

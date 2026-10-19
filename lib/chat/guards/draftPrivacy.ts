@@ -248,13 +248,17 @@ const isListingPrice = (v: number | null, prices: number[]) => v != null && pric
 const SPELLED = '(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty)'
 const PRICE_HINT = new RegExp([
   `\\b${SPELLED}(?:[ \\t-]+(?:point[ \\t]+${SPELLED}|and[ \\t]+a[ \\t]+half))?[ \\t]+(?:million|mil)\\b`,
-  '(?<!thanks )\\b(?:half a|a)[ \\t]+million\\b',
+  // Not "thanks a million", "one in a million", "a million thanks/times/reasons".
+  '(?<!thanks |in )\\b(?:half a|a)[ \\t]+million\\b(?![ \\t]{1,3}(?:thanks|times|reasons|questions|ways|things))',
   "\\b(?:low|mid|high|upper)[ \\t-]+(?:\\$?(?:\\d(?:\\.\\d+)?|\\d{3})[mk]?['’]?s|ones|twos|threes|fours|fives|sixes|sevens|eights|nines|tens)\\b",
   '\\b(?:six|seven|eight)[ \\t-]+figures?\\b',
 ].join('|'), 'gi')
 // "around 2.1" or "about 2" with no unit after it ("around 2 blocks", "about 3
 // beds" and "around 2pm" aren't), counted only in a sentence about the price.
 const BARE_FIGURE = /\b(?:around|about|roughly|approximately|approx\.?|maybe|close to|north of|south of|upwards of|at least|over|under|near)[ \t]+\d{1,2}(?:\.\d{1,2})?(?!\d|[.,]\d|[ \t]{0,3}(?:%|percent|[A-Za-z]))/gi
+// Review r2: a whole hour with words about meeting ("free around 5", "talk about
+// selling, maybe around 4?") is a time, not a price; a decimal ("around 2.1") still counts.
+const TIME_WORD = /\b(?:free|meet|call|talk|chat|speak|available|time|today|tonight|tomorrow|morning|afternoon|evening|o['’]?clock|monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekend|week)\b/i
 const PRICE_WORD = /\b(?:worth|take|accept\w*|bids?|valu\w*|price\w*|sell\w*|sale|sold|go(?:es|ing)? for|fetch\w*|get for|list\w*|asking|ask|offers?|market|trade\w*|apprais\w*|number)\b/i
 // The sentence around a match (at most 200 characters each way, so it stays linear).
 function sentenceAround(text: string, at: number, len: number): string {
@@ -405,7 +409,9 @@ function scan(text: string, audience: DraftAudience, p: Prepared, homeowner: boo
   if (audience === 'homeowner' || homeowner) {
     all('homeowner_price', PRICE_HINT)
     for (const m of text.matchAll(BARE_FIGURE)) {
-      if (PRICE_WORD.test(sentenceAround(text, m.index ?? 0, m[0].length))) hits.push({ kind: 'homeowner_price', match: m[0].trim(), index: m.index ?? 0 })
+      const sentence = sentenceAround(text, m.index ?? 0, m[0].length)
+      const hour = /^\D*(?:[1-9]|1[0-2])$/.test(m[0].trim()) && TIME_WORD.test(sentence)
+      if (!hour && PRICE_WORD.test(sentence)) hits.push({ kind: 'homeowner_price', match: m[0].trim(), index: m.index ?? 0 })
     }
   }
   all('seller_circumstance', CIRCUMSTANCES)

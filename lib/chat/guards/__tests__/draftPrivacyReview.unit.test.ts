@@ -217,3 +217,26 @@ test('a reply that addresses Ryan by name is not lifted as a draft', () => {
   assert.ok(liftInlineDraft('Hi, this is Ryan Martin. Would you ever consider selling? Thanks, Ryan'))
   assert.ok(liftInlineDraft('Hi Jordan, a 3-family in Bed-Stuy may suit your buyer. Ryan Martin'))
 })
+
+// ── Review r2 ────────────────────────────────────────────────────────────────
+test('a meeting time or a million idiom in a text to the homeowner is not a price hint', () => {
+  const owner = (s: string): Draft => ({ channel: 'text', audience: 'homeowner', body: `Hi, this is Ryan Martin. ${s} Thanks, Ryan Martin` })
+  for (const s of [
+    'If you ever want to talk about the market, I am free around 5.',
+    'Would you have time to talk about selling, maybe around 4?',
+    'Homes like yours are one in a million in this market.',
+    'It would be a million thanks if you called back.',
+  ]) {
+    assert.ok(!kinds(owner(s), NONE).includes('homeowner_price'), s)
+  }
+  // A decimal, or a whole number with no meeting words, still counts.
+  for (const s of ['Happy to talk; I think it would sell for around 2.1.', 'The owner would take about 2, maybe less.', 'It could fetch around a million.']) {
+    assert.ok(kinds(owner(s), NONE).includes('homeowner_price'), s)
+  }
+})
+
+test('stripping [DEAL:] tags stays fast on a long run of spaces', () => {
+  const t0 = Date.now()
+  enforceDraftPrivacy({ draft: { channel: 'text', audience: 'other', body: `Hi,${' '.repeat(40_000)}x [DEAL:SEED_SALE_06]` }, response: 'ok', ctx: NONE })
+  assert.ok(Date.now() - t0 < 500, `took ${Date.now() - t0} ms`)
+})
