@@ -6,7 +6,7 @@
 // DriftInteraction.parsedFilters.guard. The actual API orchestration lives in
 // the route (it needs the live Anthropic client + systemBlocks closures).
 import type { RegexFlag } from './regexGuard'
-import type { VerifierFlag } from './llmVerifier'
+import type { VerifierFlag, VerifierResult } from './llmVerifier'
 
 // total attempts = 1 initial + MAX_GUARD_RETRIES informed retries.
 export const MAX_GUARD_RETRIES = 2
@@ -94,6 +94,23 @@ export function repeatedActionClaim(history: Array<Pick<GuardAttempt, 'regexFlag
   const claims = (a: Pick<GuardAttempt, 'regexFlags'>) => a.regexFlags.some(f => f.pattern === 'action_claim')
   if (history.length < 2 || !claims(history[history.length - 1])) return false
   return history.slice(0, -1).some(claims)
+}
+
+/**
+ * Brief 43 PR 2 — true when this attempt's regex flags make it a repeated
+ * action claim. The reply then becomes NEVER_SENT_REPLY whatever the fact-check
+ * says, so the route skips that (paid) verifier call.
+ */
+export function skipVerifierForRepeatClaim(
+  history: Array<Pick<GuardAttempt, 'regexFlags'>>,
+  regexFlags: RegexFlag[],
+): boolean {
+  return repeatedActionClaim([...history, { regexFlags }])
+}
+
+/** What the guard records for an attempt whose fact-check was skipped (no flags, no cost). */
+export function skippedVerification(): VerifierResult {
+  return { isGrounded: false, flags: [], costUsd: 0, latencyMs: 0 }
 }
 
 // Stored under parsedFilters.guard — Ryan reads this in production to see

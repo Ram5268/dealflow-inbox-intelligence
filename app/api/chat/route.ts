@@ -25,6 +25,8 @@ import {
   MAX_GUARD_RETRIES,
   selectCannedFallback,
   repeatedActionClaim,
+  skipVerifierForRepeatClaim,
+  skippedVerification,
   buildFeedbackPrompt,
   formatFlagLines,
   type GuardAttempt,
@@ -629,7 +631,11 @@ export async function POST(req: NextRequest) {
           scanForStructuralHallucinations(currentResponse, { userMessage }),
           groundingCorpus,
         )
-        const verifier = await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
+        // Brief 43 PR 2: a repeated action claim gets NEVER_SENT_REPLY whatever
+        // the fact-check says, so skip that paid call.
+        const verifier = skipVerifierForRepeatClaim(guardHistory, regexFlags)
+          ? skippedVerification()
+          : await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
         if (regexFlags.length === 0 && verifier.isGrounded) break
 

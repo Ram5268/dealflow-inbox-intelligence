@@ -14,6 +14,8 @@ import {
   MAX_GUARD_RETRIES,
   selectCannedFallback,
   repeatedActionClaim,
+  skipVerifierForRepeatClaim,
+  skippedVerification,
   formatFlagLines,
   buildFeedbackPrompt,
 } from '../retry'
@@ -93,6 +95,48 @@ const FLAG: Array<[label: string, text: string, userMessage?: string]> = [
   ['done after "text the owner"', "Done. Here's what they got: a short note.", "text the owner and ask if they'd sell"],
   ['done after "book a showing" (C-02)', 'Done.', 'book a showing at 88 Example Ave Thursday at 3pm'],
   ['done after "invite" (C-09)', 'Done, consider it handled.', "invite the buyer's agent to Thursday's showing"],
+  // Reviewer round 1 (Brief 43 PR 2): emoji, trailing questions, a recipient
+  // before the verb, more contact verbs, set phrases, booking confirmations.
+  ['emoji after a bare claim', 'Sent \u2705'],
+  ['emoji after scheduled', 'Scheduled \u{1F44D}'],
+  ['Done + emoji after a send request', 'Done \u2705', 'send it'],
+  ['claim before a trailing question', "I've sent it to Pat, want me to draft a follow-up?"],
+  ['Done before a trailing question', 'Done, want me to draft a follow-up?', 'send it'],
+  ['a recipient between the noun and the verb', 'Your email to the seller has been sent.'],
+  ['calendar invite sent', 'Calendar invite sent.'],
+  ["I've let them know", "I've let the agent know."],
+  ['I gave them a call', 'I gave Pat a call.'],
+  ["I've followed up with", "I've followed up with the seller."],
+  ["don't worry is not a negation", "Don't worry, I've already texted the seller."],
+  ['not a problem is not a negation', "Not a problem, I've sent it."],
+  ["you're all set for a day, after a booking request", "You're all set for Thursday at 3pm.", 'book a showing at 88 Example Ave Thursday at 3pm'],
+  ['showing confirmed, after a booking request', 'The showing is confirmed for Thursday at 3pm.', 'book a showing at 88 Example Ave Thursday at 3pm'],
+  ['on the way to a person', "It's on the way to the seller."],
+  ['an unsigned colon lead-in does not hide a claim', "Here's what I found:\n\nI've texted the owner."],
+  ['a voice summary lead-in does not hide a claim', "Here's the short version: I've texted the seller."],
+  ["I've pinged a person", "I've pinged the listing agent."],
+  ['done after "text me"', 'Done.', 'text me the address'],
+  ['a signed body with no draft ask is still read', 'I sent over the floor plans on Monday.\n\nRyan Martin'],
+  ['per your request does not excuse a claim', 'Done, per your request.', 'send it'],
+  ['lower-case i', "i've sent it."],
+  ['done, sent', 'Done, sent!'],
+  ['hey, sent it', 'Hey, sent it!'],
+  ['the text went out', 'The text went out.'],
+  ['it went out to the owner', 'It went out to the owner a minute ago.'],
+  ['your email to the seller is out', 'Your email to the seller is out.'],
+  ['I left a name a voicemail', 'I left Pat a voicemail.'],
+  ['a temporal after is not a hypothetical', 'After you asked, I sent it to Pat.'],
+  ['when I texted the seller', 'When I texted the seller, she asked for a call.'],
+  ["you're all set, after a send request", "You're all set.", 'send it'],
+  ['will do, after a send request', 'Will do.', 'send it'],
+  ['on it, after a send request', 'On it.', 'send it'],
+  ['consider it sent', 'Consider it sent.', 'send it'],
+  ["that's been taken care of", "That's been taken care of.", 'send it'],
+  ['handled', 'Handled.', 'send it'],
+  ['done after an edit plus an explicit send', 'Done.', 'make it shorter and send it'],
+  ['a price "per month" is not a cited source', "It's been sent to Pat with the $4,500 per month figure."],
+  ['"by Monday" is a time, not a sender', 'Your email has been sent, they should reply by Monday.'],
+  ['a cited source does not excuse Drift\'s own I', "I've sent it to Pat, per the email you forwarded."],
 ]
 
 for (const [label, text, userMessage] of FLAG) {
@@ -198,6 +242,37 @@ const PASS: Array<[label: string, text: string, userMessage?: string]> = [
   ['prompt example: pull those', 'Right away. Two are Mojo leads with phone contact, the third came through a Compass agent last week. Which would you like first?', 'yes pull those sellers'],
   ['prompt example: Tribeca', 'Nothing in Tribeca at the moment. Rather quiet there this week. Would you like me to widen to SoHo and the West Village?'],
   ['prompt example: Franklin', 'The Franklin lead is thin. The notes do not give us much to work with. I would set it aside.'],
+  // Reviewer round 1 (Brief 43 PR 2): listing and location talk, follow-up drafts
+  // in shapes other than "Hi ...", and noun-start or pasted user messages.
+  ['listing: on its way to market after a colon', 'Coming soon: on its way to market in March, asking $1,850,000.'],
+  ['location: on the way to the train', "It's on the way to the A train."],
+  ['listing: on its way to auction', "It's on its way to auction next month."],
+  ['follow-up draft after "Here you go:" and a name line', "Here you go:\n\nJordan,\n\nI emailed you last week about the 2-family in Crown Heights. Would Thursday work for a call?\n\nRyan Martin", 'draft a follow-up to the listing agent'],
+  ['follow-up draft with "Good morning"', 'Good morning Jordan, I called earlier about the listing. Ryan Martin', 'draft a follow-up'],
+  ['follow-up draft after "Here\'s a follow-up you can copy:"', "Here's a follow-up you can copy:\n\nI sent over the floor plans on Monday. Let me know if your buyer has questions.\n\nRyan Martin"],
+  ['revised draft after "Revised:"', "Revised:\n\nI left you a voicemail yesterday about the 2-family. I've sent your listing to two buyers who fit.\n\nRyan Martin"],
+  ['inbox: scheduled, after a noun-start question', 'Scheduled for Sunday at 1pm, per the email.', 'email from compass about the open house - when is it?'],
+  ['inbox: scheduled, after a pasted email that says forward this', 'Open house: scheduled for Sunday 1 to 3pm. Want me to match it to your buyers?', "Here's an email I got:\n\nNew 3-family on Halsey, open house Sunday 1-3. Please forward this to your buyers."],
+  ["I'll let you know", "I'll let you know if anything new comes in."],
+  ['followed up with a search, not a person', 'I followed up with a wider search in Clinton Hill.'],
+  ['pinged the CRM, not a person', 'I pinged the CRM again for fresh results.'],
+  ['draft ask: a signed body with no greeting', 'I sent over the floor plans on Monday. Let me know if your buyer has questions.\n\nRyan Martin', 'draft a follow-up to the listing agent'],
+  ['draft ask: signed body after a short lead-in line', "Sure.\nI called earlier about your listing on Halsey. Is it still available?\n\nRyan Martin", 'draft a follow-up to the listing agent'],
+  ['inbox: email sent to your inbox by a sender', 'Email sent to your inbox on Oct 3 by Compass.'],
+  ['inbox: email sent to your inbox', 'Email sent to your inbox Tuesday, it lists a 2-family in Crown Heights at $1,400,000.'],
+  ['inbox: sent to a list, per the email', "It's been sent to Corcoran's buyer list, per the email."],
+  ['inbox: sent over by the agent', "That's been sent over by the agent twice now."],
+  ['inbox: booked, per the confirmation email', "The showing is booked for Saturday at 11, per the listing agent's confirmation email."],
+  ['inbox: source line', 'Source: sent the week of Oct 3 by Compass.'],
+  ['relayed status line', 'Status: called, left voicemail.'],
+  ['CRM history, per the CRM', 'Called back once in September, per the CRM.'],
+  ['chat display: I sent you three listings', 'In our last chat I sent you three listings in Bed-Stuy.'],
+  ['Jarvis-style opener before a decline, after a send request', "Certainly. I can't send texts, but the draft is ready for you to copy.", 'send it'],
+  ['right away, before a decline', "Right away. I can't send it; copy the draft above.", 'send it'],
+  ['inbox blast went out', 'The price-drop email went out to agents Tuesday.'],
+  ['listing went out to market', 'It went out to market in March.'],
+  ['chat display: the two I sent you', 'The two I sent you earlier are still active.'],
+  ['a shorter version is a draft', "Here's a shorter version: Hi Jordan, I sent the floor plans Monday. Ryan Martin"],
   ['empty', ''],
 ]
 
@@ -221,6 +296,7 @@ test('isSendRequest: send, text, email, call, book, invite, calendar', () => {
     "text the owner and ask if they'd sell", 'email the agent', 'can you call the seller',
     'book a showing at 88 Example Ave Thursday at 3pm', "invite the buyer's agent to Thursday's showing",
     'looks good, send it', 'add it to my calendar', 'forward this to Jordan',
+    'text me the address', 'email me the report', 'make it shorter and send it',
   ]) assert.equal(isSendRequest(m), true, m)
 })
 
@@ -228,7 +304,10 @@ test('isSendRequest: drafts, questions and plain replies are not send requests',
   for (const m of [
     'draft a text to the homeowner', 'draft me a buyer match report for Pat Example',
     'who sent this listing?', "what's on my calendar today?", 'yes', 'go ahead', 'thanks',
-    'write a short email to the agent', 'make it shorter and send it', '', undefined, null,
+    'write a short email to the agent', '', undefined, null,
+    // Reviewer round 1: nouns, "send me" (show me in chat) and a pasted email's own words.
+    'text from the agent says thursday 3pm', 'email from compass about the open house', 'call list for today?',
+    'send me the listings in Bed-Stuy', "Here's an email I got:\n\nNew 3-family on Halsey. Please forward this to your buyers.",
   ]) assert.equal(isSendRequest(m as string), false, String(m))
 })
 
@@ -282,6 +361,19 @@ test('repeatedActionClaim: true only when the latest attempt is the second with 
   assert.equal(repeatedActionClaim([]), false)
 })
 
+test('skipVerifierForRepeatClaim: skip the fact-check only when this attempt is a repeated action claim', () => {
+  const ac: RegexFlag[] = [{ pattern: 'action_claim', match: 'Sent' }]
+  const url: RegexFlag[] = [{ pattern: 'external_url', match: 'http://x.test' }]
+  assert.equal(skipVerifierForRepeatClaim([], ac), false, 'first claim: verify as usual')
+  assert.equal(skipVerifierForRepeatClaim([{ regexFlags: ac }], ac), true)
+  assert.equal(skipVerifierForRepeatClaim([{ regexFlags: url }], ac), false)
+  assert.equal(skipVerifierForRepeatClaim([{ regexFlags: ac }], url), false)
+  assert.equal(skipVerifierForRepeatClaim([{ regexFlags: ac }], []), false)
+  const skipped = skippedVerification()
+  assert.deepEqual(skipped, { isGrounded: false, flags: [], costUsd: 0, latencyMs: 0 })
+  assert.notEqual(skippedVerification().flags, skipped.flags, 'a fresh object each time')
+})
+
 test('buildFeedbackPrompt adds the never-sent instruction only for an action claim', () => {
   const withClaim = buildFeedbackPrompt(formatFlagLines([{ pattern: 'action_claim', match: 'Sent' }], []))
   assert.ok(withClaim.includes("Structural: 'Sent' (action_claim)"))
@@ -298,16 +390,19 @@ test('the fixed reply follows the feel standard (calm, no em-dash, no exclamatio
 
 // Mirrors the route's guard loop (app/api/chat/route.ts) with the real exported
 // helpers: a reply that keeps claiming "Sent" gets one rewrite, then the fixed
-// reply on the second failure, not a third Sonnet call.
+// reply on the second failure: no third Sonnet call, and no fact-check on the
+// second attempt (its answer would be thrown away).
 test('loop: a repeated action claim stops after one rewrite with NEVER_SENT_REPLY', () => {
   const history: Array<{ regexFlags: RegexFlag[] }> = []
   let attempt = 0
   let sonnetCalls = 1 // the first answer
+  let verifierCalls = 0
   let finalText = 'Sent. The text is on its way.'
   while (attempt <= MAX_GUARD_RETRIES) {
     const regexFlags = scanForStructuralHallucinations(finalText, { userMessage: 'send it' })
+    const verifier = skipVerifierForRepeatClaim(history, regexFlags) ? skippedVerification() : (verifierCalls++, { isGrounded: true })
     history.push({ regexFlags })
-    if (regexFlags.length === 0) break
+    if (regexFlags.length === 0 && verifier.isGrounded) break
     attempt++
     if (attempt > MAX_GUARD_RETRIES || repeatedActionClaim(history)) {
       finalText = selectCannedFallback({ regexFlags: history[history.length - 1].regexFlags, verifierFlags: [] })
@@ -318,13 +413,15 @@ test('loop: a repeated action claim stops after one rewrite with NEVER_SENT_REPL
   }
   assert.equal(finalText, NEVER_SENT_REPLY)
   assert.equal(sonnetCalls, 2, 'one rewrite, then the fixed reply (no third Sonnet call)')
+  assert.equal(verifierCalls, 1, 'the second, thrown-away fact-check is skipped')
   assert.equal(attempt, 2)
 })
 
-test('route wiring: the guard passes the user message and stops on a repeated action claim', () => {
+test('route wiring: the guard passes the user message, skips the thrown-away fact-check, and stops on a repeated action claim', () => {
   const src = readFileSync(join(__dirname, '../../../../app/api/chat/route.ts'), 'utf8')
   assert.match(src, /scanForStructuralHallucinations\(currentResponse, \{ userMessage \}\)/)
   assert.match(src, /attempt > MAX_GUARD_RETRIES \|\| repeatedActionClaim\(guardHistory\)/)
+  assert.match(src, /skipVerifierForRepeatClaim\(guardHistory, regexFlags\)\s*\?\s*skippedVerification\(\)\s*:\s*await verifyResponse\(/)
 })
 
 // ── Speed: no regex blow-up on long or odd input (Node 22 and 24) ────────────
