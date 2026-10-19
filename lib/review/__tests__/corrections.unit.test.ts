@@ -1,7 +1,7 @@
 // Brief 48 (PR 3, items 4.7 and 4.16b): lib/review/corrections.ts, the Review
 // Queue's correction reader. It turns what was typed into the listing's column
 // types, refuses anything else with a message that names the field, treats an
-// empty box as "leave as is", and gives a new category a plain new title. Pure:
+// emptied box as "remove this value", and gives a new category a plain new title. Pure:
 // no database, no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -82,8 +82,12 @@ test('text is trimmed, must be text, and has a length limit', () => {
   refused({ extractedSummary: 'y'.repeat(4001) }, /^Summary /)
 })
 
-test('an empty box, or null, leaves that value as it is', () => {
-  assert.deepEqual(parsed({ price: '', address: '   ', beds: null, category: '', extractedTitle: ' ' }), {})
+test('an emptied box, or null, removes that value; title, summary and category can\'t be emptied', () => {
+  // The page sends only the boxes that were changed, and each starts out showing the current value.
+  assert.deepEqual(parsed({ price: '', address: '   ', beds: null }), { price: null, address: null, beds: null })
+  for (const field of ['category', 'extractedTitle', 'extractedSummary']) {
+    for (const typed of ['', ' ', null]) assert.match(refused({ [field]: typed }, /^(Category|Title|Summary) /), /can't be left empty/)
+  }
   assert.deepEqual(parsed({}), {})
   assert.deepEqual(parsed(null), {})
 })
@@ -149,4 +153,7 @@ test('a category change brings a new title unless the correction gives one', () 
   assert.deepEqual(listingChanges(current, { category: 'BUYER_ISO', extractedTitle: 'Given title' }), { category: 'BUYER_ISO', extractedTitle: 'Given title' })
   assert.deepEqual(listingChanges(current, { category: 'OFF_MARKET_SALE', price: 1_250_000 }), { category: 'OFF_MARKET_SALE', price: 1_250_000 })
   assert.deepEqual(listingChanges(current, { price: 1_250_000 }), { price: 1_250_000 })
+  // A removed address isn't put back in the new title: the neighborhood stands in.
+  assert.deepEqual(listingChanges(current, { category: 'ACTIVE_SALE_LISTING', address: null, beds: null }),
+    { category: 'ACTIVE_SALE_LISTING', address: null, beds: null, extractedTitle: 'Active Listing · Park Slope' })
 })

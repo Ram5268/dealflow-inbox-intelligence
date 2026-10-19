@@ -254,13 +254,23 @@ test('a field the Review Queue does not correct is refused, and nothing is writt
   }
 })
 
-test('an empty box leaves that value as it is', async () => {
+test('an emptied box removes that value (null, never an empty string), and the item records it', async () => {
   seed()
   const res = await patch({ id: ITEM, action: 'correct', corrections: { price: '', address: '   ', beds: '3' } })
   assert.equal(res.status, 200, JSON.stringify(res.body))
-  assert.equal(listing().price, 999_000)
-  assert.equal(listing().address, '88 Example Ave')
+  assert.equal(listing().price, null)
+  assert.equal(listing().address, null)
   assert.equal(listing().beds, 3)
+  assert.deepEqual(item().userCorrectedFields, { price: null, address: null, beds: 3 })
+})
+
+test('an emptied title is refused, and nothing is written', async () => {
+  seed()
+  const res = await patch({ id: ITEM, action: 'correct', corrections: { extractedTitle: '' } })
+  assert.equal(res.status, 400, JSON.stringify(res.body))
+  assertPlainMessage(res.body.error)
+  assert.deepEqual(log, [])
+  assert.equal(item().status, 'pending')
 })
 
 test('reject and duplicate still close the item and set the listing, with nothing to correct', async () => {

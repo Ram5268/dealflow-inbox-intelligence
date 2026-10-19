@@ -7,7 +7,7 @@
 import { Category } from '@prisma/client'
 import { CATEGORY_LABELS } from '@/lib/utils'
 
-type TextRule = { kind: 'text'; label: string; maxLength: number }
+type TextRule = { kind: 'text'; label: string; maxLength: number; required?: true }
 type MoneyRule = { kind: 'money'; label: string }
 type CountRule = {
   kind: 'count'; label: string; min: number; max: number
@@ -15,7 +15,7 @@ type CountRule = {
   example: string
   bedWords?: true      // also reads "3BR", "3 beds" and "Studio"
 }
-type CategoryRule = { kind: 'category'; label: string }
+type CategoryRule = { kind: 'category'; label: string; required: true }
 type FieldRule = TextRule | MoneyRule | CountRule | CategoryRule
 
 const SHORT_TEXT = 300
@@ -37,15 +37,17 @@ export const CORRECTABLE_FIELDS = {
   squareFeet:       { kind: 'count', label: 'Square feet', min: 1, max: 10_000_000, step: null, example: '2400 or 2,400' },
   propertyType:     { kind: 'text', label: 'Property type', maxLength: SHORT_TEXT },
   availabilityDate: { kind: 'text', label: 'Availability date', maxLength: SHORT_TEXT },
-  extractedTitle:   { kind: 'text', label: 'Title', maxLength: SHORT_TEXT },
-  extractedSummary: { kind: 'text', label: 'Summary', maxLength: 4_000 },
-  category:         { kind: 'category', label: 'Category' },
+  extractedTitle:   { kind: 'text', label: 'Title', maxLength: SHORT_TEXT, required: true },
+  extractedSummary: { kind: 'text', label: 'Summary', maxLength: 4_000, required: true },
+  category:         { kind: 'category', label: 'Category', required: true },
   status:           { kind: 'text', label: 'Listing status', maxLength: SHORT_TEXT },
 } as const satisfies Record<string, FieldRule>
 
 type Field = keyof typeof CORRECTABLE_FIELDS
 type ValueOf<R> = R extends { kind: 'text' } ? string : R extends { kind: 'category' } ? Category : number
-export type ListingCorrections = { [K in Field]?: ValueOf<(typeof CORRECTABLE_FIELDS)[K]> }
+// null = the box was emptied: the value is removed (only where a listing may have none).
+type Cleared<R> = R extends { required: true } ? never : null
+export type ListingCorrections = { [K in Field]?: ValueOf<(typeof CORRECTABLE_FIELDS)[K]> | Cleared<(typeof CORRECTABLE_FIELDS)[K]> }
 
 type Read<T> = { ok: true; value: T } | { ok: false; error: string }
 const fail = (error: string): { ok: false; error: string } => ({ ok: false, error })
@@ -142,16 +144,24 @@ function readField(rule: FieldRule, raw: unknown): Read<string | number> {
 
 // Reads a correction into the listing's column types, or refuses it with a
 // plain-English message that names the field. A field the Review Queue doesn't
-// correct is refused by name. An empty box (or null) leaves that value as it is:
-// it is neither written nor cleared [engineering precaution].
+// correct is refused by name. The page sends only the boxes Ryan changed, and
+// each box starts out showing the current value, so a box sent empty (or null)
+// was emptied on purpose: that value is removed (null, never an empty string).
+// Title, summary and category can't be removed, so an empty one is refused
+// [engineering precaution].
 export function parseCorrections(raw: unknown): { ok: true; fields: ListingCorrections } | { ok: false; error: string } {
   if (raw == null) return { ok: true, fields: {} }
   if (typeof raw !== 'object' || Array.isArray(raw)) return fail("The corrections couldn't be read. Send each field with its new value.")
-  const fields: Record<string, string | number> = {}
+  const fields: Record<string, string | number | null> = {}
   for (const [key, value] of Object.entries(raw)) {
     if (!Object.hasOwn(CORRECTABLE_FIELDS, key)) return fail(`The Review Queue can't change "${key.slice(0, 40)}".`)
-    if (value == null || (typeof value === 'string' && value.trim() === '')) continue
-    const read = readField(CORRECTABLE_FIELDS[key as Field], value)
+    const rule: FieldRule = CORRECTABLE_FIELDS[key as Field]
+    if (value == null || (typeof value === 'string' && value.trim() === '')) {
+      if ('required' in rule) return fail(`${rule.label} can't be left empty.`)
+      fields[key] = null
+      continue
+    }
+    const read = readField(rule, value)
     if (!read.ok) return read
     fields[key] = read.value
   }
@@ -174,18 +184,20 @@ export function titleForCategory(
 
 // What a correction writes to the listing: its fields, plus a new title when the
 // category changes and the correction doesn't give a title of its own. The new
-// title uses the corrected address, neighborhood and beds when those change too.
+// title uses the corrected (or removed) address, neighborhood and beds when those
+// change too.
 export function listingChanges(
   current: { category: Category; address: string | null; neighborhood: string | null; beds: number | null },
   fields: ListingCorrections,
 ): ListingCorrections {
   if (fields.category === undefined || fields.category === current.category || fields.extractedTitle !== undefined) return fields
+  const after = <K extends 'address' | 'neighborhood' | 'beds'>(k: K) => (fields[k] !== undefined ? fields[k] : current[k])
   return {
     ...fields,
     extractedTitle: titleForCategory(fields.category, {
-      address:      fields.address ?? current.address,
-      neighborhood: fields.neighborhood ?? current.neighborhood,
-      beds:         fields.beds ?? current.beds,
+      address:      after('address'),
+      neighborhood: after('neighborhood'),
+      beds:         after('beds'),
     }),
   }
 }
