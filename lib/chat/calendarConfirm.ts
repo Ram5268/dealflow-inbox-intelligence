@@ -10,6 +10,25 @@
 // Brief 41 (M17): the reply when a calendar write fails. Never a false "booked".
 export const CALENDAR_CONFIRM_FAILED = "I couldn't add that to your calendar, so nothing was booked."
 
+// Brief 43 PR 14 (F9, dormant until Outlook returns): a proposal is only good
+// for a while. A "yes" to one whose start time has passed, or that was proposed
+// more than about a day ago, books nothing and says so [engineering precaution].
+export const PROPOSAL_MAX_AGE_MS = 24 * 60 * 60 * 1000
+export const CALENDAR_PROPOSAL_PASSED = "That time has already passed, so I didn't add it to your calendar."
+export const CALENDAR_PROPOSAL_STALE = "That proposal is more than a day old, so I didn't add it to your calendar. Tell me the time again if you still want it."
+
+// 'invalid' = the start time can't be read; 'passed' = it is now or earlier;
+// 'stale' = proposed more than PROPOSAL_MAX_AGE_MS ago. null = still good. An
+// unknown or unreadable proposal time (older callers) skips the age check.
+export function proposalExpiry(args: { startISO: string; proposedAt?: Date | string | null; now: number }): 'invalid' | 'passed' | 'stale' | null {
+  const start = Date.parse(args.startISO)
+  if (Number.isNaN(start)) return 'invalid'
+  if (start <= args.now) return 'passed'
+  const proposed = args.proposedAt == null ? NaN : new Date(args.proposedAt).getTime()
+  if (!Number.isNaN(proposed) && args.now - proposed > PROPOSAL_MAX_AGE_MS) return 'stale'
+  return null
+}
+
 // Brief 41 (M17): only a short, plain yes confirms a proposed event. The old
 // check matched these words ANYWHERE in the message, so "no, don't add it" and
 // "yes but make it 4pm" booked the original event. Optional: a leading "ok" /
@@ -52,6 +71,8 @@ export interface ConfirmDeps {
   graphOn: boolean
   // True when MATCHING_TEST_MODE_ONLY is on — skip the real write, still log the chat.
   testModeOn: boolean
+  // Brief 43 PR 14 (F9): the clock, for the proposal expiry check. Defaults to Date.now.
+  now?: () => number
   createEvent: (input: {
     subject: string; startISO: string; endISO: string
     location?: string; notes?: string
@@ -59,7 +80,7 @@ export interface ConfirmDeps {
   createMessage: (data: {
     organizationId: string; sessionId: string
     role: 'user' | 'assistant'; content: string
-    dealsJson?: unknown; suggestions?: unknown
+    dealsJson?: unknown
   }) => Promise<unknown>
   createAuditLog: (data: {
     organizationId: string; action: string; detailsJson: unknown
@@ -101,22 +122,26 @@ export async function runCalendarConfirm(args: {
   sessionId: string
   userMessage: string
   pendingEvent: PendingEventInput
+  // Brief 43 PR 14 (F9): when the proposal was made (the stored reply's time).
+  proposedAt?: Date | string | null
   deps: ConfirmDeps
 }): Promise<ConfirmResult> {
   const { organizationId, sessionId, userMessage, pendingEvent, deps } = args
   const { subject, startISO } = pendingEvent
-  const endISO = resolveEndISO(startISO, pendingEvent.endISO)
 
+  // Brief 43 PR 14 (D7): no follow-up suggestions are stored.
   const persistMessages = async (assistantText: string) => {
     await deps.createMessage({ organizationId, sessionId, role: 'user', content: userMessage })
     await deps.createMessage({
       organizationId, sessionId, role: 'assistant',
-      content: assistantText, dealsJson: [], suggestions: [],
+      content: assistantText, dealsJson: [],
     })
     await deps.touchSession(sessionId)
   }
 
   // Outlook is paused: nothing is written, and the reply says so plainly.
+  // Brief 43 PR 14 (F9): checked before any date maths, so an unreadable time
+  // on an old proposal still gets this reply.
   if (!deps.graphOn) {
     const text = "Outlook is paused, so I didn't add that to your calendar."
     await persistMessages(text)
@@ -129,6 +154,15 @@ export async function runCalendarConfirm(args: {
     await persistMessages(text)
     return { text, wroteEvent: false, eventId: null }
   }
+
+  // Brief 43 PR 14 (F9): a passed, stale or unreadable proposal books nothing.
+  const expiry = proposalExpiry({ startISO, proposedAt: args.proposedAt, now: (deps.now ?? Date.now)() })
+  if (expiry) {
+    const text = expiry === 'passed' ? CALENDAR_PROPOSAL_PASSED : expiry === 'stale' ? CALENDAR_PROPOSAL_STALE : CALENDAR_CONFIRM_FAILED
+    await persistMessages(text)
+    return { text, wroteEvent: false, eventId: null }
+  }
+  const endISO = resolveEndISO(startISO, pendingEvent.endISO)
 
   if (deps.alreadyWritten && (await deps.alreadyWritten(sessionId, { subject, startISO }))) {
     const text = "That's already on your calendar."
@@ -153,7 +187,8 @@ export async function runCalendarConfirm(args: {
   }
 
   const { day, time } = friendly(startISO)
-  const text = `Done — added to your Outlook: ${subject} on ${day} at ${time}.`
+  // Brief 43 PR 14 (Q38): no em-dash (feel standard).
+  const text = `Done. Added to your Outlook: ${subject} on ${day} at ${time}.`
 
   // The event exists now: record it, then the chat. A failure from here on is
   // logged but never turns into "nothing was booked" (it was).

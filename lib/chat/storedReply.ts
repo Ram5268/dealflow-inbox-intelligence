@@ -4,18 +4,19 @@
 // PR 3) is JSON in the same column, so a reopened chat shows the draft with no
 // migration. readStoredReply gives the page and the History list the reply text
 // and the draft back.
+// Brief 43 PR 14 (D7, a Brief 42 default): no follow-up suggestions are stored
+// any more. Older rows that have them still read the same way (the field is
+// ignored).
 import { normalizeDraft, type Draft } from './draft'
 
 export function encodeStoredReply(r: {
   response: string
-  suggestions: string[]
   pendingEvent?: Record<string, string> | null
   draft?: Draft | null
 }): string {
   if (!r.pendingEvent && !r.draft) return r.response
   return JSON.stringify({
     response: r.response,
-    suggestions: r.suggestions,
     ...(r.pendingEvent ? { pendingEvent: r.pendingEvent } : {}),
     ...(r.draft ? { draft: r.draft } : {}),
   })

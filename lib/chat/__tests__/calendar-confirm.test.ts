@@ -24,6 +24,9 @@ function makeDeps(testModeOn: boolean, graphOn = true): { deps: ConfirmDeps; rec
   const deps: ConfirmDeps = {
     graphOn,
     testModeOn,
+    // Brief 43 PR 14 (F9): a fixed clock before BASE's start time, so the
+    // proposal isn't refused as passed.
+    now: () => Date.parse('2026-08-19T00:00:00Z'),
     createEvent: async (input) => { rec.events.push(input); return { id: 'evt_123', webLink: null } },
     createMessage: async (data) => { rec.messages.push(data); return data },
     createAuditLog: async (data) => { rec.audits.push(data); return data },
@@ -73,7 +76,7 @@ test('test mode OFF → creates event + writes CALENDAR_WRITE audit (source chat
   assert.equal(rec.events[0].endISO, '2026-08-20T14:30:00')
   assert.equal(result.wroteEvent, true)
   assert.equal(result.eventId, 'evt_123')
-  assert.match(result.text, /Done — added/i)
+  assert.match(result.text, /Done\. Added/i)
 
   assert.equal(rec.messages.length, 2)
 
@@ -110,7 +113,7 @@ test('Outlook paused: no event, no CALENDAR_WRITE audit, honest reply, chat stil
     assert.equal(r.wroteEvent, false)
     assert.equal(r.eventId, null)
     assert.match(r.text, /Outlook is paused/)
-    assert.doesNotMatch(r.text, /Done|added to your Outlook/)
+    assert.doesNotMatch(r.text, /Done|added to your Outlook/i)
     assert.equal(rec.events.length, 0)
     assert.equal(rec.audits.length, 0)
     assert.equal(rec.messages.length, 2)
@@ -141,7 +144,7 @@ test('a failed calendar write says so plainly: nothing booked, no audit row, nev
   assert.equal(r.eventId, null)
   assert.equal(r.text, CALENDAR_CONFIRM_FAILED)
   assert.match(r.error ?? '', /Graph 503/)
-  assert.doesNotMatch(r.text, /Done|added to your Outlook/)
+  assert.doesNotMatch(r.text, /Done|added to your Outlook/i)
   assert.equal(rec.audits.length, 0)
   assert.equal(rec.messages.length, 2)
   assert.equal(rec.messages[1].content, CALENDAR_CONFIRM_FAILED)
@@ -172,7 +175,7 @@ test('after the event is created, a failing audit or chat save still reports "Do
     const r = await runCalendarConfirm({ ...BASE, deps })
     assert.equal(r.wroteEvent, true, failing)
     assert.equal(r.eventId, 'evt_123', failing)
-    assert.match(r.text, /^Done — added to your Outlook/, failing)
+    assert.match(r.text, /^Done\. Added to your Outlook/, failing)
     assert.equal(rec.events.length, 1, failing)
   }
 })
