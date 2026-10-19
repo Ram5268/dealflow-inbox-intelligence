@@ -43,10 +43,14 @@ export async function findSeller(rawInput: FindSellerInput): Promise<FindSellerR
   let rows: CrmSellerRow[] = []
   if (address) {
     rows = await findSellersByAddress(address, organizationId)
-    // Several sellers at the address and a name too: keep the ones with that name.
-    if (rows.length > 1 && name) {
+    // A name too: keep the sellers at the address with that name. If nobody
+    // there has it, whoever is at the address isn't shown as the person Ryan
+    // named (a wrong-person contact, #10b): they come back as candidates, so
+    // Drift asks [engineering precaution].
+    if (rows.length > 0 && name) {
       const named = rows.filter(r => hasEveryWord(r.fullName, name))
-      if (named.length > 0) rows = named
+      if (named.length === 0) return { candidates: rows.slice(0, MAX_CANDIDATES).map(toSellerCandidate) }
+      rows = named
     }
   }
   if (rows.length === 0 && name) rows = await findSellersByName(name, organizationId)

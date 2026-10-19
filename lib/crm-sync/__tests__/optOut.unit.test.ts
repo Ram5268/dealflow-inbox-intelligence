@@ -39,6 +39,15 @@ test('readCrmOptOutLeadIds: the lead ids, or null (never a throw) when the read 
   assert.equal(failed, null)
 })
 
+test('readCrmOptOutLeadIds: a read that never answers gives null after the timeout, so the 7 am sync is not held up', async () => {
+  const started = Date.now()
+  const hung = await readCrmOptOutLeadIds('dealflow-ryan', () => new Promise(() => {}), 50)
+  assert.equal(hung, null)
+  assert.ok(Date.now() - started < 2_000)
+  const { OPT_OUT_READ_TIMEOUT_MS } = await import('../crmReader')
+  assert.ok(OPT_OUT_READ_TIMEOUT_MS <= 15_000)
+})
+
 const lead: CrmLeadRow = {
   id: 'lead_1', mojoId: '90001', name: 'Pat Example', displayName: 'Pat Example', primaryAddressFull: '88 Example Ave',
   updatedAt: '2026-10-18 09:00:00', contactName: null, phones: ['+17185550142'], emails: [], fields: {},
@@ -55,11 +64,11 @@ test('markOptOut: an opted-out lead gets crmOptOut true; anyone else is left exa
   assert.deepEqual(values, [true, undefined])
 })
 
-test('the sync wires it in: opt-outs read before the write, failures logged, a count in the result', async () => {
+test('the sync wires it in: opt-outs read alongside the leads, before the write, with a count in the result', async () => {
   const { readFileSync } = await import('node:fs')
   const { join } = await import('node:path')
   const src = readFileSync(join(__dirname, '../runSync.ts'), 'utf8')
-  assert.match(src, /const optOuts = await readCrmOptOutLeadIds\(ORG_SLUG\)/)
-  assert.match(src, /\.map\(mapLead\)\.map\(c => markOptOut\(c, optOuts\)\)/)
+  assert.match(src, /const \[leads, optOuts\] = await Promise\.all\(\[readCrmLeads\(ORG_SLUG\), readCrmOptOutLeadIds\(ORG_SLUG\)\]\)/)
+  assert.match(src, /leads\.map\(mapLead\)\.map\(c => markOptOut\(c, optOuts\)\)/)
   assert.match(src, /optOutLeads: optOuts \? contacts\.filter\(c => c\.metadata\.crmOptOut\)\.length : null/)
 })

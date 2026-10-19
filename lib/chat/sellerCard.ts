@@ -41,12 +41,17 @@ export function formatPhone(raw: string | null | undefined): string | null {
 // turned into spaces, like the CRM's own SMS opt-out reader
 // (src/lib/comms/sms/opt-out.ts). "Not interested" alone is not an opt-out, and
 // neither is "stop" inside a longer note ("may stop by"); a bare "STOP" is.
-// When in doubt this leans to "do not contact" [engineering precaution].
+// When in doubt this leans to "do not contact" [engineering precaution]: a note
+// such as "do not call after 8pm" or "DNC list checked" also marks the
+// homeowner, and that is the safe direction (Ryan checks the CRM; nobody is
+// called by mistake).
 const OPT_OUT_PHRASES = [
   'do not call', 'dont call', 'never call', 'do not contact', 'dont contact', 'do not text', 'dont text',
-  'do not email', 'dont email', 'do not solicit', 'no solicitation', 'dnc', 'remove me', 'remove from list',
-  'remove from the list', 'take me off', 'opt out', 'optout', 'opted out', 'unsubscribe', 'unsubscribed',
-  'stop calling', 'stop texting', 'stop contacting', 'cease and desist',
+  'do not email', 'dont email', 'do not solicit', 'no solicitation', 'dnc', 'd n c', 'dncd', 'remove me',
+  'remove from list', 'remove from the list', 'removed from list', 'removed from the list', 'take me off',
+  'take off list', 'take off the list', 'opt out', 'optout', 'opted out', 'unsubscribe', 'unsubscribed',
+  'stop calling', 'stop texting', 'stop contacting', 'please stop', 'cease and desist', 'no more calls',
+  'asked not to be called', 'asked not to be contacted', 'asked to be removed',
 ]
 
 export function isOptOutWording(text: string | null | undefined): boolean {

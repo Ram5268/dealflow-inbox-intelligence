@@ -46,10 +46,11 @@ export const MARKED_CRM_SQL =
 export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncResult> {
   const started = Date.now()
   const org = await prisma.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG }, select: { id: true } })
-  // Brief 43 PR 5: the CRM's own opt-out list, read on its own so a failure only
-  // skips new do-not-contact marks (crmReader.ts readCrmOptOutLeadIds).
-  const optOuts = await readCrmOptOutLeadIds(ORG_SLUG)
-  const contacts = (await readCrmLeads(ORG_SLUG)).map(mapLead).map(c => markOptOut(c, optOuts))
+  // Brief 43 PR 5: the CRM's own opt-out list, read alongside the leads; a
+  // failure or a slow answer only skips new do-not-contact marks
+  // (crmReader.ts readCrmOptOutLeadIds never throws).
+  const [leads, optOuts] = await Promise.all([readCrmLeads(ORG_SLUG), readCrmOptOutLeadIds(ORG_SLUG)])
+  const contacts = leads.map(mapLead).map(c => markOptOut(c, optOuts))
 
   // Removal guard: an empty or shrunken CRM read must never mark everyone removed.
   const [{ n: markedCrm }] = await prisma.$queryRawUnsafe<{ n: number }[]>(MARKED_CRM_SQL, org.id)

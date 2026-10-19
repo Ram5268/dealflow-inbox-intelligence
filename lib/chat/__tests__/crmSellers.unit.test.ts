@@ -121,6 +121,25 @@ test('by address: unit suffixes and street-word spellings are ignored; a missing
   assert.deepEqual((await findSellersByAddress('115 Saint Marks Avenue', ORG)).map(r => r.fullName), ['Probe Saint'])
   assert.deepEqual((await findSellersByAddress('88-14 Example Boulevard', ORG)).map(r => r.fullName), ['Probe Queens'])
   assert.deepEqual(await findSellersByAddress('Example Ave', ORG), [], 'no house number, no lookup')
+  assert.deepEqual((await findSellersByAddress('#12 Sample Ave', ORG)).map(r => r.fullName), ['Probe Avenue'], 'a leading # is not a unit')
+})
+
+test('by name: a two-letter surname is a whole word only (Wu, never Wurst), with no wildcards', async () => {
+  const { findSellersByName } = await load()
+  reset([
+    contact({ id: 'mc_wu', fullName: 'Pat Wu' }),
+    contact({ id: 'mc_wu_first', fullName: 'Wu, Jordan' }),
+    contact({ id: 'mc_ng', fullName: 'Casey Ng-Example' }),
+    contact({ id: 'mc_wurst', fullName: 'Robin Wurst' }),
+    contact({ id: 'mc_kwu', fullName: 'Kwun Sample' }),
+  ])
+  const ids = async (n: string) => (await findSellersByName(n, ORG)).map(r => r.id).sort()
+  assert.deepEqual(await ids('Wu'), ['mc_wu', 'mc_wu_first'])
+  assert.deepEqual(await ids('ng'), ['mc_ng'])
+  assert.deepEqual(await ids('Li'), [])
+  assert.deepEqual(await ids('W%'), [], 'a wildcard is not a letter')
+  assert.deepEqual(await ids('w u'), [], 'two one-letter words are not a name')
+  assert.deepEqual(await ids('Pat Wu'), ['mc_wu'])
 })
 
 test('sameStreetAddress: exact house number, normalized street', async () => {
@@ -170,7 +189,11 @@ test('formatPhone and opt-out wording', async () => {
   assert.equal(formatPhone(null), null)
   assert.equal(formatPhone(''), null)
   for (const yes of ['Do Not Call', 'DNC', 'dnc list', "don't call", 'Do-Not-Contact', 'not interested — do not contact',
-    'Remove me from your list', 'STOP', 'stop calling', 'Opted out', 'unsubscribe', 'take me off the list', 'Cease and desist']) {
+    'Remove me from your list', 'STOP', 'stop calling', 'Opted out', 'unsubscribe', 'take me off the list', 'Cease and desist',
+    'D.N.C.', "DNC'd", 'removed from list', 'take off list', 'please stop', 'asked not to be called', 'asked to be removed',
+    'no more calls',
+    // Leaning conservative on purpose: these also mark the homeowner (the safe direction).
+    'do not call after 8pm', 'DNC list checked']) {
     assert.equal(isOptOutWording(yes), true, yes)
   }
   for (const no of ['Not Interested', 'No Answer', 'Contact', 'Left Message', 'Call back Tuesday', 'Wrong Number',

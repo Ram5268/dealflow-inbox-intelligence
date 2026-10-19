@@ -15,7 +15,7 @@ import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
 import { searchParties, type SearchPartiesInput } from '@/lib/chat/tools/searchParties'
 import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, FIND_SELLER_TOOL, COUNT_SELLERS_TOOL } from '@/lib/chat/tools/schemas'
-import { CRM_SELLER_TOOL_NAMES, runCrmSellerTool } from '@/lib/chat/tools/crmSellerTools'
+import { CRM_SELLER_TOOL_NAMES, newCrmSellerTurn, runCrmSellerTool } from '@/lib/chat/tools/crmSellerTools'
 import type { SellerCard } from '@/lib/chat/sellerCard'
 import { getTemplate } from '@/lib/reports/templates'
 import { getGenerator, type SectionResult } from '@/lib/reports/generators'
@@ -372,6 +372,7 @@ export async function POST(req: NextRequest) {
     // returned this turn, as structured cards for the page (name, phone, address,
     // Open in CRM link). Never put in Drift's text: any URL there trips the guard (Q19).
     const sellerCards: SellerCard[] = []
+    const crmSellerTurn = newCrmSellerTurn() // one seller contact per message (crmSellerTools.ts)
     // Brief 27.0 — server-authoritative capture of the report/fragment produced
     // this turn. We persist + return THESE (not whatever Sonnet echoes) so ids
     // are always correct and the attachment survives guard rewrites.
@@ -538,7 +539,7 @@ export async function POST(req: NextRequest) {
           // draft check) get the full result; Drift reads it without the CRM link.
           if (CRM_SELLER_TOOL_NAMES.has(tu.name)) {
             try {
-              const run = await runCrmSellerTool(tu.name, tu.input)
+              const run = await runCrmSellerTool(tu.name, tu.input, crmSellerTurn)
               allToolCalls.push({ name: tu.name, input: tu.input, totalMatched: run.totalMatched, cardIds: run.card ? [run.card.id] : [] })
               toolResultsForGuard.push({ name: tu.name, input: tu.input, output: run.output })
               if (run.card && !sellerCards.some(c => c.id === run.card!.id)) sellerCards.push(run.card)

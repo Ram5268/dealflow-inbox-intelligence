@@ -62,19 +62,32 @@ JOIN "ContactPhone" p ON p."contactId" = c.id
   AND right(regexp_replace(p.phone, '[^0-9]', '', 'g'), 10) = right(regexp_replace(s.phone, '[^0-9]', '', 'g'), 10)
 WHERE s.source = 'internal' AND length(regexp_replace(s.phone, '[^0-9]', '', 'g')) >= 10`
 
-// A separate read from LEADS_SQL, so a problem here (a missing table or grant)
-// can't stop the lead sync: it logs and returns null, and the sync goes on
-// without new opt-out marks. Marks already written stay (markOptOut only ever
-// adds) [engineering precaution: the sync runs in production every morning].
+// A separate read from LEADS_SQL, run alongside it (runSync.ts), so a problem
+// here can't stop or hold up the lead sync: a missing table or grant, or no
+// answer within OPT_OUT_READ_TIMEOUT_MS, logs and returns null, and the sync
+// goes on without new opt-out marks. Marks already written stay (markOptOut
+// only ever adds) [engineering precaution: the sync runs in production every
+// morning].
+export const OPT_OUT_READ_TIMEOUT_MS = 10_000
+
 export async function readCrmOptOutLeadIds(
   orgSlug: string,
   query: <T>(sql: string, params: unknown[]) => Promise<T[]> = crmQuery,
+  timeoutMs: number = OPT_OUT_READ_TIMEOUT_MS,
 ): Promise<Set<string> | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<'timeout'>(resolve => { timer = setTimeout(() => resolve('timeout'), timeoutMs) })
   try {
-    const rows = await query<{ leadId: string }>(OPT_OUTS_SQL, [orgSlug])
+    const rows = await Promise.race([query<{ leadId: string }>(OPT_OUTS_SQL, [orgSlug]), timedOut])
+    if (rows === 'timeout') {
+      console.warn(`[crm-sync] opt-out list not read within ${timeoutMs} ms; no new do-not-contact marks this run`)
+      return null
+    }
     return new Set(rows.map(r => r.leadId))
   } catch (e) {
     console.warn('[crm-sync] opt-out list not read; no new do-not-contact marks this run:', e instanceof Error ? e.message : e)
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }

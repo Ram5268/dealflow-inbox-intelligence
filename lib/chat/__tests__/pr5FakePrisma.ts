@@ -4,7 +4,7 @@
 // '@/lib/...' import: lib/prisma.ts reuses globalThis.prisma when it is set, so
 // no database client is ever created. Not a *.test.ts file.
 //
-// Supported: equality (Dates by time, null), equals/contains/startsWith (with
+// Supported: equality (Dates by time, null), equals/contains/startsWith/endsWith (with
 // mode 'insensitive'), in, notIn, not, gt/gte/lt/lte, a JSON path + equals
 // filter, has, and the AND / OR / NOT combinators. findMany (where, orderBy,
 // take, select, include as empty relations), findFirst, findUnique, count,
@@ -13,7 +13,7 @@
 export type Row = Record<string, unknown>
 export type Where = Record<string, unknown>
 
-const FIELD_OPS = new Set(['equals', 'contains', 'startsWith', 'in', 'notIn', 'not', 'gt', 'gte', 'lt', 'lte', 'path', 'has', 'mode'])
+const FIELD_OPS = new Set(['equals', 'contains', 'startsWith', 'endsWith', 'in', 'notIn', 'not', 'gt', 'gte', 'lt', 'lte', 'path', 'has', 'mode'])
 
 const norm = (v: unknown, insensitive: boolean) => (insensitive && typeof v === 'string' ? v.toLowerCase() : v)
 const same = (a: unknown, b: unknown) => (a instanceof Date && b instanceof Date ? a.getTime() === b.getTime() : a === b)
@@ -32,6 +32,7 @@ function fieldMatches(value: unknown, cond: unknown): boolean {
   if ('equals' in c && !same(norm(v, ins), norm(c.equals, ins))) return false
   if ('contains' in c && !(typeof v === 'string' && (norm(v, ins) as string).includes(norm(c.contains, ins) as string))) return false
   if ('startsWith' in c && !(typeof v === 'string' && (norm(v, ins) as string).startsWith(norm(c.startsWith, ins) as string))) return false
+  if ('endsWith' in c && !(typeof v === 'string' && (norm(v, ins) as string).endsWith(norm(c.endsWith, ins) as string))) return false
   if ('in' in c && !(c.in as unknown[]).some(x => same(norm(v, ins), norm(x, ins)))) return false
   if ('notIn' in c && (c.notIn as unknown[]).some(x => same(v, x))) return false
   if ('not' in c && fieldMatches(v, c.not)) return false

@@ -4,7 +4,7 @@
 //             (a seller card is any object with kind 'crm_seller')
 //   forModel  what Drift reads back (no CRM link, see findSellerForModel)
 //   card      the seller card the page shows, when there is exactly one match
-import { findSeller, findSellerForModel, type FindSellerInput } from './findSeller'
+import { findSeller, findSellerForModel, type FindSellerInput, type FindSellerResult } from './findSeller'
 import { countSellers, type CountSellersInput } from './countSellers'
 import type { SellerCard } from '@/lib/chat/sellerCard'
 
@@ -17,9 +17,28 @@ export interface CrmSellerToolRun {
   totalMatched: number
 }
 
-export async function runCrmSellerTool(name: string, input: unknown): Promise<CrmSellerToolRun> {
+// One seller contact per message [engineering precaution; D11, Ryan 2026-10-18:
+// "a specific seller contact"]. Without it, one turn could look up the 3
+// candidates of a surname, or names from another result, and hand Ryan several
+// contacts he never named. A second, different match in the same turn comes
+// back as a name and neighborhood only, with a note; the same seller again is
+// fine (by name, then by address).
+export interface CrmSellerTurn { cardId: string | null }
+export const newCrmSellerTurn = (): CrmSellerTurn => ({ cardId: null })
+export const ONE_SELLER_PER_MESSAGE =
+  'One seller contact per message: this one was not shown. Ask Ryan to ask for them by name in his next message.'
+
+export async function runCrmSellerTool(name: string, input: unknown, turn: CrmSellerTurn = newCrmSellerTurn()): Promise<CrmSellerToolRun> {
   if (name === 'find_seller') {
-    const output = await findSeller(input as FindSellerInput)
+    let output: FindSellerResult & { note?: string } = await findSeller(input as FindSellerInput)
+    // Checked and set with no await in between, so parallel calls can't both pass.
+    if ('match' in output) {
+      if (turn.cardId === null) turn.cardId = output.match.id
+      else if (turn.cardId !== output.match.id) {
+        const { id, name: sellerName, neighborhood } = output.match
+        output = { candidates: [{ kind: 'crm_seller', id, name: sellerName, neighborhood }], note: ONE_SELLER_PER_MESSAGE }
+      }
+    }
     const card = 'match' in output ? output.match : null
     const totalMatched = 'match' in output ? 1 : 'candidates' in output ? output.candidates.length : 0
     return { output, forModel: findSellerForModel(output), card, totalMatched }

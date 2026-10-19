@@ -48,28 +48,68 @@ function lookup(organizationId: string, where: Prisma.MojoContactWhereInput, tak
   })
 }
 
+// Prisma 7 sends `contains`, `startsWith` and an insensitive `equals` to
+// Postgres as ILIKE patterns WITHOUT escaping % and _, so a "name" like "Pat%"
+// or "%son%" would be a wildcard search over every seller. Names never need
+// them, so they're dropped [engineering precaution, D11].
+const LIKE_META = /[%_\\]/g
+
+// A name (or one word of it) must start a word of the stored name: "Ann" finds
+// "Ann Probe" and "Annie Probe", never "Joanne Probe" or "Hannah Probe"; "son"
+// is not "Lee Jackson". A substring match would hand Ryan the contact of a
+// seller he never named [engineering precaution, D11].
+const startsAWord = (w: string): Prisma.MojoContactWhereInput => ({
+  OR: [
+    { fullName: { startsWith: w, mode: 'insensitive' } },
+    { fullName: { contains: ` ${w}`, mode: 'insensitive' } },
+    { fullName: { contains: `-${w}`, mode: 'insensitive' } },
+  ],
+})
+
+// A two-letter surname (Wu, Ng, Li, Ho) as a whole word of the stored name
+// only, so "Wu" is never "Wurst": the word alone, or between the start or end,
+// a space, a comma or a hyphen.
+const BEFORE = ['', ' ', '-']
+const AFTER = ['', ' ', ',', '-']
+const wholeWord = (w: string): Prisma.MojoContactWhereInput => ({
+  OR: BEFORE.flatMap(b => AFTER.map((a): Prisma.MojoContactWhereInput => {
+    if (!b && !a) return { fullName: { equals: w, mode: 'insensitive' } }
+    if (!b) return { fullName: { startsWith: w + a, mode: 'insensitive' } }
+    if (!a) return { fullName: { endsWith: b + w, mode: 'insensitive' } }
+    return { fullName: { contains: b + w + a, mode: 'insensitive' } }
+  })),
+})
+
 // By name, case-insensitive: the exact name first (so "Jordan Sample" isn't
 // also "Jordan Samples"), then the name as a phrase, then every word of it in
-// any order ("Example Pat", "Pat Q Example"). Fewer than 3 letters looks up
-// nobody: a one-letter "name" would be a search, not a named seller (D11).
+// any order ("Example Pat", "Pat Q Example"), each starting a word of the
+// stored name. A one-word name of exactly 2 letters must be a whole word.
+// Fewer letters look up nobody: a one-letter "name" would be a search, not a
+// named seller (D11).
 export async function findSellersByName(name: string, organizationId: string): Promise<CrmSellerRow[]> {
-  const clean = (name ?? '').replace(/\s+/g, ' ').trim()
-  if (clean.replace(/[^a-z]/gi, '').length < 3) return []
+  const clean = (name ?? '').replace(LIKE_META, ' ').replace(/\s+/g, ' ').trim()
+  const letters = clean.replace(/[^a-z]/gi, '')
+  if (letters.length === 2 && !clean.includes(' ')) return lookup(organizationId, wholeWord(letters))
+  if (letters.length < 3) return []
   const exact = await lookup(organizationId, { fullName: { equals: clean, mode: 'insensitive' } })
   if (exact.length > 0) return exact
-  const phrase = await lookup(organizationId, { fullName: { contains: clean, mode: 'insensitive' } })
+  const phrase = await lookup(organizationId, startsAWord(clean))
   if (phrase.length > 0) return phrase
   const words = clean.toLowerCase().split(/[^a-z0-9']+/).filter(w => w.replace(/[^a-z]/g, '').length >= 2)
   if (words.length < 2) return []
-  return lookup(organizationId, { AND: words.map(w => ({ fullName: { contains: w, mode: 'insensitive' as const } })) })
+  return lookup(organizationId, { AND: words.map(startsAWord) })
 }
+
+// The street line of an address: text after the first comma (city, state,
+// ZIP) dropped, and a leading "#" ("#88 Example Ave"), which the normalizer
+// would read as a unit suffix and drop the whole line.
+const streetLine = (raw: string | null | undefined) => (raw ?? '').split(',')[0].trim().replace(/^#\s*/, '')
 
 // A street address as house number + street words, via the CRM sync's own
 // normalizer (case, punctuation, "# 3"/"Apt 4", 54th → 54, St/Ave spellings,
-// Queens "88-14" → "8814"). Text after the first comma (city, state, ZIP) is
-// dropped. null when there's no house number.
+// Queens "88-14" → "8814"). null when there's no house number.
 export function parseStreetAddress(raw: string | null | undefined): { house: string; street: string[] } | null {
-  const norm = normalizeStreet((raw ?? '').split(',')[0])
+  const norm = normalizeStreet(streetLine(raw))
   if (!norm) return null
   const [house, ...street] = norm.split(' ')
   return /^\d+[a-z]?$/.test(house) && street.length > 0 ? { house, street } : null
@@ -87,31 +127,16 @@ export function sameStreetAddress(asked: string | null | undefined, stored: stri
   return a.street.slice(0, n).join(' ') === b.street.slice(0, n).join(' ')
 }
 
-// Street words that are spelled several ways in stored addresses (St/Street,
-// W/West, Ft/Fort), so they can't narrow the database query; the exact check
-// in code covers them.
-const SPELLED_MANY_WAYS = new Set([
-  'st', 'str', 'street', 'ave', 'av', 'avenue', 'pl', 'place', 'rd', 'road', 'dr', 'drive', 'blvd', 'boulevard',
-  'pkwy', 'parkway', 'ct', 'court', 'ln', 'lane', 'ter', 'terrace', 'hwy', 'highway', 'sq', 'square', 'ft', 'fort',
-  'mt', 'mount', 'n', 's', 'e', 'w', 'north', 'south', 'east', 'west', 'saint',
-])
-
 // By street address over every seller: the database narrows by the house
-// number's leading digits and one street word, then the exact rule above decides.
+// number's leading digits only, then the exact rule above decides. A street
+// word can't narrow it: the stored text keeps its punctuation, so "St Johns Pl"
+// would never find "St. John's Pl" (the normalized check in code does).
 export async function findSellersByAddress(address: string, organizationId: string): Promise<CrmSellerRow[]> {
-  const line = (address ?? '').split(',')[0].trim()
+  const line = streetLine(address)
   const asked = parseStreetAddress(line)
   const digits = line.match(/^\d+/)?.[0]
   if (!asked || !digits) return []
-  const word = line.toLowerCase().split(/[^a-z0-9]+/).slice(1)
-    .map(w => w.replace(/^(\d+)(st|nd|rd|th)$/, '$1'))
-    .find(w => w.length >= 2 && !SPELLED_MANY_WAYS.has(w))
-  const rows = await lookup(organizationId, {
-    AND: [
-      { address: { startsWith: digits } },
-      ...(word ? [{ address: { contains: word, mode: 'insensitive' as const } }] : []),
-    ],
-  }, null)
+  const rows = await lookup(organizationId, { address: { startsWith: digits } }, null)
   return rows.filter(r => sameStreetAddress(line, r.address))
 }
 
