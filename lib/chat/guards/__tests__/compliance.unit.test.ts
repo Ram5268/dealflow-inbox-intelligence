@@ -441,7 +441,11 @@ test('route wiring: the guard passes the user message, skips the thrown-away fac
   const src = readFileSync(join(__dirname, '../../../../app/api/chat/route.ts'), 'utf8')
   assert.match(src, /scanForStructuralHallucinations\(currentResponse, \{ userMessage \}\)/)
   assert.match(src, /attempt > MAX_GUARD_RETRIES \|\| repeatedActionClaim\(guardHistory\)/)
-  assert.match(src, /skipVerifierForRepeatClaim\(guardHistory, regexFlags\)\s*\?\s*skippedVerification\(\)\s*:\s*await verifyResponse\(/)
+  // Brief 43 PR 4: the same skip, merged with the time budget (no fact-check
+  // past the hard deadline either).
+  assert.match(src, /const skipRepeat = skipVerifierForRepeatClaim\(guardHistory, regexFlags\)/)
+  assert.match(src, /budget\.pastHard\(\) \|\| skipRepeat\s*\?\s*null\s*:\s*await withTimeout\(\s*verifyResponse\(/)
+  assert.match(src, /const verifier = skipRepeat\s*\?\s*skippedVerification\(\)/)
 })
 
 // ── Speed: no regex blow-up on long or odd input (Node 22 and 24) ────────────

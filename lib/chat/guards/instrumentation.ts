@@ -9,7 +9,8 @@ import { prisma } from '@/lib/prisma'
 import type { GuardTelemetry } from './retry'
 import { formatFlagLines } from './retry'
 
-export type GuardVerdict = 'pass' | 'retry' | 'refuse' | 'canned_fallback'
+// 'timeout' (Brief 43 PR 4): the turn ran out of time before Drift had a reply.
+export type GuardVerdict = 'pass' | 'retry' | 'refuse' | 'canned_fallback' | 'timeout'
 
 /**
  * Map the guard's telemetry into a single verdict label:
@@ -40,6 +41,38 @@ export interface GuardFireEventInput {
   toolCallsAttempted: unknown // [{ name, input, totalMatched, cardIds }]
   telemetry: GuardTelemetry
   finalResponseSent: string | null
+  // Brief 43 PR 4: set for a row the telemetry can't describe (a timed-out turn).
+  verdict?: GuardVerdict
+  reason?: string
+}
+
+/**
+ * Brief 43 PR 4 (Q4; Z-05): the row for a turn that ran out of time before
+ * Drift had a reply, so timeouts show up in the guard log (they used to write
+ * none). Counts only: no message text and no tool inputs, just which tools ran,
+ * how many results each had, and how long the turn took. sessionId is '' when
+ * no chat was saved (the column is required and has no foreign key).
+ */
+export function timedOutGuardInput(input: {
+  organizationId: string
+  sessionId: string | null
+  elapsedMs: number
+  toolCalls: Array<{ name: string; totalMatched: number }>
+  finalResponseSent: string
+}): GuardFireEventInput {
+  const n = input.toolCalls.length
+  return {
+    organizationId:     input.organizationId,
+    sessionId:          input.sessionId ?? '',
+    userTurn:           '',
+    priorAssistantTurn: null,
+    assistantAttempt:   '',
+    toolCallsAttempted: input.toolCalls.map(c => ({ name: c.name, totalMatched: c.totalMatched })),
+    telemetry:          { enabled: true, finalAttempt: 0, fellbackToCanned: false, history: [], totalVerifierCostUsd: 0 },
+    finalResponseSent:  input.finalResponseSent,
+    verdict:            'timeout',
+    reason:             `timed out after ${(input.elapsedMs / 1000).toFixed(1)} s with ${n} tool call${n === 1 ? '' : 's'}`,
+  }
 }
 
 /**
@@ -57,8 +90,8 @@ export async function logGuardFireEvent(input: GuardFireEventInput): Promise<voi
         priorAssistantTurn: input.priorAssistantTurn,
         assistantAttempt:   input.assistantAttempt,
         toolCallsAttempted: input.toolCallsAttempted as object,
-        verifierVerdict:    deriveVerdict(input.telemetry),
-        verifierReason:     summarizeReason(input.telemetry) || null,
+        verifierVerdict:    input.verdict ?? deriveVerdict(input.telemetry),
+        verifierReason:     input.reason ?? (summarizeReason(input.telemetry) || null),
         finalResponseSent:  input.finalResponseSent,
       },
     })
