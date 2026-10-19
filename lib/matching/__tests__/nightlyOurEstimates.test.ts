@@ -6,6 +6,7 @@
 // checks. Runs under tsx; every seller, buyer and value is invented.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { EXISTING_MATCH_COUNTS_SQL } from '../nightly/sql'
 
 type Row = Record<string, unknown>
 const omit = (o: Row, k: string): Row => Object.fromEntries(Object.entries(o).filter(([x]) => x !== k))
@@ -54,7 +55,10 @@ const reset = (flag: unknown, values: unknown = []) => {
   state.committed = []
 }
 const txClient = (pending: Array<[string, unknown]>) => ({
-  $queryRawUnsafe: async (_sql: string, rows: string) => {
+  $queryRawUnsafe: async (sql: string, rows: string) => {
+    // Brief 47 (PR 1): the size check's count. No Match rows yet, so only 0 sellers or
+    // 0 buyers could refuse a night, and these nights have both.
+    if (sql === EXISTING_MATCH_COUNTS_SQL) return [{ matches: 0, sellers: 0 }]
     const parsed = JSON.parse(rows) as Row[]
     pending.push(['upsert', parsed.map(r => omit(r, 'id'))])
     return parsed.map(() => ({ inserted: true }))

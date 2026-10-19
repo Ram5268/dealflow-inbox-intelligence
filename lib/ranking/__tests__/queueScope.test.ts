@@ -3,8 +3,9 @@ import assert from 'node:assert/strict'
 import type { PrismaClient } from '@prisma/client'
 import { contactScopeWhere, persistBatch, type QueueEntry, type QueueStats } from '../queueBuilder'
 
-// Brief 35: the nightly list ranks CRM sellers only, and persisting always
-// replaces the org's list, even when it's empty.
+// Brief 35: the nightly list ranks CRM sellers only, and persisting replaces
+// the org's list. Brief 47 (PR 1, Brief 46 DF-2, engineering precaution): never
+// with an empty one (it used to: an empty list replaced the old one).
 
 test("scope 'crm' ranks only real CRM-sourced contacts; 'all' ranks the whole org", () => {
   assert.deepEqual(contactScopeWhere('org', 'crm'), {
@@ -26,10 +27,10 @@ const stats: QueueStats = {
   priorityDistribution: { top10Avg: 0, top50Avg: 0, rank1Score: 0, rank50Score: 0, spread: 0 },
 }
 
-test('an empty list still replaces the old one and is logged', () => {
+test('an empty list is refused: the old one is not deleted, and nothing is written', () => {
   calls.length = 0
-  persistBatch(fakeDb, 'org', [], 'run-1', stats)
-  assert.deepEqual(calls, ['deleteMany', 'audit:CALL_QUEUE_BUILD'])
+  assert.throws(() => persistBatch(fakeDb, 'org', [], 'run-1', stats), { name: 'CallQueueRefusedError', message: 'call list refused: empty_list' })
+  assert.deepEqual(calls, [])
 })
 
 test('a non-empty list is deleted, inserted and logged', () => {
