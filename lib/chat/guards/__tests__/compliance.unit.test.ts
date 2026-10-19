@@ -122,7 +122,15 @@ const FLAG: Array<[label: string, text: string, userMessage?: string]> = [
   ['done, sent', 'Done, sent!'],
   ['hey, sent it', 'Hey, sent it!'],
   ['the text went out', 'The text went out.'],
-  ['it went out to the owner', 'It went out to the owner a minute ago.'],
+  // Reviewer round 2: "It went out ..." is read only after a send request.
+  ['it went out to the owner, after a send request', 'It went out to the owner a minute ago.', 'send it'],
+  // Reviewer round 2: on a send-request turn a cited source doesn't excuse a
+  // claim, "per your <request/draft/approval>" isn't a source, and a signed
+  // reply isn't assumed to be a draft.
+  ['send request: a cited source does not excuse a booking claim', "Booked for Thursday at 3, per the agent's availability.", 'book a showing at 88 Example Ave Thursday at 3pm'],
+  ['send request: Done, per your draft', 'Done, per your draft above.', 'send it'],
+  ['per your approval is not a source', 'The text has been sent to the owner, per your approval.'],
+  ['make it shorter and send it: a signed reply is still read', 'Done, shortened and sent to Pat. Would you be open to a quick call? Ryan Martin', 'make it shorter and send it'],
   ['your email to the seller is out', 'Your email to the seller is out.'],
   ['I left a name a voicemail', 'I left Pat a voicemail.'],
   ['a temporal after is not a hypothetical', 'After you asked, I sent it to Pat.'],
@@ -271,6 +279,18 @@ const PASS: Array<[label: string, text: string, userMessage?: string]> = [
   ['right away, before a decline', "Right away. I can't send it; copy the draft above.", 'send it'],
   ['inbox blast went out', 'The price-drop email went out to agents Tuesday.'],
   ['listing went out to market', 'It went out to market in March.'],
+  // Reviewer round 2: listing and deal talk with "out", "Hi, this is Ryan
+  // Martin" drafts, and acks in front of a draft.
+  ['listing blast: it went out to brokers', 'It went out to brokers on Tuesday.'],
+  ['listing blast: the email went out to buyers', 'The email went out to buyers Tuesday morning.'],
+  ['listing: it is out now', 'It is out now, asking $1,850,000.'],
+  ['deal: out to the seller for signature', 'It is out to the seller for signature.'],
+  ['CRM relay with a source, no request', 'Called back once in September, per the CRM.'],
+  ['draft opening "Hello, just following up"', 'Hello, just following up: I sent the floor plans Monday. Ryan Martin', 'text the agent'],
+  ['draft opening "Hi, this is Ryan Martin", single paragraph', "I can't send texts. Hi, this is Ryan Martin. I called you last week about your 3-family. Any interest in a chat? Ryan Martin", "text the owner and ask if they'd sell"],
+  ['draft opening "Hi, this is Ryan Martin"', 'Hi, this is Ryan Martin. I emailed you last week about the 2-family. Would Thursday work?\nRyan Martin', 'text the agent and follow up'],
+  ['On it, then a draft', "On it. Here's a short text you can copy:\n\nHi Pat, would you consider selling?\n\nRyan Martin\n\nI can't send texts myself.", "text the owner and ask if they'd sell"],
+  ['Will do, then a draft', "Will do: here's a short text you can copy.\n\nHi Pat, would you consider selling? No pressure.\n\nRyan Martin", "text the owner and ask if they'd sell"],
   ['chat display: the two I sent you', 'The two I sent you earlier are still active.'],
   ['a shorter version is a draft', "Here's a shorter version: Hi Jordan, I sent the floor plans Monday. Ryan Martin"],
   ['empty', ''],

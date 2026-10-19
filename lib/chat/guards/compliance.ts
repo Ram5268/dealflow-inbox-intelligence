@@ -72,7 +72,7 @@ const DRAFT_LEAD_IN = /\b(?:here's|here is|here are|below is|below are)\b[^:\n]{
 const DRAFT_LABEL = /(?:^|\n) ?(?:subject|draft)(?: \d)?:/gi
 // A greeting to someone other than Ryan ("Hi Pat,", "Hello there"), at the start
 // of a line or sentence. Not "Hey, sent it".
-const DRAFT_GREETING = /(?:^|\n|[.!?:] )(?:[Hh]i|[Hh]ello|[Hh]ey|[Dd]ear|[Gg]ood (?:morning|afternoon|evening))(?=,? [A-Z]|,? (?:there|all|team)\b|,?\n)(?!,? Ryan\b)/g
+const DRAFT_GREETING = /(?:^|\n|[.!?:] )(?:[Hh]i|[Hh]ello|[Hh]ey|[Dd]ear|[Gg]ood (?:morning|afternoon|evening))(?=[ ,\n])(?!,? Ryan\b)(?!,? (?:sent|texted|emailed|messaged|forwarded|called|booked|scheduled|done|all set|on it|will do)\b)/g
 // A salutation line that is only a name ("Jordan," / "Jordan -").
 const NAME_SALUTATION = /(?:^|\n)(?!Ryan\b|Best\b|Thanks\b|Cheers\b|Regards\b|Sincerely\b|Warmly\b)[A-Z][a-z]{1,20}(?: [A-Z][a-z]{1,20})?(?:,| -| \u2014) ?(?=\n)/g
 // A lead-in line ending in a colon ("Try this:" / "Revised:") starts a draft
@@ -147,12 +147,14 @@ const MESSAGE = String.raw`(?:texts?|emails?|e-mails?|messages?|notes?|drafts?|r
 // a source ("per the email", "according to the CRM") is reporting the inbox,
 // not claiming Drift did it. Used for every shape except Drift's own "I".
 // "per month" / "per square foot" (prices) and "by Monday" (a time) don't count.
-const INBOX_SOURCE = /\b(?:[Pp]er|[Aa]ccording to) (?:(?:the|their|his|her) [A-Za-z]|your (?!(?:request|ask|instructions?|note)\b)[A-Za-z]|[A-Z])|\bby (?:the |a |an |their |his |her )?(?:agents?|listing agent|brokers?|brokerage|owner|seller|landlord|developer|sponsor|team|(?!(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tues|Tue|Wed|Thurs|Thur|Thu|Fri|Sat|Sun|January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec|EOD|COB)\b)[A-Z])/
+const INBOX_SOURCE = /\b(?:[Pp]er|[Aa]ccording to) (?:(?:the|their|his|her) [A-Za-z]|your (?:notes?|crm|call (?:log|history|notes)|inbox|emails?|records?|calendar)\b|[A-Z])|\bby (?:the |a |an |their |his |her )?(?:agents?|listing agent|brokers?|brokerage|owner|seller|landlord|developer|sponsor|team|(?!(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tues|Tue|Wed|Thurs|Thur|Thu|Fri|Sat|Sun|January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec|EOD|COB)\b)[A-Z])/
 
 interface ClaimPattern {
   regex: RegExp
   // Drift's own "I ..." claims: a cited source doesn't excuse those.
   firstPerson?: boolean
+  // Only read right after a send request.
+  sendRequestOnly?: boolean
   // Bare clause-initial shapes carry their own lead and skip the prefix checks.
   anchored?: boolean
   // Past or state claims pass under "if/once/when"; promises ("I'll send it
@@ -219,10 +221,18 @@ const CLAIM_PATTERNS: ClaimPattern[] = [
     conditionalPasses: true,
   },
   {
-    // "The text went out." "It went out to the owner." "Your email to the seller
-    // is out." Not "The price-drop email went out Tuesday" (an agent's blast).
-    regex: new RegExp(String.raw`\b(?:[Ii]t|[Tt]hat|(?:[Tt]he|[Yy]our) ${MESSAGE}(?: to [^.!?;:\n]{1,40}?)?) (?:went|has gone|'s gone|is|'s) out(?=[.!,]|$| to (?:the |your |their )?(?:seller|owner|homeowner|agent|buyer|broker|landlord|tenant|listing agent|buyer's agent|client)s?\b| to [A-Z]| (?:a minute ago|just now|now)\b)`, 'g'),
+    // "The text went out." "Your email to the seller is out." One person, not
+    // a blast: "The email went out to buyers Tuesday" is an agent's email.
+    regex: new RegExp(String.raw`\b(?:[Tt]he|[Yy]our) ${MESSAGE}(?: to [^.!?;:\n]{1,40}?)? (?:went|has gone|is) out(?=[.!,]|$| to (?:the |your |their )?(?:seller|owner|homeowner|agent|buyer|broker|landlord|tenant|listing agent|buyer's agent|client)\b(?!s)| to [A-Z]| (?:a minute ago|just now|now)\b)`, 'g'),
     conditionalPasses: true,
+  },
+  {
+    // "It went out to the owner." only right after a send request;
+    // otherwise "It went out to brokers Tuesday" / "It is out now, asking ..."
+    // is a listing.
+    regex: new RegExp(String.raw`\b(?:[Ii]t|[Tt]hat) (?:went|has gone|is) out(?=[.!,]|$| to (?:the |your |their )?(?:seller|owner|homeowner|agent|buyer|broker|landlord|tenant|listing agent|buyer's agent|client)\b(?!s)| to [A-Z]| (?:a minute ago|just now)\b)`, 'g'),
+    conditionalPasses: true,
+    sendRequestOnly: true,
   },
   {
     // "The text is on its way." "It's on its way to Pat." Not "on its way to
@@ -252,8 +262,11 @@ const CLAIM_PATTERNS: ClaimPattern[] = [
 // ("Certainly." / "Right away." are left out: the prompt has Drift open with them.)
 // "Scheduled for Friday at noon." (Without a request, "scheduled for Friday" is
 // how Drift describes a showing-confirmation email in the inbox.)
+// "Will do" / "On it" / "Handled" count only when the reply has
+// no draft; "On it. Here's a short text you can copy: ..." is the draft offer.
+const ACK_ONLY = new RegExp(String.raw`^${LEAD}(?:handled|will do|on it)(?=[.!,]|$| (?:and|it|that)\b)`, 'i')
 const AFTER_SEND_REQUEST: RegExp[] = [
-  new RegExp(String.raw`^${LEAD}(?:done|all done|all set|you're all set|it's done|that's done|consider it (?:done|sent)|(?:that's |it's )?(?:been )?taken care of|handled|will do|on it)(?=[.!,]|$| (?:and|it|that)\b)`, 'i'),
+  new RegExp(String.raw`^${LEAD}(?:done|all done|all set|you're all set|it's done|that's done|consider it (?:done|sent)|(?:that's |it's )?(?:been )?taken care of)(?=[.!,]|$| (?:and|it|that)\b)`, 'i'),
   new RegExp(String.raw`^${LEAD}(?:scheduled|confirmed|set) for (?:${DAY}\b|\d)`, 'i'),
   // Booking confirmations: "You're all set for Thursday at 3pm."
   new RegExp(String.raw`^${LEAD}(?:you're|you are) (?:all )?(?:set|confirmed|booked) for (?:${DAY}\b|\d)|^${LEAD}(?:the |your )?(?:showing|appointment|meeting|call|viewing|tour)(?: is| has been|'s)? (?:confirmed|set|scheduled)(?=[.!,]|$| for (?:${DAY}\b|\d))`, 'i'),
@@ -291,13 +304,18 @@ export function isSendRequest(userMessage: string | null | undefined): boolean {
 export function scanActionClaims(text: string, opts: ActionClaimOptions = {}): RegexFlag[] {
   if (!text) return []
   const draftAsked = !!opts.userMessage && DRAFT_ASK.test(normalize(opts.userMessage).toLowerCase())
-  const scanned = stripDraftText(normalize(text), { draftAsked })
   const sendRequest = isSendRequest(opts.userMessage)
+  const normalized = normalize(text)
+  const scanned = stripDraftText(normalized, { draftAsked: draftAsked && !sendRequest })
+  const hasDraft = scanned !== normalized.replace(CODE_FENCE, '\n').replace(BLOCKQUOTE, '').replace(QUOTED, '""').replace(RELAYED_NOTES, '\n')
   const flags: RegexFlag[] = []
   for (const raw of scanned.split(CLAUSE_BREAK)) {
     const clause = raw.replace(/^[\s"'(*•>-]+/, '').trimEnd()
     if (!clause || clause.endsWith('?')) continue // a question isn't a claim
-    const inboxSource = INBOX_SOURCE.test(clause)
+    // On a send-request turn ("send it", "book a showing ...") a
+    // cited source doesn't excuse a claim ("Booked for Thursday, per the agent's
+    // availability"); on other turns it is inbox or CRM talk.
+    const inboxSource = !sendRequest && INBOX_SOURCE.test(clause)
     const taken: Array<[number, number]> = []
     const add = (start: number, match: string) => {
       const end = start + match.length
@@ -306,13 +324,14 @@ export function scanActionClaims(text: string, opts: ActionClaimOptions = {}): R
       flags.push({ pattern: ACTION_CLAIM, match: match.trim() })
     }
     if (sendRequest && !inboxSource) {
-      for (const re of AFTER_SEND_REQUEST) {
+      for (const re of hasDraft ? AFTER_SEND_REQUEST : [...AFTER_SEND_REQUEST, ACK_ONLY]) {
         const m = re.exec(clause)
         if (m) add(0, m[0])
       }
     }
     for (const p of CLAIM_PATTERNS) {
       if (inboxSource && !p.firstPerson) continue
+      if (p.sendRequestOnly && !sendRequest) continue
       if (p.anchored) {
         const m = p.regex.exec(clause)
         if (m && !NEGATED_AFTER.test(clause.slice(m[0].length, m[0].length + 30))) add(0, m[0])
