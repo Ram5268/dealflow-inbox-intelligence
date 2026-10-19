@@ -38,6 +38,6 @@ test('no .unit.test.ts file is a database test', () => {
     assert.ok(!integration.has(file), `${file} is listed in INTEGRATION_TESTS`)
     if (file === relative(ROOT, __filename)) continue // this file names the patterns
     const src = readFileSync(join(ROOT, file), 'utf8')
-    assert.ok(!/requireTestDb|dotenv\/config/.test(src), `${file} loads a database (requireTestDb / dotenv)`)
+    assert.ok(!/requireTestDb|\bdotenv\b/.test(src), `${file} loads a database (requireTestDb / dotenv)`)
   }
 })

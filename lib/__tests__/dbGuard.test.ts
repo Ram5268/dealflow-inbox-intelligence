@@ -142,6 +142,9 @@ const npmTestFiles = [...new Set(
 )]
 
 test('npm test runs no database-backed file', () => {
+  // Brief 43 (PR 0): every *.unit.test.ts runs only through this step;
+  // a hand-merged `test` line that drops it would skip them all silently.
+  assert.match(scripts.test, /&& npm run test:unit(?= &&|$)/)
   const integration = new Set(INTEGRATION_TESTS.map(t => t.file))
   for (const f of npmTestFiles) {
     assert.ok(!integration.has(f), `${f} is an integration test`)
