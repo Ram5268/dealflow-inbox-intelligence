@@ -2,6 +2,17 @@ import 'dotenv/config'
 import { Pool } from 'pg'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient, Category, TransactionType } from '@prisma/client'
+import { refuseLiveDatabase } from '../lib/dbGuard'
+
+// Brief 47 (PR 2), engineering precaution (Brief 41.2 found-not-fixed;
+// confirmed 2026-10-18): this writes demo emails and listings, and it's run by
+// `npm run db:seed` and `prisma db seed`, from a folder whose .env may point at
+// production. So, like the seed scripts in scripts/ (Brief 41.2 PR B's
+// test-or-seed rule), it refuses any database but a *_perf or *_test one, with
+// no override. .env is loaded first (the first import), and this runs before
+// the pool is built, so it checks the URL the seed really uses
+// (lib/__tests__/scriptGuards.test.ts checks).
+refuseLiveDatabase(process.env.DATABASE_URL, 'prisma/seed.ts')
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 const adapter = new PrismaPg(pool)
