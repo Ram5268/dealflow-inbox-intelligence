@@ -31,9 +31,10 @@ class DealFlow:
             raise RuntimeError(f"{config.SECRET_ENV} is not set")
         self.base = base_url.rstrip("/")
         # A new connection for every request: requests' own get/post open and close one per call.
-        # A connection kept open from the targets request sits idle while the model runs (about
-        # 6 minutes), the server closes it, and with no retries the first publish request then
-        # fails ("Remote end closed connection without response", seen 2026-10-18). Tests pass a fake.
+        # On 2026-10-18 the first publish request, sent on the connection kept open from the targets
+        # request about 6 minutes earlier, got "Remote end closed connection without response", and
+        # with no retries the run stopped. Likeliest cause, not confirmed: the server closed that
+        # connection as the request arrived. A fresh connection can't be one. Tests pass a fake.
         self.http = session or requests
         self._headers = {"Authorization": f"Bearer {key}", "User-Agent": config.USER_AGENT, "Content-Type": "application/json"}
 

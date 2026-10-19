@@ -260,7 +260,8 @@ def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool,
         try:
             return client.post(payload)
         except Exception as e:
-            log(f"  {step} failed after {time.time() - t:.1f}s: {type(e).__name__}")
+            why = f"{type(e).__name__} {e.status}" if isinstance(e, Refused) else type(e).__name__
+            log(f"  {step} failed after {time.time() - t:.1f}s: {why}")
             raise
 
     r = send("start", {"action": "start", "run": run_payload})
