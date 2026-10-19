@@ -1,0 +1,41 @@
+name: valuation-fetch-tests
+
+# Brief 44.1: the tests for the public-data downloader in valuation/fetch/.
+#
+# Engineering precaution: the tests block the network and use tiny recorded
+# responses, so this job downloads nothing and is given no secrets. It is a
+# separate file so the repo's ci.yml stays untouched.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'valuation/fetch/**'
+      - '.github/workflows/valuation-fetch-tests.yml'
+  pull_request:
+    paths:
+      - 'valuation/fetch/**'
+      - '.github/workflows/valuation-fetch-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: valuation/fetch/requirements.txt
+
+      - name: Install
+        run: pip install -r valuation/fetch/requirements.txt
+
+      - name: Test (no network)
+        run: python -m pytest valuation/fetch/tests
