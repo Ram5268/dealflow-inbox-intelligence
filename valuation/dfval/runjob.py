@@ -252,7 +252,19 @@ def recount(run_payload: dict, rows: list[dict]) -> dict:
 def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool, log, final: dict | None = None) -> bool:
     """start -> rows (200 at a time) -> publish. A seller DealFlow no longer counts as a CRM seller
     is dropped and the run restarted with the smaller row count (CONTRACT.md §3)."""
-    r = client.post({"action": "start", "run": run_payload})
+    def send(step: str, payload: dict) -> dict:
+        # One line per request (its step and size; on a failure, how long it took and the error
+        # type), so a stopped publish says where it stopped. Counts only. Still no retries.
+        t = time.time()
+        log(f"  send {step}: {len(json.dumps(payload, allow_nan=False)):,} bytes")
+        try:
+            return client.post(payload)
+        except Exception as e:
+            why = f"{type(e).__name__} {e.status}" if isinstance(e, Refused) else type(e).__name__
+            log(f"  {step} failed after {time.time() - t:.1f}s: {why}")
+            raise
+
+    r = send("start", {"action": "start", "run": run_payload})
     if not (passed and r.get("gatesPassed")):
         log("gates failed: the run is recorded, nothing published; DealFlow keeps the last published values")
         return False
@@ -261,7 +273,7 @@ def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool,
     while i < len(rows):
         batch = rows[i:i + config.BATCH_SIZE]
         try:
-            client.post({"action": "rows", "runId": run_payload["runId"], "rows": batch})
+            send(f"rows {i + 1:,}-{i + len(batch):,}", {"action": "rows", "runId": run_payload["runId"], "rows": batch})
             i += len(batch)
         except Refused as e:
             unknown = set(e.body.get("unknown") or [])
@@ -272,10 +284,10 @@ def publish(client: DealFlow, run_payload: dict, rows: list[dict], passed: bool,
             run_payload = recount(run_payload, rows)
             if final is not None:
                 final.update(counts=run_payload["counts"], gates=run_payload["gates"])
-            r = client.post({"action": "start", "run": run_payload})
+            r = send("start again", {"action": "start", "run": run_payload})
             if not (run_payload["gates"]["passed"] and r.get("gatesPassed")):
                 log("after dropping them a gate fails: nothing published; DealFlow keeps the last published values")
                 return False
-    client.post({"action": "publish", "runId": run_payload["runId"]})
+    send("publish", {"action": "publish", "runId": run_payload["runId"]})
     log(f"published run {run_payload['runId']}: {len(rows):,} rows")
     return True
