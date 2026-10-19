@@ -122,6 +122,22 @@ test('the borough can come from elsewhere in the message, or from the parsed que
   // A neighborhood that is also a first name counts only next to the address.
   assert.equal(find('Travis asked who owns 418 Marigold Street?')?.boroughCode, null)
   assert.equal(find('who owns 418 Example St, Chelsea')?.boroughCode, '1')
+  // Brief 43 PR 11 review: only the place words right after the street are
+  // typed with it; a first name later in the sentence, or after "St.", is not.
+  assert.equal(find('who owns 418 Example St for Travis')?.boroughCode, null)
+  assert.equal(find('who owns 418 Example St. Travis wants to know')?.boroughCode, null)
+  assert.equal(find('who owns 418 Example St, my buyer Jamaica is asking')?.boroughCode, null)
+  assert.equal(find('Who owns 418 Example St. Chelsea asked me.')?.boroughCode, null)
+  assert.deepEqual([find('who owns 418 Example St. My Queens buyer is asking.')?.boroughCode, find('who owns 418 Example St. My Queens buyer is asking.')?.boroughFrom], ['4', 'message'])
+  assert.deepEqual([find('who owns 418 Example St Apt 3B, Brooklyn')?.boroughCode, find('who owns 418 Example St Apt 3B, Brooklyn')?.boroughFrom], ['3', 'address'])
+  assert.deepEqual([find('who owns 418 Example St. Brooklyn')?.boroughCode, find('who owns 418 Example St. Brooklyn')?.boroughFrom], ['3', 'address'])
+  // Typed with the address beats a borough later in the sentence, but not
+  // one offered as an alternative.
+  assert.equal(find('who owns 418 Example St, Queens/Brooklyn?')?.boroughFrom, 'conflict')
+  assert.equal(find('who owns 418 Example St in Brooklyn or the Bronx?')?.boroughFrom, 'conflict')
+  assert.deepEqual([find('who owns 418 Example St, Brooklyn or is it a condo?')?.boroughCode], ['3'])
+  assert.deepEqual([find('who owns 418 Example St, Queens, for my Brooklyn buyer')?.boroughCode, find('who owns 418 Example St, Queens, for my Brooklyn buyer')?.boroughFrom], ['4', 'address'])
+  assert.deepEqual([find('who owns 418 Example St, Brooklyn for my Queens buyer')?.boroughCode, find('who owns 418 Example St, Brooklyn for my Queens buyer')?.boroughFrom], ['3', 'address'])
   // parsed.boroughs is the last resort, unless the borough word is the street's own.
   const c = find('who owns 12 Example Park West', { boroughs: ['Manhattan'] })
   assert.deepEqual([c?.boroughCode, c?.boroughFrom], ['1', 'hint'])

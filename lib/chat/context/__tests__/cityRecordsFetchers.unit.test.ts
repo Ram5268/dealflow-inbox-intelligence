@@ -31,7 +31,8 @@ test('"when did … last sell" fires the deed lookup with no model help (Q25)', 
   city.reset()
   const sellFor = await run(acrisFetcher, 'what did 88 Example Avenue, Brooklyn sell for?')
   assert.ok(city.urlsFor('8h5j-fqxa').length > 0, '"sell for" too')
-  assert.match(sellFor.block ?? '', /Last sale: 2020-01-10 for \$1,500,000/)
+  // Brief 43 PR 11 review: the lot with the newest deed.
+  assert.match(sellFor.block ?? '', /Last sale: 2022-08-01 for \$700,000/)
   city.reset()
   await run(acrisFetcher, 'has 418 Marigold Street, Staten Island sold since 2019?')
   assert.ok(city.urlsFor('8h5j-fqxa').length > 0, '"sold" too')
@@ -91,7 +92,9 @@ test('when the message names no borough, the parse fallback\'s borough is used, 
 test('nothing on file in the assumed borough: Drift is told that, and to ask', async () => {
   const out = await run(acrisFetcher, 'who owns 1500 Broadway?')
   const block = out.block ?? ''
-  assert.match(block, /No deed records on file/)
+  assert.match(block, /No deed records found for this address as written/)
+  // Brief 43 PR 11 review: a spelling miss is not proof there are none.
+  assert.match(block, /not that none exist/)
   assert.match(block, /Brooklyn/)
   assert.match(block, /Borough assumed: Brooklyn/)
 })
@@ -108,7 +111,11 @@ test('permits and violations: that building, in that borough (M30; DRIFT_SCRIPT 
   assert.match(city.whereFor('ipu4-2q9a')[0], /'MARIGOLD STREET'/)
   assert.match(city.whereFor('3h2n-5cm9')[0], /boro='4'/)
   // Nothing came back from either dataset: "none on file", not silence.
-  assert.match(out.block ?? '', /No DOB permits or violations on file/)
+  assert.match(out.block ?? '', /No permits or violations found for this address as written/)
+  // Brief 43 PR 11 review: only the older DOB permits and DOB violations are
+  // searched, so Drift says what was checked.
+  assert.match(out.block ?? '', /DOB NOW/)
+  assert.match(out.block ?? '', /not that there are none/)
   assert.doesNotMatch(out.block ?? '', /assumed/i)
 })
 
@@ -127,4 +134,32 @@ test('the new street forms reach the lookups (Q24)', async () => {
   city.reset()
   await run(acrisFetcher, 'who owns 1500 Broadway, Manhattan?')
   assert.ok(city.urlsFor('8h5j-fqxa').some(u => /street_name=BROADWAY(&|$)/.test(u) && /borough=1(&|$)/.test(u)), city.urlsFor('8h5j-fqxa').join('\n'))
+})
+
+test('two boroughs named: Brooklyn is searched, and Drift is told the message named two (review)', async () => {
+  const out = await run(acrisFetcher, 'who owns 418 Marigold Street, Brooklyn or Queens?')
+  assert.match(out.block ?? '', /named more than one borough/)
+  assert.doesNotMatch(out.block ?? '', /didn't name a borough/)
+})
+
+test('a borough named elsewhere in the message is used, and Drift is told so (review)', async () => {
+  const out = await run(acrisFetcher, 'my Queens buyer asked who owns 418 Marigold Street?')
+  assert.match(out.block ?? '', /BBL: Queens Block 04444 Lot 0044/)
+  assert.match(out.block ?? '', /Borough taken as Queens from elsewhere in the message/)
+  city.reset()
+  const typed = await run(acrisFetcher, 'who owns 418 Marigold Street, Queens?')
+  assert.doesNotMatch(typed.block ?? '', /BOROUGH NOTE/)
+})
+
+test('"any permits or violations there?" uses the previous message\'s address, and says so (review; L4, DRIFT_SCRIPT #22)', async () => {
+  const msg = 'any permits or violations there?'
+  const out = await dobFetcher({ parsed: plain(msg), userMessage: msg, queryText: msg, isConfirmMessage: false, previousUserMessage: 'who owns 418 Marigold Street, Queens?' })
+  assert.match(city.whereFor('ipu4-2q9a')[0] ?? '', /borough='QUEENS'/)
+  assert.match(city.whereFor('ipu4-2q9a')[0] ?? '', /'MARIGOLD STREET'/)
+  assert.match(out.block ?? '', /the address in Ryan's previous message/)
+  // No previous address, or nothing pointing back: no lookup.
+  city.reset()
+  assert.equal((await dobFetcher({ parsed: plain(msg), userMessage: msg, queryText: msg, isConfirmMessage: false, previousUserMessage: 'show me listings in Bushwick' })).block, null)
+  assert.equal((await dobFetcher({ parsed: plain('any permits?'), userMessage: 'any permits?', queryText: 'any permits?', isConfirmMessage: false, previousUserMessage: 'who owns 418 Marigold Street?' })).block, null)
+  assert.equal(city.urls.length, 0)
 })

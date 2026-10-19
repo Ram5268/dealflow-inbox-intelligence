@@ -41,6 +41,9 @@ export interface ACRISResult {
   // (condo units, a split lot, or, with no borough given, another borough's).
   // Their deeds are left out; see keepOneLot.
   otherLotsAtAddress: number
+  // Brief 43 PR 11 review: the kept lot is one condo unit (lot 1001-6999),
+  // not the whole building: its unit, or "lot 1002" when none is listed.
+  condoUnit?: string | null
   fetchedAt: string
 }
 
@@ -271,14 +274,54 @@ const ADDRESS_PATTERN = new RegExp(
   'i',
 )
 
+// Brief 43 PR 11 review: the run of place words right after a street: unit,
+// borough, neighborhood, "NY", zip, joined by commas, spaces or "in"/"at"
+// (", Apt 2, Brooklyn, NY 11221", " in Bed-Stuy"). It stops at the first
+// other word, so "… for Travis" gives "" [engineering precaution].
+const PLACE_AT_START = (() => {
+  const names = [
+    ...NEIGHBORHOOD_WORDS.map(n => n.name),
+    'manhattan', 'bronx', 'brooklyn', 'bklyn', 'bk', 'kings county', 'queens', 'staten island', 'richmond county',
+    'new york city', 'new york', 'nyc', 'n.y.', 'ny',
+  ]
+  const alts = [...new Set(names)].sort((a, b) => b.length - a.length).map(escapeRe).join('|')
+  return new RegExp(`^(?:\\d{5}(?:-\\d{4})?(?!\\d)|(?:${alts})(?![a-z0-9'’-])(?!\\s{1,3}(?:${STREET_WORDS})\\b))`, 'i')
+})()
+const PLACE_JOIN = /^(?:\s*,\s*|\s+(?:in|at)\s+|\s+)(?:the\s+)?/i
+const UNIT_AT_START = /^\s*,?\s*(?:(?:apt|apartment|unit|suite|ste|fl|floor|ph)(?![a-z])\.?\s*#?\s*[a-z0-9-]{1,6}|#\s*[a-z0-9-]{1,6})(?![a-z0-9])/i
+
+// "or Queens", "and Brooklyn", "/ Queens", "vs. the Bronx" right after the place run.
+const PLACE_ALTERNATIVE = /^\s*,?\s*(?:or|and|vs\.?|\/)\s*(?:the\s+)?/i
+
+function placeAlternativeAfter(rest: string): ReturnType<typeof findPlace> {
+  const join = PLACE_ALTERNATIVE.exec(rest)?.[0]
+  if (!join) return null
+  const place = PLACE_AT_START.exec(rest.slice(join.length))
+  return place ? findPlace(place[0], { strict: true }) : null
+}
+
+function placeRunAfter(tail: string): string {
+  let run = UNIT_AT_START.exec(tail)?.[0] ?? ''
+  let found = false
+  for (let i = 0; i < 6; i++) {
+    const rest = tail.slice(run.length)
+    const join = PLACE_JOIN.exec(rest)?.[0] ?? ''
+    const place = PLACE_AT_START.exec(rest.slice(join.length))
+    if (!place) break
+    run += join + place[0]
+    found = true
+  }
+  return found ? run : ''
+}
+
 export interface AddressInText {
   /** The street address as typed: "418 Marigold Street". */
   street: string
   /** The street plus the borough, zip or neighborhood typed with it: "418 Marigold Street, Brooklyn, NY 11221". */
   address: string
   boroughCode: BoroughCode | null
-  /** Where the borough came from: typed with the address, elsewhere in the message, or the parsed query. */
-  boroughFrom: 'address' | 'message' | 'hint' | null
+  /** Where the borough came from: typed with the address, elsewhere in the message, or the parsed query; 'conflict' when two boroughs were named. */
+  boroughFrom: 'address' | 'message' | 'hint' | 'conflict' | null
 }
 
 /**
@@ -297,13 +340,27 @@ export function findAddressInText(text: string, hints: { boroughs?: string[] } =
 
   // The rest of the sentence after the street.
   const tail = text.slice(end).split(/[?!;\n]|\.(?=\s|$)/)[0].slice(0, 80)
-  const atAddress = findPlace(tail, { strict: false })
-  if (atAddress === 'conflict') return { street, address: street, boroughCode: null, boroughFrom: null }
+  // Brief 43 PR 11 review: only the place words right after the street count
+  // as typed with it (", Brooklyn, NY 11221", " in Bed-Stuy", " Apt 2, Queens").
+  // A name later in the sentence ("… for Travis", "… my Queens buyer") is
+  // elsewhere in the message. After "St." with no comma, the next word may
+  // start a new sentence, so the first-name neighborhoods don't count there.
+  // A borough typed with the address wins over one later in the sentence
+  // ("418 Example St, Queens, for my Brooklyn buyer" is in Queens)
+  // [engineering precaution].
+  const lead = placeRunAfter(tail)
+  const atAddress = lead ? findPlace(lead, { strict: m[0].endsWith('.') && !/^\s*,/.test(tail) }) : null
+  // "…, Brooklyn or Queens?": a second borough offered as an alternative.
+  const alternative = atAddress && atAddress !== 'conflict' ? placeAlternativeAfter(tail.slice(lead.length)) : null
+  if (atAddress === 'conflict' || (atAddress && alternative && alternative !== 'conflict' && alternative.code !== atAddress.code) || alternative === 'conflict') {
+    return { street, address: street, boroughCode: null, boroughFrom: 'conflict' }
+  }
   if (atAddress) return { street, address: `${street}, ${atAddress.label}`, boroughCode: atAddress.code, boroughFrom: 'address' }
 
-  const rest = text.slice(0, m.index) + ' '.repeat(m[0].length) + text.slice(end)
+  const used = end + lead.length
+  const rest = text.slice(0, m.index) + ' '.repeat(used - m.index) + text.slice(used)
   const inMessage = findPlace(rest, { strict: true })
-  if (inMessage === 'conflict') return { street, address: street, boroughCode: null, boroughFrom: null }
+  if (inMessage === 'conflict') return { street, address: street, boroughCode: null, boroughFrom: 'conflict' }
   if (inMessage) return { street, address: street, boroughCode: inMessage.code, boroughFrom: 'message' }
 
   const streetLower = street.toLowerCase()
@@ -357,6 +414,7 @@ interface LegalRow {
   property_type: string
   street_number: string
   street_name: string
+  unit?: string
 }
 
 interface MasterRow {
@@ -427,10 +485,15 @@ const CACHE_TTL = 24 * 60 * 60 * 1000
 
 // Brief 43 PR 11 (Q16): one street address can match more than one tax lot:
 // the same number and street in another borough (when no borough was given),
-// a split lot, condo units. Merging their deeds gave one building's "current
-// owner" with another's "last sale". Keep the lot with the most filings (ties:
-// the first the city listed) and count the others [engineering precaution].
-function keepOneLot(legals: LegalRow[]): { rows: LegalRow[]; otherLots: number } {
+// a split or merged lot, condo units. Merging their deeds gave one building's
+// "current owner" with another's "last sale". Keep one lot and count the others
+// [engineering precaution].
+//
+// Brief 43 PR 11 review: the lot with the newest deed (then the newest filing,
+// then the most filings), not the most filings: after a merger or split the
+// old lot keeps decades of filings while the building now sits on the new one
+// [engineering precaution].
+function keepOneLot(legals: LegalRow[], master: MasterRow[]): { rows: LegalRow[]; otherLots: number } {
   const byLot = new Map<string, LegalRow[]>()
   for (const l of legals) {
     const key = `${l.borough}|${l.block}|${l.lot}`
@@ -438,9 +501,31 @@ function keepOneLot(legals: LegalRow[]): { rows: LegalRow[]; otherLots: number }
     if (rows) rows.push(l)
     else byLot.set(key, [l])
   }
+  const byId = new Map(master.map(m => [m.document_id, m]))
+  const newest = (rows: LegalRow[], deedsOnly: boolean) => rows.reduce((best, l) => {
+    const m = byId.get(l.document_id)
+    if (!m || (deedsOnly && !isDeed(m))) return best
+    const d = m.recorded_datetime ?? m.document_date ?? ''
+    return d > best ? d : best
+  }, '')
   let rows: LegalRow[] = []
-  for (const lotRows of byLot.values()) if (lotRows.length > rows.length) rows = lotRows
+  let key: [string, string, number] = ['', '', 0]
+  for (const lotRows of byLot.values()) {
+    const k: [string, string, number] = [newest(lotRows, true), newest(lotRows, false), lotRows.length]
+    const better = k[0] !== key[0] ? k[0] > key[0] : k[1] !== key[1] ? k[1] > key[1] : k[2] > key[2]
+    if (rows.length === 0 || better) { rows = lotRows; key = k }
+  }
   return { rows, otherLots: byLot.size - 1 }
+}
+
+const isDeed = (m: MasterRow) => [...DEED_TYPES].some(t => m.doc_type?.toUpperCase().startsWith(t.split(',')[0]))
+
+// Modern ACRIS document ids start with the recording date (YYYYMMDD…); older
+// ones ("FT_…") sort after them. Used to send the newest ids first, since the
+// Master lookup takes at most 50.
+const newestIdFirst = (a: string, b: string) => {
+  const da = /^\d{8}/.test(a), db = /^\d{8}/.test(b)
+  return da !== db ? (da ? -1 : 1) : b.localeCompare(a)
 }
 
 // Brief 43 PR 11: what a deed lookup found. 'none' means the city records
@@ -478,10 +563,20 @@ export async function findPropertyRecords(address: string, opts: { boroughCode?:
   if (searchBorough) legals = legals.filter(l => String(l.borough) === searchBorough)
   if (legals.length === 0) return { status: 'none' }
 
-  // Brief 43 PR 11 (Q16): one lot only.
-  const { rows: lotLegals, otherLots } = keepOneLot(legals)
+  // Step 2: Get document metadata from Master (every matching lot's, newest
+  // first, so the lot can be picked by date; still one request).
+  let allMaster: MasterRow[] = []
+  try {
+    allMaster = await fetchMaster([...new Set(legals.map(l => l.document_id))].sort(newestIdFirst))
+  } catch (e) {
+    console.error('[ACRIS] Master fetch failed:', (e as Error).message)
+    return { status: 'failed' }
+  }
 
-  const docIds = [...new Set(lotLegals.map(l => l.document_id))]
+  // Brief 43 PR 11 (Q16): one lot only.
+  const { rows: lotLegals, otherLots } = keepOneLot(legals, allMaster)
+
+  const docIds = new Set(lotLegals.map(l => l.document_id))
 
   // Detect co-op from property type codes
   const isCoOp = lotLegals.some(l => COOP_TYPES.has(l.property_type))
@@ -491,19 +586,17 @@ export async function findPropertyRecords(address: string, opts: { boroughCode?:
   const block = firstLegal.block ?? null
   const lot = firstLegal.lot ?? null
   const boroughCode = firstLegal.borough ?? searchBorough ?? null
+  const lotNumber = parseInt(String(lot ?? ''), 10)
+  const unitName = lotLegals.map(l => l.unit?.trim()).find(Boolean)
+  const condoUnit = otherLots > 0 && lotNumber >= 1001 && lotNumber <= 6999
+    ? (unitName ? `unit ${unitName}` : `lot ${lotNumber}`)
+    : null
 
-  // Step 2: Get document metadata from Master
-  let master: MasterRow[] = []
-  try {
-    master = await fetchMaster(docIds)
-  } catch (e) {
-    console.error('[ACRIS] Master fetch failed:', (e as Error).message)
-    return { status: 'failed' }
-  }
+  const master = allMaster.filter(m => docIds.has(m.document_id))
 
   // Filter to deeds and mortgages, sort by date descending
   const deeds = master
-    .filter(m => [...DEED_TYPES].some(t => m.doc_type?.toUpperCase().startsWith(t.split(',')[0])))
+    .filter(isDeed)
     .sort((a, b) => (b.recorded_datetime ?? '').localeCompare(a.recorded_datetime ?? ''))
 
   const mortgages = master
@@ -578,6 +671,7 @@ export async function findPropertyRecords(address: string, opts: { boroughCode?:
     isCoOp,
     transfers,
     otherLotsAtAddress: otherLots,
+    condoUnit,
     fetchedAt: new Date().toISOString(),
   }
 
@@ -622,8 +716,11 @@ export function formatForChat(r: ACRISResult): string {
   // Brief 43 PR 11 (Q16): say when other lots share the address, so Drift
   // doesn't present one lot's records as the whole address's.
   const others = r.otherLotsAtAddress ?? 0
-  if (others > 0) {
-    lines.push(`Note: ${others} other tax lot${others === 1 ? ' shares' : 's share'} this street address (for example condo units or a split lot); these records are for the lot with the most filings.`)
+  if (others > 0 && r.condoUnit) {
+    // Brief 43 PR 11 review: a condo's owner is per unit [engineering precaution].
+    lines.push(`Note: this address is a condo building with ${others + 1} or more unit lots. These records are for one unit (${r.condoUnit}), not the whole building: don't call this owner the building's owner, and ask Ryan which unit he means.`)
+  } else if (others > 0) {
+    lines.push(`Note: ${others} other tax lot${others === 1 ? ' shares' : 's share'} this street address (for example a split or merged lot); these records are for the lot with the newest deed.`)
   }
 
   return lines.join('\n')

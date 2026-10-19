@@ -51,6 +51,16 @@ const COMPASS_FORMS: Record<string, string[]> = {
   EAST: ['EAST', 'E'], WEST: ['WEST', 'W'], NORTH: ['NORTH', 'N'], SOUTH: ['SOUTH', 'S'],
 }
 
+// Brief 43 PR 11 review: the DOB data writes numbered streets and avenues with
+// digits ("5 AVENUE"), so a typed "Fifth Avenue" also asks for "5 AVENUE" and
+// "5TH AVENUE", and a typed "5th Ave" also for "FIFTH AVENUE"
+// [engineering precaution].
+const SPELLED_ORDINALS: Record<string, string> = {
+  FIRST: '1', SECOND: '2', THIRD: '3', FOURTH: '4', FIFTH: '5', SIXTH: '6',
+  SEVENTH: '7', EIGHTH: '8', NINTH: '9', TENTH: '10', ELEVENTH: '11', TWELFTH: '12',
+}
+const SPELLED_BY_NUMBER: Record<string, string> = Object.fromEntries(Object.entries(SPELLED_ORDINALS).map(([w, n]) => [n, w]))
+
 function ordinal(n: string): string {
   const num = parseInt(n, 10)
   if (num % 100 >= 11 && num % 100 <= 13) return `${n}TH`
@@ -67,7 +77,8 @@ export function dobStreetForms(streetName: string): string[] {
   const words = streetName.split(' ').filter(Boolean)
   const last = words.length - 1
   const choices = words.map((w, i) => {
-    if (/^\d+$/.test(w)) return [w, ordinal(w)]
+    if (/^\d+$/.test(w)) return SPELLED_BY_NUMBER[w] && words.length > 1 ? [w, ordinal(w), SPELLED_BY_NUMBER[w]] : [w, ordinal(w)]
+    if (SPELLED_ORDINALS[w] && words.length > 1) return [w, SPELLED_ORDINALS[w], ordinal(SPELLED_ORDINALS[w])]
     if (COMPASS_FORMS[w] && words.length > 1 && (i === 0 || i === last)) return COMPASS_FORMS[w]
     const typeHere = i === last || (i === last - 1 && COMPASS_FORMS[words[last]] !== undefined) ||
       (i === 0 && words.length === 2 && /^[A-Z]$/.test(words[1]))          // "AVENUE J"

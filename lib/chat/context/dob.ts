@@ -16,12 +16,12 @@ const DOB_KEYWORDS = [
 // Brief 43 PR 11 (M30, Q16): permits and violations for that building in that
 // borough, or "none on file" (DRIFT_SCRIPT #22), and a note when the borough
 // was assumed [engineering precaution].
-export const dobFetcher: ContextFetcher = async ({ parsed, userMessage }) => {
+export const dobFetcher: ContextFetcher = async ({ parsed, userMessage, previousUserMessage }) => {
   const messageLower = userMessage.toLowerCase()
   const trigger = parsed.isDOB || DOB_KEYWORDS.some(k => messageLower.includes(k))
   if (!trigger) return { block: null }
 
-  const place = cityRecordsAddress(userMessage, parsed)
+  const place = cityRecordsAddress(userMessage, parsed, previousUserMessage)
   if (!place) return { block: null }
 
   try {
@@ -29,7 +29,12 @@ export const dobFetcher: ContextFetcher = async ({ parsed, userMessage }) => {
     if (found.status === 'failed') return { block: null }
     const body = found.status === 'found'
       ? formatDobForChat(found.result)
-      : `\n\nDOB RECORDS — ${found.label}\nNo DOB permits or violations on file for this building.`
+      // Brief 43 PR 11 review: only the older DOB permit records and DOB
+      // violations are searched, by this spelling of the address. Most permits
+      // since about 2021 are filed in the city's newer system (DOB NOW), and
+      // HPD and ECB violations are kept apart, so Drift says what was checked
+      // [engineering precaution].
+      : `\n\nDOB RECORDS — ${found.label}\nNo permits or violations found for this address as written, in the older DOB permit records and DOB violations. Permits filed in the city's newer system (DOB NOW, most permits since about 2021) and HPD or ECB violations are not checked here, so say none were found in the records checked, not that there are none.`
     return { block: `${body}${place.note}` }
   } catch {
     return { block: null }

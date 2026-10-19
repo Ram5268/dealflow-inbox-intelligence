@@ -234,6 +234,7 @@ export async function POST(req: NextRequest) {
       userMessage,
       queryText,
       isConfirmMessage,
+      previousUserMessage: history.filter(m => m.role === 'user').slice(-1)[0]?.content ?? null,
     })
 
     // Cards are hydrated AFTER the tool_use loop (from the ids Sonnet's tools
