@@ -29,11 +29,12 @@ export function nightlyWorld(init: Partial<Tables> = {}, opts: { countFails?: bo
   const writes: Write[] = [] // committed writes, in order
   const calls: { op: string; tx: boolean }[] = [] // every call, reads too, and whether it ran in a transaction
   let pending: Write[] | null = null // the open transaction's writes
+  let viaTx = false // the call came through the transaction's own client (not the global one)
   let nextId = 1
-  const read = (op: string) => { calls.push({ op, tx: pending != null }) }
+  const read = (op: string) => { calls.push({ op, tx: viaTx }) }
   const write = (op: string, args: unknown) => {
-    calls.push({ op, tx: pending != null })
-    ;(pending ?? writes).push({ op, args })
+    calls.push({ op, tx: viaTx })
+    ;(viaTx && pending ? pending : writes).push({ op, args })
   }
 
   const model = (name: TableName) => ({
@@ -130,7 +131,7 @@ export function nightlyWorld(init: Partial<Tables> = {}, opts: { countFails?: bo
       const snapshot = structuredClone(data)
       pending = []
       try {
-        const out = await (arg as (tx: unknown) => Promise<unknown>)(base)
+        const out = await (arg as (tx: unknown) => Promise<unknown>)(txClient)
         writes.push(...pending)
         return out
       } catch (e) {
@@ -141,6 +142,25 @@ export function nightlyWorld(init: Partial<Tables> = {}, opts: { countFails?: bo
       }
     },
   }
+
+  // The client a $transaction callback gets. Calls through it are the transaction's;
+  // a call through the global client while a transaction is open is not (as in Prisma,
+  // where it runs on another connection). Each model call records synchronously.
+  const inTx = (fn: (...a: unknown[]) => unknown) => (...a: unknown[]) => {
+    const prev = viaTx
+    viaTx = true
+    try { return fn(...a) } finally { viaTx = prev }
+  }
+  const txClient: Row = new Proxy(base, {
+    get: (t, p) => {
+      const v = t[p as string]
+      if (typeof v === 'function') return inTx(v as (...a: unknown[]) => unknown)
+      if (v && typeof v === 'object') {
+        return new Proxy(v as Row, { get: (m, q) => (typeof m[q as string] === 'function' ? inTx(m[q as string] as (...a: unknown[]) => unknown) : m[q as string]) })
+      }
+      return v
+    },
+  })
 
   return {
     db: base,

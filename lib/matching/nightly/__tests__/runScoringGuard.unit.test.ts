@@ -54,6 +54,7 @@ function assertRefused(n: Night, reasons: string[]): Row {
   assert.equal(n.error.name, 'ScoringRefusedError')
   assert.equal(n.error.message, `scoring refused: ${reasons.join(', ')}`)
   assert.deepEqual(n.world.writes.map(w => w.op), ['auditLog.create'])
+  assert.ok(n.world.calls.filter(c => c.op === 'auditLog.create').every(c => c.tx), 'the refusal row is written in the scoring transaction')
   const row = n.world.writes[0].args as Row
   assert.equal(row.action, REFUSED)
   assert.equal(row.organizationId, 'org-test')
