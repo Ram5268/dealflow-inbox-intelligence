@@ -19,7 +19,7 @@
     "test:valuations": "npx --yes tsx lib/valuations/__tests__/contract.test.ts && npx --yes tsx lib/valuations/__tests__/importRun.test.ts && npx --yes tsx lib/valuations/__tests__/auth.test.ts && npx --yes tsx lib/valuations/__tests__/serviceKey.test.ts && npx --yes tsx lib/valuations/__tests__/targetsStatus.test.ts && npx --yes tsx app/api/valuations/__tests__/routes.test.ts",
     "test:valuation-matching": "npx --yes tsx lib/matching/__tests__/ourEstimates.test.ts && npx --yes tsx lib/matching/__tests__/archetypeChance.test.ts && npx --yes tsx lib/matching/__tests__/nightlyOurEstimates.test.ts && npx --yes tsx lib/matching/__tests__/ourEstimatesPreview.test.ts",
     "test:brief45": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/importScoring/__tests__/request.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/importScoring/__tests__/scoreImport.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/ranking/__tests__/queueEquivalence.test.ts && ts-node --compiler-options '{\"module\":\"CommonJS\"}' lib/ranking/__tests__/rankContact.test.ts && npx --yes tsx app/api/crm/score-import/__tests__/route.test.ts",
-    "db:migrate": "prisma migrate dev",
+    "db:migrate": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/migrate-dev-guard.ts && prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "db:studio": "prisma studio"

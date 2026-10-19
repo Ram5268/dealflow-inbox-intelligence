@@ -1,7 +1,8 @@
 // Brief 41.2 (PR B), engineering precaution: every script under scripts/
 // refuses the live database unless that's clearly intended.
 // Scripts load .env, and the main checkout's .env DATABASE_URL is production.
-// DB-free: this test only parses source files.
+// DB-free: this test parses source files (and, Brief 47, runs two of them with
+// fake URLs that can never connect anywhere).
 //
 // A script that isn't on READ_ONLY must import a database guard from
 // lib/dbGuard and call it at the top level, right after its imports: before
@@ -16,9 +17,13 @@
 // (scripts/tests/ today), except scripts/_archive/, which is retired and never
 // run (checked below). Brief 44's Python in valuation/ is out of scope; any
 // TypeScript (or JavaScript) script added to scripts/ must pass this test.
-import { test } from 'node:test'
+//
+// Brief 47 (PR 2): also prisma/seed.ts and `npm run db:migrate` (at the end).
+import { after, test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import ts from 'typescript'
 
@@ -42,6 +47,7 @@ const TEST_ONLY = [
   'scripts/eval-seed-matches.ts',
   'scripts/hallucination-adversarial-test.ts',
   'scripts/matching-fixture-harness.ts',
+  'scripts/migrate-dev-guard.ts', // Brief 47 (PR 2): run by `npm run db:migrate` before `prisma migrate dev`
   'scripts/regenerate-match-table-brief32.ts',
   'scripts/regenerate-match-table.ts',
   'scripts/reset-seed-active.ts',
@@ -238,4 +244,144 @@ test('scripts/_archive/ is never run: not by package.json, CI or another script'
     assert.doesNotMatch(readFileSync(join(ROOT, '.github', 'workflows', wf), 'utf8'), /_archive/, wf)
   }
   for (const f of listScripts()) assert.doesNotMatch(code(f), /_archive/, f)
+})
+
+// Brief 47 (PR 2), engineering precaution (Brief 41.2 found-not-fixed;
+// confirmed 2026-10-18): two commands outside scripts/ could also reach the
+// database in .env, which in the main checkout is production.
+//   - `npm run db:seed` and `prisma db seed` (prisma.config.ts migrations.seed)
+//     run prisma/seed.ts, which writes demo emails and listings. It calls
+//     refuseLiveDatabase like the seed scripts above, with no override.
+//   - `npm run db:migrate` runs `prisma migrate dev`, Prisma's development
+//     tool, which can offer to reset (erase) the database. It now runs
+//     scripts/migrate-dev-guard.ts first, which stops it on anything but a
+//     *_perf or *_test database. Production migrations stay
+//     `prisma migrate deploy`, run only as a named data step.
+const SEED = 'prisma/seed.ts'
+const MIGRATE_GUARD = 'scripts/migrate-dev-guard.ts'
+const PRISMA_CONFIG = 'prisma.config.ts'
+const GUARD_DB = 'prisma migrate dev (npm run db:migrate, DATABASE_URL)'
+const GUARD_SHADOW = 'prisma migrate dev (npm run db:migrate, SHADOW_DATABASE_URL)'
+
+const packageJson = () =>
+  JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { scripts: Record<string, string>; prisma?: { seed?: string } }
+
+// The first statement is `import 'dotenv/config'`, as in prisma.config.ts:
+// .env (in the folder it's run from) is loaded before anything else runs, so
+// the guard sees the URL the command really uses.
+function loadsDotenvFirst(f: string): boolean {
+  const first = parse(f).statements[0]
+  return !!first && ts.isImportDeclaration(first) && !first.importClause &&
+    ts.isStringLiteral(first.moduleSpecifier) && first.moduleSpecifier.text === 'dotenv/config'
+}
+
+test('prisma/seed.ts loads .env, then calls refuseLiveDatabase(process.env.DATABASE_URL) before any database work', () => {
+  assert.ok(loadsDotenvFirst(SEED), `${SEED}: the first statement is import 'dotenv/config'`)
+  const { call, use, callNode } = positions(SEED, ['refuseLiveDatabase'])
+  assert.ok(call >= 0, `${SEED} must import refuseLiveDatabase from lib/dbGuard and call it`)
+  assert.ok(use > call, `${SEED}: the guard comes before the pool, the client and any query`)
+  assert.ok(unconditional(callNode!), `${SEED}: the guard is a statement of its own, not under a condition`)
+  assert.ok(checksDatabaseUrl(callNode!), `${SEED}: the guard is given process.env.DATABASE_URL, the URL its pool uses`)
+  assert.ok(!calls(SEED, OVERRIDABLE), `${SEED} must not use a guard that accepts --i-mean-live`)
+  assert.doesNotMatch(code(SEED), /LIVE_OVERRIDE_FLAG|--i-mean-live/)
+  // Every way to seed runs this file, so its guard covers them all.
+  const pkg = packageJson()
+  assert.match(pkg.scripts['db:seed'], /\sprisma\/seed\.ts$/)
+  assert.match(code(PRISMA_CONFIG), /seed: '[^']*\sprisma\/seed\.ts'/)
+  if (pkg.prisma?.seed) assert.match(pkg.prisma.seed, /\sprisma\/seed\.ts$/) // Prisma 7 no longer reads this one
+})
+
+test('npm run db:migrate runs the guard first, then prisma migrate dev, which gets any extra arguments', () => {
+  const { scripts } = packageJson()
+  const steps = scripts['db:migrate'].split(' && ')
+  assert.equal(steps.length, 2, 'guard && prisma migrate dev: Prisma runs only when the guard exits 0')
+  assert.match(steps[0], /^ts-node .*\sscripts\/migrate-dev-guard\.ts$/)
+  // Last, so `npm run db:migrate -- --name x` hands `--name x` to Prisma.
+  assert.equal(steps[1], 'prisma migrate dev')
+  // No other script runs Prisma's development commands without the guard.
+  for (const [name, cmd] of Object.entries(scripts)) {
+    if (/\bprisma\s+migrate\s+(dev|reset)\b/.test(cmd)) assert.ok(cmd.startsWith(`${steps[0]} && prisma migrate `), `${name} must run the guard first`)
+  }
+})
+
+test('the migrate guard checks the URLs prisma.config.ts gives Prisma, with .env loaded the same way', () => {
+  for (const f of [MIGRATE_GUARD, PRISMA_CONFIG]) assert.ok(loadsDotenvFirst(f), `${f}: the first statement is import 'dotenv/config'`)
+  const config = code(PRISMA_CONFIG)
+  assert.match(config, /\burl: process\.env\['DATABASE_URL'\]/)
+  assert.match(config, /\bshadowDatabaseUrl: process\.env\['SHADOW_DATABASE_URL'\]/)
+  assert.match(code(MIGRATE_GUARD), /refuseLiveDatabase\(process\.env\.SHADOW_DATABASE_URL,/)
+})
+
+// Running them the way package.json does (ts-node, CommonJS), with only PATH,
+// HOME and TMPDIR from this process, as `env -i` would, from a scratch folder
+// outside the repo, so no real .env is ever read. The URLs are fake:
+// example.invalid can never resolve, so nothing can connect anywhere. PGHOST
+// points there too, so a run with no URL can't fall back to a local server.
+const FAKE_LIVE = 'postgresql://u:p@example.invalid:5432/railway'
+const FAKE_TEST = 'postgresql://u:p@example.invalid:5432/b47_fake_test'
+const FAKE_SHADOW_TEST = 'postgresql://u:p@example.invalid:5432/b47_shadow_test'
+const TS_NODE = join(ROOT, 'node_modules', 'ts-node', 'dist', 'bin.js')
+
+const scratchDirs: string[] = []
+after(() => { for (const d of scratchDirs) rmSync(d, { recursive: true, force: true }) })
+function scratchDir(dotenv?: string): string {
+  const dir = mkdtempSync(join(tmpdir(), 'b47-db-guard-'))
+  scratchDirs.push(dir)
+  assert.ok(!dir.startsWith(ROOT), 'the scratch folder is outside the repo')
+  if (dotenv !== undefined) writeFileSync(join(dir, '.env'), dotenv)
+  return dir
+}
+
+type Run = { status: number | null; out: string }
+function run(file: string, cwd: string, vars: Record<string, string> = {}): Run {
+  const env: Record<string, string> = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '', PGHOST: 'example.invalid', ...vars }
+  if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR
+  // No NODE_ENV, as under env -i (Next's types say there always is one).
+  const options = { cwd, env: env as NodeJS.ProcessEnv, encoding: 'utf8' as const, timeout: 120_000 }
+  const r = spawnSync(process.execPath, [TS_NODE, '--compiler-options', '{"module":"CommonJS"}', join(ROOT, file)], options)
+  return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}${r.error ? String(r.error) : ''}` }
+}
+function assertRefused(r: Run, what: string, database: string): void {
+  assert.notEqual(r.status, 0, r.out)
+  assert.ok(r.out.includes(`REFUSING: ${what} would use database "${database}"`), r.out)
+}
+
+test('the migrate guard refuses a live-looking, unreadable or missing DATABASE_URL and a live-looking shadow database, and passes test databases', () => {
+  const dir = scratchDir()
+  assertRefused(run(MIGRATE_GUARD, dir, { DATABASE_URL: FAKE_LIVE }), GUARD_DB, 'railway')
+  assertRefused(run(MIGRATE_GUARD, dir), GUARD_DB, '(not set)')
+  assertRefused(run(MIGRATE_GUARD, dir, { DATABASE_URL: 'not a url' }), GUARD_DB, '(unreadable URL)')
+  assertRefused(run(MIGRATE_GUARD, dir, { DATABASE_URL: FAKE_TEST, SHADOW_DATABASE_URL: FAKE_LIVE }), GUARD_SHADOW, 'railway')
+  const passes: Record<string, string>[] = [{ DATABASE_URL: FAKE_TEST }, { DATABASE_URL: FAKE_TEST, SHADOW_DATABASE_URL: FAKE_SHADOW_TEST }]
+  for (const vars of passes) {
+    const r = run(MIGRATE_GUARD, dir, vars)
+    assert.equal(r.status, 0, r.out)
+    assert.doesNotMatch(r.out, /REFUSING/)
+  }
+})
+
+test('the seed stops on a live-looking or missing DATABASE_URL before it starts, and goes on for a test database', () => {
+  const dir = scratchDir()
+  for (const [vars, database] of [[{ DATABASE_URL: FAKE_LIVE }, 'railway'], [{}, '(not set)']] as const) {
+    const r = run(SEED, dir, vars)
+    assertRefused(r, SEED, database)
+    // Stopped before main(): it never started seeding or tried to connect.
+    assert.doesNotMatch(r.out, /Seeding demo data|Can't reach database server|P1001|ENOTFOUND/)
+  }
+  // Past the guard on a test database; example.invalid then can't be reached.
+  const r = run(SEED, dir, { DATABASE_URL: FAKE_TEST })
+  assert.notEqual(r.status, 0, r.out)
+  assert.doesNotMatch(r.out, /REFUSING/)
+  assert.match(r.out, /Seeding demo data/)
+})
+
+test('the migrate guard and the seed read .env from the folder they are run from, as prisma.config.ts does', () => {
+  const live = scratchDir(`DATABASE_URL="${FAKE_LIVE}"\n`)
+  // .env is loaded before the seed's guard runs: otherwise it would say "(not set)".
+  const seed = run(SEED, live)
+  assertRefused(seed, SEED, 'railway')
+  assert.doesNotMatch(seed.out, /Seeding demo data/)
+  assertRefused(run(MIGRATE_GUARD, live), GUARD_DB, 'railway')
+  const fakeTest = run(MIGRATE_GUARD, scratchDir(`DATABASE_URL="${FAKE_TEST}"\n`))
+  assert.equal(fakeTest.status, 0, fakeTest.out)
 })
