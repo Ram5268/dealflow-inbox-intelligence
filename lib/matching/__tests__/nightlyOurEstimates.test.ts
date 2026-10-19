@@ -36,8 +36,11 @@ const ISO_BUYERS = [
 ]
 const MOJO_BUYERS = [contact('buyer-mojo', { intent: 'BUYER', metadata: {}, budgetMax: 1_500_000, bedsMin: 3, cashOnly: true })]
 
+// Published two days before the test runs: matching ignores values published more than 100 days
+// before the night's clock (Brief 49, lib/matching/ourEstimates.ts), so a fixed date would age out.
+const RECENTLY_PUBLISHED = new Date(Date.now() - 2 * 86_400_000)
 const published = (contactId: string, value: number | null) =>
-  ({ contactId, value, createdAt: new Date('2026-10-17'), run: { publishedAt: new Date('2026-10-17T15:00:00Z') } })
+  ({ contactId, value, createdAt: new Date('2026-10-17'), run: { publishedAt: RECENTLY_PUBLISHED } })
 const GOOD_VALUES = SELLERS.map((s, i) => published(s.id as string, 1_000_000 + i * 25_000)) // inside the budgets
 const BAD_VALUES = SELLERS.map(s => published(s.id as string, 6_000_000)) // far above every budget
 

@@ -219,9 +219,12 @@ export const MOJO_BUYER = crmSeller('buyer-mojo', 90, {
 })
 
 export const SWITCH_ON = { id: 'USE_OUR_ESTIMATES', enabled: true }
+// Published two days before the test runs: matching ignores values published more than 100 days
+// before the night's clock (Brief 49, lib/matching/ourEstimates.ts), so a fixed date would age out.
+const RECENTLY_PUBLISHED = new Date(Date.now() - 2 * 86_400_000)
 const published = (contactId: string, value: number) => ({
   id: `pv-${contactId}`, organizationId: ORG_ID, contactId, value, createdAt: new Date('2026-10-17'),
-  run: { published: true, publishedAt: new Date('2026-10-17T15:00:00Z') },
+  run: { published: true, publishedAt: RECENTLY_PUBLISHED },
 })
 export const GOOD_VALUES = SELLERS.map((s, i) => published(s.id as string, 1_000_000 + i * 25_000)) // inside the budgets
 export const BAD_VALUES = SELLERS.map(s => published(s.id as string, 6_000_000)) // far above every budget
