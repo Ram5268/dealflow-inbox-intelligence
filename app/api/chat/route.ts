@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
+import { guardChat } from '@/lib/spendGuard'
 import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
@@ -154,6 +155,12 @@ async function parseBinary(buffer: Buffer, filename: string, mimeType: string): 
 
 export async function POST(req: NextRequest) {
   const t0 = Date.now()
+  // Brief 43 PR 17 [engineering precaution]: DealFlow has no login [Ryan,
+  // 2026-09-24], so the daily spend cap and per-address limits run first,
+  // before the parser (a paid call), Claude, or any session work. See
+  // lib/spendGuard.ts.
+  const spendRefusal = await guardChat(req)
+  if (spendRefusal) return spendRefusal
   try {
     const body = await req.json()
     const userMessage: string = (body.message ?? '').trim()

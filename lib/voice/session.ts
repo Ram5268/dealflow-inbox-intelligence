@@ -10,6 +10,9 @@ export const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls'
 export const VOICE_SESSION_ACTION = 'VOICE_SESSION'
 export const SESSIONS_PER_HOUR = 60
 export const MAX_SDP_BYTES = 20_000
+// Brief 43 PR 17: the per-address refusal, in lib/spendGuard.ts's shape (kept
+// here so this module stays free of Prisma).
+export const ADDRESS_LIMIT_MESSAGE = 'Voice mode has reached its hourly limit. Try again in a little while.'
 
 const RE_TERMS = ['two-family', 'three-family', 'duplex', 'triplex', 'co-op', 'condo', 'multifamily']
 
@@ -26,6 +29,13 @@ export interface VoiceSessionDeps {
   enabled: boolean; apiKey: string | undefined; fetchImpl?: typeof fetch; now?: () => number
   countSessionsSince: (since: Date) => Promise<number>
   logSession: () => Promise<unknown>
+  // Brief 43 PR 17 [engineering precaution]: a per-address cap inside the
+  // global one, so a stranger can't use up the shared 60 and lock Ryan out of
+  // voice mode (no login [Ryan, 2026-09-24]). Optional so the Brief 36 tests
+  // run unchanged; the route always passes them.
+  countAddressSessionsSince?: (since: Date) => Promise<number>
+  sessionsPerAddressPerHour?: number
+  logRefusal?: (reason: string) => Promise<unknown>
 }
 
 const json = (body: object, status: number) =>
@@ -44,6 +54,11 @@ export async function handleVoiceSession(req: Request, deps: VoiceSessionDeps): 
   const now = deps.now?.() ?? Date.now()
   if ((await deps.countSessionsSince(new Date(now - 3_600_000))) >= SESSIONS_PER_HOUR) {
     return json({ error: 'Voice mode has hit its hourly limit. Try again later.' }, 429)
+  }
+  if (deps.countAddressSessionsSince && deps.sessionsPerAddressPerHour != null &&
+      (await deps.countAddressSessionsSince(new Date(now - 3_600_000))) >= deps.sessionsPerAddressPerHour) {
+    await deps.logRefusal?.('ip_per_hour')
+    return json({ error: 'spend_limit', message: ADDRESS_LIMIT_MESSAGE }, 429)
   }
   await deps.logSession()
 
