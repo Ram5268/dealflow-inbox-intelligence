@@ -11,9 +11,10 @@ import { buildCallQueue } from '../ranking/queueBuilder'
 //     yesterday's call list stays, and the run fails (the cron route returns 500).
 //   • Brief 46 DF-2: the call-list step never replaces the list with an empty one;
 //     it keeps yesterday's, writes one AuditLog row and fails.
-// Both are engineering precautions. The CRM lead sync (step 1) has no CRM to read
-// here, so it fails in every run below; as before, that never stops the later steps.
-delete process.env.DATABASE_URL_CRM_RO
+// Both are engineering precautions. The CRM lead sync (step 1) is stopped at its
+// first read (the org lookup, before it would connect to the CRM), so it fails in
+// every full run below; as before, that never stops the later steps.
+const NO_CRM = 'the CRM lead sync is stubbed out in this test'
 
 const quiet = async <T>(fn: () => Promise<T>): Promise<T> => {
   const { warn, error } = console
@@ -32,6 +33,13 @@ async function run(tables: Partial<Tables>, opts: { dryRun?: boolean; only?: 'ca
   if (opts.testBuyers === false) delete process.env.SCORING_INCLUDE_TEST_BUYERS
   else process.env.SCORING_INCLUDE_TEST_BUYERS = 'true'
   current.world = nightlyWorld(tables, { countFails: opts.countFails })
+  if (!opts.only) {
+    // Step 1's first call; scoring's own org lookup (the same call) comes after it.
+    const org = current.world.db.organization as { findUniqueOrThrow: (a: unknown) => Promise<unknown> }
+    const real = org.findUniqueOrThrow
+    let calls = 0
+    org.findUniqueOrThrow = async a => { if (calls++ === 0) throw new Error(NO_CRM); return real(a) }
+  }
   const before = structuredClone(current.world.data)
   const pipeline = await quiet(() => runNightlyPipeline({ dryRun: opts.dryRun, only: opts.only }))
   return { pipeline, world: current.world, before }
@@ -50,7 +58,7 @@ test('scoring refused: the call list is not rebuilt, yesterday\'s stays, and the
   const match = await yesterdaysMatches()
   const { pipeline, world, before } = await run(orgTables({ match, callQueueEntry: YESTERDAY }), { testBuyers: false })
   assert.equal(pipeline.ok, false)
-  assert.deepEqual(pipeline.steps.crmLeadSync, { ok: false, error: 'DATABASE_URL_CRM_RO not set' })
+  assert.deepEqual(pipeline.steps.crmLeadSync, { ok: false, error: NO_CRM })
   assert.deepEqual(pipeline.steps.scoring, { ok: false, error: 'scoring refused: no_buyers, matches_shrank, sellers_shrank' })
   assert.deepEqual(pipeline.steps.callQueue, { ok: false, error: 'skipped: scoring was refused' })
   assert.deepEqual(world.data.callQueueEntry, before.callQueueEntry)
