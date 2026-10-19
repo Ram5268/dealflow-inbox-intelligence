@@ -2,9 +2,32 @@
 // fake Prisma (pr5FakePrisma.ts, which evaluates every where clause and throws
 // on an operator it doesn't know). Fictional people only (Brief 43 HELPER_RULES
 // rule 7): "Probe" names, Example streets, the 555-01xx range. Not a *.test.ts file.
-import { contact, ORG, type Row } from './pr5FakePrisma'
+import { contact, makeFakePrisma as makePr5FakePrisma, matchesWhere, ORG, type Row, type Where } from './pr5FakePrisma'
 
-export { makeFakePrisma, contact, sixHundredFifty, ORG, ORG_ROW, type Row } from './pr5FakePrisma'
+export { contact, sixHundredFifty, ORG, ORG_ROW, type Row } from './pr5FakePrisma'
+
+// PR 5's fake plus groupBy({ by: [one field], where, _count: { _all: true } }),
+// evaluated over the table like every other call, and logged.
+export function makeFakePrisma(tables: Record<string, Row[]>) {
+  const fake = makePr5FakePrisma(tables)
+  const prisma = new Proxy(fake.prisma, {
+    get(target, prop: string | symbol) {
+      const model = (target as Record<string | symbol, unknown>)[prop]
+      if (typeof prop === 'symbol' || prop === 'then' || prop.startsWith('$') || !model || typeof model !== 'object') return model
+      return {
+        ...(model as object),
+        groupBy: async (args: { by: string[]; where?: Where; _count?: { _all?: boolean } }) => {
+          if (args.by.length !== 1 || Object.keys(args).some(k => !['by', 'where', '_count'].includes(k))) throw new Error('pr6Fixtures: unsupported groupBy')
+          const groups = new Map<unknown, number>()
+          for (const r of (fake.tables[prop] ?? []).filter(r => matchesWhere(r, args.where))) groups.set(r[args.by[0]], (groups.get(r[args.by[0]]) ?? 0) + 1)
+          fake.calls.push({ model: prop, op: 'groupBy', args: args as unknown as Record<string, unknown>, returned: groups.size })
+          return [...groups].map(([k, n]) => ({ [args.by[0]]: k, _count: { _all: n } }))
+        },
+      }
+    },
+  })
+  return { ...fake, prisma }
+}
 
 const T_NIGHTLY = Date.UTC(2026, 9, 19, 9, 0, 0)
 

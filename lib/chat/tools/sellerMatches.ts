@@ -27,7 +27,7 @@ import { plainFitReason } from '@/lib/matching/fitReason'
 import {
   buyerWants, matchLink, tierOf, type BuyerFacts, type SellerMatchBuyer, type SellerMatches, type SellerMatchesSeller,
 } from '@/lib/chat/sellerMatchesCard'
-import type { SellerCandidate } from '@/lib/chat/sellerCard'
+import type { SellerCandidate, SellerCard } from '@/lib/chat/sellerCard'
 import { findSeller, type FindSellerInput } from './findSeller'
 
 // The nightly keeps at most 10 buyers per seller (lib/matching/nightly/select.ts
@@ -46,8 +46,13 @@ export async function getSellerMatches(rawInput: GetSellerMatchesInput): Promise
   // find_seller parses the input, and in test mode reaches no CRM seller.
   const found = await findSeller(rawInput)
   if (!('match' in found)) return found
-  const { id, name, address, neighborhood, doNotContact } = found.match
-  return loadSellerMatches(await getCurrentOrgId(), { kind: 'crm_seller', id, name, address, neighborhood, doNotContact })
+  return loadSellerMatches(await getCurrentOrgId(), sellerOf(found.match))
+}
+
+// The seller as the matches result carries it (no phone, no CRM link).
+export function sellerOf(card: SellerCard): SellerMatchesSeller {
+  const { id, name, address, neighborhood, doNotContact } = card
+  return { kind: 'crm_seller', id, name, address, neighborhood, doNotContact }
 }
 
 const MATCH_SELECT = {

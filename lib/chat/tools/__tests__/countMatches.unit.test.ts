@@ -96,6 +96,23 @@ test('count_sellers_with_buyers: CRM sellers with at least one HOT or WARM match
   assert.ok(!/Probe|mc_|Example/.test(json))
 })
 
+test('count_sellers_with_buyers: only sellers the call Queue ranks, so "they\'re ranked in your CRM Queue" holds', async () => {
+  // The Queue's hard filters (lib/ranking/hardFilters.ts) leave out a do-not-call
+  // status, an opt-out tag or group, and a seller whose every phone is flagged.
+  fake.tables.mojoContact = [
+    contact({ id: 'mc_ok', fullName: 'Probe Seller Ok' }),
+    contact({ id: 'mc_one_flag', fullName: 'Probe Seller One Flag', phone: '7185550101', additionalPhones: ['7185550102'], phoneDncFlags: [true, false] }),
+    contact({ id: 'mc_status', fullName: 'Probe Seller Status', status: 'Do Not Call' }),
+    contact({ id: 'mc_tag', fullName: 'Probe Seller Tag', tags: ['DNC'], groups: [] }),
+    contact({ id: 'mc_group', fullName: 'Probe Seller Group', tags: [], groups: ['opted_out'] }),
+    contact({ id: 'mc_all_flags', fullName: 'Probe Seller All Flags', phone: '7185550103', additionalPhones: [], phoneDncFlags: [true] }),
+  ]
+  fake.tables.match = fake.tables.mojoContact.map((c, i) => match({ id: `q${i}`, opportunityId: c.id as string, counterpartId: 'iso_1', tier: 'HOT', score: 90 }))
+  fake.tables.matchDismissal = []
+  const { countSellersWithBuyers } = await import('../countMatches')
+  assert.deepEqual(await countSellersWithBuyers(), { count: 2, withHot: 2 })
+})
+
 test('count_sellers_with_buyers: test mode counts no CRM sellers', async () => {
   process.env.TEST_MODE_ONLY = 'true'
   try {

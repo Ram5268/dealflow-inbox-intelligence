@@ -15,8 +15,9 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { isTestModeOnly } from '@/lib/config/testMode'
-import { inChunks, loadDismissedPairs } from '@/lib/matching/dismissals'
+import { inChunks } from '@/lib/matching/dismissals'
 import { HOT_MIN_FIT, WARM_MIN_FIT } from '@/lib/matching/tiers'
+import { applyHardFilters } from '@/lib/ranking/hardFilters'
 import { crmSellerPoolWhere } from '@/lib/chat/crmSellers'
 import { tierOf } from '@/lib/chat/sellerMatchesCard'
 
@@ -39,8 +40,8 @@ export function tierWhere(tier: MatchTierChoice | 'HOT_OR_WARM'): Prisma.MatchWh
 }
 
 // A database count, minus the dismissed pairs among those rows. Dismissals are
-// few, so only rows that touch a dismissed id are read, and none at all when
-// nothing is dismissed.
+// few, so only the dismissed pairs' own rows are read (dismissedRows), and none
+// at all when nothing is dismissed.
 async function countUndismissed(where: Prisma.MatchWhereInput): Promise<{ count: number; unseen: number }> {
   const [count, unseen, dismissals] = await Promise.all([
     prisma.match.count({ where }),
@@ -48,20 +49,30 @@ async function countUndismissed(where: Prisma.MatchWhereInput): Promise<{ count:
     prisma.matchDismissal.findMany({ select: { partyId: true, listingId: true } }),
   ])
   if (dismissals.length === 0) return { count, unseen }
-  const ids = [...new Set(dismissals.flatMap(d => [d.partyId, d.listingId]))]
-  const touched = new Map((await inChunks(ids, chunk => prisma.match.findMany({
-    where: { AND: [where, { OR: [{ opportunityId: { in: chunk } }, { counterpartId: { in: chunk } }] }] },
-    select: { id: true, opportunityId: true, counterpartId: true, seen: true },
-  }))).map(m => [m.id, m]))
-  const isDismissed = await loadDismissedPairs(prisma, [...touched.values()])
-  let gone = 0
-  let goneUnseen = 0
-  for (const m of touched.values()) {
-    if (!isDismissed(m)) continue
-    gone++
-    if (!m.seen) goneUnseen++
+  const gone = await dismissedRows(where, dismissals)
+  return { count: count - gone.length, unseen: unseen - gone.filter(m => !m.seen).length }
+}
+
+// The rows of `where` that ARE a dismissed pair, either orientation (as
+// loadDismissedPairs reads a dismissal), looked up by the pairs themselves: at
+// most a couple of rows per dismissal, never every row of a much-matched buyer.
+// 4 bind values per dismissal, so 1,000 per query stays far under Prisma's limit.
+const PAIR_CHUNK = 1_000
+type Dismissal = { partyId: string; listingId: string }
+async function dismissedRows(where: Prisma.MatchWhereInput, dismissals: Dismissal[]) {
+  const out = new Map<string, { id: string; opportunityId: string; seen: boolean; tier: string | null; score: number }>()
+  for (let i = 0; i < dismissals.length; i += PAIR_CHUNK) {
+    const pairs = dismissals.slice(i, i + PAIR_CHUNK).flatMap(d => [
+      { opportunityId: d.listingId, counterpartId: d.partyId },
+      { opportunityId: d.partyId, counterpartId: d.listingId },
+    ])
+    const rows = await prisma.match.findMany({
+      where: { AND: [where, { OR: pairs }] },
+      select: { id: true, opportunityId: true, seen: true, tier: true, score: true },
+    })
+    for (const r of rows) out.set(r.id, r)
   }
-  return { count: count - gone, unseen: unseen - goneUnseen }
+  return [...out.values()]
 }
 
 export async function countMatches(rawInput: CountMatchesInput): Promise<{ tier: MatchTierChoice; count: number; unseen: number }> {
@@ -75,32 +86,47 @@ export async function countMatches(rawInput: CountMatchesInput): Promise<{ tier:
 
 // Ryan's CRM sellers (find_seller's pool: real CRM sellers, no duplicate,
 // removed or legacy copies) with at least one undismissed HOT or WARM buyer,
-// and how many of them have a HOT one.
+// and how many of them have a HOT one. Only sellers the call Queue ranks: the
+// Queue's own hard filters (lib/ranking/hardFilters.ts: a do-not-call status,
+// tag or group, every phone flagged) leave the others out, so "they're ranked
+// in your CRM Queue" (D14 [Ryan, 2026-10-19]) stays true [engineering precaution].
 export async function countSellersWithBuyers(): Promise<{ count: number; withHot: number }> {
   // TEST_MODE_ONLY: CRM sellers are real data, so test mode counts none (as count_sellers).
   if (isTestModeOnly()) return { count: 0, withHot: 0 }
   const organizationId = await getCurrentOrgId()
-  const rows = await prisma.match.findMany({
-    where: { AND: [{ organizationId, opportunityType: 'contact' }, tierWhere('HOT_OR_WARM')] },
-    select: { opportunityId: true, counterpartId: true, tier: true, score: true },
-  })
-  if (rows.length === 0) return { count: 0, withHot: 0 }
-  const isDismissed = await loadDismissedPairs(prisma, rows)
-  const hot = new Map<string, boolean>()
-  for (const m of rows) {
-    if (isDismissed(m)) continue
-    hot.set(m.opportunityId, hot.get(m.opportunityId) === true || tierOf(m) === 'HOT')
+  const seller = { organizationId, opportunityType: 'contact' }
+  const hotOrWarm: Prisma.MatchWhereInput = { AND: [seller, tierWhere('HOT_OR_WARM')] }
+  // Database group-bys: one row per seller (at most the ~1,500 sellers), not every match.
+  const [byHotOrWarm, byHot, dismissals] = await Promise.all([
+    prisma.match.groupBy({ by: ['opportunityId'], where: hotOrWarm, _count: { _all: true } }),
+    prisma.match.groupBy({ by: ['opportunityId'], where: { AND: [seller, tierWhere('HOT')] }, _count: { _all: true } }),
+    prisma.matchDismissal.findMany({ select: { partyId: true, listingId: true } }),
+  ])
+  if (byHotOrWarm.length === 0) return { count: 0, withHot: 0 }
+  const left = new Map(byHotOrWarm.map(g => [g.opportunityId, g._count._all]))
+  const leftHot = new Map(byHot.map(g => [g.opportunityId, g._count._all]))
+  for (const m of dismissals.length > 0 ? await dismissedRows(hotOrWarm, dismissals) : []) {
+    left.set(m.opportunityId, (left.get(m.opportunityId) ?? 0) - 1)
+    if (tierOf(m) === 'HOT') leftHot.set(m.opportunityId, (leftHot.get(m.opportunityId) ?? 0) - 1)
   }
-  const inPool = new Set((await inChunks([...hot.keys()], chunk => prisma.mojoContact.findMany({
+  const waiting = [...left].filter(([, n]) => n > 0).map(([id]) => id)
+  const inPool = new Set((await inChunks(waiting, chunk => prisma.mojoContact.findMany({
     where: { AND: [crmSellerPoolWhere(organizationId), { id: { in: chunk } }] },
-    select: { id: true },
-  }))).map(c => c.id))
+    select: { id: true, status: true, tags: true, groups: true, phone: true, additionalPhones: true, phoneDncFlags: true },
+  })))
+    // As rankContact calls it (lib/ranking/queueBuilder.ts); these sellers have matches.
+    .filter(c => !applyHardFilters({
+      status: c.status, tags: c.tags ?? [], groups: c.groups ?? [],
+      phones: [c.phone, ...(c.additionalPhones ?? [])], phoneDncFlags: c.phoneDncFlags ?? [],
+      matchCount: 1, allMatchesRental: false,
+    }).excluded)
+    .map(c => c.id))
   let count = 0
   let withHot = 0
-  for (const [id, isHot] of hot) {
+  for (const id of waiting) {
     if (!inPool.has(id)) continue
     count++
-    if (isHot) withHot++
+    if ((leftHot.get(id) ?? 0) > 0) withHot++
   }
   return { count, withHot }
 }

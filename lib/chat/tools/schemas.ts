@@ -221,7 +221,7 @@ export const COUNT_MATCHES_TOOL: Anthropic.Messages.Tool = {
 export const COUNT_SELLERS_WITH_BUYERS_TOOL: Anthropic.Messages.Tool = {
   name: 'count_sellers_with_buyers',
   description:
-    'Count Ryan\'s CRM sellers that have at least one HOT or WARM buyer waiting. Use it for "which of my sellers have buyers waiting?". ' +
+    'Count Ryan\'s CRM sellers that have at least one HOT or WARM buyer waiting (the ones his CRM Queue ranks). Use it for "which of my sellers have buyers waiting?". ' +
     'Returns { count, withHot } only, never names. Answer with the count and say they\'re ranked in his CRM Queue; never list or name the sellers.',
   input_schema: { type: 'object', properties: {}, required: [] } as Anthropic.Messages.Tool.InputSchema,
 }

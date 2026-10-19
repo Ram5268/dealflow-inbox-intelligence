@@ -10,7 +10,8 @@
 //   matchesCard  that seller's buyers, as the card the page shows
 import { findSeller, findSellerForModel, type FindSellerInput, type FindSellerResult } from './findSeller'
 import { countSellers, type CountSellersInput } from './countSellers'
-import { getSellerMatches, getSellerMatchesForModel, type GetSellerMatchesInput } from './sellerMatches'
+import { getSellerMatchesForModel, loadSellerMatches, sellerOf, type GetSellerMatchesInput, type GetSellerMatchesResult } from './sellerMatches'
+import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { countMatches, countSellersWithBuyers, type CountMatchesInput } from './countMatches'
 import type { SellerCard } from '@/lib/chat/sellerCard'
 import type { SellerMatchesCard } from '@/lib/chat/sellerMatchesCard'
@@ -36,6 +37,16 @@ export const newCrmSellerTurn = (): CrmSellerTurn => ({ cardId: null })
 export const ONE_SELLER_PER_MESSAGE =
   'One seller contact per message: this one was not shown. Ask Ryan to ask for them by name in his next message.'
 
+// Brief 43 PR 6: the same one-seller rule covers get_seller_matches, so a
+// message shows one named seller's contact and/or buyers, never several
+// sellers' (D11 [Ryan, 2026-10-18]; engineering precaution). The same check as
+// find_seller's below, as a function, run right after the lookup resolves and
+// before any other await, so parallel calls can't both pass.
+function claim(turn: CrmSellerTurn, sellerId: string): boolean {
+  if (turn.cardId === null) turn.cardId = sellerId
+  return turn.cardId === sellerId
+}
+
 export async function runCrmSellerTool(name: string, input: unknown, turn: CrmSellerTurn = newCrmSellerTurn()): Promise<CrmSellerToolRun> {
   if (name === 'find_seller') {
     let output: FindSellerResult & { note?: string } = await findSeller(input as FindSellerInput)
@@ -56,7 +67,14 @@ export async function runCrmSellerTool(name: string, input: unknown, turn: CrmSe
     return { output, forModel: output, card: null, matchesCard: null, totalMatched: output.count }
   }
   if (name === 'get_seller_matches') {
-    const output = await getSellerMatches(input as GetSellerMatchesInput)
+    // find_seller's own lookup (and its candidates / none), then the one-seller check.
+    const found = await findSeller(input as GetSellerMatchesInput)
+    let output: GetSellerMatchesResult & { note?: string }
+    if (!('match' in found)) output = found
+    else if (!claim(turn, found.match.id)) {
+      const { id, name: sellerName, neighborhood } = found.match
+      output = { candidates: [{ kind: 'crm_seller', id, name: sellerName, neighborhood }], note: ONE_SELLER_PER_MESSAGE }
+    } else output = await loadSellerMatches(await getCurrentOrgId(), sellerOf(found.match))
     // A card only when there are buyers to show; "none yet" is Drift's one line.
     const matchesCard: SellerMatchesCard | null = 'seller' in output && output.count > 0 ? { kind: 'seller_matches', ...output } : null
     const totalMatched = 'seller' in output ? output.count : 'candidates' in output ? output.candidates.length : 0
