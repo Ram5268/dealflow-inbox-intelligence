@@ -33,6 +33,9 @@ import {
   type GuardAttempt,
   type GuardTelemetry,
 } from '@/lib/chat/guards/retry'
+import { DRAFT_FIELD_SCHEMA, buildDraftContext, draftAsText, enforceDraftPrivacy } from '@/lib/chat/guards/draftPrivacy'
+import { encodeStoredReply, readStoredReply, storedReplyForModel } from '@/lib/chat/storedReply'
+import { normalizeDraft } from '@/lib/chat/draft'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -324,15 +327,20 @@ export async function POST(req: NextRequest) {
             },
             required: ['templateId', 'sectionKey'],
           },
+          // Brief 43 PR 3 (Q3) — an email or text to copy, apart from the reply;
+          // its rules are in the field's description (lib/chat/guards/draftPrivacy.ts).
+          draft: DRAFT_FIELD_SCHEMA,
         },
         required: ['response', 'suggestions', 'referencedDeals'],
       } as Anthropic.Messages.Tool.InputSchema,
     }
 
     // Brief 41: the model's conversation must start with a user turn.
+    // Brief 43 PR 3 (review r1): a reply stored as JSON (a draft) goes to the model
+    // as its text plus the draft, the way the draft rewrite shows it, not as JSON.
     const anthropicHistory: Anthropic.Messages.MessageParam[] = startAtUserTurn(history).map(m => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content,
+      content: m.role === 'assistant' ? storedReplyForModel(m.content) : m.content,
     }))
 
     // ── Sonnet 4.6 tool_use loop ─────────────────────────────────────────────
@@ -531,6 +539,14 @@ export async function POST(req: NextRequest) {
     const guardEnabled = process.env.HALLUCINATION_GUARD_ENABLED !== 'false'
     const guardApplies = guardEnabled && !aiResult.pendingEvent
     let currentResponse = aiResult.response ?? ''
+    // Brief 43 PR 3 (review r1): the draft goes through the fact-check with the
+    // reply (the verifier only; the regex scan and PR 2's never-sent check read
+    // the reply alone), and a guard rewrite may correct it.
+    let currentDraft: unknown = (aiResult as { draft?: unknown }).draft
+    const withDraft = (response: string, draft: unknown) => {
+      const d = normalizeDraft(draft)
+      return d ? draftAsText(response, d) : response
+    }
     // Brief 11.0 Fix #2 — the first thing Sonnet tried to say, before any guard
     // correction/fallback overwrites currentResponse. Logged for guard-fire audit.
     const assistantAttempt = currentResponse
@@ -568,10 +584,11 @@ export async function POST(req: NextRequest) {
           groundingCorpus,
         )
         // Brief 43 PR 2: a repeated action claim gets NEVER_SENT_REPLY whatever
-        // the fact-check says, so skip that paid call.
+        // the fact-check says, so skip that paid call. Brief 43 PR 3: the
+        // fact-check reads the reply plus its draft.
         const verifier = skipVerifierForRepeatClaim(guardHistory, regexFlags)
           ? skippedVerification()
-          : await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
+          : await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, withDraft(currentResponse, currentDraft))
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
         if (regexFlags.length === 0 && verifier.isGrounded) break
 
@@ -596,7 +613,7 @@ export async function POST(req: NextRequest) {
         const flagLines = formatFlagLines(regexFlags, verifier.flags)
         const retryMessages: Anthropic.Messages.MessageParam[] = [
           ...messages,
-          { role: 'assistant', content: currentResponse },
+          { role: 'assistant', content: withDraft(currentResponse, currentDraft) },
           { role: 'user', content: buildFeedbackPrompt(flagLines) },
         ]
         const retry = await anthropic.messages.create({
@@ -615,6 +632,7 @@ export async function POST(req: NextRequest) {
         const retryResult = retryUse?.input as AiResult | undefined
         if (retryResult) {
           currentResponse   = retryResult.response ?? currentResponse
+          currentDraft      = (retryResult as { draft?: unknown }).draft ?? currentDraft
           latestSuggestions = retryResult.suggestions ?? latestSuggestions
           latestReferenced  = retryResult.referencedDeals ?? latestReferenced
         }
@@ -656,6 +674,44 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    // ── Brief 43 PR 3 (Q3, spot #17) — draft privacy ─────────────────────────
+    // A draft (an email or text for Ryan to copy; nothing is sent [Ryan,
+    // 2026-09-24]) comes back in drift_response.draft, apart from the reply the
+    // guard above checked. It's held to the rules for anything sent against this
+    // turn's CRM homeowners, the street addresses Ryan typed and the listings
+    // found (lib/chat/guards/draftPrivacy.ts). A failed check gets one rewrite
+    // with feedback (a forced drift_response, like the guard's retry), then the
+    // deterministic clean-up, or a short decline. A canned guard fallback drops
+    // the draft along with the reply it came with.
+    const replyBeforeDraftCheck = aiResult.response ?? ''
+    const draftResult = await enforceDraftPrivacy({
+      draft:    fellbackToCanned ? null : currentDraft,
+      response: replyBeforeDraftCheck,
+      ctx:      buildDraftContext({ toolResults: toolResultsForGuard, userMessage, history, contextBlock: dynamicSystemBlock }),
+      rewrite:  async (feedback, previous) => {
+        const redo = await anthropic.messages.create({
+          model: CHAT_MODEL,
+          max_tokens: 4096,
+          system: systemBlocks,
+          messages: [
+            ...messages,
+            { role: 'assistant', content: draftAsText(replyBeforeDraftCheck, previous) },
+            { role: 'user', content: feedback },
+          ],
+          tools,
+          tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
+        })
+        tokensIn  += redo.usage?.input_tokens  ?? 0
+        tokensOut += redo.usage?.output_tokens ?? 0
+        const redoUse = redo.content.find(
+          (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
+        )
+        return (redoUse?.input as { draft?: unknown } | undefined)?.draft ?? null
+      },
+    })
+    const draft = draftResult.draft
+    aiResult = { ...aiResult, response: draftResult.response }
+
     const cleanResponse = (aiResult.response ?? '')
       .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
       .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
@@ -683,11 +739,10 @@ export async function POST(req: NextRequest) {
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`
       : userMessage
 
-    // Store pendingEvent in assistant message content as JSON so confirm flow can read it
+    // Store pendingEvent in assistant message content as JSON so confirm flow can read it.
+    // Brief 43 PR 3: a draft is stored the same way (no migration); GET reads it back.
     const pendingEvent = aiResult.pendingEvent ?? null
-    const storedAssistantContent = pendingEvent
-      ? JSON.stringify({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent })
-      : cleanResponse
+    const storedAssistantContent = encodeStoredReply({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent, draft })
 
     // Save messages to this session
     await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'user', content: storedMsg } })
@@ -746,7 +801,11 @@ export async function POST(req: NextRequest) {
       const interaction = await prisma.driftInteraction.create({
         data: {
           query:          userMessage || storedMsg,
-          parsedFilters:  { toolCalls: allToolCalls, maxIterationsHit, guard: guardTelemetry } as unknown as object,
+          // Brief 43 PR 3: draftPrivacy records what a draft was flagged for (kinds only, never the text).
+          parsedFilters:  {
+            toolCalls: allToolCalls, maxIterationsHit, guard: guardTelemetry,
+            ...(draftResult.outcome !== 'none' ? { draftPrivacy: { outcome: draftResult.outcome, flagKinds: draftResult.flagKinds, rewrote: draftResult.rewrote } } : {}),
+          } as unknown as object,
           topCards:       topCards as unknown as object[],
           responseTimeMs: Date.now() - t0,
           modelUsed:      CHAT_MODEL,
@@ -773,6 +832,8 @@ export async function POST(req: NextRequest) {
       // produced no report/fragment.
       attachedReport:   serverAttachedReport,
       attachedFragment: serverAttachedFragment,
+      // Brief 43 PR 3 — the checked draft to copy, or null.
+      draft,
     })
   } catch (err) {
     console.error('[DealFlow] Chat API error:', err)
@@ -790,5 +851,14 @@ export async function GET(req: NextRequest) {
     where: { sessionId },
     orderBy: { createdAt: 'asc' },
   })
-  return NextResponse.json({ messages })
+  // Brief 43 PR 3: a reply stored as JSON (a draft or a calendar proposal) is
+  // shown as its text, with its draft beside it.
+  return NextResponse.json({
+    messages: messages.map(m => (m.role === 'assistant' ? { ...m, ...replyFields(m.content) } : m)),
+  })
+}
+
+function replyFields(content: string) {
+  const { response, draft } = readStoredReply(content)
+  return { content: response, draft }
 }

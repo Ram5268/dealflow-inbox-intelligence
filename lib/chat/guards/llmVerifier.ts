@@ -54,6 +54,7 @@ ALLOWED — do NOT flag these:
 - Building-era or block-character context tied to an address in the tool results ("W 19th and W 20th are prewar Chelsea", "Willow St is a brownstone row", "Astoria Blvd is near the Hell Gate waterfront strip").
 - Descriptions of the assistant's OWN capabilities and architecture — its tools (search_listings, search_parties), that it reads the broker's inbox/extracted listings, Mojo CRM leads, calendar, that it can draft outreach but cannot send email or read public records. These describe the system itself, not property facts. The assistant may freely explain what it can and cannot do.
 - Subjective commentary ("great value", "priced to sell", "family-friendly").
+- In a draft message the response carries ("Draft (email, buyer_side): ..."), its greeting, its sign-off ("Ryan Martin"), pleasantries and offers to show the home or share more. The draft's facts about a property are checked like any other claim.
 - Obvious NYC general knowledge ("Park Slope is in Brooklyn", "the UWS is uptown", "prewar buildings are older").
 - Simple arithmetic derived from numbers that ARE in the tool results or supplied by the user (e.g., computing a monthly payment or rent-multiple from a stated price).
 
