@@ -110,7 +110,8 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
     for c in ["contactId", "address", "city", "state", "zip", "unitCount", "buildingSqft", "cachedBbl"]:
         if c not in sellers:
             sellers[c] = None
-    log(f"targets: {len(sellers):,} CRM sellers")
+    units_from_lead = targets.get("unitsFromLeadFields")  # Brief 49 PR 5: a count from DealFlow, never a value
+    log(f"targets: {len(sellers):,} CRM sellers" + (f"; {int(units_from_lead):,} with a unit number from the lead's own fields" if units_from_lead is not None else ""))
     inp = Inputs(raw, screen="name-free", log=log)
     asof = inp.end
     data_through = asof - pd.Timedelta(days=1)
@@ -203,6 +204,7 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
         "training_sales": int(tr.sum()),
         "screen_min_price_to_market_value": config.MIN_PRICE_TO_MARKET_VALUE,
         "sales_gap_months": inp.sales_info.get("gap_months"),
+        "units_from_lead_fields": int(units_from_lead) if isinstance(units_from_lead, int) else None,  # Brief 49 PR 5
         "value_vs_city": {"sellers_with_city_value": int(len(ratio)), "over_3x": int((ratio > 3).sum()), "under_one_third": int((ratio < 1 / 3).sum()),
                           "median_ratio": round(float(np.median(ratio)), 3) if len(ratio) else None},
         "seconds": round(time.time() - t0),

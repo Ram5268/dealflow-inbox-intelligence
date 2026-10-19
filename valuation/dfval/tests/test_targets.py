@@ -71,3 +71,10 @@ def test_no_value_reasons():
     assert no_value_reason(row("R4", lot="7501", units=9, condo="1"), False) == "condo_without_unit"
     assert no_value_reason(row("R4", lot="7501", units=9, condo="1"), True) == "other_property_type"
     assert no_value_reason(row("G1", units=0), False) == "other_property_type"
+
+
+def test_a_unit_added_by_dealflow_targets_is_read():
+    # Brief 49 PR 5: lib/valuations/targets.ts adds the lead's own unit as "#<unit>".
+    p = parse_address("101 Example Street #3F")
+    assert (p.number, p.street, p.unit) == ("101", "EXAMPLE ST", "3F")
+    assert parse_address("101 Example Street #2-R").unit == "2-R"

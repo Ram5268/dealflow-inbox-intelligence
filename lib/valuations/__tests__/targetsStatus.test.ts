@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { PrismaClient } from '@prisma/client'
-import { buildTargets } from '../targets'
+import { addressWithUnit, buildTargets, cleanUnit, leadUnit } from '../targets'
 import { buildStatus } from '../status'
 import { makeFakeDb, seedSellers, ORG, passingChecks, type FakeDb } from './fakeDb'
 
@@ -108,4 +108,44 @@ test('status before any run says "no runs yet"', async () => {
   assert.equal(s.message, 'no runs yet')
   assert.equal(s.latestRun, null)
   assert.equal(s.latestPublished, null)
+})
+
+// ── Brief 49 (PR 5): a condo's unit number from the lead's own fields ─────────────────
+test('Brief 49: leadUnit finds the unit in the old Mojo fields or a unit / second-address-line key', () => {
+  assert.equal(leadUnit({ source: 'crm', unmapped: { Unit: 'Apt 2R' } }), '2R')
+  assert.equal(leadUnit({ unmapped: { 'Property Address 2': '#4B' } }), '4B')
+  assert.equal(leadUnit({ unmapped: { apt_number: 3 } }), '3')
+  assert.equal(leadUnit({ unmapped: { 'Unit #': 'unit 2-r' } }), '2-R')
+  assert.equal(leadUnit({ source: 'crm', address2: 'Suite 1' }), '1') // a key on metadata itself
+  assert.equal(leadUnit({ unmapped: { Unit: '' }, address_line_2: 'PH' }), 'PH') // an empty field is skipped
+  for (const bad of [{ unmapped: { Unit: '2nd Floor' } }, { unmapped: { Unit: '123 Example Street Apt 4' } }, { unmapped: { Unit: -2 } },
+    { unmapped: { Notes: '2R' } }, { source: 'crm', crmLeadId: 'lead7', callAttempts: 3 }, null, 'x', []]) {
+    assert.equal(leadUnit(bad), null, JSON.stringify(bad))
+  }
+  assert.equal(cleanUnit('#  3F'), '3F')
+  assert.equal(cleanUnit('APARTMENT 12'), '12')
+})
+
+test('Brief 49: a unit is added only when the address has none', () => {
+  const m = { unmapped: { Unit: '2R' } }
+  assert.deepEqual(addressWithUnit('100 Example Street', m), { address: '100 Example Street #2R', added: true })
+  for (const a of ['100 Example Street #3', '100 Example Street Apt 4B', '100 Example Street Unit 5', '100 Example Street, 2F']) {
+    assert.deepEqual(addressWithUnit(a, m), { address: a, added: false }, a)
+  }
+  assert.deepEqual(addressWithUnit(null, m), { address: null, added: false })
+  assert.deepEqual(addressWithUnit('100 Example Street', { source: 'crm' }), { address: '100 Example Street', added: false })
+})
+
+test('Brief 49: targets add the lead\'s unit, count it, and send nothing else from metadata', async () => {
+  const db = makeFakeDb(); seedSellers(db, 3)
+  const c1 = db.mojoContact.rows.find(r => r.id === 'c0001')!
+  c1.metadata = { source: 'crm', crmLeadId: 'lead1', callAttempts: 4, unmapped: { Unit: 'Apt 3F', 'Lead Notes': 'Zqleakq' } }
+  const t = await buildTargets(asPrisma(db), ORG)
+  assert.equal(t.unitsFromLeadFields, 1)
+  assert.deepEqual(t.sellers.map(s => s.address), ['100 Example Street', '101 Example Street #3F', '102 Example Street'])
+  const text = JSON.stringify(t)
+  for (const leak of ['Zqleakq', 'crmLeadId', 'lead1', 'callAttempts', 'unmapped', 'metadata', 'Mailing', 'Homeowner']) {
+    assert.ok(!text.includes(leak), `targets leaked ${leak}`)
+  }
+  assert.deepEqual(Object.keys(t.sellers[1]).sort(), ['address', 'buildingSqft', 'cachedBbl', 'city', 'contactId', 'state', 'unitCount', 'zip'])
 })
