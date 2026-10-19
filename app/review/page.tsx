@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
+import { sendReviewAction } from '@/lib/review/send'
 
 type FlagReason = 'low_confidence' | 'ambiguous_category' | 'missing_address' | 'possible_duplicate'
   | 'conflicting_category' | 'schema_validation_failed' | 'multi_listing_ambiguity'
@@ -88,6 +89,7 @@ export default function ReviewPage() {
   const [acting, setActing]   = useState<string | null>(null) // item id being actioned
   const [editing, setEditing] = useState<string | null>(null) // item id in correction mode
   const [corrections, setCorrections] = useState<Record<string, string>>({})
+  const [failure, setFailure] = useState<{ id: string; message: string } | null>(null) // why the last action didn't save
 
   async function load() {
     setLoading(true)
@@ -103,12 +105,15 @@ export default function ReviewPage() {
 
   async function act(itemId: string, action: string, corrs?: Record<string, string>, notes?: string) {
     setActing(itemId)
-    await fetch('/api/review', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: itemId, action, corrections: corrs, notes }),
-    })
+    setFailure(null)
+    // Brief 48 (PR 3): the reply is read now. A refused or failed save keeps the
+    // item, the open form and what Ryan typed, with the server's message under it.
+    const problem = await sendReviewAction({ id: itemId, action, corrections: corrs, notes })
     setActing(null)
+    if (problem) {
+      setFailure({ id: itemId, message: problem })
+      return
+    }
     setEditing(null)
     setCorrections({})
     setItems(prev => prev.filter(i => i.id !== itemId))
@@ -264,7 +269,7 @@ export default function ReviewPage() {
                       Save corrections
                     </button>
                     <button
-                      onClick={() => { setEditing(null); setCorrections({}) }}
+                      onClick={() => { setEditing(null); setCorrections({}); setFailure(null) }}
                       style={{ flex: 0.6, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 999, padding: '9px 0', fontFamily: 'var(--font-ui)', fontSize: 12, cursor: 'pointer' }}
                     >
                       Cancel
@@ -277,7 +282,8 @@ export default function ReviewPage() {
               {!isEditing && (
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
                   <ActionBtn label="Approve"    disabled={isActing} color="rgba(120,220,150,0.9)" onClick={() => act(item.id, 'approve')} />
-                  <ActionBtn label="Correct"    disabled={isActing} color="rgba(130,200,230,0.9)" onClick={() => setEditing(item.id)} />
+                  {/* Brief 48 (PR 3): a fresh form, so another item's typing never carries over */}
+                  <ActionBtn label="Correct"    disabled={isActing} color="rgba(130,200,230,0.9)" onClick={() => { setEditing(item.id); setCorrections({}); setFailure(null) }} />
                   <ActionBtn label="Reject"     disabled={isActing} color="rgba(220,100,100,0.8)" onClick={() => act(item.id, 'reject')} />
                   <ActionBtn label="Duplicate"  disabled={isActing} color="rgba(180,160,220,0.8)" onClick={() => act(item.id, 'mark_duplicate')} />
                   <ActionBtn label="Stale"      disabled={isActing} color="rgba(255,255,255,0.4)" onClick={() => act(item.id, 'mark_stale')} />
@@ -299,6 +305,13 @@ export default function ReviewPage() {
                       Detail →
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* Brief 48 (PR 3): why the last action on this item didn't save, under the form or the buttons */}
+              {failure?.id === item.id && (
+                <div role="alert" style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'rgba(240,190,120,0.95)', lineHeight: 1.45 }}>
+                  {failure.message}
                 </div>
               )}
             </div>
