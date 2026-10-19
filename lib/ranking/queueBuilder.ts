@@ -63,22 +63,37 @@ export function contactScopeWhere(orgId: string, scope: QueueScope): Prisma.Mojo
     : { organizationId: orgId }
 }
 
-// Brief 35: the persist transaction always replaces the org's list, even with
-// 0 entries (so a stale list can't survive), and records the run in AuditLog.
+// Brief 47 (PR 1, Brief 46 DF-2, engineering precaution): the call list is never
+// replaced with an empty one. A run that would save 0 entries keeps yesterday's
+// list, writes one AuditLog row (CALL_QUEUE_BUILD_REFUSED: counts and a code) and
+// fails. Until Brief 47 an empty list replaced the old one.
+export const CALL_QUEUE_REFUSED_ACTION = 'CALL_QUEUE_BUILD_REFUSED'
+
+export class CallQueueRefusedError extends Error {
+  constructor() {
+    super('call list refused: empty_list')
+    this.name = 'CallQueueRefusedError'
+  }
+}
+
+// Brief 35: the persist transaction replaces the org's list and records the run
+// in AuditLog. Brief 47 (PR 1): an empty batch is refused here too (buildCallQueue
+// refuses first; this is the second line of defense).
 export function persistBatch(
   db: Pick<PrismaClient, 'callQueueEntry' | 'auditLog'>,
   orgId: string, entries: QueueEntry[], generationRunId: string, stats: QueueStats,
 ) {
+  if (entries.length === 0) throw new CallQueueRefusedError()
   return [
     db.callQueueEntry.deleteMany({ where: { organizationId: orgId } }),
-    ...(entries.length > 0 ? [db.callQueueEntry.createMany({
+    db.callQueueEntry.createMany({
       data: entries.map(e => ({
         organizationId: orgId, contactId: e.contactId, rank: e.rank, priorityScore: e.priorityScore,
         reason: e.reason, primaryMatchId: e.primaryMatchId, contributingMatchIds: e.contributingMatchIds,
         contributions: e.contributions, generationRunId,
       })),
       skipDuplicates: true,
-    })] : []),
+    }),
     db.auditLog.create({ data: { organizationId: orgId, action: 'CALL_QUEUE_BUILD', detailsJson: { generationRunId, ...stats } } }),
   ]
 }
@@ -306,6 +321,18 @@ export async function buildCallQueue(
     queueLength: entries.length,
     priorityDistribution: { top10Avg, top50Avg, rank1Score, rank50Score, spread: rank1Score - rank50Score },
   }
-  if (persist) await prisma.$transaction(persistBatch(prisma, orgId, entries, generationRunId, stats))
+  if (persist) {
+    // Brief 47 (PR 1): 0 entries keeps yesterday's list (see CALL_QUEUE_REFUSED_ACTION).
+    if (entries.length === 0) {
+      await prisma.auditLog.create({
+        data: {
+          organizationId: orgId, action: CALL_QUEUE_REFUSED_ACTION,
+          detailsJson: { reasons: ['empty_list'], totalContactsConsidered: stats.totalContactsConsidered, exclusionCounts, queueLength: 0 },
+        },
+      })
+      throw new CallQueueRefusedError()
+    }
+    await prisma.$transaction(persistBatch(prisma, orgId, entries, generationRunId, stats))
+  }
   return { entries, generationRunId, stats }
 }

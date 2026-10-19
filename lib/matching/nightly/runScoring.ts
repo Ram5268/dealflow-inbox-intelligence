@@ -10,12 +10,17 @@ import { boroughFromLabel } from '../borough'
 import { fromRaw } from '../../domain/Neighborhood'
 import type { BuyerData, ListingData, ScoringContext } from '../scorerTypes'
 import { topForSeller, toMatchRow, type Candidate } from './select'
-import { DELETE_STALE_MATCHES_SQL, UPSERT_MATCHES_SQL } from './sql'
+import { DELETE_STALE_MATCHES_SQL, EXISTING_MATCH_COUNTS_SQL, UPSERT_MATCHES_SQL } from './sql'
+import { SCORING_REFUSED_ACTION, ScoringRefusedError, scoringRefusal, type ScoringRefusalDetails } from './guard'
 
 // Brief 35: nightly-pipeline step 2. Scores every CRM seller (supply) against
 // buyer demand with the Brief 32 scorer and keeps each seller's best pairs as
 // Match rows. Writes only Match + AuditLog, in one transaction; a dry run
 // executes the same statements, then rolls back.
+// Brief 47 (PR 1): before any write, the size check (guard.ts, engineering
+// precaution) can refuse the night. A refused night writes one AuditLog row,
+// NIGHTLY_SCORING_REFUSED, and nothing else, then throws ScoringRefusedError
+// (a refused dry run writes nothing and throws too).
 export const ORG_SLUG = 'dealflow-ryan'
 export const MAX_KEPT_PER_SELLER = 10 // guard: selection keeps ≤ 10 per seller, so more means a bug
 const CHUNK = 1_000
@@ -127,8 +132,29 @@ export async function runNightlyScoring({ dryRun = false } = {}): Promise<Scorin
 
   const rows = kept.map(c => ({ id: randomUUID(), ...toMatchRow(c) }))
   const keys = rows.map(r => ({ opportunityId: r.opportunityId, counterpartId: r.counterpartId, counterpartType: r.counterpartType }))
+  const sellersCovered = new Set(rows.map(r => r.opportunityId)).size
   try {
-    return await prisma.$transaction(async tx => {
+    const out = await prisma.$transaction(async tx => {
+      // Brief 47 (PR 1): the size check, counted in this transaction before the first
+      // write. Refused: no Match row is written or deleted, the switch rollback isn't
+      // recorded (the check runs again next night; its counts are in this row), and
+      // there's no NIGHTLY_SCORING row.
+      const [existing] = await tx.$queryRawUnsafe<{ matches: number; sellers: number }[]>(EXISTING_MATCH_COUNTS_SQL, org.id)
+      const sizes = {
+        sellers: listings.length, buyers: buyers.length, kept: rows.length, sellersCovered,
+        existingMatches: existing.matches, existingSellersCovered: existing.sellers,
+      }
+      const reasons = scoringRefusal(sizes)
+      if (reasons.length > 0) {
+        const refused = new ScoringRefusedError(reasons)
+        if (dryRun) throw refused // rolls the transaction back: a dry run writes nothing
+        const details: ScoringRefusalDetails = {
+          reasons, ...sizes, includeTestBuyers: process.env.SCORING_INCLUDE_TEST_BUYERS === 'true',
+          ...(night.check && { ourEstimates: night.check }),
+        }
+        await tx.auditLog.create({ data: { organizationId: org.id, action: SCORING_REFUSED_ACTION, detailsJson: details } })
+        return refused // the row commits with the transaction; thrown below
+      }
       let inserted = 0
       let updated = 0
       for (let i = 0; i < rows.length; i += CHUNK) {
@@ -146,7 +172,7 @@ export async function runNightlyScoring({ dryRun = false } = {}): Promise<Scorin
         demandExcludedNoLocation,
         ...stats,
         kept: rows.length,
-        sellersCovered: new Set(rows.map(r => r.opportunityId)).size,
+        sellersCovered,
         inserted,
         updated,
         deleted,
@@ -160,6 +186,8 @@ export async function runNightlyScoring({ dryRun = false } = {}): Promise<Scorin
       await tx.auditLog.create({ data: { organizationId: org.id, action: 'NIGHTLY_SCORING', detailsJson: result } })
       return result
     }, { maxWait: 10_000, timeout: 120_000 })
+    if (out instanceof ScoringRefusedError) throw out
+    return out
   } catch (e) {
     if (e instanceof DryRunRollback) return e.result
     throw e

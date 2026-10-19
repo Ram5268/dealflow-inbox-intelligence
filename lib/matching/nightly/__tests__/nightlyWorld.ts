@@ -99,7 +99,7 @@ export function nightlyWorld(init: Partial<Tables> = {}, opts: { countFails?: bo
       for (const k of SCORER_COLUMNS) old[k] = r[k]
       out.push({ inserted: false })
     }
-    write('match.upsert', rows.map(({ id: _id, ...rest }) => rest)) // the ids are random
+    write('match.upsert', rows.map(r => Object.fromEntries(Object.entries(r).filter(([k]) => k !== 'id')))) // the ids are random
     return out
   }
 
