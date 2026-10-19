@@ -203,6 +203,7 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
         "training_sales": int(tr.sum()),
         "screen_min_price_to_market_value": config.MIN_PRICE_TO_MARKET_VALUE,
         "sales_gap_months": inp.sales_info.get("gap_months"),
+        "sales_gap_rebuilt_from_deeds": inp.sales_info.get("gap_sales_rebuilt"),  # Brief 49 PR 6
         "value_vs_city": {"sellers_with_city_value": int(len(ratio)), "over_3x": int((ratio > 3).sum()), "under_one_third": int((ratio < 1 / 3).sum()),
                           "median_ratio": round(float(np.median(ratio)), 3) if len(ratio) else None},
         "seconds": round(time.time() - t0),
