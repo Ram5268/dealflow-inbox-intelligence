@@ -9,6 +9,7 @@ import { classifyIntent } from './intentClassifier'
 import type { ParsedQuery } from './types'
 import { NEIGHBORHOODS, BOROUGHS } from '../domain/Neighborhood'
 import { withTimeout, isTimedOut, LOOKUP_TIMEOUT_MS } from '../chat/turnBudget'
+import { extractAddressFromText, SALE_WORDS } from '../acris'
 
 // Pre-built variant→canonical index used by extractNeighborhoods. Built once
 // at module load. Each variant is lowercased and stored with its canonical;
@@ -325,7 +326,10 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
   const isRental      = detectRentalSale(text)
   const lower         = text.toLowerCase()
   const isCalendar    = /\b(schedule|book|calendar|appointment|today|tomorrow|this week|next week|monday|tuesday|wednesday|thursday|friday)\b/.test(lower)
-  const isACRIS       = /\b(who owns|acris|deed|sold for|ownership|mortgage|lien)\b/.test(lower)
+  // Brief 43 PR 11 (Q25): "when did 418 Example St last sell?" is a records
+  // question too, when the message has an address [engineering precaution].
+  const isACRIS       = /\b(who owns|acris|deed|sold for|ownership|mortgage|lien)\b/.test(lower) ||
+                        (SALE_WORDS.test(lower) && extractAddressFromText(text) !== null)
   const isDOB         = /\b(permit|violation|dob|building department|air rights|certificate of occupancy|co |c\.o\.)\b/.test(lower)
   const isMyBuyer       = MY_BUYER_PATTERN.test(lower)
   const isSellerLead    = SELLER_LEAD_PATTERN.test(lower)
