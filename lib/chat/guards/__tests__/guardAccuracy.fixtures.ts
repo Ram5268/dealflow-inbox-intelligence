@@ -110,6 +110,7 @@ export const PASS: Row[] = [
   // DRIFT_SCRIPT #8: an honest "no record" stays as written.
   ['#8 target: I don\'t have a record of that sale', "I don't have a record of that sale.", { userMessage: 'the 3-family on Halsey that sold for $2.1M last week, who bought it?' }],
   ['#8: no record, then the offer', "I don't have a record of that sale. Give me the house number and I'll look up the deed records.", { userMessage: 'the 3-family on Halsey that sold for $2.1M last week, who bought it?' }],
+  ['#8: no record, then an offer naming the source', "I don't have a record of that sale. If you give me the house number on Halsey, I can pull the deed records from ACRIS.", {}],
   ['#8: no record of who bought it or when it last sold', "I don't have a record of who bought it or when it last sold.", {}],
   ['#8: no record of the previous owner of an address', "I don't have a record of the previous owner of 88 Example Ave.", {}],
   ['#8: echoes the question without a year', "I don't have a record of a 3-family on Halsey selling for $2.1M last week.", {}],
