@@ -1,8 +1,8 @@
 // Brief 48 (4.5) [planner]: Check In (POST /api/sync/run) no longer runs the old
 // matcher, lib/matchmaking.ts. That matcher wrote a homeowner's full name and
-// street address into Match.reason, and the CRM's morning copy can show a match's
-// reason as its "Why" line; homeowner details stay out of buyer-facing text
-// [Ryan, 2026-10-19]. The behaviour test runs the real route under tsx on an
+// street address into Match.reason, and the CRM's morning copy shows a match's
+// reason as the "Why" line on that homeowner's own card [planner, item 4.5].
+// The behaviour test runs the real route under tsx on an
 // in-memory stand-in for Prisma holding one buyer request created 5 minutes ago
 // and one homeowner in its neighborhood: the setup in which the old matcher
 // wrote a Match row naming the homeowner. Outlook paused, network refused, no
@@ -38,8 +38,15 @@ const TABLES: Record<string, Row[]> = {
 }
 
 // Enough of Prisma's `where` for the queries on this path. An unknown filter
-// throws, so a query the stand-in can't answer fails the test instead of
-// quietly matching nothing.
+// throws and is also recorded in `gaps`: the route swallows errors in its
+// background steps, so the test asserts `gaps` is empty rather than relying on
+// the throw (a query the stand-in can't answer fails the test instead of
+// quietly matching nothing).
+const gaps: string[] = []
+function gap(what: string): never {
+  gaps.push(what)
+  throw new Error(`stand-in: ${what}`)
+}
 function fits(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([key, want]) => {
     if (key === 'OR') return (want as Row[]).some(w => fits(row, w))
@@ -54,7 +61,7 @@ function fits(row: Row, where: Row = {}): boolean {
         case 'gte': return got instanceof Date && got.getTime() >= (x as Date).getTime()
         case 'contains': return typeof got === 'string' && got.toLowerCase().includes(String(x).toLowerCase())
         case 'mode': return true // 'insensitive': contains above ignores case already
-        default: throw new Error(`stand-in: no "${op}" filter`)
+        default: return gap(`no "${op}" filter`)
       }
     })
   })
@@ -65,7 +72,9 @@ function fits(row: Row, where: Row = {}): boolean {
 const READS = new Set(['findMany', 'findFirst', 'findUnique', 'count'])
 const calls: Array<{ model: string; op: string; args: Row }> = []
 ;(globalThis as unknown as { prisma: unknown }).prisma = new Proxy({}, {
-  get: (_t, model) => typeof model !== 'string' || model === 'then' ? undefined : new Proxy({}, {
+  get: (_t, model) => typeof model !== 'string' || model === 'then' ? undefined
+    : model.startsWith('$') ? () => gap(`no ${model}`) // $transaction, $queryRaw, ...
+    : new Proxy({}, {
     get: (_u, op) => typeof op !== 'string' || op === 'then' ? undefined : async (args: Row = {}) => {
       calls.push({ model, op, args })
       const found = (TABLES[model] ?? []).filter(r => fits(r, args.where as Row | undefined))
@@ -115,6 +124,7 @@ test('Check In runs no old matcher: no Match row, and no homeowner name or addre
   }
   assert.deepEqual(calls.filter(c => c.model === 'mojoContact').map(c => c.op), [], 'Check In looks up no homeowner while Outlook is paused')
   assert.deepEqual(network, [], 'no network call')
+  assert.deepEqual(gaps, [], 'every query on the path was one the stand-in can answer')
 })
 
 // Source check: the route neither imports nor calls the old matcher, and no other

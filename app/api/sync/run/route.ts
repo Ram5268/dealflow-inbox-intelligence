@@ -88,10 +88,12 @@ async function runSync() {
   // runs the old matcher (lib/matchmaking.ts, deprecated since Brief 7.2) on
   // opportunities from the last 30 minutes [planner]. It wrote a homeowner's
   // full name and street address into Match.reason, which the CRM's morning
-  // copy can show as a match's "Why" line; homeowner details stay out of
-  // buyer-facing text [Ryan, 2026-10-19]. Opportunities this sync creates are
-  // still matched by the 7.0 engine inside runIncrementalSync() (gated by
-  // MATCHING_TEST_MODE_ONLY).
+  // copy shows as the "Why" line on that homeowner's own card. With INGEST_V2
+  // off, opportunities this sync creates are still matched by the 7.0 engine
+  // inside runIncrementalSync() (gated by MATCHING_TEST_MODE_ONLY). With
+  // INGEST_V2=true, V1 creates none and the V2 block below runs no matcher, so
+  // new email opportunities get no per-sync match until one is wired here.
+  // Outlook is paused, so neither path creates any today.
 
   // Phase 3B — Ingestion V2 (body + linked HTML). Behind feature flag so the
   // V1 pipeline keeps running by default. Non-blocking; failures are logged
