@@ -1,8 +1,9 @@
 import { safeEqual } from '../auth/safeEqual'
 
 // Brief 41 (H6) — one fail-closed switch for the maintenance routes:
-// sync/reextract, sync/reclassify, sync/hotsheet, sync/embed-all and
-// admin/backfill-hotsheets. They delete or rewrite listings, or run up OpenAI,
+// sync/reextract, sync/reclassify, sync/hotsheet, sync/embed-all,
+// admin/backfill-hotsheets and (Brief 48) sync/reprocess-attachments. They
+// delete or rewrite listings or saved email attachment text, or run up OpenAI,
 // Anthropic and ScrapingBee bills, and nothing in the app calls them. They are
 // off unless MAINTENANCE_ENABLED is exactly 'true'. An off-switch, not a login.
 export function maintenanceEnabled(): boolean {
