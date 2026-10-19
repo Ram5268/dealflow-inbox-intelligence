@@ -91,7 +91,8 @@ test('status never shows a value, address, tax lot, contact id or blob, even for
     assert.ok(!text.includes(leak.toLowerCase()), `status leaked ${leak}`)
   }
   for (const run of [s.latestRun!, s.latestPublished!]) {
-    assert.deepEqual(Object.keys(run).sort(), RUN_KEYS)
+    // Brief 49 (PR 3): the latest published run also carries its age in whole days.
+    assert.deepEqual(Object.keys(run).sort(), run === s.latestPublished ? [...RUN_KEYS, 'ageDays'].sort() : RUN_KEYS)
     assert.equal(run.modelVersion, null, 'a stored model version that is not a code is not shown')
     assert.deepEqual(Object.keys(run.counts).sort(), COUNT_KEYS)
     assert.equal(run.counts.valued, null)
@@ -174,4 +175,30 @@ test('Brief 49: a generic Address 2 is skipped next to mailing fields; a propert
   assert.equal(leadUnit({ unmapped: { 'Address 2': 'Apt 5C', 'Mailing Address': '1 Elsewhere Rd', 'Property Unit': '2R' } }), '2R')
   assert.equal(leadUnit({ unmapped: { 'Address 2': 'Apt 5C', 'Property Unit': '2R' } }), '2R')
   assert.equal(leadUnit({ unmapped: { 'Address 2': 'Apt 5C' } }), '5C')
+})
+
+test('Brief 49: latestPublished.ageDays is the whole days since it was published; the latest run has none', async () => {
+  const db = makeFakeDb(); seedSellers(db, 3)
+  plantRun(db, 'vr_pub', { published: true, publishedAt: at('2026-10-20T11:00:00Z') })
+  plantRun(db, 'vr_new', { runAt: at('2026-11-20T10:00:00Z') }) // a newer run that didn't publish
+  const age = async (now: string) => (await buildStatus(asPrisma(db), ORG, at(now))).latestPublished?.ageDays
+  assert.equal(await age('2026-10-20T11:00:00Z'), 0)
+  assert.equal(await age('2026-10-21T10:59:59Z'), 0)
+  assert.equal(await age('2026-10-21T11:00:00Z'), 1)
+  assert.equal(await age('2026-11-19T12:00:00Z'), 30)
+  assert.equal(await age('2027-01-28T11:00:00Z'), 100)
+  assert.equal(await age('2027-01-29T11:00:00Z'), 101) // matching no longer uses it (lib/matching/ourEstimates.ts)
+  assert.equal(await age('2026-10-19T00:00:00Z'), 0) // a clock behind the import's never shows a negative age
+  const s = await buildStatus(asPrisma(db), ORG, at('2026-11-21T00:00:00Z'))
+  assert.equal(s.latestRun?.published, false)
+  assert.equal('ageDays' in (s.latestRun ?? {}), false)
+  assert.equal(typeof (await buildStatus(asPrisma(db), ORG)).latestPublished?.ageDays, 'number') // today's clock by default
+})
+
+test('Brief 49: a published run with no publish time shows no age', async () => {
+  const db = makeFakeDb(); seedSellers(db, 3)
+  plantRun(db, 'vr_pub', { published: true, publishedAt: null })
+  const s = await buildStatus(asPrisma(db), ORG, at('2026-11-21T00:00:00Z'))
+  assert.equal(s.latestPublished?.published, true)
+  assert.equal(s.latestPublished?.ageDays, null)
 })

@@ -36,8 +36,11 @@ const ISO_BUYERS = [
 ]
 const MOJO_BUYERS = [contact('buyer-mojo', { intent: 'BUYER', metadata: {}, budgetMax: 1_500_000, bedsMin: 3, cashOnly: true })]
 
+// Published two days before the test runs: matching ignores values published more than 100 days
+// before the night's clock (Brief 49, lib/matching/ourEstimates.ts), so a fixed date would age out.
+const RECENTLY_PUBLISHED = new Date(Date.now() - 2 * 86_400_000)
 const published = (contactId: string, value: number | null) =>
-  ({ contactId, value, createdAt: new Date('2026-10-17'), run: { publishedAt: new Date('2026-10-17T15:00:00Z') } })
+  ({ contactId, value, createdAt: new Date('2026-10-17'), run: { publishedAt: RECENTLY_PUBLISHED } })
 const GOOD_VALUES = SELLERS.map((s, i) => published(s.id as string, 1_000_000 + i * 25_000)) // inside the budgets
 const BAD_VALUES = SELLERS.map(s => published(s.id as string, 6_000_000)) // far above every budget
 
@@ -176,4 +179,25 @@ test('a dry run reports what would happen and writes nothing', async () => {
   assert.equal(dry.result.dryRun, true)
   assert.equal(dry.result.ourEstimates?.rolledBack, true)
   assert.deepEqual(dry.committed, [])
+})
+
+// Brief 49 (PR 3), reviewer's suggestion: the monthly job has stopped and every value is past
+// the 100-day limit. The night is the switch-off night: same Match rows, no rollback, the switch
+// stays on (so a fresh run is used again with no one's help), and the check says 0 sellers priced.
+test('switch on, every value older than 100 days: the switch-off night, no rollback, the switch stays on', async () => {
+  const STALE = new Date(Date.now() - 101 * 86_400_000)
+  const stale = GOOD_VALUES.map(v => ({ ...v, run: { publishedAt: STALE } }))
+  const off = await night(null)
+  const on = await night({ enabled: true }, stale)
+  assert.deepEqual(on.reads, ['featureFlag', 'propertyValuation'])
+  assert.deepEqual(upserts(on.committed), upserts(off.committed))
+  assert.deepEqual(kinds(on.committed), ['upsert', 'audit:NIGHTLY_SCORING'])
+  assert.deepEqual(omit(on.stable, 'ourEstimates'), off.stable)
+  const check = on.result.ourEstimates!
+  assert.equal(check.rolledBack, false)
+  assert.deepEqual(check.reasons, [])
+  assert.equal(check.sellersPricedByOurValue, 0)
+  assert.equal(check.hotWith, check.hotWithout)
+  assert.equal(check.sellersLosingAllMatches, 0)
+  // Brief 47's status window then shows lastNightUsedOurValues: true with sellersPricedByOurValues: 0.
 })

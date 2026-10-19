@@ -1,0 +1,156 @@
+name: valuation-monthly
+
+# Brief 49 PR 2 (Ryan's open item 5.1): DealFlow's home values refresh themselves every month.
+#
+# In plain English: at 10:00 UTC on the 20th this job downloads the city's public sales and
+# property records (valuation/fetch, Brief 44.1), rebuilds the model's tables, values every CRM
+# seller, checks the publish gates and, only when every gate passes, sends the values to DealFlow
+# through its own protected import address (valuation/dfval, Brief 44). The run on the 23rd is
+# the backup: it does nothing when this month's values are already published. A run started by
+# hand ("Run workflow") is a dry run, which sends nothing, unless its "publish" box is ticked.
+#
+# Rules, and where each comes from:
+# - Engineering precaution (Brief 44 §5, the publish gates): typical miss at most 11.5% for all
+#   homes and 14.5% for 2-4 family homes in Ryan's 8 neighborhoods; 2-in-3 range coverage between
+#   60% and 75%; at least 1,300 sellers valued. A failed gate, download or request publishes
+#   nothing, DealFlow keeps the last published values, and the run shows red.
+# - Engineering precaution: each secret goes only to the step that uses it (the NYC Open Data key
+#   pair to the download; VALUATION_IMPORT_SECRET to the valuation step). The code never prints
+#   them and GitHub masks them. The job holds no database credentials.
+# - Brief 44 revision 2: the run keeps only counts, accuracy numbers and one median rounded to
+#   $10,000 (summary.json). Each home's value stays in the valuation step's memory and goes only
+#   to DealFlow.
+# - Brief 44.1 revision 1: a 4-hour limit (the download alone took 62 minutes on 2026-10-18).
+# - Brief 44 revisions 4-6: no download code outside valuation/fetch; whole public files, one
+#   request at a time; no names.
+
+on:
+  schedule:
+    - cron: '0 10 20,23 * *'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the values if every gate passes. Leave unticked for a dry run, which sends nothing to DealFlow.'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One run at a time; a second one waits instead of overlapping (engineering precaution).
+concurrency:
+  group: valuation-monthly
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            valuation/fetch/requirements.txt
+            valuation/dfval/requirements.txt
+
+      - name: Check free disk space, and add swap
+        # The downloaded files take about 0.6 GB and the two Python environments about 1 GB
+        # (engineering precaution: stop early, not halfway). A rehearsal on Ryan's Mac on
+        # 2026-10-19 peaked at about 8.3 GB of memory, more than a standard runner's 7 GB, so 8 GB
+        # more swap keeps a peak from killing the run. On a 2-core runner /mnt is a ~14 GB disk
+        # that already holds a 4 GB swap file (~9-10 GB free), so the swap goes there when 9 GB is
+        # free, else on the run's own disk when it has 16 GB free. Adding swap is never fatal.
+        run: |
+          avail_gb=$(df -BG --output=avail "$RUNNER_TEMP" | tail -1 | tr -dc '0-9')
+          echo "Free disk for the run: ${avail_gb} GB; memory: $(free -m | awk '/^Mem:/{printf "%.1f", $2/1024}') GB; CPUs: $(nproc)"
+          if [ "${avail_gb:-0}" -lt 8 ]; then
+            echo "::error::Only ${avail_gb} GB of disk is free; the run needs at least 8 GB. Nothing was downloaded or published."
+            exit 1
+          fi
+          spare_gb=$(df -BG --output=avail /mnt 2>/dev/null | tail -1 | tr -dc '0-9')
+          swap=
+          if [ "${spare_gb:-0}" -ge 9 ]; then swap=/mnt/valuation-swap
+          elif [ "${avail_gb:-0}" -ge 16 ]; then swap=/valuation-swap
+          fi
+          if [ -n "$swap" ] && sudo fallocate -l 8G "$swap" && sudo chmod 600 "$swap" && sudo mkswap "$swap" > /dev/null && sudo swapon "$swap"; then
+            echo "Added 8 GB of swap at $swap"
+          else
+            echo "::warning::No extra swap was added (/mnt ${spare_gb:-0} GB free, run disk ${avail_gb} GB free); the valuation step may run short of memory."
+          fi
+          swapon --show
+          free -m
+
+      - name: Install the pinned versions
+        # Two environments, each with exactly the versions its package was tested with: the
+        # downloader's (pandas 3, pyarrow 26) and the model's (the research's pandas 2.3, pyarrow 21).
+        run: |
+          python -m venv "$RUNNER_TEMP/venv-fetch"
+          "$RUNNER_TEMP/venv-fetch/bin/pip" install --disable-pip-version-check -q -r valuation/fetch/requirements.txt
+          python -m venv "$RUNNER_TEMP/venv-dfval"
+          "$RUNNER_TEMP/venv-dfval/bin/pip" install --disable-pip-version-check -q -r valuation/dfval/requirements.txt
+
+      - name: Test the code (no network)
+        run: |
+          "$RUNNER_TEMP/venv-fetch/bin/python" -m pytest -q valuation/fetch/tests
+          "$RUNNER_TEMP/venv-dfval/bin/python" -m pytest -q valuation/dfval/tests
+
+      - name: Decide what this run does
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          PUBLISH_INPUT: ${{ inputs.publish }}
+          REF: ${{ github.ref }}
+        run: |
+          "$RUNNER_TEMP/venv-dfval/bin/python" -m valuation.dfval plan --event "$EVENT" --publish-input "$PUBLISH_INPUT" --ref "$REF" >> "$GITHUB_OUTPUT"
+
+      - name: Download the public records (valuation/fetch)
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          NYC_SOCRATA_KEY_ID: ${{ secrets.NYC_SOCRATA_KEY_ID }}
+          NYC_SOCRATA_KEY_SECRET: ${{ secrets.NYC_SOCRATA_KEY_SECRET }}
+        run: |
+          "$RUNNER_TEMP/venv-fetch/bin/python" -m valuation.fetch --out "$RUNNER_TEMP/valuation-data"
+
+      - name: Build the tables, value the sellers and check the gates; publish only on a publish run (valuation/dfval)
+        # One process, so each home's value stays in memory: build the tables, run the model
+        # (the name-free configuration Brief 44 published), check the gates, then, on a publish
+        # run and only if every gate passed, publish through DealFlow's import address (a new
+        # connection for every request, DealFlow #33). A publish run whose gates fail exits 3.
+        if: steps.plan.outputs.skip != 'true'
+        env:
+          VALUATION_IMPORT_SECRET: ${{ secrets.VALUATION_IMPORT_SECRET }}
+          PUBLISH: ${{ steps.plan.outputs.publish }}
+        run: |
+          mode=--dry-run
+          if [ "$PUBLISH" = "true" ]; then mode=--publish; fi
+          timer=()
+          if [ -x /usr/bin/time ]; then timer=(/usr/bin/time -v -o "$RUNNER_TEMP/valuation-time.txt"); fi
+          "${timer[@]}" "$RUNNER_TEMP/venv-dfval/bin/python" -m valuation.dfval run --data "$RUNNER_TEMP/valuation-data" --out "$RUNNER_TEMP/valuation-out" "$mode"
+
+      - name: Summary (counts and gate results only)
+        # Red unless every gate passed, and, on a publish run, the values were published.
+        if: always() && steps.plan.outputs.skip != 'true' && steps.plan.outcome == 'success'
+        env:
+          PUBLISH: ${{ steps.plan.outputs.publish }}
+        run: |
+          set -o pipefail
+          "$RUNNER_TEMP/venv-dfval/bin/python" -m valuation.dfval summary --out "$RUNNER_TEMP/valuation-out" --data "$RUNNER_TEMP/valuation-data" --timing "$RUNNER_TEMP/valuation-time.txt" --publish "$PUBLISH" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the run's summary for 90 days (counts, accuracy and one rounded median; no home's value)
+        if: always() && steps.plan.outputs.skip != 'true' && steps.plan.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: valuation-summary-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/valuation-out/summary.json
+            ${{ runner.temp }}/valuation-data/manifest.json
+          if-no-files-found: ignore
+          retention-days: 90

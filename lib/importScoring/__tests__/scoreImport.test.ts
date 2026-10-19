@@ -289,8 +289,10 @@ test('USE_OUR_ESTIMATES on: our values only when they pass the nightly\'s checks
     return memoryDb({
       ...w,
       featureFlag: [{ id: 'USE_OUR_ESTIMATES', enabled: true }],
+      // Published two days before the test runs: matching ignores values published more than 100
+      // days before the scoring clock (Brief 49, lib/matching/ourEstimates.ts).
       propertyValuation: [{ contactId: 's_new1', organizationId: 'org_df', value, createdAt: new Date('2026-10-17T15:00:00Z'),
-        run: { published: true, publishedAt: new Date('2026-10-17T15:00:00Z') } }],
+        run: { published: true, publishedAt: new Date(Date.now() - 2 * 86_400_000) } }],
     }, (sql, params, _kind, data) => importRaw(data as unknown as Record<string, Row[]>)(sql, params))
   }
   const check = (mem: Mem) => ((mem.data.auditLog[0].detailsJson as Row).scoring as Row).ourEstimates as Row

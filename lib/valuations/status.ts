@@ -3,7 +3,8 @@ import { GATE_KEYS, MODEL_VERSION, recheckGates } from './contract'
 import { LATEST_PUBLISHED_FIRST } from './importRun'
 
 // Brief 44 — GET /api/valuations/status (public, like /api/debug/health): when the
-// monthly job last ran, whether it published, its counts and its gate results.
+// monthly job last ran, whether it published, its counts and its gate results, and
+// (Brief 49) how many days old the newest published run is.
 // It never shows a value, an address, a tax lot, a contact, the metrics or the
 // scoreboard: every field below is rebuilt from a fixed list, so nothing else stored
 // on a run can reach it (engineering precaution).
@@ -51,7 +52,13 @@ function publicRun(r: RunRow) {
   }
 }
 
-export async function buildStatus(db: PrismaClient, organizationId: string) {
+// Brief 49 (PR 3): whole days since the newest published run was published, rounded down.
+// Matching stops using values more than 100 days (100 x 24 hours) old (lib/matching/ourEstimates.ts,
+// MAX_VALUE_AGE_DAYS), so on the day this shows 100 they may already be out.
+const ageInDays = (publishedAt: Date | null, now: Date) =>
+  publishedAt ? Math.max(0, Math.floor((now.getTime() - publishedAt.getTime()) / 86_400_000)) : null
+
+export async function buildStatus(db: PrismaClient, organizationId: string, now: Date = new Date()) {
   const [latest, latestPublished] = await Promise.all([
     db.valuationRun.findFirst({ where: { organizationId }, orderBy: [{ runAt: 'desc' }, { createdAt: 'desc' }], select: RUN_SELECT }),
     db.valuationRun.findFirst({ where: { organizationId, published: true }, orderBy: LATEST_PUBLISHED_FIRST, select: RUN_SELECT }),
@@ -61,6 +68,8 @@ export async function buildStatus(db: PrismaClient, organizationId: string) {
     message: latest ? null : 'no runs yet',
     gateKeys: GATE_KEYS,
     latestRun: latest ? publicRun(latest as RunRow) : null,
-    latestPublished: latestPublished ? publicRun(latestPublished as RunRow) : null,
+    latestPublished: latestPublished
+      ? { ...publicRun(latestPublished as RunRow), ageDays: ageInDays((latestPublished as RunRow).publishedAt, now) }
+      : null,
   }
 }
