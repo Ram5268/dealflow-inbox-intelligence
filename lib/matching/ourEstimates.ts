@@ -3,7 +3,8 @@
 //   • Off (no row, enabled false or anything else, or a failed read): scoring is exactly
 //     as before, and nothing else is read.
 //   • On: each CRM seller without a last asking price is priced by the value of its newest
-//     published valuation (a run that passed the job's publish checks), through the
+//     published valuation (a run that passed the job's publish checks, published within the
+//     last 100 days: Brief 49), through the
 //     existing chance-based price fit (sellerPrice.ts), and the few-alternatives counts are
 //     redone with those prices. An expired or withdrawn listing keeps its last asking price,
 //     as PR #14 does.
@@ -59,28 +60,44 @@ const publishedTime = (r: PublishedValueRow) => r.run.publishedAt?.getTime() ?? 
 const newer = (a: PublishedValueRow, b: PublishedValueRow) =>
   publishedTime(a) > publishedTime(b) || (publishedTime(a) === publishedTime(b) && a.createdAt.getTime() > b.createdAt.getTime())
 
+// Brief 49 (PR 3; Ryan's open item 5.2, his yes on 2026-10-19): a valuation whose run was
+// published more than 100 days ago isn't used, in case the monthly job ever stops publishing.
+// That seller is matched without a price, as before Brief 44. 100 days is three missed monthly
+// runs plus some slack; the newest run's age is on /api/valuations/status as latestPublished.ageDays.
+export const MAX_VALUE_AGE_DAYS = 100
+const DAY_MS = 86_400_000
+
+export function recentEnough(publishedAt: Date | null, now: Date): boolean {
+  return publishedAt != null && now.getTime() - publishedAt.getTime() <= MAX_VALUE_AGE_DAYS * DAY_MS
+}
+
 // Each seller's value from its newest published valuation, the one the CRM card shows.
-// When that valuation has no value (a home the model can't value), the seller gets none:
-// an older month's value is never used (engineering precaution).
-export function newestPublishedValues(rows: PublishedValueRow[]): Map<string, number> {
+// When that valuation has no value (a home the model can't value), or its run was published
+// more than 100 days before `now`, the seller gets none: an older month's value is never used
+// (engineering precaution).
+export function newestPublishedValues(rows: PublishedValueRow[], now: Date): Map<string, number> {
   const newest = new Map<string, PublishedValueRow>()
   for (const r of rows) {
     const seen = newest.get(r.contactId)
     if (!seen || newer(r, seen)) newest.set(r.contactId, r)
   }
   const values = new Map<string, number>()
-  for (const [contactId, r] of newest) if (usable(r.value)) values.set(contactId, r.value)
+  for (const [contactId, r] of newest) if (usable(r.value) && recentEnough(r.run.publishedAt, now)) values.set(contactId, r.value)
   return values
 }
 
 // Valuations of published runs only. The import keeps the values of the 12 most recent
 // published runs, so this is at most about a dozen rows per seller.
-export async function loadPublishedValues(db: Pick<PrismaClient, 'propertyValuation'>, orgId: string): Promise<Map<string, number>> {
+export async function loadPublishedValues(
+  db: Pick<PrismaClient, 'propertyValuation'>,
+  orgId: string,
+  now: Date = new Date(),
+): Promise<Map<string, number>> {
   const rows = await db.propertyValuation.findMany({
     where: { organizationId: orgId, run: { published: true } },
     select: { contactId: true, value: true, createdAt: true, run: { select: { publishedAt: true } } },
   })
-  return newestPublishedValues(rows)
+  return newestPublishedValues(rows, now)
 }
 
 // ── Pricing the sellers ─────────────────────────────────────────────────────
@@ -104,7 +121,8 @@ export interface OurEstimates {
 
 // Reads the switch (once per scoring run) and, when it's on, prices the sellers by our
 // values and redoes the few-alternatives counts with those prices, so each buyer's count
-// sees the prices the buyer is scored against. Off: the same inputs back.
+// sees the prices the buyer is scored against. Off: the same inputs back. A value's age is
+// measured against the scoring run's own clock (ctx.now).
 export async function withOurEstimates<T extends { listings: ListingData[]; buyers: BuyerData[]; ctx: ScoringContext }>(
   db: Pick<PrismaClient, 'featureFlag' | 'propertyValuation'>,
   orgId: string,
@@ -113,7 +131,7 @@ export async function withOurEstimates<T extends { listings: ListingData[]; buye
   if (!(await readOurEstimatesSwitch(db))) return inputs
   const without = { listings: inputs.listings, ctx: inputs.ctx }
   try {
-    const listings = applyOurEstimates(inputs.listings, await loadPublishedValues(db, orgId))
+    const listings = applyOurEstimates(inputs.listings, await loadPublishedValues(db, orgId, inputs.ctx.now))
     const ctx: ScoringContext = { ...inputs.ctx, substitutionCounts: precomputeSubstitutionCounts(inputs.buyers, listings) }
     const applied = listings.filter(l => l.ourEstimate === true).length
     return { ...inputs, listings, ctx, ourEstimates: { applied, failed: false, without } }
