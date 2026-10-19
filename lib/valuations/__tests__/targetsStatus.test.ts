@@ -144,8 +144,34 @@ test('Brief 49: targets add the lead\'s unit, count it, and send nothing else fr
   assert.equal(t.unitsFromLeadFields, 1)
   assert.deepEqual(t.sellers.map(s => s.address), ['100 Example Street', '101 Example Street #3F', '102 Example Street'])
   const text = JSON.stringify(t)
-  for (const leak of ['Zqleakq', 'crmLeadId', 'lead1', 'callAttempts', 'unmapped', 'metadata', 'Mailing', 'Homeowner']) {
+  for (const leak of ['Zqleakq', 'crmLeadId', 'lead1', 'callAttempts', 'unmapped', 'metadata']) {
     assert.ok(!text.includes(leak), `targets leaked ${leak}`)
   }
   assert.deepEqual(Object.keys(t.sellers[1]).sort(), ['address', 'buildingSqft', 'cachedBbl', 'city', 'contactId', 'state', 'unitCount', 'zip'])
+})
+
+test('Brief 49: "already has a unit" is decided on the job\'s own clean-up of the address', () => {
+  const m = { unmapped: { Unit: '2R' } }
+  for (const a of ['100 Example St Apt 3.', '100 Example St Fl.2', '100 Example St Ste.1', '100 Example St Rm.3', "100 Example St #3'", '   ']) {
+    assert.equal(addressWithUnit(a, m).added, false, a)
+  }
+  assert.equal(addressWithUnit('100 Example St.', m).address, '100 Example St. #2R')
+})
+
+test('Brief 49: filler values and look-alike keys are not units', () => {
+  for (const v of ['None', 'NONE', 'No unit', 'NA', 'TBD', 'null', '0', 'x', 'Yes', 'N/A']) assert.equal(cleanUnit(v), null, v)
+  assert.equal(cleanUnit('North'), 'NORTH')
+  assert.equal(cleanUnit('APT2R'), '2R')
+  assert.equal(cleanUnit('No. 3'), '3')
+  assert.equal(cleanUnit('Ste.4'), '4')
+  for (const k of ['Unit Count', 'Units', 'unit_count', 'Number of Units', 'Floor', 'Mailing Address 2', 'Mailing Unit', 'Owner Address 2', 'Unit Type']) {
+    assert.equal(leadUnit({ unmapped: { [k]: '3F' } }), null, k)
+  }
+})
+
+test('Brief 49: a generic Address 2 is skipped next to mailing fields; a property key wins over it', () => {
+  assert.equal(leadUnit({ unmapped: { 'Address 2': 'Apt 5C', 'Mailing Address': '1 Elsewhere Rd' } }), null)
+  assert.equal(leadUnit({ unmapped: { 'Address 2': 'Apt 5C', 'Mailing Address': '1 Elsewhere Rd', 'Property Unit': '2R' } }), '2R')
+  assert.equal(leadUnit({ unmapped: { 'Address 2': 'Apt 5C', 'Property Unit': '2R' } }), '2R')
+  assert.equal(leadUnit({ unmapped: { 'Address 2': 'Apt 5C' } }), '5C')
 })

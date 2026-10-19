@@ -78,3 +78,14 @@ def test_a_unit_added_by_dealflow_targets_is_read():
     p = parse_address("101 Example Street #3F")
     assert (p.number, p.street, p.unit) == ("101", "EXAMPLE ST", "3F")
     assert parse_address("101 Example Street #2-R").unit == "2-R"
+
+
+
+def test_the_unit_count_from_dealflow_is_only_ever_a_whole_number():
+    # Brief 49 PR 5: a report-only field; anything odd counts as missing and never stops a run.
+    from valuation.dfval.runjob import lead_unit_count
+    assert lead_unit_count({"unitsFromLeadFields": 3}) == 3
+    assert lead_unit_count({"unitsFromLeadFields": 0}) == 0
+    for bad in ({}, {"unitsFromLeadFields": None}, {"unitsFromLeadFields": "abc"}, {"unitsFromLeadFields": {}},
+                {"unitsFromLeadFields": 3.0}, {"unitsFromLeadFields": True}, {"unitsFromLeadFields": -1}):
+        assert lead_unit_count(bad) is None, bad
