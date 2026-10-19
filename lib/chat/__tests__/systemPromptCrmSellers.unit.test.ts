@@ -6,8 +6,9 @@ import { RYAN_MD } from '../../prompts/ryanMd'
 // Brief 43 PR 5: the "Your CRM sellers (D11):" lines in Drift's instructions.
 // D11 [Ryan, 2026-10-18]: never list or search CRM sellers; one named seller's
 // contact; opted-out sellers marked; counts fine. D13 (by address) and D15 (the
-// call list), and the #10 wording [Ryan, 2026-10-19]. The D14 count line comes
-// with PR 6's count tool. Pure text tests; no network, no database.
+// call list), and the #10 wording [Ryan, 2026-10-19]. The D14 count line came
+// with PR 6's count tool (tested in systemPromptSellerMatches.unit.test.ts).
+// Pure text tests; no network, no database.
 const HEADING = 'Your CRM sellers (D11):'
 
 function block(): string {
@@ -36,13 +37,12 @@ test('do not contact: Ryan\'s wording first, and no call, text or draft, whateve
   assert.match(RYAN_MD, /give the draft for Ryan to copy/i)
 })
 
-test("counts in Ryan's #10 wording, the call list in the CRM Queue, and no buyers-waiting number yet", () => {
+test("counts in Ryan's #10 wording and the call list in the CRM Queue", () => {
   const b = block()
   assert.ok(b.includes(`"You have [N] sellers in [area] in your CRM. Give me a name or an address and I'll pull up that one contact."`))
   assert.match(b, /use count_sellers/)
   assert.ok(b.includes(`"Your call list is in the CRM Queue, ranked fresh every morning."`))
-  assert.match(b, /they're ranked in your CRM Queue/)
-  assert.doesNotMatch(b, /buyers waiting[^\n]*count/i, 'the D14 count line is PR 6\'s')
+  assert.match(b, /they're ranked in your CRM Queue/i) // D14's line (PR 6) starts the sentence
   assert.ok(b.includes(`"I don't search your CRM sellers in chat. Each seller's notes are in your CRM."`))
   assert.match(b, /A phone number appears only for the one seller Ryan named/)
 })
@@ -59,5 +59,6 @@ test('the block follows the feel standard and stays short', () => {
   const b = block()
   assert.ok(!b.includes('—'), 'no em-dash')
   assert.ok(!b.includes('!'), 'no exclamation mark')
-  assert.ok(b.length < 2000, `block is ${b.length} characters`)
+  // Brief 43 PR 6 adds three lines (get_seller_matches, count_matches, D14).
+  assert.ok(b.length < 2600, `block is ${b.length} characters`)
 })
