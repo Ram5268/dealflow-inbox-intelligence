@@ -1,8 +1,9 @@
 name: Daily StreetEasy Sweep
 
+# Brief 48 (PR 2) [planner, Brief 48]: runs by hand only, with no schedule. The
+# daily 7am run never worked (its secrets are unset, so every run failed), and
+# GitHub has had this workflow switched off since 2026-10-11.
 on:
-  schedule:
-    - cron: '0 11 * * *'  # 7am ET (UTC-4 in summer, UTC-5 in winter — use 11 or 12)
   workflow_dispatch:        # allows manual trigger from GitHub Actions tab
 
 jobs:
