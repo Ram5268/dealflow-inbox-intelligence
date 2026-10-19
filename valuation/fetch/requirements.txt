@@ -1,0 +1,6 @@
+# Brief 44.1: what valuation/fetch needs, pinned so the monthly run doesn't
+# change behavior when a library publishes a new version (engineering precaution).
+requests==2.34.2
+pandas==3.0.6
+pyarrow==26.0.0
+pytest==9.1.1
