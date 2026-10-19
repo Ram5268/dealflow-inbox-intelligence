@@ -161,6 +161,7 @@ export const FIND_SELLER_TOOL: Anthropic.Messages.Tool = {
     properties: {
       name: { type: 'string', description: 'The seller\'s name as Ryan gave it, e.g. "Pat Example".' },
       address: { type: 'string', description: 'The street address as Ryan gave it, e.g. "88 Example Ave". The house number must match exactly.' },
+      neighborhood: { type: 'string', description: 'Only with a name, when Ryan picks one of several candidates with that name: the neighborhood he chose, e.g. "Bushwick".' },
     },
     required: [],
   } as Anthropic.Messages.Tool.InputSchema,

@@ -80,6 +80,31 @@ const wholeWord = (w: string): Prisma.MojoContactWhereInput => ({
   })),
 })
 
+// Words that aren't anyone's name: titles, suffixes and the words of an
+// estate, trust or company ("Mr.", "Jr", "Estate of", "Family Trust", "LLC").
+// They're dropped from what Ryan typed after the exact-name try, so "Mr. Wu"
+// finds Pat Wu, and "Estate", "Trust" or "LLC" alone looks up nobody: that
+// would be a search by situation or kind of owner (probate, #14), not a named
+// seller [engineering precaution, D11].
+const NOT_A_NAME = new Set([
+  'mr', 'mrs', 'ms', 'miss', 'mx', 'dr', 'jr', 'sr', 'ii', 'iii', 'iv',
+  'estate', 'estates', 'of', 'the', 'and', 'heirs', 'deceased', 'executor', 'executrix', 'administrator',
+  'trust', 'trustee', 'trustees', 'revocable', 'irrevocable', 'living', 'family',
+  'llc', 'inc', 'corp', 'corporation', 'co', 'company', 'holdings', 'realty', 'properties', 'partners',
+  'lp', 'llp', 'ltd', 'associates', 'group',
+])
+
+// Several sellers with the same name: the one in the neighborhood Ryan picked
+// (any spelling, "Bed-Stuy" is "Bedford-Stuyvesant").
+export function sameNeighborhood(stored: string | null | undefined, picked: string | null | undefined): boolean {
+  const canon = (s: string | null | undefined) => {
+    const t = (s ?? '').trim()
+    return t ? (fromRaw(t) ?? t).toLowerCase() : null
+  }
+  const a = canon(stored)
+  return a !== null && a === canon(picked)
+}
+
 // By name, case-insensitive: the exact name first (so "Jordan Sample" isn't
 // also "Jordan Samples"), then the name as a phrase, then every word of it in
 // any order ("Example Pat", "Pat Q Example"), each starting a word of the
@@ -87,11 +112,18 @@ const wholeWord = (w: string): Prisma.MojoContactWhereInput => ({
 // Fewer letters look up nobody: a one-letter "name" would be a search, not a
 // named seller (D11).
 export async function findSellersByName(name: string, organizationId: string): Promise<CrmSellerRow[]> {
-  const clean = (name ?? '').replace(LIKE_META, ' ').replace(/\s+/g, ' ').trim()
+  const typed = (name ?? '').replace(LIKE_META, ' ').replace(/\s+/g, ' ').trim()
+  // The exact name as typed comes first, titles and all, so "Pat Example Jr"
+  // is never his father "Pat Example".
+  if (typed.replace(/[^a-z]/gi, '').length >= 3) {
+    const exact = await lookup(organizationId, { fullName: { equals: typed, mode: 'insensitive' } })
+    if (exact.length > 0) return exact
+  }
+  const clean = typed.split(' ').filter(w => !NOT_A_NAME.has(w.toLowerCase().replace(/[^a-z]/g, ''))).join(' ')
   const letters = clean.replace(/[^a-z]/gi, '')
   if (letters.length === 2 && !clean.includes(' ')) return lookup(organizationId, wholeWord(letters))
   if (letters.length < 3) return []
-  const exact = await lookup(organizationId, { fullName: { equals: clean, mode: 'insensitive' } })
+  const exact = clean === typed ? [] : await lookup(organizationId, { fullName: { equals: clean, mode: 'insensitive' } })
   if (exact.length > 0) return exact
   const phrase = await lookup(organizationId, startsAWord(clean))
   if (phrase.length > 0) return phrase

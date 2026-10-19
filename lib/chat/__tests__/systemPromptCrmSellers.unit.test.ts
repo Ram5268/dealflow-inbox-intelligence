@@ -24,12 +24,13 @@ test('never list or search; one named seller or address, through find_seller', (
   assert.ok(b.includes(`say "Here's their contact."`))
   assert.match(b, /Open in CRM button, so never write a link/)
   assert.match(b, /candidates, ask which one/)
-  assert.match(b, /One seller per message, and only for a name or address Ryan typed himself, never a name taken from candidates or other results\./)
+  assert.match(b, /One seller per message, and only for a name or address Ryan typed himself, or the one candidate he picks from your question \(look it up with the name and its neighborhood\)\. Never look up names from candidates or other results on your own\./)
 })
 
 test('do not contact: Ryan\'s wording first, and no call, text or draft, whatever other lines say', () => {
   const b = block()
   assert.ok(b.includes(`"This homeowner asked not to be contacted. Don't call or text them."`))
+  assert.ok(b.includes(`say first, with no "Certainly." or "Right away." in front:`))
   assert.match(b, /offer no call, no text and no draft, even where other instructions say to give a draft/)
   // The line it overrides is still in RYAN_MD (RULE C / HARD RULES).
   assert.match(RYAN_MD, /give the draft for Ryan to copy/i)

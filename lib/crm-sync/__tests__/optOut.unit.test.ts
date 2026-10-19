@@ -41,7 +41,11 @@ test('readCrmOptOutLeadIds: the lead ids, or null (never a throw) when the read 
 
 test('readCrmOptOutLeadIds: a read that never answers gives null after the timeout, so the 7 am sync is not held up', async () => {
   const started = Date.now()
+  // The timer is unref'd (it must never keep a finished sync's process alive),
+  // so this test keeps the event loop busy itself; a real read holds a socket.
+  const keepAlive = setInterval(() => {}, 1_000)
   const hung = await readCrmOptOutLeadIds('dealflow-ryan', () => new Promise(() => {}), 50)
+  clearInterval(keepAlive)
   assert.equal(hung, null)
   assert.ok(Date.now() - started < 2_000)
   const { OPT_OUT_READ_TIMEOUT_MS } = await import('../crmReader')

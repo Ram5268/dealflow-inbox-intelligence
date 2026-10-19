@@ -7,13 +7,15 @@ import { z } from 'zod'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import {
-  findSellersByAddress, findSellersByName, toSellerCandidate, toSellerCard,
+  findSellersByAddress, findSellersByName, sameNeighborhood, toSellerCandidate, toSellerCard,
   type CrmSellerRow, type SellerCandidate, type SellerCard,
 } from '@/lib/chat/crmSellers'
 
 export const findSellerInputSchema = z.object({
   name: z.string().optional(),
   address: z.string().optional(),
+  // Only to pick one of several same-name candidates: the neighborhood Ryan chose.
+  neighborhood: z.string().optional(),
 })
 
 export type FindSellerInput = z.infer<typeof findSellerInputSchema>
@@ -54,6 +56,13 @@ export async function findSeller(rawInput: FindSellerInput): Promise<FindSellerR
     }
   }
   if (rows.length === 0 && name) rows = await findSellersByName(name, organizationId)
+  // Several with that name and Ryan picked one by its neighborhood (the "which
+  // one?" question): keep that one. A neighborhood alone looks up nobody.
+  const neighborhood = input.neighborhood?.trim() ?? ''
+  if (rows.length > 1 && neighborhood) {
+    const picked = rows.filter(r => sameNeighborhood(r.neighborhood, neighborhood))
+    if (picked.length > 0) rows = picked
+  }
 
   if (rows.length === 1) return { match: toSellerCard(rows[0]) }
   if (rows.length > 1) return { candidates: rows.slice(0, MAX_CANDIDATES).map(toSellerCandidate) }

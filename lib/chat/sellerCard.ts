@@ -54,10 +54,19 @@ const OPT_OUT_PHRASES = [
   'asked not to be called', 'asked not to be contacted', 'asked to be removed',
 ]
 
+// Taken out before the phrases above are matched: a visit ("please stop by
+// Tuesday") and a clean do-not-call check ("non-DNC", "DNC scrub passed") are
+// not opt-outs. Only these exact phrases: the deliberate conservative cases
+// above still mark the homeowner [engineering precaution].
+const NOT_AN_OPT_OUT = [
+  'stop by', 'stop in', 'stop over', 'non dnc', 'not dnc', 'not on dnc', 'dnc scrub passed', 'dnc scrub clean',
+]
+
 export function isOptOutWording(text: string | null | undefined): boolean {
   const t = (text ?? '').replace(/['’‘`]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
   if (!t) return false
   if (t === 'stop') return true
-  const padded = ` ${t} `
+  let padded = ` ${t} `
+  for (const p of NOT_AN_OPT_OUT) padded = padded.split(` ${p} `).join(' ')
   return OPT_OUT_PHRASES.some(p => padded.includes(` ${p} `))
 }

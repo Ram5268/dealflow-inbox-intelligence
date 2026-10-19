@@ -191,13 +191,16 @@ test('formatPhone and opt-out wording', async () => {
   for (const yes of ['Do Not Call', 'DNC', 'dnc list', "don't call", 'Do-Not-Contact', 'not interested — do not contact',
     'Remove me from your list', 'STOP', 'stop calling', 'Opted out', 'unsubscribe', 'take me off the list', 'Cease and desist',
     'D.N.C.', "DNC'd", 'removed from list', 'take off list', 'please stop', 'asked not to be called', 'asked to be removed',
-    'no more calls',
+    'no more calls', 'please stop. stop by never',
     // Leaning conservative on purpose: these also mark the homeowner (the safe direction).
     'do not call after 8pm', 'DNC list checked']) {
     assert.equal(isOptOutWording(yes), true, yes)
   }
   for (const no of ['Not Interested', 'No Answer', 'Contact', 'Left Message', 'Call back Tuesday', 'Wrong Number',
-    'said he may stop by', 'Bad Number', 'Appointment Set', '', null]) {
+    'said he may stop by', 'Bad Number', 'Appointment Set', '', null,
+    // Review round 2: visits and clean DNC checks are not opt-outs.
+    'please stop by Tuesday', 'will stop in next week', 'can stop over Saturday', 'non-DNC', 'Not DNC',
+    'not on DNC list', 'DNC scrub passed', 'DNC scrub clean']) {
     assert.equal(isOptOutWording(no as string), false, String(no))
   }
 })

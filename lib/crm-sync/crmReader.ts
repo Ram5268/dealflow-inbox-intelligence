@@ -76,7 +76,11 @@ export async function readCrmOptOutLeadIds(
   timeoutMs: number = OPT_OUT_READ_TIMEOUT_MS,
 ): Promise<Set<string> | null> {
   let timer: ReturnType<typeof setTimeout> | undefined
-  const timedOut = new Promise<'timeout'>(resolve => { timer = setTimeout(() => resolve('timeout'), timeoutMs) })
+  const timedOut = new Promise<'timeout'>(resolve => {
+    timer = setTimeout(() => resolve('timeout'), timeoutMs)
+    // Never the reason a finished sync's process stays open.
+    ;(timer as { unref?: () => void }).unref?.()
+  })
   try {
     const rows = await Promise.race([query<{ leadId: string }>(OPT_OUTS_SQL, [orgSlug]), timedOut])
     if (rows === 'timeout') {
