@@ -57,6 +57,7 @@ const MAINTENANCE_ROUTES = [
   'app/api/sync/hotsheet/route.ts',
   'app/api/sync/embed-all/route.ts',
   'app/api/admin/backfill-hotsheets/route.ts',
+  'app/api/sync/reprocess-attachments/route.ts', // Brief 48 (PR 2)
 ]
 
 test('every maintenance route checks the switch before anything else', () => {
@@ -110,9 +111,24 @@ test('sync/run: the scheduler GET needs the cron secret; Check In (POST) stays o
   assert.doesNotMatch(s, /searchParams\.get\('secret'\)/)
   // Check In on the home page is a plain POST with no secret: it must keep working.
   assert.match(src('app/page.tsx'), /fetch\('\/api\/sync\/run', \{ method: 'POST' \}\)/)
-  // The scheduled callers send the header.
+  // The callers that hold the cron secret send the header (the StreetEasy sweep
+  // runs by hand only since Brief 48; next test).
   assert.match(src('.github/workflows/daily-sweep.yml'), /-H "Authorization: Bearer \$\{\{ secrets\.CRON_SECRET \}\}"[\s\S]*\/api\/se-sync/)
   assert.deepEqual(JSON.parse(src('vercel.json')).crons.map((c: { path: string }) => c.path).sort(), ['/api/cron/nightly-pipeline', '/api/push/digest'])
+})
+
+// Brief 48 (PR 2) [planner, Brief 48]: the daily StreetEasy sweep never worked (its
+// secrets are unset; every run failed) and GitHub has had it switched off since
+// 2026-10-11, so it has no schedule. Its only trigger is the manual one.
+test('the StreetEasy sweep runs by hand only: no schedule, the manual trigger stays', () => {
+  const wf = src('.github/workflows/daily-sweep.yml')
+  const start = wf.indexOf('\non:\n')
+  const end = wf.indexOf('\njobs:\n')
+  assert.ok(start >= 0 && end > start, 'an on: block before jobs:')
+  // The trigger names: the on: block's keys, two spaces in, comments skipped.
+  const triggers = wf.slice(start, end).split('\n').filter(l => /^ {2}[^\s#]/.test(l)).map(l => l.trim().split(':')[0])
+  assert.deepEqual(triggers, ['workflow_dispatch'])
+  assert.doesNotMatch(wf, /^[ \t]*(-[ \t]*)?(schedule|cron)[ \t]*:/m)
 })
 
 test('opening a listing never runs a StreetEasy lookup; the lookup is an explicit POST', () => {

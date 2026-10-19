@@ -9,6 +9,11 @@ import pyarrow.parquet as pq
 from valuation.fetch import allowlist
 
 ENTRY_KEYS = {"source", "filter", "columns", "rows", "downloaded_at", "sha256"}
+# What valuation/dfval reads (raw.py Raw.manifest and Raw.sources, build.py Inputs). Its tests
+# write this shape by hand, so these keys are pinned here, on the writer's side (Brief 49 review).
+READER_RUN_KEYS = {"status", "finished_at"}
+READER_DATASET_KEYS = {"rows", "source_updated_at"}
+FAKE_UPDATED_AT = "2026-09-21T14:13:20Z"  # FakeServer's default rowsUpdatedAt, 1_790_000_000
 
 
 def _fill(server, helpers):
@@ -26,6 +31,7 @@ def test_full_run_writes_a_complete_manifest(server, session, helpers, run_cli, 
     assert manifest["run"]["error"] is None
     assert manifest["run"]["newest_roll_year"] == 2027
     assert manifest["run"]["requests"] == len(session.calls)
+    assert READER_RUN_KEYS <= set(manifest["run"]) and manifest["run"]["finished_at"]
     expected_paths = [f.out_path for f in allowlist.DOF_FILES] + [d.out_path for d in allowlist.DATASETS.values()]
     assert list(manifest["files"]) == expected_paths  # section 2 order
 
@@ -40,6 +46,8 @@ def test_full_run_writes_a_complete_manifest(server, session, helpers, run_cli, 
         assert entry["columns"] == list(ds.columns)
         assert entry["rows"] == len(server.rows[ds.id]) == pq.read_metadata(tmp_path / ds.out_path).num_rows
         assert entry["dataset"] == f"#{ds.number}"
+        assert READER_DATASET_KEYS <= set(entry)
+        assert entry["source_updated_at"] == FAKE_UPDATED_AT
 
 
 def test_the_files_open_in_pandas_as_text(server, helpers, run_cli, tmp_path, no_floors):

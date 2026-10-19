@@ -14,13 +14,18 @@ const ANSWER = 'v=0\r\no=- 9 9 IN IP4 10.0.0.1\r\ns=answer\r\n'
 const NOW = Date.UTC(2026, 8, 26, 20, 0, 0)
 
 function setup(opts: { enabled?: boolean; recent?: number; upstream?: { status: number; body: string } | Error } = {}) {
-  const rec = { counts: [] as Date[], logged: 0, fetches: [] as Array<{ url: string; init: RequestInit }> }
+  const rec = {
+    counts: [] as Date[], excepted: [] as Array<string | undefined>, logged: 0,
+    refused: [] as Array<{ id: string | undefined; reason: string }>, fetches: [] as Array<{ url: string; init: RequestInit }>,
+  }
   const deps: VoiceSessionDeps = {
     enabled: opts.enabled ?? true,
     apiKey: KEY,
     now: () => NOW,
-    countSessionsSince: async since => { rec.counts.push(since); return opts.recent ?? 0 },
-    logSession: async () => { rec.logged++ },
+    // `recent` = the other sessions in the hour (this request's own row is left out).
+    countSessionsSince: async (since, exceptId) => { rec.counts.push(since); rec.excepted.push(exceptId); return opts.recent ?? 0 },
+    logSession: async () => { rec.logged++; return `vs_${rec.logged}` },
+    refuseSession: async (id, reason) => { rec.refused.push({ id, reason }) },
     fetchImpl: (async (url: string, init: RequestInit) => {
       rec.fetches.push({ url, init })
       const up = opts.upstream ?? { status: 201, body: ANSWER }
@@ -42,7 +47,7 @@ test('flag off → 404 and nothing else happens', async () => {
   const { deps, rec } = setup({ enabled: false })
   const res = await handleVoiceSession(offer(), deps)
   assert.equal(res.status, 404)
-  assert.equal(rec.counts.length + rec.logged + rec.fetches.length, 0)
+  assert.equal(rec.counts.length + rec.logged + rec.refused.length + rec.fetches.length, 0)
 })
 
 test('only application/sdp is accepted', async () => {
@@ -60,15 +65,23 @@ test('offers over 20 KB (or empty) are rejected before any upstream call', async
   assert.equal(rec.logged + rec.fetches.length, 0)
 })
 
-test('rate cap: the 61st session in a rolling hour gets 429, nothing logged or forwarded', async () => {
+// Brief 43 PR 17 changed this test: the session row is now written before the
+// count (reserve, then count, so a burst can't all read "under the limit"), so
+// a refused session is logged once and that row is turned into its refusal row
+// (it no longer counts). It still forwards nothing.
+test('rate cap: the 61st session in a rolling hour gets 429, nothing forwarded; its own row becomes the refusal', async () => {
   const { deps, rec } = setup({ recent: SESSIONS_PER_HOUR })
   const res = await handleVoiceSession(offer(), deps)
   assert.equal(res.status, 429)
   assert.equal(rec.counts[0].getTime(), NOW - 3_600_000, 'counts from one hour ago')
-  assert.equal(rec.logged + rec.fetches.length, 0)
+  assert.equal(rec.excepted[0], 'vs_1', 'its own row is left out of the count')
+  assert.equal(rec.logged, 1)
+  assert.deepEqual(rec.refused, [{ id: 'vs_1', reason: 'global_per_hour' }])
+  assert.equal(rec.fetches.length, 0)
   const under = setup({ recent: SESSIONS_PER_HOUR - 1 })
   assert.equal((await handleVoiceSession(offer(), under.deps)).status, 200)
   assert.equal(under.rec.logged, 1, 'an allowed session is logged (AuditLog VOICE_SESSION)')
+  assert.equal(under.rec.refused.length, 0)
 })
 
 test('success: forwards the offer + session config with the key, returns only the SDP answer', async () => {
