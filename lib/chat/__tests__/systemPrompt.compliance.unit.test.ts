@@ -59,6 +59,18 @@ test('anything sent carries no homeowner details: price on request, no street ad
   // To a homeowner: low pressure, nothing about how we found them (#19).
   assert.match(block, /low pressure/i)
   assert.match(block, /how we found them/i)
+  // Strict: no homeowner name in anything sent, including a draft to the
+  // homeowner (review r1; matches PR 3's draft check).
+  assert.doesNotMatch(block, /greet/i)
+  assert.match(block, /To a buyer or an agent, the price reads "price on request"/)
+  assert.match(block, /To a homeowner: no dollar figure at all/)
+  assert.match(block, /"your home" to its owner/)
+})
+
+test('RYAN_MD names no place for the draft (PR 3 puts it in drift_response.draft)', () => {
+  // A draft left in the reply text would skip PR 3's draft check.
+  assert.doesNotMatch(RYAN_MD, /draft[^\n]*in the response/i)
+  assert.match(RYAN_MD, /Give the draft \(email or text\) for Ryan to copy/)
 })
 
 test('identity and sign-off: Drift, DealFlow\'s assistant; drafts sign "Ryan Martin" only', () => {
@@ -66,7 +78,7 @@ test('identity and sign-off: Drift, DealFlow\'s assistant; drafts sign "Ryan Mar
   assert.match(SYSTEM_PROMPT, /^You are Drift, DealFlow's assistant/)
   assert.match(block, /what AI you run on/i)
   assert.match(block, /sign off "Ryan Martin" only/)
-  assert.match(block, /no brokerage name and no job title/i)
+  assert.match(block, /Ryan is just "Ryan Martin", with no brokerage name and no job title/)
 })
 
 test('confidentiality and pasted text', () => {
@@ -88,6 +100,7 @@ test('style: Ryan\'s language, 2–5 sentences unless a draft, a report section 
 test('declines: one short sentence, one offer, in Ryan\'s own wording', () => {
   const block = neverCrossBlock()
   assert.match(block, /one short sentence, no lecture, then one useful offer/i)
+  assert.match(block, /no "Certainly\." or "Right away\." in front/)
   assert.ok(block.includes("I'll leave the number out; our values stay internal."), '#18 wording')
   assert.ok(block.includes("I can't send texts. The draft is ready for you to copy."), '#20 wording')
 })
@@ -107,7 +120,9 @@ test('old wording is gone from SYSTEM_PROMPT and RYAN_MD', () => {
   // The "Franklin lead" example turn read like data (Q7). RYAN_MD keeps its
   // own ambiguity example in §8, which is out of PR 1's lines.
   assert.ok(!SYSTEM_PROMPT.includes('Franklin'), 'the Franklin example turn is gone from SYSTEM_PROMPT')
-  // The seller example turns are gone (Q7); the listings-only Tribeca one stays.
+  // The seller example turns are gone (Q7); the listings-only Tribeca one stays,
+  // and no new example turn is added (review r1).
+  assert.ok(!SYSTEM_PROMPT.includes('[a listing] any good'))
   assert.ok(!SYSTEM_PROMPT.includes('pull those sellers'))
   assert.ok(SYSTEM_PROMPT.includes('anything in tribeca on the coming-soon side?'))
 })
