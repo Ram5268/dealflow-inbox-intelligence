@@ -32,9 +32,10 @@ class DealFlow:
         self.base = base_url.rstrip("/")
         # A new connection for every request: requests' own get/post open and close one per call.
         # On 2026-10-18 the first publish request, sent on the connection kept open from the targets
-        # request about 6 minutes earlier, got "Remote end closed connection without response", and
-        # with no retries the run stopped. Likeliest cause, not confirmed: the server closed that
-        # connection as the request arrived. A fresh connection can't be one. Tests pass a fake.
+        # request about 335-345 seconds earlier, got "Remote end closed connection without response",
+        # and with no retries the run stopped. Measured the same evening: DealFlow's side closes an
+        # idle connection after about 340 seconds (open at 337 s, closed by 345 s), so the request
+        # raced that close. A fresh connection can't. Tests pass a fake.
         self.http = session or requests
         self._headers = {"Authorization": f"Bearer {key}", "User-Agent": config.USER_AGENT, "Content-Type": "application/json"}
 

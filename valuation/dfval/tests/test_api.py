@@ -1,7 +1,7 @@
 """The DealFlow client opens a new connection for every request. On 2026-10-18 the first publish
-request, sent on a connection kept open from the targets request about 6 minutes earlier, got no
-answer, and with no retries the run stopped (likeliest cause, not confirmed: the server closed that
-connection as the request arrived)."""
+request, sent on a connection kept open from the targets request about 335-345 seconds earlier, got
+no answer, and with no retries the run stopped: DealFlow's side closes an idle connection after
+about 340 seconds (open at 337 s, closed by 345 s), and the request raced that close."""
 import pytest
 import requests
 
