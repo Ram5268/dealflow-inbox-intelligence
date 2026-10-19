@@ -26,7 +26,7 @@ export interface MatchFitResult {
   scores?: Record<string, number>
   // Brief 41 (H7): the seller is a homeowner (CRM contact). Reports and drafts
   // never show a homeowner's price (our estimate, or an expired listing's last
-  // asking price: "off-market, price not set"), so a reason never names price.
+  // asking price: "price on request"), so a reason never names price.
   homeownerSeller?: boolean
 }
 
