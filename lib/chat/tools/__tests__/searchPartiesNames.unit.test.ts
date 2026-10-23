@@ -140,3 +140,16 @@ test('a long query counts only its first 8 distinct words', async () => {
   // 8 words in each of the two fields (title, agent).
   assert.equal(where.match(/"contains"/g)?.length, 16)
 })
+
+// Review r1 follow-up: PR 5's CRM-stored buyers get the same name and type checks.
+test("a CRM-stored buyer is found by name, and by type when it's cash only (matching's reading)", async () => {
+  load()
+  const crm = (id: string, over: Row): Row => ({ id, organizationId: ORG, intent: 'BUYER', fullName: 'Morgan Sample', neighborhood: 'Bushwick',
+    initialNeighborhood: null, city: 'Brooklyn', bedsMin: 2, bedsMax: 3, budgetMin: 900_000, budgetMax: 1_400_000, isTestData: true, cashOnly: null, updatedAt: day(2), ...over })
+  fake.data.mojoContact = [SELLER_SAME_NAME, crm('crm_cash', { cashOnly: true }), crm('crm_fin', { fullName: 'Riley Sample', cashOnly: false })]
+  assert.deepEqual(ids(await run({ role: 'buyer', query: 'Morgan Sample' })), ['crm_cash'])
+  const cash = await run({ archetype: 'CASH_BUYER' })
+  assert.deepEqual(ids(cash), [CASH_MENTIONS_1031.id, 'crm_cash'].sort())
+  assert.equal(cash.cards.find(c => c.id === 'crm_cash')?.archetype, 'all cash')
+  assert.equal((await run({ role: 'buyer', query: 'Riley Sample' })).cards[0]?.archetype, null)
+})

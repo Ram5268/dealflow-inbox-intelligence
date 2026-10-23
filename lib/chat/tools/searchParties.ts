@@ -276,6 +276,7 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
     select: {
       id: true, fullName: true, intent: true, neighborhood: true, initialNeighborhood: true, city: true,
       bedsMin: true, bedsMax: true, budgetMin: true, budgetMax: true, isTestData: true,
+      cashOnly: true,
     },
   })
   for (const m of crmParties) {
@@ -305,6 +306,8 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
       priceRange: m.budgetMin != null && m.budgetMax != null ? [m.budgetMin, m.budgetMax] : null,
       ...(overlap !== undefined ? { priceOverlapScore: overlap } : {}),
       isTestData: m.isTestData,
+      // Brief 43 PR 9 (Q41): the type as matching reads it (adapters.ts mojoContactToBuyerData).
+      archetype: m.cashOnly === true ? archetypeLabel('CASH_BUYER') : null,
     })
   }
 
