@@ -40,7 +40,9 @@ test('curated matches returns only HOT listings, with fit rationale', async () =
   assert.equal(item.listingId, 'L1')
   assert.equal(item.address, '394 DeKalb Ave')
   assert.equal(item.priceLabel, '$4,500,000')
-  assert.equal(item.fit, 'Exact Soho 2BR at $4.5M, squarely in budget.', 'fit is the matcher reason')
+  // Brief 48 PR 13 (Q34): a listing's fit line is worked out from its facts
+  // against the criteria, not the older matcher's stored sentence.
+  assert.equal(item.fit, 'Right neighborhood, in budget, bedroom count', "fit comes from the listing's facts")
   // sources: matcher + one inbox listing id.
   assert.ok(r.sources.some(s => s.type === 'matcher'))
   assert.ok(r.sources.some(s => s.type === 'inbox' && s.id === 'L1'))
@@ -52,7 +54,9 @@ test('near-misses returns WARM + POSSIBLE with the exclusion reason', async () =
   assert.equal(r.content.items?.length, 2, 'WARM + POSSIBLE, not HOT')
   const ids = r.content.items!.map(i => i.listingId)
   assert.deepEqual(ids, ['L2', 'L3'])
-  assert.equal(r.content.items![0].why, 'Noho, one neighborhood over; beds match.')
+  // Brief 48 PR 13 (Q34): from the facts, as above ($3.5M is under the
+  // minimum: neither a strength nor a drawback; $5.1M is over the maximum).
+  assert.deepEqual(r.content.items!.map(i => i.why), ['Right neighborhood, bedroom count', 'Right neighborhood, bedroom count; weaker on price'])
   assert.ok(r.content.prose?.includes('$'), 'prose surfaces prices inline')
 })
 

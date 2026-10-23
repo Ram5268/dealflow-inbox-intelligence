@@ -59,7 +59,9 @@ export async function POST(req: NextRequest) {
     }
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const generated = await generator.full({ ...params, prisma, anthropic })
+    // Brief 48 PR 13 (Q44): the report reads only this organization's buyer and
+    // matches; after the params, so a param can't change it.
+    const generated = await generator.full({ ...params, prisma, anthropic, organizationId: await getCurrentOrgId() })
 
     const buyerId = typeof params.buyerId === 'string' ? params.buyerId : null
 

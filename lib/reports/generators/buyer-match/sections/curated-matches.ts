@@ -1,9 +1,9 @@
 // Brief 27.0 — "Curated matches" section. Deterministic: the HOT-tier listings
-// from the matcher, each with its fit rationale (the matcher's stored reason).
-import type { GenContext, SectionResult, SourceRef, MatchedListing } from '../../types'
+// from the matcher, each with its fit rationale (fitLineOf below).
+import type { GenContext, SectionResult, SourceRef, MatchedListing, BuyerRecord } from '../../types'
 import { nowISO } from '../../types'
 import { money, bedsLabel } from './_format'
-import { plainFitReason } from '../../../../matching/fitReason'
+import { listingFitReason, plainFitReason } from '../../../../matching/fitReason'
 import { PRICE_ON_REQUEST } from '../../../../matching/outreachPrice'
 
 // Brief 41 (H7): a homeowner has no asking price (our estimate never shows) and
@@ -23,6 +23,16 @@ export function sourceOf(m: MatchedListing): string {
   return m.listing.isHomeowner ? 'off-market seller' : m.listing.sourceBrokerage ?? m.listing.sourceAgentName ?? 'inbox'
 }
 
+// The "why it fits" line a report shows for a match, or null when nothing can
+// be said. A homeowner's comes from the nightly's stored line, made safe
+// (plainFitReason). Brief 48 PR 13 (Q34): a listing's is worked out from its
+// facts against the buyer's criteria; its stored text is an older matcher's and
+// can be wrong ("in budget" over the maximum), so it's never shown.
+export function fitLineOf(m: MatchedListing, buyer: BuyerRecord): string | null {
+  if (m.listing.isHomeowner) return m.reason ? plainFitReason(m.reason, { homeowner: true }) : null
+  return listingFitReason(m.listing, buyer)
+}
+
 const CURATED_LIMIT = 8
 
 export async function curatedMatchesSection(ctx: GenContext): Promise<SectionResult> {
@@ -37,7 +47,7 @@ export async function curatedMatchesSection(ctx: GenContext): Promise<SectionRes
     beds: m.listing.beds,
     bedsLabel: bedsLabel(null, null, m.listing.beds),
     tier: m.tier,
-    fit: m.reason ? plainFitReason(m.reason, { homeowner: m.listing.isHomeowner }) : 'Tiered as a strong fit by the matcher.',
+    fit: fitLineOf(m, ctx.buyer) ?? 'Tiered as a strong fit by the matcher.',
     source: sourceOf(m),
   }))
 

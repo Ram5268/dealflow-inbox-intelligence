@@ -37,12 +37,14 @@ export async function generateBuyerMatchReport({
   buyerId,
   prisma,
   anthropic,
+  organizationId,
 }: {
   buyerId: string
   prisma: PrismaClient
   anthropic?: Anthropic
+  organizationId?: string // Brief 48 PR 13 (Q44): see gatherContext
 }): Promise<GeneratedReport> {
-  const ctx = await gatherContext({ buyerId, prisma })
+  const ctx = await gatherContext({ buyerId, prisma, organizationId })
 
   const sections: SectionResult[] = await Promise.all(
     SECTION_ORDER.map(key => SECTION_RUNNERS[key](ctx, anthropic)),
@@ -65,11 +67,13 @@ export async function generateBuyerMatchSection({
   buyerId,
   prisma,
   anthropic,
+  organizationId,
 }: {
   sectionKey: string
   buyerId: string
   prisma: PrismaClient
   anthropic?: Anthropic
+  organizationId?: string
 }): Promise<SectionResult> {
   const runner = SECTION_RUNNERS[sectionKey]
   if (!runner) {
@@ -77,6 +81,6 @@ export async function generateBuyerMatchSection({
       `buyer-match: unknown section "${sectionKey}". Valid sections: ${SECTION_ORDER.join(', ')}.`,
     )
   }
-  const ctx = await gatherContext({ buyerId, prisma })
+  const ctx = await gatherContext({ buyerId, prisma, organizationId })
   return runner(ctx, anthropic)
 }

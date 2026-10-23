@@ -35,8 +35,10 @@ export type GeneratedReport = {
 }
 
 // ── buyer-match context ──────────────────────────────────────────────────────
-// A demand party (BUYER_ISO / RENTER_INQUIRY ExtractedOpportunity). This is what
-// the matcher and the persisted Match rows key on — NOT a MojoContact.
+// A demand party: a BUYER_ISO / RENTER_INQUIRY ExtractedOpportunity, or (Brief
+// 48 PR 13, Q8) a buyer or renter stored in Ryan's CRM table (a MojoContact with
+// intent BUYER / RENTER, read as BUYER_ISO / RENTER_INQUIRY). The persisted Match
+// rows key on its id as the counterpart.
 export type BuyerRecord = {
   id: string
   category: Category
@@ -92,6 +94,8 @@ export interface GenContext {
   prisma: PrismaClient
   buyer: BuyerRecord
   matches: () => Promise<MatchedListing[]>
+  // Brief 48 PR 13 (Q44): the organization every read is scoped to.
+  organizationId?: string
 }
 
 // A section runner. anthropic is only used by Sonnet-composed sections.

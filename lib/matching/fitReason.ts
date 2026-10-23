@@ -10,6 +10,7 @@
 // is never named for a homeowner (their price is never shown: our estimate, or
 // an expired listing's last asking price).
 import type { MatchFitResult } from './scorerTypes'
+import { fromRaw, getAdjacent } from '../domain/Neighborhood'
 
 // A fit feature that raised the match.
 const FIT_LABELS: Record<string, string> = {
@@ -133,13 +134,17 @@ function ourWording(reason: string, homeowner: boolean): string | null {
   return composeReason(strengths.filter(shown), drawbacks.filter(shown))
 }
 
-// Exported for chat drafts (Brief 43 PR 3, lib/chat/guards/draftPrivacy.ts); the list is unchanged.
+// Exported for chat drafts (Brief 43 PR 3, lib/chat/guards/draftPrivacy.ts).
+// Brief 48 PR 13 (4.16; Brief 46 M5): an estate's executor (or executrix) is a
+// seller circumstance too [engineering precaution, as the rest of the list];
+// "execute" and "executive" aren't.
 export const SELLER_CIRCUMSTANCES = new RegExp(
   [
     'foreclos', 'lis pendens', 'auction', 'distress', 'equity', 'vacan', 'absentee', 'probate', '(?<!real )estate',
     'divorc', 'tax lien', 'delinquen', 'motivated', 'tenure', 'default', 'underwater', 'behind on', 'inherit',
     '\\bheirs?\\b', 'deceas', 'bankrupt', 'short sale', '\\breo\\b', 'bank[- ]owned', 'free and clear',
     'out of state', 'hardship', '\\bseniors?\\b', 'passed away', 'widow', 'eviction', 'judgment',
+    '\\bexecut(?:ors?|rix|rices)\\b',
   ].join('|'),
   'i',
 )
@@ -180,6 +185,52 @@ export function plainFitReason(stored: string | null | undefined, opts: { homeow
   if (SELLER_CIRCUMSTANCES.test(reason) || SCORER_KEY_IN_TEXT.test(reason) || SCARCITY_TEXT.test(reason)) return GENERIC_FIT_REASON
   if (VALUE_WORD.test(reason) && MONEY.test(reason)) return GENERIC_FIT_REASON
   return reason
+}
+
+// Brief 48 PR 13 (Q34; Brief 46 drift-1 R-02): a listing's fit line, worked out
+// from its own facts against the buyer's criteria, in the nightly's wording
+// ("Right neighborhood, in budget; weaker on bedrooms"). A listing's Match row
+// holds an older matcher's text (the email-sync engine's AI-written sentence,
+// or the classic matcher's), which can be wrong: "in budget" on $2,030,000
+// against a $2,000,000 maximum. The nightly only writes homeowner rows.
+//   - Neighborhood: the buyer's own is a strength; an adjacent one is neither
+//     (as the nightly scores it, 0.6); anywhere else is a drawback.
+//   - Price: inside the budget is a strength; over the maximum a drawback; under
+//     the minimum neither.
+//   - Bedrooms: inside the asked range is a strength; outside it a drawback.
+// Unknown on either side: not named. Nothing known: null.
+type ListingFacts = { neighborhood: string | null; price: number | null; beds: number | null }
+type BuyerAsk = {
+  neighborhoods: string[]
+  minPrice: number | null; maxPrice: number | null; price: number | null
+  minBeds: number | null; maxBeds: number | null; beds: number | null
+}
+export function listingFitReason(listing: ListingFacts, buyer: BuyerAsk): string | null {
+  const strengths: string[] = []
+  const drawbacks: string[] = []
+
+  const here = fromRaw(listing.neighborhood)
+  const wanted = buyer.neighborhoods.map(n => fromRaw(n)).filter((n): n is string => n !== null)
+  if (here && wanted.length) {
+    if (wanted.includes(here)) strengths.push(FIT_LABELS.neighborhood)
+    else if (!getAdjacent(here).some(n => wanted.includes(n))) drawbacks.push(WEAK_LABELS.neighborhood)
+  }
+
+  const max = buyer.maxPrice ?? buyer.price
+  if (listing.price != null && (max != null || buyer.minPrice != null)) {
+    if (max != null && listing.price > max) drawbacks.push(WEAK_LABELS.price)
+    else if (buyer.minPrice == null || listing.price >= buyer.minPrice) strengths.push(FIT_LABELS.price)
+  }
+
+  const bedsMin = buyer.beds ?? buyer.minBeds
+  const bedsMax = buyer.beds ?? buyer.maxBeds
+  if (listing.beds != null && (bedsMin != null || bedsMax != null)) {
+    const inRange = (bedsMin == null || listing.beds >= bedsMin) && (bedsMax == null || listing.beds <= bedsMax)
+    if (inRange) strengths.push(FIT_LABELS.beds)
+    else drawbacks.push(WEAK_LABELS.beds)
+  }
+
+  return strengths.length || drawbacks.length ? composeReason(strengths, drawbacks) : null
 }
 
 // A homeowner is never named: the address, else "Homeowner in <neighborhood>".

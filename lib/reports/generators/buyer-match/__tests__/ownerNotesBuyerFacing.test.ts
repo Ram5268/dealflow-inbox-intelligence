@@ -139,6 +139,7 @@ const prisma = {
   },
   mojoContact: { findMany: async () => [] },
   match: { findMany: async () => MATCHES },
+  matchDismissal: { findMany: async () => [] }, // Brief 48 PR 13 (M29): the report leaves dismissed matches out
 } as unknown as PrismaClient
 
 test('a Buyer Match report shows those rows exactly like a homeowner (area and type), with or without an address', async () => {
@@ -159,9 +160,10 @@ test('a Buyer Match report shows those rows exactly like a homeowner (area and t
   assert.equal(byId.get('lead-no-addr')!.fit, GENERIC_FIT_REASON)
   assert.equal(byId.get('landlord-no-addr')!.why, 'Matched on neighborhood, bedrooms') // never price for a homeowner
   // An ordinary listing is shown as before: its title when there's no address, its price and source.
+  // Brief 48 PR 13 (Q34): its fit line is worked out from its facts, not its stored text.
   assert.deepEqual(
     [byId.get('listing-1')!.address, byId.get('listing-1')!.priceLabel, byId.get('listing-1')!.source, byId.get('listing-1')!.fit],
-    ['Renovated Park Slope 4BR', '$1,750,000', 'Listing Brokerage', 'In budget, right neighborhood'],
+    ['Renovated Park Slope 4BR', '$1,750,000', 'Listing Brokerage', 'Right neighborhood, in budget, bedroom count'],
   )
 })
 

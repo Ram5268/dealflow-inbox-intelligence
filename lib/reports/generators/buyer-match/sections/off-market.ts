@@ -23,6 +23,8 @@ export async function offMarketSection(ctx: GenContext): Promise<SectionResult> 
 
   const rows = await ctx.prisma.extractedOpportunity.findMany({
     where: {
+      // Brief 48 PR 13 (Q44): this organization's leads only.
+      ...(ctx.organizationId ? { organizationId: ctx.organizationId } : {}),
       category: { in: cats },
       isTestData: b.isTestData,
       isDuplicate: false,

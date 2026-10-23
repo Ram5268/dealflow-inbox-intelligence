@@ -4,8 +4,7 @@
 import type { GenContext, SectionResult, SourceRef } from '../../types'
 import { nowISO } from '../../types'
 import { bedsLabel } from './_format'
-import { plainFitReason } from '../../../../matching/fitReason'
-import { HOMEOWNER_PRICE_LABEL, priceOf, sourceOf } from './curated-matches'
+import { HOMEOWNER_PRICE_LABEL, fitLineOf, priceOf, sourceOf } from './curated-matches'
 
 const NEAR_MISS_LIMIT = 8
 
@@ -23,7 +22,7 @@ export async function nearMissesSection(ctx: GenContext): Promise<SectionResult>
     beds: m.listing.beds,
     bedsLabel: bedsLabel(null, null, m.listing.beds),
     tier: m.tier,
-    why: m.reason ? plainFitReason(m.reason, { homeowner: m.listing.isHomeowner }) : 'Tiered below a clear fit by the matcher.',
+    why: fitLineOf(m, ctx.buyer) ?? 'Tiered below a clear fit by the matcher.',
     source: sourceOf(m),
   }))
 

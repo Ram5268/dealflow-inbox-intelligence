@@ -13,6 +13,7 @@ import VoiceConversation from '@/components/VoiceConversation'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 import { chatErrorReply } from '@/lib/chat/chatErrorReply'
+import { createChatView, type ChatViewToken } from '@/lib/chat/chatView'
 import { FILE_TOO_BIG_NOTE, TEXT_READ_BYTES, fileKind, filesTooBig, textToSend } from '@/lib/chat/fileSize'
 import ReportPickerSheet from '@/components/ReportPickerSheet'
 import BuyerPickerSheet from '@/components/BuyerPickerSheet'
@@ -1070,6 +1071,9 @@ function ChatPageInner() {
   const [cs, dispatch] = useReducer(reducer, INITIAL)
   const [messages, setMessages] = useState<Message[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  // Brief 48 PR 13 (M22): which chat is on screen, so a reply that arrives after
+  // Ryan switched chats is filed in the chat it was asked in (lib/chat/chatView.ts).
+  const [chatView] = useState(createChatView)
   // Brief 3.0, Step 3 — cards Ryan has already tapped (from click history),
   // fetched once on mount and optimistically extended when he taps a card.
   const [seenCardIds, setSeenCardIds] = useState<Set<string>>(new Set())
@@ -1114,18 +1118,25 @@ function ChatPageInner() {
     const sessionParam = searchParams.get('sessionId')
     if (newParam === '1') {
       dispatch({ type: 'RESET_NEW' })
+      chatView.open(null)
+      setLoading(false)
       setCurrentSessionId(null)
       setMessages([])
       setShowShader(true); setSessionKey(k => k + 1)
       window.history.replaceState({}, '', '/chat')
     } else if (sessionParam) {
       const dealParam = searchParams.get('deal')
+      chatView.open(sessionParam)
+      const opened = chatView.token()
+      setLoading(false)
       setCurrentSessionId(sessionParam)
       setShowShader(true); setSessionKey(k => k + 1)
       setLoadingHistory(true)
       fetch(`/api/chat?sessionId=${sessionParam}`)
         .then(r => r.json())
         .then(d => {
+          // Brief 48 PR 13 (M22): another chat was opened while this one loaded.
+          if (!chatView.isCurrent(opened)) return
           const msgs: Message[] = (d.messages ?? []).map((m: Record<string, unknown>) => ({
             ...m,
             ...splitStoredChatCards((m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined)),
@@ -1146,10 +1157,10 @@ function ChatPageInner() {
           }
           dispatch({ type: 'GO', to: 'memory' })
         })
-        .finally(() => setLoadingHistory(false))
+        .finally(() => { if (chatView.isCurrent(opened)) setLoadingHistory(false) })
       window.history.replaceState({}, '', '/chat')
     }
-  }, [searchParams])
+  }, [searchParams, chatView])
 
   useEffect(() => {
     if (cs.view === 'memory' || cs.view === 'memory_new') {
@@ -1159,10 +1170,12 @@ function ChatPageInner() {
 
   const handleNewChat = useCallback(() => {
     dispatch({ type: 'RESET_NEW' })
+    chatView.open(null)
+    setLoading(false)
     setCurrentSessionId(null)
     setMessages([])
     setShowShader(true); setSessionKey(k => k + 1)
-  }, [])
+  }, [chatView])
 
   async function send(text?: string, files?: File[]) {
     const msg = (text ?? input).trim()
@@ -1173,34 +1186,45 @@ function ChatPageInner() {
     const displayMsg = hasFiles ? [msg, `📎 ${files!.map(f => f.name).join(', ')}`].filter(Boolean).join('\n') : msg
     setMessages(p => [...p, { id: crypto.randomUUID(), role: 'user', content: displayMsg, createdAt: new Date().toISOString() }])
     setLoading(true)
+    // Brief 48 PR 13 (M22): the chat this question is asked in.
+    const sent = chatView.token()
     try {
       const processed = hasFiles ? await Promise.all(files!.map(processFile)) : []
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: msg || '(see attached file)', files: processed, sessionId: currentSessionId }),
+        body: JSON.stringify({ message: msg || '(see attached file)', files: processed, sessionId: sent.sessionId }),
       })
       // Brief 43 PR 4 (Q4): Vercel's 504 (60-second limit) and 413 (file too big)
       // are HTML pages, not JSON; say what happened by status.
       const data = await res.json().catch(() => null)
+      // Brief 48 PR 13 (M22): Ryan switched chats while this was answered. The
+      // server saved the reply in its own chat: leave the chat on screen alone,
+      // or, if he went back to that chat, read it again.
+      const action = chatView.replyAction(sent, data?.sessionId)
+      if (action === 'drop') return
+      if (action === 'reload') { await refetchMessages(data.sessionId, chatView.token()); return }
       if (!res.ok || !data) {
         setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: chatErrorReply(res.status, data), createdAt: new Date().toISOString() }])
         return
       }
-      if (data.sessionId) setCurrentSessionId(data.sessionId)
+      if (data.sessionId) { chatView.adopt(data.sessionId); setCurrentSessionId(data.sessionId) }
       setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], sellerCards: data.sellerCards ?? [], sellerMatches: data.sellerMatches ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, attachedReport: data.attachedReport ?? null, attachedFragment: data.attachedFragment ?? null, draft: data.draft ?? null, createdAt: new Date().toISOString() }])
     } catch {
-      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: 'Something went wrong. Try again.', createdAt: new Date().toISOString() }])
-    } finally { setLoading(false) }
+      if (chatView.isCurrent(sent)) setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: 'Something went wrong. Try again.', createdAt: new Date().toISOString() }])
+    } finally { if (chatView.isCurrent(sent)) setLoading(false) }
   }
 
   // Brief 28.0 — reload a session's messages (rehydrates report attachments via
   // ...m). Shared by the report-generation flow and the voice-close refetch.
-  const refetchMessages = useCallback(async (sid: string) => {
+  // Brief 48 PR 13 (M22): with `asked`, nothing changes if another chat was
+  // opened while it loaded.
+  const refetchMessages = useCallback(async (sid: string, asked?: ChatViewToken) => {
     try {
       const res = await fetch(`/api/chat?sessionId=${sid}`)
       if (!res.ok) return
       const d = await res.json()
+      if (asked && !chatView.isCurrent(asked)) return
       const msgs: Message[] = (d.messages ?? []).map((m: Record<string, unknown>) => ({
         ...m,
         ...splitStoredChatCards((m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined)),
@@ -1208,7 +1232,7 @@ function ChatPageInner() {
       }))
       setMessages(msgs)
     } catch { /* non-fatal */ }
-  }, [])
+  }, [chatView])
 
   // Brief 28.0 — + button flow: buyer picked → generate a full report, save it,
   // write the preview-card message, then refetch so the card appears in-thread.
@@ -1217,16 +1241,20 @@ function ChatPageInner() {
     setPendingTemplateId(null)
     if (cs.view === 'memory_new') dispatch({ type: 'GO', to: 'memory' })
     setGeneratingReport(true)
+    // Brief 48 PR 13 (M22): the chat the report is made in.
+    const asked = chatView.token()
     try {
       const res = await fetch('/api/reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateId, params: { buyerId }, sessionId: currentSessionId, writeToChat: true }),
+        body: JSON.stringify({ templateId, params: { buyerId }, sessionId: asked.sessionId, writeToChat: true }),
       })
       const data = await res.json()
       if (!res.ok || data.error) { showToast(data.error ?? 'Report generation failed.'); return }
-      const sid: string | null = data.sessionId ?? currentSessionId
-      if (sid) { setCurrentSessionId(sid); await refetchMessages(sid) }
+      // Ryan opened another chat meanwhile: the report is saved in its own chat.
+      if (!chatView.isCurrent(asked)) return
+      const sid: string | null = data.sessionId ?? asked.sessionId
+      if (sid) { chatView.adopt(sid); setCurrentSessionId(sid); await refetchMessages(sid, asked) }
     } catch {
       showToast('Report generation failed.')
     } finally {
@@ -1299,7 +1327,7 @@ function ChatPageInner() {
             } catch { /* non-fatal — thread just won't refresh */ }
           }
         }}
-        onNewSession={(id) => setCurrentSessionId(id)}
+        onNewSession={(id) => { chatView.adopt(id); setCurrentSessionId(id) }}
       />
 
       {/* Brief 28.0 — Report engine UI: picker → detail → buyer picker → generate;
