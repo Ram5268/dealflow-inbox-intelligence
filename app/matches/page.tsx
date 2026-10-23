@@ -10,7 +10,7 @@ import DraftOutreachSheet from '@/components/DraftOutreachSheet'
 import PartyCard from '@/components/PartyCard'
 import { showToast as showErrorToast } from '@/components/Toast'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
-import { DEFAULT_MATCH_TAB, MATCH_TABS, emptyState, matchesQuery, mergePage, sumCounts, type MatchTab } from '@/lib/matching/matchesList'
+import { DEFAULT_MATCH_TAB, MATCH_TABS, countsOf, emptyState, matchesQuery, mergePage, sumCounts, type MatchTab } from '@/lib/matching/matchesList'
 
 function MatchCardSkeleton() {
   return (
@@ -133,9 +133,10 @@ interface PartiesResponse {
   counts: { total: number; buyers: number; renters: number; sellers: number }
 }
 
-// Brief 48 (PR 12, item 4.4): the tabs come from lib/matching/matchesList.ts
-// (HOT 80+, WARM 65+, ALL: the stored tiers in lib/matching/tiers.ts). They used
-// to start at 90 and 70, which matched no tier.
+// Brief 48 (PR 12, item 4.4): the tabs come from lib/matching/matchesList.ts:
+// HOT 80+, WARM 65 to 79, ALL, each one tier (the stored tier, else the score;
+// lib/matching/tiers.ts), with HOT first and the default. They used to start at
+// 90 and 70, which matched no tier.
 type ScoreBand = MatchTab
 
 // Brief 7.1 — qualitative tier chip. Null (legacy sync-path rows) renders nothing.
@@ -282,9 +283,11 @@ export default function MatchesPage() {
   async function fetchMatches() {
     const seq = ++listSeq.current
     setLoading(true)
+    setLoadingMore(false) // a "show more" for the old tab is dropped (listSeq)
     setNextCursor(null)
     try {
       const r = await fetch(`/api/matches?${bandParams().toString()}`)
+      if (!r.ok) throw new Error(`matches ${r.status}`)
       const j = await r.json() as MatchesResponse
       if (seq !== listSeq.current) return
       setData(j)
@@ -306,12 +309,17 @@ export default function MatchesPage() {
       if (!r.ok) throw new Error(`matches ${r.status}`)
       const j = await r.json() as MatchesResponse
       if (seq !== listSeq.current) return
-      setData(d => d ? { ...d, matches: mergePage(d.matches, j.matches), counts: sumCounts(d.counts, j.counts) } : j)
+      // Counts only the cards this page adds (a card shown already isn't counted twice).
+      setData(d => {
+        if (!d) return j
+        const matches = mergePage(d.matches, j.matches)
+        return { ...d, matches, counts: sumCounts(d.counts, countsOf(matches.slice(d.matches.length))) }
+      })
       setNextCursor(j.nextCursor ?? null)
     } catch {
       if (seq === listSeq.current) showErrorToast("Couldn't load more matches")
     } finally {
-      setLoadingMore(false)
+      if (seq === listSeq.current) setLoadingMore(false)
     }
   }
 
@@ -558,7 +566,7 @@ export default function MatchesPage() {
                 <MatchCardSkeleton />
                 <MatchCardSkeleton />
               </div>
-            ) : !data || data.matches.length === 0 ? (
+            ) : !data || (data.matches.length === 0 && !nextCursor) ? (
               <EmptyState {...emptyState('matches', scoreBand, unseenOnly)} />
             ) : (
               <>

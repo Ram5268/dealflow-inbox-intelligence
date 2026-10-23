@@ -9,9 +9,9 @@ import { resolveSupplies } from '@/lib/matching/supplyResolver'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { crmLeadUrl } from '@/lib/crmLink'
 import { plainFitReason } from '@/lib/matching/fitReason'
-import { MATCHES_ORDER, MATCHES_PAGE_SIZE, afterCursor, decodeCursor, splitPage } from '@/lib/matching/matchesList'
+import { MATCHES_ORDER, MATCHES_PAGE_SIZE, afterCursor, countsOf, decodeCursor, splitPage, tierParam, tierWhere } from '@/lib/matching/matchesList'
 
-// GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1][&after=<cursor>]
+// GET /api/matches[?unseen=1][&tier=hot|warm][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1][&after=<cursor>]
 // List with both sides hydrated. Sort: unseen first, then highest-scoring,
 // then newest (then id, so every row has one place). seen rows are returned but
 // visually de-emphasized client-side.
@@ -23,7 +23,8 @@ import { MATCHES_ORDER, MATCHES_PAGE_SIZE, afterCursor, decodeCursor, splitPage 
 // Brief 48 (PR 12, item 4.4): 200 a page, past the old cap of 200. The reply's
 // nextCursor (null on the last page) goes back as ?after= for the next page
 // (lib/matching/matchesList.ts). A page can hold fewer than 200 when a pair on
-// it was dismissed; the pages after it are unaffected.
+// it was dismissed; the pages after it are unaffected. ?tier= is one tier, as
+// the tabs show it (stored tier, else score; matchesList.ts tierWhere).
 export async function GET(req: NextRequest) {
   const sp          = req.nextUrl.searchParams
   const id          = sp.get('id')
@@ -33,6 +34,7 @@ export async function GET(req: NextRequest) {
   const typeRaw     = id ? null : sp.get('type')
   const type        = typeRaw && typeRaw !== 'all' ? typeRaw : null
   const includeDismissed = !!id || sp.get('includeDismissed') === '1'
+  const tier        = id ? null : tierParam(sp.get('tier'))
   const afterRaw    = id ? null : sp.get('after')
   const after       = decodeCursor(afterRaw)
   if (afterRaw && !after) {
@@ -44,7 +46,8 @@ export async function GET(req: NextRequest) {
   if (type) where.counterpartType = type
   if (onlyUnseen)                                    where.seen  = false
   if (scoreMin !== null && !Number.isNaN(scoreMin))  where.score = { gte: scoreMin }
-  if (after) Object.assign(where, afterCursor(after))
+  const and = [...(tier ? [tierWhere(tier)] : []), ...(after ? [afterCursor(after)] : [])] // each is an OR of its own
+  if (and.length) where.AND = and
 
   const read = await prisma.match.findMany({
     where,
@@ -185,13 +188,7 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  const counts = {
-    total:    matches.length,
-    unseen:   matches.filter(m => !m.seen).length,
-    mojo:     matches.filter(m => m.counterpartType === 'mojo').length,
-    listings: matches.filter(m => m.counterpartType === 'opportunity').length,
-    showings: matches.filter(m => m.counterpartType === 'showing_confirmation').length,
-  }
+  const counts = countsOf(matches)
 
   return NextResponse.json({ matches: enriched, counts, nextCursor })
 }

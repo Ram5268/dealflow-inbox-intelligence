@@ -2,39 +2,70 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { HOT_MIN_FIT, WARM_MIN_FIT } from '../tiers'
 import { tierOf } from '../nightly/select'
+import { tierCounts } from '../../push/digestCounts'
 import {
-  DEFAULT_MATCH_TAB, MATCHES_ORDER, MATCHES_PAGE_SIZE, MATCH_TABS, afterCursor, decodeCursor, emptyState, encodeCursor,
-  matchesQuery, mergePage, partyBand, splitPage, sumCounts, type MatchTab,
+  DEFAULT_MATCH_TAB, MATCHES_ORDER, MATCHES_PAGE_SIZE, MATCH_TABS, afterCursor, countsOf, decodeCursor, emptyState, encodeCursor,
+  matchTier, matchesQuery, mergePage, partyBand, splitPage, sumCounts, tierParam, tierWhere,
 } from '../matchesList'
 
 // Brief 48 (PR 12, item 4.4): the Matches screen's tabs, paging and empty
 // state, as pure functions. The tabs follow lib/matching/tiers.ts (HOT is 80 and
-// up, WARM 65 and up) [planner's fix list, approved by Ryan 2026-10-19]; the old
-// tabs were GOLD 90+ and STRONG 70+. The list pages past its first 200.
+// up, WARM 65 to 79) [planner's fix list, approved by Ryan 2026-10-19; WARM as its
+// own band and HOT first: executor, 2026-10-23]; the old tabs were GOLD 90+ and
+// STRONG 70+. The list pages past its first 200.
 
-test('the tabs are HOT 80+, WARM 65+ and ALL, from tiers.ts; WARM stays the default', () => {
-  assert.deepEqual(MATCH_TABS.map(t => [t.id, t.label, t.scoreMin]), [
-    ['hot', 'HOT 80+', HOT_MIN_FIT], ['warm', 'WARM 65+', WARM_MIN_FIT], ['all', 'ALL', null],
+test('the tabs are HOT 80+, WARM 65–79 and ALL, from tiers.ts; HOT is the default', () => {
+  assert.deepEqual(MATCH_TABS.map(t => [t.id, t.label, t.tier]), [
+    ['hot', 'HOT 80+', 'HOT'], ['warm', 'WARM 65–79', 'WARM'], ['all', 'ALL', null],
   ])
   assert.equal(HOT_MIN_FIT, 80)
   assert.equal(WARM_MIN_FIT, 65)
-  assert.equal(DEFAULT_MATCH_TAB, 'warm')
-  // Every HOT-tier score is in the HOT tab, every WARM-tier score is in the WARM tab and none below it.
-  for (let score = 0; score <= 100; score++) {
-    const inTab = (id: MatchTab) => score >= (MATCH_TABS.find(t => t.id === id)!.scoreMin ?? 0)
-    assert.equal(inTab('hot'), tierOf(score) === 'HOT', `score ${score}`)
-    assert.equal(inTab('warm'), tierOf(score) !== 'POSSIBLE', `score ${score}`)
-  }
+  assert.equal(DEFAULT_MATCH_TAB, 'hot')
+  for (const t of MATCH_TABS) assert.ok(!/[!—]/.test(t.label), t.label)
 })
 
-test("the Parties view counts Hot and Warm by the same thresholds as the cards' tiers", () => {
-  for (let score = 0; score <= 100; score++) assert.equal(partyBand(score), tierOf(score).toLowerCase(), `score ${score}`)
-  assert.deepEqual([79, 80, 64, 65, 89, 90].map(partyBand), ['warm', 'hot', 'possible', 'warm', 'hot', 'hot'])
+// Rows as the nightly writes them (tier = tierOf(score)), rows with no tier, and
+// old rows whose stored tier disagrees with today's thresholds (a 2026-08-11
+// backfill set them at 90/70): each sits in exactly the tier its card, the
+// digest (tierCounts) and Drift show.
+const TIER_ROWS = [
+  ...Array.from({ length: 101 }, (_, s) => ({ id: `n${s}`, score: s, tier: tierOf(s) as string | null })),
+  ...Array.from({ length: 101 }, (_, s) => ({ id: `x${s}`, score: s, tier: null as string | null })),
+  { id: 'old85', score: 85, tier: 'WARM' }, { id: 'old67', score: 67, tier: 'POSSIBLE' }, { id: 'seed80', score: 80, tier: 'WARM' },
+]
+function fitsTier(r: { score: number; tier: string | null }, w: Where): boolean {
+  return (w.OR as Where[]).some(x => Object.entries(x).every(([k, v]) => {
+    const val = (r as Record<string, unknown>)[k]
+    if (v && typeof v === 'object') {
+      const c = v as { gte?: number; lt?: number }
+      return (c.gte === undefined || (val as number) >= c.gte) && (c.lt === undefined || (val as number) < c.lt)
+    }
+    return val === v
+  }))
+}
+
+test('each tab is one tier: the stored tier, else the score, the same as the digest counts', () => {
+  for (const r of TIER_ROWS) {
+    const want = tierCounts([r])
+    assert.equal(fitsTier(r, tierWhere('HOT')), want.hot === 1, `${r.id} HOT`)
+    assert.equal(fitsTier(r, tierWhere('WARM')), want.warm === 1, `${r.id} WARM`)
+    assert.equal(matchTier(r), want.hot ? 'HOT' : want.warm ? 'WARM' : 'POSSIBLE', r.id)
+  }
+  // No row is in both tabs.
+  assert.equal(TIER_ROWS.filter(r => fitsTier(r, tierWhere('HOT')) && fitsTier(r, tierWhere('WARM'))).length, 0)
+  assert.deepEqual([tierParam('hot'), tierParam('WARM'), tierParam('possible'), tierParam(''), tierParam(null), tierParam('80')],
+    ['HOT', 'WARM', null, null, null, null])
+})
+
+test("the Parties view counts Hot and Warm by the same rule as the cards' tiers", () => {
+  for (let score = 0; score <= 100; score++) assert.equal(partyBand({ tier: null, score }), tierOf(score).toLowerCase(), `score ${score}`)
+  assert.deepEqual([79, 80, 64, 65, 89, 90].map(score => partyBand({ tier: null, score })), ['warm', 'hot', 'possible', 'warm', 'hot', 'hot'])
+  assert.equal(partyBand({ tier: 'WARM', score: 85 }), 'warm') // the stored tier wins, as on the card
 })
 
 test('the query for a tab, the seen switch and a page', () => {
-  assert.equal(matchesQuery({ tab: 'hot', unseenOnly: true }), 'unseen=1&scoreMin=80')
-  assert.equal(matchesQuery({ tab: 'warm', unseenOnly: false }), 'scoreMin=65')
+  assert.equal(matchesQuery({ tab: 'hot', unseenOnly: true }), 'unseen=1&tier=hot')
+  assert.equal(matchesQuery({ tab: 'warm', unseenOnly: false }), 'tier=warm')
   assert.equal(matchesQuery({ tab: 'all', unseenOnly: false }), '')
   assert.equal(matchesQuery({ tab: 'all', unseenOnly: true, cursor: 'abc' }), 'unseen=1&after=abc')
 })
@@ -46,7 +77,7 @@ test('a cursor round-trips; anything else is refused', () => {
   assert.deepEqual(decodeCursor('1.70.1792487877123.id.with.dots'), { seen: true, score: 70, createdAt: '2026-10-20T09:17:57.123Z', id: 'id.with.dots' })
   for (const bad of [null, undefined, '', 'not-a-cursor', '0.91.1792487877123', '0.91.1792487877123.', '2.91.1792487877123.m',
     'x.91.1792487877123.m', '0.1,5.1792487877123.m', '0..1792487877123.m', '0.091.1792487877123.m', '0.91.yesterday.m',
-    '0.91.-5.m', '0.91.1e3.m', '0. 91.1792487877123.m']) {
+    '0.91.-5.m', '0.91.1e3.m', '0. 91.1792487877123.m', '0.91.9000000000000000.m']) {
     assert.equal(decodeCursor(bad), null, String(bad))
   }
 })
@@ -125,6 +156,8 @@ test("opening matches while paging the unseen list skips none of the rest", () =
 test('with seen matches shown, a match opened since can come round again: it is shown once', () => {
   const a = { id: 'a' }, b = { id: 'b' }, c = { id: 'c' }
   assert.deepEqual(mergePage([a, b], [c, a]).map(x => x.id), ['a', 'b', 'c'])
+  assert.deepEqual(countsOf([{ seen: false, counterpartType: 'mojo' }, { seen: true, counterpartType: 'opportunity' }, { seen: false, counterpartType: 'showing_confirmation' }]),
+    { total: 3, unseen: 2, mojo: 1, listings: 1, showings: 1 })
   assert.deepEqual(sumCounts({ total: 2, unseen: 1, mojo: 0, listings: 2, showings: 0 }, { total: 3, unseen: 3, mojo: 1, listings: 2, showings: 0 }),
     { total: 5, unseen: 4, mojo: 1, listings: 4, showings: 0 })
 })

@@ -12,24 +12,26 @@ import { NextRequest } from 'next/server'
 type Row = Record<string, unknown> & { id: string; organizationId: string; score: number; seen: boolean; createdAt: Date }
 const ORG = 'org_b48_pr12'
 const rows: Row[] = Array.from({ length: 450 }, (_, i) => ({
-  id: `match_${String(i).padStart(3, '0')}`, organizationId: ORG, score: 99 - Math.floor(i / 25), seen: i >= 430,
-  createdAt: new Date(Date.UTC(2026, 9, 1 + (i % 3), 9)), reason: 'Right neighborhood', tier: 'HOT',
+  id: `match_${String(i).padStart(3, '0')}`, organizationId: ORG, score: 99 - Math.floor(i / 15), seen: i >= 430,
+  // Scores 99 down to 70: HOT and WARM. Every fourth row has no tier (old matchers).
+  createdAt: new Date(Date.UTC(2026, 9, 1 + (i % 3), 9)), reason: 'Right neighborhood',
+  tier: i % 4 === 0 ? null : 99 - Math.floor(i / 15) >= 80 ? 'HOT' : 'WARM',
   counterpartType: 'opportunity', counterpartId: `buyer_${i % 7}`, opportunityId: `seller_${i}`, opportunityType: 'contact',
 }))
 rows.push({ ...rows[0], id: 'match_other_org', organizationId: 'org_other' })
+rows[7].tier = 'WARM' // an old row whose stored tier (set at 90/70) disagrees with its score: it follows its tier
 const DISMISSED = rows[250] // its pair (buyer, seller) is dismissed
 
 type Where = Record<string, unknown>
 function fits(row: Record<string, unknown>, w: Where): boolean {
   return Object.entries(w).every(([k, v]) => {
     if (k === 'OR') return (v as Where[]).some(x => fits(row, x))
+    if (k === 'AND') return (v as Where[]).every(x => fits(row, x))
     const num = (x: unknown) => (x instanceof Date ? x.getTime() : x) as number | string
     if (v && typeof v === 'object' && !(v instanceof Date)) {
       const c = v as Record<string, unknown>
-      if ('gte' in c) return num(row[k]) >= num(c.gte)
-      if ('lt' in c) return num(row[k]) < num(c.lt)
-      if ('gt' in c) return num(row[k]) > num(c.gt)
-      throw new Error(`unsupported ${JSON.stringify(c)}`)
+      if (Object.keys(c).some(op => !['gte', 'lt', 'gt'].includes(op))) throw new Error(`unsupported ${JSON.stringify(c)}`)
+      return (!('gte' in c) || num(row[k]) >= num(c.gte)) && (!('lt' in c) || num(row[k]) < num(c.lt)) && (!('gt' in c) || num(row[k]) > num(c.gt))
     }
     return num(row[k]) === num(v)
   })
@@ -91,6 +93,16 @@ test('the list pages past 200: every match once, in order, then nextCursor is nu
   assert.equal(ids.length, 449) // 450, less the dismissed one
   assert.deepEqual(sizes, [200, 199, 50]) // the dismissed pair sits on page 2
   assert.equal(last, null)
+})
+
+test('the HOT and WARM tabs page through one tier each: the stored tier, else the score', async () => {
+  const tierOfRow = (r: Row) => (r.tier as string | null) ?? (r.score >= 80 ? 'HOT' : r.score >= 65 ? 'WARM' : 'POSSIBLE')
+  const hot = await walk('tier=hot')
+  assert.deepEqual(hot.ids, ordered(r => tierOfRow(r) === 'HOT'))
+  assert.ok(hot.ids.length > 200 && !hot.ids.includes('match_007'))
+  const warm = await walk('unseen=1&tier=warm')
+  assert.deepEqual(warm.ids, ordered(r => !r.seen && tierOfRow(r) === 'WARM'))
+  assert.ok(warm.ids.includes('match_007') && warm.ids.every(id => !hot.ids.includes(id)))
 })
 
 test('paging keeps the tab and the seen filter', async () => {
