@@ -113,6 +113,19 @@ test('count_sellers_with_buyers: only sellers the call Queue ranks, so "they\'re
   assert.deepEqual(await countSellersWithBuyers(), { count: 2, withHot: 2 })
 })
 
+test('count_sellers_with_buyers: not a seller on the CRM\'s own opt-out list, nor one with no phone (the CRM Queue drops both)', async () => {
+  fake.tables.mojoContact = [
+    contact({ id: 'mc_ok', fullName: 'Probe Seller Ok' }),
+    contact({ id: 'mc_crm_optout', fullName: 'Probe Seller Opt Out', metadata: { source: 'crm', crmLeadId: 'lead_oo', crmOptOut: true } }),
+    contact({ id: 'mc_no_phone', fullName: 'Probe Seller No Phone', phone: null, additionalPhones: [] }),
+    contact({ id: 'mc_second_phone', fullName: 'Probe Seller Second Phone', phone: null, additionalPhones: ['7185550104'] }),
+  ]
+  fake.tables.match = fake.tables.mojoContact.map((c, i) => match({ id: `o${i}`, opportunityId: c.id as string, counterpartId: 'iso_1', tier: 'HOT', score: 90 }))
+  fake.tables.matchDismissal = []
+  const { countSellersWithBuyers } = await import('../countMatches')
+  assert.deepEqual(await countSellersWithBuyers(), { count: 2, withHot: 2 })
+})
+
 test('count_sellers_with_buyers: test mode counts no CRM sellers', async () => {
   process.env.TEST_MODE_ONLY = 'true'
   try {

@@ -112,7 +112,7 @@ export async function countSellersWithBuyers(): Promise<{ count: number; withHot
   const waiting = [...left].filter(([, n]) => n > 0).map(([id]) => id)
   const inPool = new Set((await inChunks(waiting, chunk => prisma.mojoContact.findMany({
     where: { AND: [crmSellerPoolWhere(organizationId), { id: { in: chunk } }] },
-    select: { id: true, status: true, tags: true, groups: true, phone: true, additionalPhones: true, phoneDncFlags: true },
+    select: { id: true, status: true, tags: true, groups: true, phone: true, additionalPhones: true, phoneDncFlags: true, metadata: true },
   })))
     // As rankContact calls it (lib/ranking/queueBuilder.ts); these sellers have matches.
     .filter(c => !applyHardFilters({
@@ -120,6 +120,11 @@ export async function countSellersWithBuyers(): Promise<{ count: number; withHot
       phones: [c.phone, ...(c.additionalPhones ?? [])], phoneDncFlags: c.phoneDncFlags ?? [],
       matchCount: 1, allMatchesRental: false,
     }).excluded)
+    // The CRM Queue also drops a lead on the CRM's own opt-out list (its
+    // compliance scrub; DealFlow keeps the mark as metadata.crmOptOut, PR 5) and
+    // a lead with no phone, so those aren't "ranked in your CRM Queue" either
+    // [engineering precaution].
+    .filter(c => (c.metadata as { crmOptOut?: unknown } | null)?.crmOptOut !== true && [c.phone, ...(c.additionalPhones ?? [])].some(Boolean))
     .map(c => c.id))
   let count = 0
   let withHot = 0
