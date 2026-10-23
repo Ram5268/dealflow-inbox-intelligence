@@ -16,17 +16,32 @@ const NUMBER_WORDS = /\b(?:one|two|three|four|five|six|seven|eight|nine|ten|elev
 // The verifier's "still flag" topics (llmVerifier.ts): prices and charges,
 // ownership and sales, records, sizes, comps.
 const FACT_WORDS = /\b(?:prices?|priced|pricing|asking|budgets?|sold|sales?|owns?|owners?|ownership|owned|deeds?|llc|corp|zon(?:e|ed|es|ing)|permits?|violations?|tax(?:es)?|maintenance|charges?|square|sq|sqft|cap rate|noi|comps?|closing costs?|mortgage|rates?)\b/i
+// Purchase and transfer history, and sale history: also on the verifier's
+// "still flag" list ("purchase history, transfer dates", "sale-history claims").
+const HISTORY_WORDS = /\b(?:b(?:uy|uys|uying|ought)|purchas(?:e|es|ed|ing)|acquir(?:e|es|ed|ing)|inherit(?:s|ed|ing)?|transfer(?:s|red|ring)?|title|estate|executor|closed|closing|contract|listed|delisted|traded|refinanc(?:e|ed|ing)|liens?|foreclos(?:e|ed|ure|ures|ing)|street|avenue|ave|blvd|boulevard|parkway)\b/i
 const LINK = /https?:|www\.|\.(?:com|net|org|io|nyc)\b|@/i
 
 // Capitalised words a fact-free reply may have anywhere.
 const ALLOWED_WORDS = new Set(['I', "I'm", "I'll", "I've", "I'd", 'Ryan', 'Drift', 'DealFlow', 'OK'])
+// Words a fact-free reply may start a sentence with. Any other capitalised word
+// that starts a sentence may be a name or a place ("Pat called back."), so the
+// fact-check runs (when unsure, it runs).
+const SENTENCE_STARTS = new Set([
+  'a', 'afternoon', 'all', 'also', 'and', 'any', 'anything', 'anytime', 'absolutely', 'but', 'bye', 'can', 'cheers',
+  'could', 'do', 'enjoy', 'evening', 'goodbye', 'hope', 'morning', 'night',
+  'glad', 'good', 'got', 'great', 'happy', 'have', 'hello', 'here', "here's", 'hey', 'hi', 'how', 'if', 'it', "it's",
+  'just', 'let', "let's", 'my', 'no', 'not', 'noted', 'nothing', 'of', 'okay', 'perfect', 'please', 'ready',
+  'see', 'should', 'so', 'sounds', 'sure', 'take', 'talk', 'thank', 'thanks', 'that', "that's", 'the', 'then',
+  'there', "there's", 'this', 'understood', 'want', 'we', "we're", 'welcome', 'what', "what's", 'when', 'which',
+  'will', 'would', 'yes', 'yep', 'you', "you're", "you'll", 'your',
+])
 
 /** True when the reply text carries nothing the fact-check could check. */
 export function isFactFreeReply(text: string): boolean {
   const t = text.trim()
   if (!t) return true
   if (t.length > MAX_FACT_FREE_CHARS) return false
-  if (NUMBER_SIGNS.test(t) || NUMBER_WORDS.test(t) || FACT_WORDS.test(t) || LINK.test(t)) return false
+  if (NUMBER_SIGNS.test(t) || NUMBER_WORDS.test(t) || FACT_WORDS.test(t) || HISTORY_WORDS.test(t) || LINK.test(t)) return false
   // Names, places, addresses and named sources: a capitalised word that doesn't
   // start a sentence, or a capital inside a word (ACRIS, StreetEasy, Bed-Stuy).
   let sentenceStart = true
@@ -34,7 +49,7 @@ export function isFactFreeReply(text: string): boolean {
     const word = raw.replace(/[’‘]/g, "'").replace(/^[("'“[]+|[)"'”\].,!?:;]+$/g, '')
     if (word && !ALLOWED_WORDS.has(word)) {
       if (/[A-Z]/.test(word.slice(1))) return false
-      if (/^[A-Z]/.test(word) && !sentenceStart) return false
+      if (/^[A-Z]/.test(word) && (!sentenceStart || !SENTENCE_STARTS.has(word.toLowerCase()))) return false
     }
     sentenceStart = /[.!?:;]["'”’)]*$/.test(raw)
   }

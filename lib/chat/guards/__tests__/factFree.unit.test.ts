@@ -67,3 +67,22 @@ test('a long reply always gets the fact-check', () => {
   const reply = Array.from({ length: 40 }, () => 'happy to help with that').join(' and ')
   assert.equal(isFactFreeReply(reply), false)
 })
+
+test('review r1: purchase, transfer and sale history, and a name that starts a sentence, keep the fact-check', () => {
+  for (const reply of [
+    'Pat bought it in the spring.',
+    'Yes, she bought it from her brother.',
+    'She purchased the house from the estate.',
+    'He inherited it from his parents.',
+    'They closed on it last spring.',
+    'It went into contract last week.',
+    'Yes. Pat agreed to sell.',
+    'Jordan called back.',
+    'It is on maple street near the park.',
+  ]) {
+    assert.equal(isFactFreeReply(reply), false, reply)
+  }
+  for (const reply of ['Sounds good. Let me know.', 'Happy to help.', 'Got it.', 'Thank you, Ryan.', 'Sure thing.']) {
+    assert.equal(isFactFreeReply(reply), true, reply)
+  }
+})
