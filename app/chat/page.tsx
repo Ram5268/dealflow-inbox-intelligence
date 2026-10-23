@@ -853,7 +853,8 @@ function RaisedView({
       {/* Results label */}
       <div style={{ padding: '0 22px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative', zIndex: 5 }}>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.65)' }}>
-          {deals.length} RESULTS · BY MATCH
+          {/* Brief 43 PR 8: in the order Drift named them (best match first only when it named none) */}
+          {deals.length} RESULTS
         </div>
         <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.18em', color: 'rgba(255,255,255,0.55)' }}>
           TAP TO RAISE

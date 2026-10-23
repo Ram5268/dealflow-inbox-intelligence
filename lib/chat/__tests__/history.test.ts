@@ -86,7 +86,10 @@ test("the model's conversation starts at a user turn, even when the window start
   assert.deepEqual(startAtUserTurn([{ role: 'user', content: 'hi' }]), [{ role: 'user', content: 'hi' }])
   assert.deepEqual(startAtUserTurn([]), [])
   const route = readFileSync(join(ROOT, 'app/api/chat/route.ts'), 'utf8')
-  assert.match(route, /const anthropicHistory: Anthropic\.Messages\.MessageParam\[\] = startAtUserTurn\(history\)\.map/)
+  // Brief 43 PR 8: the route's history builder starts with startAtUserTurn too (historyForModel).
+  assert.match(route, /const anthropicHistory: Anthropic\.Messages\.MessageParam\[\] = historyForModel\(history\)/)
+  const history2 = readFileSync(join(ROOT, 'lib/chat/history.ts'), 'utf8')
+  assert.match(history2, /export function historyForModel[\s\S]*const turns = startAtUserTurn\(messages\)/)
 })
 
 test('chat context blocks only read: no side-channel fetcher writes to the DB (M18)', () => {
