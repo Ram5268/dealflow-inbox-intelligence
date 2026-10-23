@@ -9,7 +9,7 @@ import { pickTonight, recordRollback, withOurEstimates, type SwitchCheck } from 
 import { boroughFromLabel } from '../borough'
 import { fromRaw } from '../../domain/Neighborhood'
 import type { BuyerData, ListingData, ScoringContext } from '../scorerTypes'
-import { topForSeller, toMatchRow, type Candidate } from './select'
+import { IN_PLAY_BUYER_REQUEST, topForSeller, toMatchRow, type Candidate } from './select'
 import { DELETE_STALE_MATCHES_SQL, EXISTING_MATCH_COUNTS_SQL, UPSERT_MATCHES_SQL } from './sql'
 import { SCORING_REFUSED_ACTION, ScoringRefusedError, scoringRefusal, type ScoringRefusalDetails } from './guard'
 
@@ -62,7 +62,8 @@ export async function loadScoringInputs(
   const [sellers, mojoBuyers, isoBuyers, dismissals, comps] = await Promise.all([
     db.mojoContact.findMany({ where: { organizationId: orgId, isTestData: false, metadata: { path: ['source'], equals: 'crm' } } }),
     db.mojoContact.findMany({ where: { organizationId: orgId, intent: 'BUYER', ...demandScope } }),
-    db.extractedOpportunity.findMany({ where: { organizationId: orgId, category: 'BUYER_ISO', ...demandScope } }),
+    // Brief 48 (PR 10): buyer requests in play only (select.ts IN_PLAY_BUYER_REQUEST).
+    db.extractedOpportunity.findMany({ where: { organizationId: orgId, category: 'BUYER_ISO', ...IN_PLAY_BUYER_REQUEST, ...demandScope } }),
     db.matchDismissal.findMany({ select: { partyId: true, listingId: true } }),
     precomputeCompsMedians(db, orgId),
   ])

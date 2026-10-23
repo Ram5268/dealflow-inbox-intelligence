@@ -15,6 +15,16 @@ export interface Candidate {
   captureStatus: string
 }
 
+// Brief 48 (PR 10, item 4.9): the buyer requests (BUYER_ISO rows) the night
+// scores. Only ones in play count, the rule the app's other buyer lists use
+// (available-buyers, Drift's party search): not marked duplicate, and
+// processingStatus 'active'. So requests marked duplicate or still waiting in the
+// Review Queue ('needs_review') are skipped [planner's fix list, approved by Ryan
+// 2026-10-19; Brief 40 audit M11], and so are ones closed there as rejected or
+// stale [engineering precaution]. Both columns are non-null with defaults, so
+// there's no null trap. Mojo buyer contacts are unchanged.
+export const IN_PLAY_BUYER_REQUEST = { isDuplicate: false, processingStatus: 'active' } as const
+
 export { HOT_MIN_FIT, WARM_MIN_FIT }
 export const tierOf = (mf: number): 'HOT' | 'WARM' | 'POSSIBLE' => (mf >= HOT_MIN_FIT ? 'HOT' : mf >= WARM_MIN_FIT ? 'WARM' : 'POSSIBLE')
 

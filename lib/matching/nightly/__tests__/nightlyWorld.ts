@@ -201,6 +201,7 @@ export function isoBuyer(id: string, over: Row = {}): Row {
     neighborhood: null, neighborhoods: ['Park Slope'], price: null, minPrice: null, maxPrice: null, beds: null,
     minBeds: 3, maxBeds: 5, bathsMin: null, bathsMax: null, propertyTypes: [], mustHaves: null, dealbreakers: null,
     buyerArchetype: null, timeline: null, monthlyMaintenance: null, monthlyCommonCharges: null, monthlyTaxes: null,
+    isDuplicate: false, processingStatus: 'active', // the column defaults: a request in play
     createdAt: new Date('2026-10-01'), ...over,
   }
 }
