@@ -7,10 +7,9 @@
 // refuses it, the browser keeps its sign-up, so the next Check In tries again, and
 // Check In says why in a calm toast instead of failing silently. The browser parts
 // are passed in, so this is unit-tested.
-import { MAX_PUSH_DEVICES } from '@/lib/push/devices'
-
-export const CHECK_IN_FULL_MESSAGE =
-  `Notifications are off on this device: ${MAX_PUSH_DEVICES} devices already get them, the most allowed. Remove one in Settings, then Check In again.`
+// The toast is one line and cuts off what doesn't fit (components/Toast.tsx), which
+// on a 375 px phone is about 52 characters, so this stays short enough to read whole.
+export const CHECK_IN_FULL_MESSAGE = 'Notifications are full. Remove a device in Settings.'
 
 // What a browser push sign-up needs here: the JSON the server stores comes from it.
 export interface SignUp { toJSON(): unknown }

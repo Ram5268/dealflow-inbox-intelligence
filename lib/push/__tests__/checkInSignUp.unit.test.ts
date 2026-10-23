@@ -51,8 +51,10 @@ test('no permission, or push not set up on the server: nothing is sent', async (
 test('refused at the device limit: a calm message, and the next Check In tries again', async () => {
   const b = browser({ existing: true, status: 409 })
   assert.deepEqual(await signUpOnCheckIn(b.deps), { result: 'full', message: CHECK_IN_FULL_MESSAGE })
-  assert.match(CHECK_IN_FULL_MESSAGE, /5 devices/)
-  assert.match(CHECK_IN_FULL_MESSAGE, /Remove one in Settings, then Check In again/)
+  assert.match(CHECK_IN_FULL_MESSAGE, /Remove a device in Settings/)
+  // Read whole on a phone: the toast is one line and cuts off past about 52 characters
+  // at 375 px (Geist 13 px, components/Toast.tsx).
+  assert.ok(CHECK_IN_FULL_MESSAGE.length <= 52, `${CHECK_IN_FULL_MESSAGE.length} characters`)
   assert.ok(!/endpoint|subscription|VAPID|organi[sz]ation|!|—/i.test(CHECK_IN_FULL_MESSAGE), CHECK_IN_FULL_MESSAGE)
   // Sent again on the next Check In: the browser keeps its sign-up (nothing cancels it).
   const again = browser({ existing: true, status: 200 })
