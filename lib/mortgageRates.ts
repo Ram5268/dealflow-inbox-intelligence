@@ -1,5 +1,6 @@
 // FRED MORTGAGE30US — 30-year fixed rate, updates every Thursday.
 // Cached in memory for 24 hours to avoid redundant API calls.
+import { fetchWithTimeout } from './chat/turnBudget'
 
 interface RateData {
   rate: number
@@ -20,7 +21,8 @@ export async function getCurrentMortgageRate(): Promise<RateData | null> {
 
   try {
     const url = `https://api.stlouisfed.org/fred/series/observations?series_id=MORTGAGE30US&api_key=${apiKey}&file_type=json&limit=2&sort_order=desc`
-    const res = await fetch(url)
+    // Brief 43 PR 4 (M32): gives up after LOOKUP_TIMEOUT_MS [engineering precaution].
+    const res = await fetchWithTimeout(url)
     if (!res.ok) throw new Error(`FRED API returned ${res.status}`)
 
     const data = await res.json()

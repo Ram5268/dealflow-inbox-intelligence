@@ -1,12 +1,14 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { startOfNewYorkDay } from '@/lib/time/newYork'
 
 // Read-only counts for the Greeting screen pulse rows.
 // No schema changes — plain Prisma count queries on existing tables.
 export async function GET() {
-  const midnight = new Date()
-  midnight.setHours(0, 0, 0, 0)
+  // Brief 48 (PR 4): "overnight" counts from New York midnight [planner]. setHours(0, 0, 0, 0) was
+  // midnight on the server's own clock, UTC on Vercel: 8 PM New York time the evening before (7 PM in winter).
+  const midnight = startOfNewYorkDay(new Date())
 
   const [overnightEmails, overnightOpps, totalOpps, lastAudit, newMatches, newShowingConfirmations, pendingReviewCount] = await Promise.all([
     prisma.rawEmail.count({

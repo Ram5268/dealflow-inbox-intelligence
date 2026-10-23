@@ -26,3 +26,15 @@ export const PRE_RETRIEVAL_FETCHERS:  ContextFetcher[] = [
 export const POST_RETRIEVAL_FETCHERS: ContextFetcher[] = [
   mojoFetcher,
 ]
+
+// Brief 43 PR 4 (Q4): how Drift's one-line note names a lookup that ran out of
+// time (composeContext's runFetcher). Plain words: Drift may repeat them.
+export const FETCHER_SOURCES = new Map<ContextFetcher, string>([
+  [mortgageFetcher,       "today's mortgage rate"],
+  [acrisFetcher,          'city property records'],
+  [dobFetcher,            'city building records'],
+  [calendarFetcher,       'the calendar'],
+  [matchesFetcher,        'the new-matches list'],
+  [liveStreetEasyFetcher, 'live StreetEasy'],
+  [mojoFetcher,           'the CRM seller lookup'],
+])
