@@ -25,6 +25,11 @@ const SETS_ONLY: Record<string, string> = {
   // Brief 45 (PR E): a database-backed test (npm run test:integration only).
   'lib/importScoring/__tests__/scoreImport.integration.test.ts':
     'points crmQuery at the CRM test database it seeds (CRM_TEST_DATABASE_URL, refused unless *_test or *_perf)',
+  // Brief 48 (PR 7): the CRM lead copy's database-backed tests (npm run test:integration only).
+  'lib/crm-sync/__tests__/crmSyncGolden.integration.test.ts':
+    'points crmQuery at the CRM test database it seeds (CRM_TEST_DATABASE_URL, refused unless *_test or *_perf)',
+  'lib/crm-sync/__tests__/crmWins.integration.test.ts':
+    'points crmQuery at the CRM test database it seeds (CRM_TEST_DATABASE_URL, refused unless *_test or *_perf)',
 }
 const SKIP_DIRS = new Set(['node_modules', '.next', '.git', '.vercel'])
 const CODE = /\.[cm]?[jt]sx?$/

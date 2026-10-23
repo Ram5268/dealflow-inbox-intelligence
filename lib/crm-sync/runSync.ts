@@ -5,11 +5,18 @@ import { planSync, type ExistingRow, type SyncPlan } from './plan'
 import {
   DUPLICATES_SQL, LEGACY_SQL, REKEY_SQL, REMOVED_SQL, UPSERT_SQL, diffUpdates, toUpsertRow, type UpsertReturn,
 } from './upsert'
+import {
+  CRM_WINS_INSERT_SQL, CRM_WINS_UPDATE_SQL, crmOwnName, crmWinsRunCounts, readCrmWinsSwitch, toCrmWinsRow,
+} from './crmWins'
 
 // Brief 34: CRM → DealFlow lead sync. Used by nightly-pipeline step 1 and by
 // scripts/crm-lead-sync.ts. The CRM read is read-only. Every DealFlow write
 // happens in one transaction, and a dry run executes the same statements then
 // rolls back.
+// Brief 48 (PR 7): with the CRM_WINS switch on (crmWins.ts), existing sellers
+// take the CRM's values, and the audit row counts the changes per field instead
+// of the keep-old self-check rolling back on any change. With it off, the copy
+// is exactly as before.
 export const ORG_SLUG = 'dealflow-ryan'
 const CHUNK = 500
 
@@ -26,6 +33,10 @@ export type CrmSyncResult = {
   optOutLeads: number | null // Brief 43 PR 5: CRM leads on the CRM's opt-out list; null = not read this run
   filled: Record<string, number>
   skipped: SyncPlan['skipped']
+  // Brief 48 (PR 7): only on a run with the CRM_WINS switch on (counts only).
+  crmWins?: true
+  changed?: Record<string, number> // existing values replaced, per field
+  notesKeptBelow?: number // sellers whose own DealFlow notes moved under the CRM's this run
   ms: number
 }
 
@@ -59,18 +70,37 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
   }
 
   const plan = planSync(contacts, await prisma.$queryRawUnsafe<ExistingRow[]>(EXISTING_SQL, org.id))
-  const rows = plan.upserts.map(toUpsertRow)
+  // Brief 48 (PR 7): read once per copy; a failed read is off.
+  const crmWins = await readCrmWinsSwitch(prisma)
+  const ownNames = new Map(leads.map(l => [l.mojoId, crmOwnName(l)]))
+  const rows = crmWins
+    ? plan.upserts.map(u => toCrmWinsRow(u, ownNames.get(u.contact.mojoId) ?? null))
+    : plan.upserts.map(toUpsertRow)
   try {
     return await prisma.$transaction(async tx => {
       const rekeyed = await tx.$executeRawUnsafe(REKEY_SQL, JSON.stringify(plan.rekeys))
       const returned: UpsertReturn[] = []
       for (let i = 0; i < rows.length; i += CHUNK) {
-        returned.push(...await tx.$queryRawUnsafe<UpsertReturn[]>(UPSERT_SQL, JSON.stringify(rows.slice(i, i + CHUNK)), org.id))
+        const chunk = JSON.stringify(rows.slice(i, i + CHUNK))
+        if (!crmWins) returned.push(...await tx.$queryRawUnsafe<UpsertReturn[]>(UPSERT_SQL, chunk, org.id))
+        else {
+          returned.push(...await tx.$queryRawUnsafe<UpsertReturn[]>(CRM_WINS_UPDATE_SQL, chunk, org.id))
+          returned.push(...await tx.$queryRawUnsafe<UpsertReturn[]>(CRM_WINS_INSERT_SQL, chunk, org.id))
+        }
       }
-      const { filled, changed } = diffUpdates(returned)
-      if (changed.length > 0) {
+      // Keep-old: any changed existing value means the rule broke, so roll back.
+      // CRM wins [Ryan, 2026-10-19]: changes are the point and are counted per
+      // field; a value that went blank breaks its rule, so roll back.
+      const wins = crmWins ? crmWinsRunCounts(returned) : null
+      const keepOld = wins ? null : diffUpdates(returned)
+      if (keepOld && keepOld.changed.length > 0) {
+        const { changed } = keepOld
         throw new Error(`keep-old rule violated on ${changed.length} values (rolled back): ${changed.slice(0, 10).join(', ')}`)
       }
+      if (wins && wins.erased.length > 0) {
+        throw new Error(`CRM-wins rule violated: ${wins.erased.length} values went blank (rolled back)`)
+      }
+      const { filled } = wins ?? keepOld!
       const insertedIds = new Set(returned.filter(r => r.inserted).map(r => r.mojoId))
       const result: CrmSyncResult = {
         dryRun,
@@ -85,6 +115,7 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
         optOutLeads: optOuts ? contacts.filter(c => c.metadata.crmOptOut).length : null,
         filled,
         skipped: plan.skipped,
+        ...(wins && { crmWins: true as const, changed: wins.changed, notesKeptBelow: wins.notesKeptBelow }),
         ms: Date.now() - started,
       }
       if (dryRun) throw new DryRunRollback(result)

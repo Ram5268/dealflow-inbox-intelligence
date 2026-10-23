@@ -8,4 +8,7 @@ export const INTEGRATION_TESTS: ReadonlyArray<{ file: string; runner: 'tsx' | 't
   { file: 'lib/ranking/__tests__/queueBuilder.integration.test.ts', runner: 'tsx' },
   // Brief 45 (PR E): also needs CRM_TEST_DATABASE_URL (a CRM *_test database).
   { file: 'lib/importScoring/__tests__/scoreImport.integration.test.ts', runner: 'tsx' },
+  // Brief 48 (PR 7): the CRM lead copy on Postgres 18; also need CRM_TEST_DATABASE_URL.
+  { file: 'lib/crm-sync/__tests__/crmSyncGolden.integration.test.ts', runner: 'tsx' },
+  { file: 'lib/crm-sync/__tests__/crmWins.integration.test.ts', runner: 'tsx' },
 ]
