@@ -93,7 +93,7 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
 export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
   name: 'generate_report',
   description:
-    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for [buyer]", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for [buyer]"), use generate_report_section instead. Only unlocked templates work (currently: buyer-match). For buyer-match, params must be { buyerId }, where buyerId is the id of a buyer or renter that search_parties returned in this turn; any other id is refused. Call search_parties first, and if nothing matches exactly, ask Ryan which buyer he means.',
+    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for [buyer]", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for [buyer]"), use generate_report_section instead. Only unlocked templates work (currently: buyer-match). For buyer-match, params must be { buyerId }, where buyerId is the id of a buyer or renter that search_parties returned in this turn, or one in the Shown note of an earlier reply in this chat; any other id is refused. Call search_parties first, and if nothing matches exactly, ask Ryan which buyer he means.',
   input_schema: {
     type: 'object',
     properties: {
@@ -101,7 +101,7 @@ export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
       params: {
         type: 'object',
         description: 'Template-specific params, e.g. { buyerId: "abc123" } for buyer-match.',
-        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties, this turn).' } },
+        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties this turn, or an earlier Shown note).' } },
       },
     },
     required: ['templateId', 'params'],
@@ -111,7 +111,7 @@ export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
 export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
   name: 'generate_report_section',
   description:
-    'Generate a SINGLE SECTION of a report template, for inline chat display. Use when the user asks about a specific piece ("what are the near-misses for [buyer]", "give me the budget check on this buyer", "curated matches for the Soho buyer"). Cheaper and faster than a full report and NOT saved. Returns structured section content that you should restate in full in your reply so the user sees it. For buyer-match, sectionKey is one of: criteria, matching-inventory, curated-matches, near-misses, off-market, budget-reality, showing-schedule, recommended-adjustment; params is { buyerId }, a buyer id that search_parties returned in this turn (any other id is refused).',
+    'Generate a SINGLE SECTION of a report template, for inline chat display. Use when the user asks about a specific piece ("what are the near-misses for [buyer]", "give me the budget check on this buyer", "curated matches for the Soho buyer"). Cheaper and faster than a full report and NOT saved. Returns structured section content that you should restate in full in your reply so the user sees it. For buyer-match, sectionKey is one of: criteria, matching-inventory, curated-matches, near-misses, off-market, budget-reality, showing-schedule, recommended-adjustment; params is { buyerId }, a buyer id that search_parties returned in this turn, or one in the Shown note of an earlier reply in this chat (any other id is refused).',
   input_schema: {
     type: 'object',
     properties: {
@@ -120,7 +120,7 @@ export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
       params: {
         type: 'object',
         description: 'Template-specific params, e.g. { buyerId: "abc123" }.',
-        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties, this turn).' } },
+        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties this turn, or an earlier Shown note).' } },
       },
     },
     required: ['templateId', 'sectionKey', 'params'],

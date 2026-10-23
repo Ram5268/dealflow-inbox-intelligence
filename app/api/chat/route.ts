@@ -19,7 +19,7 @@ import { CRM_SELLER_TOOL_NAMES, newCrmSellerTurn, runCrmSellerTool } from '@/lib
 import type { SellerCard } from '@/lib/chat/sellerCard'
 import { getTemplate } from '@/lib/reports/templates'
 import { getGenerator, type SectionResult } from '@/lib/reports/generators'
-import { unresolvedBuyer } from '@/lib/chat/tools/reportBuyerGate'
+import { unresolvedBuyer, shownIdsInChat } from '@/lib/chat/tools/reportBuyerGate'
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
 import { buildGroundingCorpus, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
@@ -362,6 +362,8 @@ export async function POST(req: NextRequest) {
     // as its text plus the draft, the way the draft rewrite shows it, not as JSON.
     // Brief 43 PR 8 (Q14): and the note of the cards, buyer and report it showed.
     const anthropicHistory: Anthropic.Messages.MessageParam[] = historyForModel(history)
+    // Brief 43 PR 8 x PR 9 (#16): the buyers and cards earlier replies showed.
+    const shownInChat = shownIdsInChat(history)
 
     // ── Sonnet 4.6 tool_use loop ─────────────────────────────────────────────
     // tool_choice='any' forces a tool call every turn, so the loop deterministically
@@ -424,8 +426,9 @@ export async function POST(req: NextRequest) {
       if (!generator) return { error: `No generator registered for ${templateId}` }
       const buyerId = typeof params.buyerId === 'string' ? params.buyerId : null
       // Brief 43 PR 9 (Q15): only for a buyer a search_parties call returned
-      // earlier this turn; otherwise a tool error: search first, or ask Ryan.
-      const unresolved = unresolvedBuyer(buyerId, allToolCalls)
+      // earlier this turn, or one DealFlow showed earlier in this chat (PR 8's
+      // Shown notes); otherwise a tool error: search first, or ask Ryan.
+      const unresolved = unresolvedBuyer(buyerId, allToolCalls, shownInChat)
       if (unresolved) return unresolved
 
       if (tu.name === 'generate_report') {

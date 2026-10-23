@@ -38,7 +38,7 @@ export function readStoredReply(content: string): { response: string; draft: Dra
 }
 
 // Brief 43 PR 8: the stored note, or null (plain text and older JSON rows have none).
-function readStoredShown(content: string): ShownFooter | null {
+export function readStoredShown(content: string): ShownFooter | null {
   if (!content.trimStart().startsWith('{')) return null
   try {
     return normalizeShown((JSON.parse(content) as { shown?: unknown })?.shown)

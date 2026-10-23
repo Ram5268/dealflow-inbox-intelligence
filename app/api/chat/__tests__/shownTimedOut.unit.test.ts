@@ -23,6 +23,13 @@ beforeEach(async () => {
 })
 afterEach(() => mock.timers.reset())
 
+// Brief 43 PR 9 (Q15): a report needs a buyer id that search_parties returned
+// earlier in the turn, so the report turn searches for the buyer first.
+const BUSHWICK_BUYER = {
+  id: 'buyer-1', organizationId: 'org-test', category: 'BUYER_ISO', isDuplicate: false, processingStatus: 'active',
+  extractedTitle: 'Bushwick 3-family buyer', neighborhood: 'Bushwick', neighborhoods: ['Bushwick'], isTestData: true,
+}
+
 async function withFastReport(fn: () => Promise<void>) {
   const { GENERATOR_REGISTRY } = await import('../../../../lib/reports/generators')
   const real = GENERATOR_REGISTRY['buyer-match']
@@ -37,7 +44,9 @@ for (const slowSave of [false, true]) {
   test(`a timed-out report turn keeps the buyer id and report id for the next turn (slow save: ${slowSave})`, async () => {
     await withFastReport(async () => {
       if (slowSave) dbDelayMs['report.create'] = 300
+      tables.extractedOpportunity = [BUSHWICK_BUYER]
       ai.script(
+        () => anthropicTool('search_parties', { query: 'Bushwick 3-family' }),
         () => { if (slowSave) mock.timers.tick(51_800); return anthropicTool('generate_report', { templateId: 'buyer-match', params: { buyerId: 'buyer-1' } }) },
         () => HANG,
       )

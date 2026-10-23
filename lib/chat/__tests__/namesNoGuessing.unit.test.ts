@@ -37,7 +37,7 @@ test('a named buyer is found with search_parties, and a report needs an id from 
     assert.match(text, /search_parties FIRST/, name)
     assert.match(text, /buyer id that search_parties returned in this same turn/, name)
   }
-  // A buyer from an earlier turn is searched for again (the history has no ids).
+  // A buyer from an earlier turn: the id in its Shown note (PR 8), else a new search.
   assert.match(SYSTEM_PROMPT, /search for them again this turn/)
   for (const tool of [GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL]) {
     assert.match(tool.description ?? '', /search_parties returned in this turn/, tool.name)
