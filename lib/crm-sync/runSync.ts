@@ -28,6 +28,7 @@ export type CrmSyncResult = {
   inserted: number
   updated: number
   rekeyed: number
+  rekeysSkipped?: number // Brief 48 (PR 8 review r1): only when a planned re-key was left undone (REKEY_SQL)
   duplicatesMarked: number
   legacyMarked: number
   removedMarked: number
@@ -132,6 +133,11 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
         inserted: insertedIds.size,
         updated: returned.length - insertedIds.size,
         rekeyed,
+        // Brief 48 (PR 8 review r1) [engineering precaution]: REKEY_SQL leaves a re-key
+        // undone when another row holds the new Mojo ID (test data, another
+        // organization); that seller then drops out (crm_removed below). Counted, only
+        // when it happens, so the copy's audit row is otherwise unchanged.
+        ...(plan.rekeys.length > rekeyed && { rekeysSkipped: plan.rekeys.length - rekeyed }),
         duplicatesMarked: await tx.$executeRawUnsafe(DUPLICATES_SQL, JSON.stringify(plan.duplicates)),
         legacyMarked: await tx.$executeRawUnsafe(LEGACY_SQL, org.id),
         removedMarked: await tx.$executeRawUnsafe(REMOVED_SQL, org.id, JSON.stringify(contacts.map(c => c.mojoId))),

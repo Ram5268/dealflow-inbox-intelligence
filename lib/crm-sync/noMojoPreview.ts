@@ -1,5 +1,6 @@
 import { STAND_IN_PREFIX } from './crmReader'
-import type { SyncPlan } from './plan'
+import { phoneKey } from './mapLead'
+import { personKey, type ExistingRow, type SyncPlan } from './plan'
 
 // Brief 48 (PR 8, item 4.1): the pure parts of scripts/brief48-no-mojo-preview.ts, which
 // counts the CRM leads with no Mojo ID and what the next copy would do with them. Counts
@@ -31,17 +32,36 @@ export interface RowSource { source: string | null; crmLeadId: string | null }
 
 // What the next copy's plan does, by kind. `taken`: Mojo IDs held by rows the copy never
 // writes (test data, another organization), whose leads are neither inserted nor updated.
-export function noMojoPlanCounts(plan: SyncPlan, taken: ReadonlySet<string>, rows: ReadonlyMap<string, RowSource>) {
+// Brief 48 (PR 8 review r1): `existing` = EXISTING_SQL's rows. A new seller "like" a
+// seller DealFlow already copies from the CRM (source 'crm') shares one of its phone
+// numbers (10 digits), or its name and street: most likely the same person entered
+// in the CRM twice, who would then be matched and on the call list twice. "No area":
+// a new seller without a ZIP or neighborhood, which the matcher pairs with buyers
+// anywhere. Counts only.
+export function noMojoPlanCounts(
+  plan: SyncPlan, taken: ReadonlySet<string>, rows: ReadonlyMap<string, RowSource>, existing: readonly ExistingRow[] = [],
+) {
   const standIn = (k: string) => k.startsWith(STAND_IN_PREFIX)
   const inserts = plan.upserts.filter(u => !u.keeper && !taken.has(u.contact.mojoId))
-  const csvRekeys = plan.rekeys.filter(r => r.old_id.startsWith('csv_'))
+  const blocked = plan.rekeys.filter(r => taken.has(r.new_id))
+  const csvRekeys = plan.rekeys.filter(r => r.old_id.startsWith('csv_') && !taken.has(r.new_id))
   const newMarks = plan.duplicates.filter(d => rows.get(d.id)?.source !== 'duplicate')
+  const live = existing.filter(r => rows.get(r.id)?.source === 'crm')
+  const livePhones = new Set(live.flatMap(r => [r.phone, ...(r.additionalPhones ?? [])]).flatMap(p => (p ? [phoneKey(p)] : [])).filter(Boolean))
+  const liveNames = new Set(live.filter(r => r.fullName && r.address).map(r => personKey(r.fullName, r.address)))
+  const samePhone = (u: SyncPlan['upserts'][number]) => u.contact.phones.some(p => livePhones.has(phoneKey(p)))
+  const sameName = (u: SyncPlan['upserts'][number]) => !!u.contact.address && liveNames.has(personKey(u.contact.fullName, u.contact.address))
   return {
     newSellersWithoutMojoId: inserts.filter(u => standIn(u.contact.mojoId)).length,
     newSellersWithMojoId: inserts.filter(u => !standIn(u.contact.mojoId)).length,
+    newSellersNoArea: inserts.filter(u => !u.contact.zipCode && !u.contact.neighborhood).length,
+    newSellersLikeExisting: { samePhone: inserts.filter(samePhone).length, sameNameAndStreet: inserts.filter(sameName).length },
     sellersOnTheirOwnRow: plan.upserts.filter(u => u.keeper && u.keeper.mojoId === u.contact.mojoId).length,
-    reKeyedByCrmLeadId: plan.rekeys.length - csvRekeys.length, // the same row, its key changed (stand-in <-> Mojo ID)
+    reKeyedByCrmLeadId: plan.rekeys.length - csvRekeys.length - blocked.length, // the same row, its key changed (stand-in <-> Mojo ID)
     reKeyedCsv: csvRekeys.length,
+    // A re-key REKEY_SQL leaves undone: the new Mojo ID is held by test data or another
+    // organization. That seller is then neither updated nor kept (marked crm_removed).
+    reKeysBlocked: blocked.length,
     // Rows newly marked as a duplicate of their seller's row: a lead's own older rows
     // (found by its CRM lead id), and csv copies.
     newDuplicateMarks: {

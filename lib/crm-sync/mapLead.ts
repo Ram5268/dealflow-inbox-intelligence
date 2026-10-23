@@ -18,6 +18,16 @@ export const phoneKey = (p: string): string | null => {
   return digits.length >= 10 ? digits.slice(-10) : null
 }
 
+// Brief 48 (PR 8 review r1) [engineering precaution]: a lead typed into the CRM by
+// hand, or from an upload without Mojo's columns, has no 'Property Zip Code' field,
+// only its address line ("12 Sample St, Brooklyn, NY 11221"). Without a ZIP the
+// matcher can't place the home (eligibility.ts keeps a pair whose listing area is
+// unknown), so such a seller was paired with buyers anywhere in the city. The
+// address line's trailing ZIP is used when the field is missing or blank; a field
+// that is there is read exactly as before.
+export const zipFromAddress = (full: string | null | undefined): string | null =>
+  full?.match(/(?:^|[\s,])(\d{5})(?:-\d{4})?\s*$/)?.[1] ?? null
+
 export function mapLead(lead: CrmLeadRow) {
   const text = (k: string) => clean(lead.fields[k]?.t)
   const num = (k: string) => lead.fields[k]?.n ?? null
@@ -32,6 +42,7 @@ export function mapLead(lead: CrmLeadRow) {
   const mailing = text('Mailing Address')
   const propertyType = text('Property Type')
   const lastCallResult = text('Last Call Result')
+  const zip = text('Property Zip Code') ?? zipFromAddress(lead.primaryAddressFull)
 
   return {
     mojoId: lead.mojoId,
@@ -42,8 +53,8 @@ export function mapLead(lead: CrmLeadRow) {
     address,
     city,
     state: text('Property State'),
-    zipCode: text('Property Zip Code')?.match(/^\d{5}/)?.[0] ?? null,
-    neighborhood: zipToNeighborhood(text('Property Zip Code')), // only written when inserting
+    zipCode: zip?.match(/^\d{5}/)?.[0] ?? null,
+    neighborhood: zipToNeighborhood(zip), // only written when inserting
     propertyTypeDetail: propertyType,
     unitCount: propertyType ? UNITS[propertyType] ?? null : null,
     propertyBeds: nonZero('Bedrooms'),

@@ -38,7 +38,7 @@ export interface SyncPlan {
   skipped: { mojoId: string; reason: string; rowIds: string[] }[]
 }
 
-const personKey = (name: string | null, street: string | null) =>
+export const personKey = (name: string | null, street: string | null) =>
   `${(name ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')}|${normalizeStreet(street) ?? ''}`
 const isIntact = (r: ExistingRow) => /^[a-z]{2}$/i.test(r.state ?? '') && /^\d{5}/.test(r.zipCode ?? '')
 

@@ -49,13 +49,14 @@ async function preview(db: PrismaClient) {
     const org = await db.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG }, select: { id: true } })
     const [crm] = await crmQuery<CrmMojoCounts>(CRM_MOJO_COUNTS_SQL, [ORG_SLUG])
     const [{ n: dealflowStandInRows }] = await db.$queryRawUnsafe<{ n: number }[]>(DF_STAND_IN_COUNT_SQL, org.id)
-    const plan = planSync((await readCrmLeads(ORG_SLUG)).map(mapLead), await db.$queryRawUnsafe<ExistingRow[]>(EXISTING_SQL, org.id))
+    const existing = await db.$queryRawUnsafe<ExistingRow[]>(EXISTING_SQL, org.id)
+    const plan = planSync((await readCrmLeads(ORG_SLUG)).map(mapLead), existing)
     const taken = new Set((await db.$queryRawUnsafe<Array<{ mojoId: string }>>(TAKEN_SQL, org.id)).map(r => r.mojoId))
     const sources = new Map((await db.$queryRawUnsafe<Array<RowSource & { id: string }>>(DF_ROW_SOURCES_SQL, org.id)).map(r => [r.id, r]))
     console.log(JSON.stringify({
       crm,
       dealflowStandInRows,
-      nextCopy: noMojoPlanCounts(plan, taken, sources),
+      nextCopy: noMojoPlanCounts(plan, taken, sources, existing),
     }, null, 2))
   } finally {
     await closeCrmPool()

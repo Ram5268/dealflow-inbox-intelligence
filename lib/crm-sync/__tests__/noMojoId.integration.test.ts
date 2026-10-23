@@ -90,6 +90,17 @@ test('a lead with no Mojo ID, or an empty one, is copied once under crm-<lead id
   }
 })
 
+test('review r1: the row an earlier copy made under the key "" (an empty Mojo ID) is re-keyed to crm-<lead id>, not copied again', { skip: SKIP }, async () => {
+  await cleanup(df, crm)
+  const blankRow = { id: `${P}mc_blank`, mojoId: '', fullName: 'Lee Sample', phone: '7185550121', address: '7 Example Ave', city: 'Brooklyn', state: 'NY',
+    zipCode: '11221', metadata: { source: 'crm', crmLeadId: `${P}lead_blank`, crmUpdatedAt: '2026-10-01 12:00:00', callAttempts: null, lastCallResult: null, syncVersion: 1 } }
+  await seed(df, crm, [...CRM_LEADS, BLANK], [...DF_ROWS, blankRow])
+  const r = await runCrmLeadSync()
+  assert.equal(r.inserted, 1) // the base seed's new Mojo lead only
+  assert.deepEqual((await rows()).filter(x => x.crmLeadId === `${P}lead_blank`).map(x => [x.id, x.mojoId, x.source]), [[blankRow.id, `crm-${P}lead_blank`, 'crm']])
+  await oneSellerPerLead()
+})
+
 test('a later Mojo export adds a Mojo ID to the hand-typed lead: the same row is re-keyed, no second row', { skip: SKIP }, async () => {
   await cleanup(df, crm)
   await seed(df, crm, [...CRM_LEADS, HAND])
@@ -126,16 +137,24 @@ test('the Mojo ID it gets already has an older DealFlow row: that row becomes th
   await oneSellerPerLead()
 })
 
-test('the Mojo ID it gets is held by a test-data row: the copy still runs (that seller is left alone, as such a lead always was)', { skip: SKIP }, async () => {
+test('the Mojo ID it gets is held by a test-data row: the copy still runs, that seller drops out (as such a lead was never copied) and the audit row counts the skipped re-key', { skip: SKIP }, async () => {
   await cleanup(df, crm)
   await seed(df, crm, [...CRM_LEADS, HAND])
   await runCrmLeadSync()
   await crm.query(`UPDATE "Lead" SET "mojoId" = $1 WHERE id = $2`, [`${P}m_testrow_2`, `${P}lead_hand`])
   await df.query(`INSERT INTO "MojoContact" (id, "mojoId", "fullName", "isTestData", "updatedAt", "organizationId") VALUES ($1, $2, 'Test Seller', true, now(), $3)`,
     [`${P}mc_testrow_2`, `${P}m_testrow_2`, DF_ORG])
+  const standIn = (await rows()).find(r => r.mojoId === `crm-${P}lead_hand`)!
   const r = await runCrmLeadSync()
-  assert.deepEqual([r.rekeyed, r.inserted], [0, 0])
+  assert.deepEqual([r.rekeyed, r.inserted, r.rekeysSkipped], [0, 0, 1])
   assert.equal((await df.query(`SELECT "fullName" FROM "MojoContact" WHERE id = $1`, [`${P}mc_testrow_2`])).rows[0].fullName, 'Test Seller')
+  // Review r1: the stand-in seller is not kept under its old key; it drops out, and the audit row says a re-key was skipped.
+  assert.deepEqual((await rows()).filter(x => x.id === standIn.id).map(x => [x.mojoId, x.source]), [[`crm-${P}lead_hand`, 'crm_removed']])
+  // When the test row goes, the next copy re-keys the same row and it is a seller again.
+  await df.query(`DELETE FROM "MojoContact" WHERE id = $1`, [`${P}mc_testrow_2`])
+  const again = await runCrmLeadSync()
+  assert.deepEqual([again.rekeyed, again.inserted, again.rekeysSkipped], [1, 0, undefined])
+  assert.deepEqual((await rows()).filter(x => x.id === standIn.id).map(x => [x.mojoId, x.source]), [[`${P}m_testrow_2`, 'crm']])
 })
 
 test('the hand-typed person imported again as a second CRM lead: DealFlow keeps one seller per CRM lead, as the CRM holds them', { skip: SKIP }, async () => {

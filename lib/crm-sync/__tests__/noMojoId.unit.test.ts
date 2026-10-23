@@ -102,8 +102,42 @@ test('the preview counts: no-Mojo-ID leads and new sellers by kind, re-keys, new
   const sources = new Map([['mc_o2', { source: 'crm', crmLeadId: 'lead_o' }]])
   const counts = noMojoPlanCounts(plan, new Set(['crm-lead_t']), sources)
   assert.deepEqual(counts, {
-    newSellersWithoutMojoId: 1, newSellersWithMojoId: 0, sellersOnTheirOwnRow: 2, reKeyedByCrmLeadId: 1, reKeyedCsv: 0,
+    newSellersWithoutMojoId: 1, newSellersWithMojoId: 0, newSellersNoArea: 0, newSellersLikeExisting: { samePhone: 0, sameNameAndStreet: 0 },
+    sellersOnTheirOwnRow: 2, reKeyedByCrmLeadId: 1, reKeyedCsv: 0, reKeysBlocked: 0,
     newDuplicateMarks: { ownOlderRows: 1, csvCopies: 0 }, heldElsewhere: 1, skipped: 0,
   })
   assert.doesNotMatch(JSON.stringify(counts), /lead_|mc_|crm-|9001/)
+})
+
+// Brief 48 (PR 8 review r1): a hand-typed lead has only its address line (the CRM's New
+// Lead form takes a name and an address). Without a ZIP the matcher keeps every buyer
+// (eligibility.ts: an unknown area is kept), so the ZIP comes from the address line.
+test('review r1: a lead with no ZIP field takes the ZIP at the end of its address line; a ZIP field wins', async () => {
+  const { zipFromAddress } = await import('../mapLead')
+  assert.equal(zipFromAddress('12 Sample St, Brooklyn, NY 11221'), '11221')
+  assert.equal(zipFromAddress('12 Sample St Brooklyn NY 11221-1234 '), '11221')
+  for (const none of [null, undefined, '', '12 Sample St', '12 Sample St, Brooklyn, NY', '123456', 'Unit 112210']) assert.equal(zipFromAddress(none), null, String(none))
+  const lead = { id: 'lead_z', mojoId: 'crm-lead_z', name: 'Kai Example', displayName: 'Kai Example', updatedAt: '2026-10-20 12:00:00', contactName: null, phones: [], emails: [] }
+  const typed = mapLead({ ...lead, primaryAddressFull: '5 Example Ave, Brooklyn, NY 11221', fields: {} })
+  assert.deepEqual([typed.address, typed.zipCode, typed.neighborhood], ['5 Example Ave', '11221', 'Bushwick'])
+  const field = mapLead({ ...lead, primaryAddressFull: '5 Example Ave, Brooklyn, NY 11221', fields: { 'Property Zip Code': { t: '11231', n: null, d: null } } })
+  assert.equal(field.zipCode, '11231')
+  const bad = mapLead({ ...lead, primaryAddressFull: '5 Example Ave, Brooklyn, NY 11221', fields: { 'Property Zip Code': { t: 'Brooklyn', n: null, d: null } } })
+  assert.equal(bad.zipCode, null) // a field that is there is read as before
+  assert.equal(mapLead({ ...lead, primaryAddressFull: '5 Example Ave', fields: {} }).zipCode, null)
+})
+
+test('review r1: the preview counts new sellers that look like a seller DealFlow has, new sellers with no area, and blocked re-keys', async () => {
+  const { noMojoPlanCounts } = await import('../noMojoPreview')
+  const rows = [row('mc_pat', '90001', 'lead_1', 'Pat Example', '88 Example Ave'), row('mc_h', 'crm-lead_h', 'lead_h')]
+  rows[0].phone = '7185550142'
+  const twin = mapLead({ id: 'lead_tw', mojoId: 'crm-lead_tw', name: 'Pat Example', displayName: 'Pat Example', primaryAddressFull: '88 Example Ave',
+    updatedAt: '2026-10-20 12:00:00', contactName: null, phones: ['+17185550142'], emails: [], fields: {} })
+  const plan = planSync([contact('90001', 'lead_1', 'Pat Example', '88 Example Ave'), twin, contact('90020', 'lead_h')], rows)
+  const sources = new Map([['mc_pat', { source: 'crm', crmLeadId: 'lead_1' }], ['mc_h', { source: 'crm', crmLeadId: 'lead_h' }]])
+  const counts = noMojoPlanCounts(plan, new Set(['90020']), sources, rows)
+  assert.equal(counts.newSellersWithoutMojoId, 1)
+  assert.equal(counts.newSellersNoArea, 1) // the twin's address line has no ZIP
+  assert.deepEqual(counts.newSellersLikeExisting, { samePhone: 1, sameNameAndStreet: 1 })
+  assert.deepEqual([counts.reKeyedByCrmLeadId, counts.reKeysBlocked], [0, 1]) // 90020 is held by test data
 })
