@@ -55,3 +55,14 @@ test('search_parties takes a name or description and a buyer type (Q15, Q41)', (
   assert.deepEqual([...(props.archetype.enum ?? [])].sort(), [...zodArchetypes].sort())
   assert.equal(searchPartiesInputSchema.parse({ query: 'Jordan Sample', archetype: 'EXCHANGE_1031' }).query, 'Jordan Sample')
 })
+
+// Reviewer (Brief 43 PR 9 r1): an area in query must match the title's spelling
+// ("Bedford-Stuyvesant" is not "Bed-Stuy"), so areas, beds and budgets go in
+// their own fields, where search_parties already reads every spelling.
+test('a name goes in query; an area, beds or budget go in their own fields', () => {
+  const props = (SEARCH_PARTIES_TOOL.input_schema as { properties: Record<string, { description?: string }> }).properties
+  assert.match(props.query.description ?? '', /never in query/)
+  for (const [name, text] of [['SYSTEM_PROMPT', SYSTEM_PROMPT], ['RYAN_MD', RYAN_MD]]) {
+    assert.match(text, /an area, beds or budget (go )?in their own fields[^.]*never in query/, name)
+  }
+})

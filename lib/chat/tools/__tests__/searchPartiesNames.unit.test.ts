@@ -106,3 +106,37 @@ test('the archetype is on every buyer card, in plain words (Q41)', async () => {
   // Without the filter, nothing changes for a plain search: every buyer, no seller dropped by it.
   assert.equal(r.cards.filter(c => c.role === 'buyer').length, 6)
 })
+
+// Reviewer (Brief 43 PR 9 r1): how Ryan and Drift actually name a buyer.
+test("a possessive, a number word or 'lead' still find the buyer; a blank query is no query", async () => {
+  load()
+  assert.deepEqual(ids(await run({ query: "Jordan Sample's" })), [JORDAN.id, RENTER.id].sort())
+  assert.deepEqual(ids(await run({ query: 'Casey Placeholder\u2019s buyer' })), [JORDAN.id])
+  assert.deepEqual(ids(await run({ query: "Jordan Sample's search" })), [JORDAN.id, RENTER.id].sort())
+  assert.deepEqual(ids(await run({ role: 'buyer', query: 'Jordan lead' })), [JORDAN.id])
+  // "three-family" is the title's "3-family", and the database narrowing allows both forms.
+  assert.deepEqual(ids(await run({ query: 'Bed-Stuy three-family' })), [JORDAN.id])
+  const where = JSON.stringify(fake.calls.filter(c => c.model === 'extractedOpportunity').at(-1)?.args.where)
+  assert.match(where, /"contains":"3"/)
+  assert.match(where, /"contains":"three"/)
+  assert.deepEqual(ids(await run({ query: 'Ridgewood 2-family' })), [MENTIONS_1031.id])
+  for (const query of ['', '   ']) assert.equal((await run({ role: 'buyer', query })).cards.length, 6, `blank query ${JSON.stringify(query)}`)
+  // Still exact: a different name, part of a word, or filler only finds nothing.
+  assert.equal((await run({ query: "Riley's" })).cards.length, 0)
+  assert.equal((await run({ query: 'Chen' })).cards.length, 0)
+  assert.equal((await run({ query: 'the lead' })).cards.length, 0)
+})
+
+// Review r1: a query is capped at 8 distinct words, so the database query stays small.
+test('a long query counts only its first 8 distinct words', async () => {
+  const { queryWords, MAX_QUERY_WORDS } = await import('../partyFilters')
+  assert.equal(MAX_QUERY_WORDS, 8)
+  assert.deepEqual(queryWords('Jordan jordan SAMPLE'), ['jordan', 'sample'])
+  const long = Array.from({ length: 20 }, (_, i) => `word${String.fromCharCode(97 + i)}`).join(' ')
+  assert.equal(queryWords(long).length, 8)
+  load()
+  await run({ query: long })
+  const where = JSON.stringify(fake.calls.filter(c => c.model === 'extractedOpportunity').at(-1)?.args.where)
+  // 8 words in each of the two fields (title, agent).
+  assert.equal(where.match(/"contains"/g)?.length, 16)
+})

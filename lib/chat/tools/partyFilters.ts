@@ -10,7 +10,7 @@
 //   ExtractedOpportunity.buyerArchetype column). Inbox extraction doesn't fill
 //   that column, so a request with none stored also counts when it names the
 //   type in unmistakable words ("1031", "FHA"). A stored type always wins.
-// All of this is an engineering choice for Q15/Q41, not a rule of Ryan's.
+// All of this is for Q15/Q41 [engineering precaution], not a rule of Ryan's.
 import type { Prisma } from '@prisma/client'
 
 // Plain words for the card (no system codes in what Drift reads out), and the
@@ -32,13 +32,26 @@ export function archetypeLabel(code: string | null | undefined): string | null {
   return code && code in BUYER_ARCHETYPES ? BUYER_ARCHETYPES[code as BuyerArchetype].label : null
 }
 
-// Lowercased words, letters and digits only, in any script.
-const words = (s: string | null | undefined): string[] => (s ?? '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)
+// "two-family" and "2-family" are the same words: number words two to nine
+// read as digits, in the query and the fields alike (and in the database below).
+const NUMBER_WORDS: Record<string, string> = { two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9' }
+const DIGIT_WORDS: Record<string, string> = Object.fromEntries(Object.entries(NUMBER_WORDS).map(([w, d]) => [d, w]))
 
-// Words that say nothing about which buyer ("the buyer", "my client").
-const FILLER = new Set(['a', 'an', 'the', 'my', 'for', 'of', 'buyer', 'buyers', 'renter', 'renters', 'client', 'named'])
+// Lowercased words, letters and digits only, in any script. A possessive "'s"
+// goes first ("Pat's buyer" is Pat's), so it isn't a word of its own.
+const words = (s: string | null | undefined): string[] => (s ?? '').toLowerCase().replace(/['\u2019]s\b/g, '')
+  .split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(w => NUMBER_WORDS[w] ?? w)
 
-export const queryWords = (query: string | null | undefined): string[] => words(query).filter(w => !FILLER.has(w))
+// Words that say nothing about which buyer ("the buyer", "my client", "the
+// Example lead", "Pat's search").
+const FILLER = new Set(['a', 'an', 'the', 'my', 'for', 'of', 'buyer', 'buyers', 'renter', 'renters', 'client', 'named',
+  'lead', 'search'])
+
+// At most this many distinct words count, which keeps the database query small.
+export const MAX_QUERY_WORDS = 8
+
+export const queryWords = (query: string | null | undefined): string[] =>
+  [...new Set(words(query).filter(w => !FILLER.has(w)))].slice(0, MAX_QUERY_WORDS)
 
 // Every word appears as a whole word in at least one of the fields.
 export function fieldHasAllWords(fields: Array<string | null | undefined>, want: string[]): boolean {
@@ -57,7 +70,9 @@ export function mentionsArchetype(code: BuyerArchetype, texts: Array<string | nu
 // Typed against Prisma's where input, so a misspelt column fails tsc.
 type TextField = Extract<keyof Prisma.ExtractedOpportunityWhereInput, 'extractedTitle' | 'sourceAgentName' | 'extractedSummary'>
 const has = (field: TextField, w: string): Prisma.ExtractedOpportunityWhereInput =>
-  ({ [field]: { contains: w, mode: 'insensitive' } })
+  DIGIT_WORDS[w]
+    ? { OR: [w, DIGIT_WORDS[w]].map(x => ({ [field]: { contains: x, mode: 'insensitive' } })) }
+    : { [field]: { contains: w, mode: 'insensitive' } }
 
 // The database side of both filters, for the inbox buyer/renter query. Broad on
 // purpose (substring); fieldHasAllWords / mentionsArchetype make it exact.

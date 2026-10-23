@@ -12,6 +12,13 @@ import { CANNED_GENERIC } from '../../../../lib/chat/guards/retry'
 const START = Date.parse('2026-10-19T15:00:00Z')
 const TIMED_OUT = "I couldn't finish that; try a narrower question."
 const reply = (response: string) => anthropicTool('drift_response', { response, suggestions: [], referencedDeals: [] })
+// Brief 43 PR 9 (Q15): a report needs a buyer id that search_parties returned
+// earlier in the turn, so the report tests search for the buyer first.
+const BUSHWICK_BUYER = {
+  id: 'buyer-1', organizationId: 'org-test', category: 'BUYER_ISO', isDuplicate: false, processingStatus: 'active',
+  extractedTitle: 'Bushwick 3-family buyer', neighborhood: 'Bushwick', neighborhoods: ['Bushwick'], isTestData: true,
+}
+const searchBuyer = () => anthropicTool('search_parties', { query: 'Bushwick 3-family' })
 
 async function post(body: Record<string, unknown>) {
   const { POST } = await import('../route')
@@ -166,14 +173,16 @@ test('a turn that saved a report before time ran out keeps its chat, so the repo
     section: real.section,
   }
   try {
+    tables.extractedOpportunity = [BUSHWICK_BUYER]
     ai.script(
+      searchBuyer,
       () => anthropicTool('generate_report', { templateId: 'buyer-match', params: { buyerId: 'buyer-1' } }),
       () => HANG,
     )
     const arrived = ai.arrival()
     let settled = false
     const pending = post({ message: 'buyer match report for the bushwick 3-family buyer' }).finally(() => { settled = true })
-    await arrived // the first call (generate_report)
+    await arrived // the first call (search_parties, then generate_report)
     await flush()
     mock.timers.tick(52_000)
     await flush()
@@ -210,13 +219,17 @@ async function withSlowReport(fn: () => Promise<void>) {
 
 test('a report still being made at the ceiling: the turn ends by 52 s and nothing is saved after the reply', async () => {
   await withSlowReport(async () => {
+    tables.extractedOpportunity = [BUSHWICK_BUYER]
     ai.script(
+      searchBuyer,
       () => { mock.timers.tick(45_000); return anthropicTool('generate_report', { templateId: 'buyer-match', params: { buyerId: 'buyer-1' } }) },
       () => HANG, // the report's own model call (it has no signal)
     )
-    const first = ai.arrival()
+    const search = ai.arrival()
     let settled = false
     const pending = post({ message: 'buyer match report for the bushwick 3-family buyer' }).finally(() => { settled = true })
+    await search
+    const first = ai.arrival()
     await first
     const reportCall = ai.arrival()
     await flush()
@@ -256,7 +269,9 @@ test('a report save under way at the ceiling: the chat keeps the exchange and th
   await withSlowReport(async () => {
     dbDelayMs['chatSession.create'] = 300
     dbDelayMs['report.create'] = 300
+    tables.extractedOpportunity = [BUSHWICK_BUYER]
     ai.script(
+      searchBuyer,
       () => { mock.timers.tick(30_000); return anthropicTool('generate_report', { templateId: 'buyer-match', params: { buyerId: 'buyer-1' } }) },
       () => { mock.timers.tick(21_800); return anthropicText('Widen the price a little.') }, // the report's call ends at 51.8 s
     )

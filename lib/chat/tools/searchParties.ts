@@ -164,7 +164,8 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
   const includeTestData = input.includeTestData ?? true  // seed-only test mode: default on
   // Brief 43 PR 9 (Q15): no guessing. A query of filler words only ("the buyer")
   // finds nothing rather than every buyer.
-  const nameWords = input.query != null ? queryWords(input.query) : null
+  // A blank query is no query (the model sometimes sends "").
+  const nameWords = input.query?.trim() ? queryWords(input.query) : null
   const wantArchetype = input.archetype ?? null
   if (nameWords?.length === 0) return { cards: [], totalMatched: 0, filtersApplied: input }
   const wantBorough = input.borough ?? null

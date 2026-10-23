@@ -167,7 +167,7 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
       // Brief 43 PR 9 (Q15, Q41): lib/chat/tools/partyFilters.ts.
       query: {
         type: 'string',
-        description: 'A buyer\'s or renter\'s name, their agent\'s name, or distinctive words from their request (e.g. "Ridgewood two-family"). Every word must appear as a whole word in the request\'s title, the agent\'s name or the buyer\'s name; no results means nobody by that name is on file. Cards carry agentName.',
+        description: 'A buyer\'s or renter\'s name, their agent\'s name, or a distinctive word from their request\'s title. Every word (up to 8) must appear as a whole word in the request\'s title, the agent\'s name or the buyer\'s name; no results means nobody by that name is on file. Put an area, beds or budget in neighborhoods, bedsMin/bedsMax or priceRangeOverlaps, never in query (a title may spell an area differently). Cards carry agentName.',
       },
       archetype: {
         type: 'string',
