@@ -41,7 +41,7 @@ test('a draft written into the reply is checked like one in the draft field', as
   reset()
   db.mojoContacts = [PAT_ROW]
   const inline = "Here's the draft:\n\nHi Jordan,\n\nPat Example at (718) 555-0142 may sell the 3-family at 88 Example Ave in Bed-Stuy, around $2.1M. It is going through probate.\n\nBest,\nRyan"
-  script.push(anthropicTool('search_parties', { role: 'seller' }), reply(inline), reply(inline))
+  script.push(anthropicTool('find_seller', { name: 'Pat Example' }), reply(inline), reply(inline))
   const { json } = await postChat({ message: "draft a note to my buyer Jordan about Pat Example's house" })
   for (const s of LEAKS) {
     assert.ok(!String(json.response).includes(s), `reply: ${s}`)

@@ -1,14 +1,17 @@
 // Brief 3.0, Step 1b — search_parties tool.
 //
-// Direct DB search over the demand + lead side, callable by Haiku in the chat
+// Direct DB search over the demand side, callable by Sonnet in the chat
 // tool_use loop. Two sources, unified into one card shape:
 //   - ExtractedOpportunity BUYER_ISO / RENTER_INQUIRY  -> other agents' buyers/renters
 //     (co-broke demand from Ryan's inbox)
-//   - MojoContact                                       -> Ryan's personal seller/landlord
-//     leads (real property owners he's prospecting; always real data)
+//   - MojoContact intent BUYER / RENTER                 -> buyers and renters stored in
+//     Ryan's CRM table (Brief 43 PR 5, Q8: buyers, never "sellers")
 //
-// role narrows the source: buyer -> BUYER_ISO, renter -> RENTER_INQUIRY,
-// seller/landlord -> MojoContact. No role -> all three.
+// role narrows the source: buyer -> buyers, renter -> renters, no role -> both.
+// Brief 43 PR 5 (D11 [Ryan, 2026-10-18]): Ryan's CRM sellers are never listed or
+// searched here. role seller/landlord is still accepted (an old or invented call
+// mustn't error) but returns no cards and a note; find_seller gives one named
+// seller's contact and count_sellers a count (lib/chat/tools/findSeller.ts).
 //
 // Borough is derived from neighborhood (getBorough(fromRaw(...))) for the same
 // null-column reason as search_listings. priceRangeOverlaps ("who's looking in
@@ -20,11 +23,13 @@ import { Category, Prisma } from '@prisma/client'
 import { fromRaw, getBorough } from '@/lib/domain/Neighborhood'
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
 import { isTestModeOnly } from '@/lib/config/testMode'
+import { wantedHoods } from './neighborhoodMatch'
 
 export const searchPartiesInputSchema = z.object({
   role: z.enum(['buyer', 'renter', 'seller', 'landlord']).optional(),
   borough: z.string().optional(),
   neighborhoods: z.array(z.string()).optional(),
+  nearby: z.boolean().optional(), // Brief 43 PR 7 (Q13): add the adjacent areas
   beds: z.number().optional(),
   bedsMin: z.number().optional(),
   bedsMax: z.number().optional(),
@@ -39,7 +44,7 @@ export interface PartyCard {
   id: string
   kind: 'party'
   role: 'buyer' | 'renter' | 'seller' | 'landlord'
-  category: string | null // BUYER_ISO / RENTER_INQUIRY / 'MOJO_LEAD'
+  category: string | null // BUYER_ISO / RENTER_INQUIRY / 'CRM_BUYER' / 'CRM_RENTER'
   title: string
   name: string | null
   phone: string | null
@@ -54,7 +59,15 @@ export interface SearchPartiesResult {
   cards: PartyCard[]
   totalMatched: number
   filtersApplied: SearchPartiesInput
+  note?: string // Brief 43 PR 5: set when a seller/landlord search was asked for
 }
+
+// Brief 43 PR 5 (D11 [Ryan, 2026-10-18]): the answer to a seller/landlord search.
+export const SELLERS_NOT_SEARCHABLE = "Sellers aren't searchable in chat; name one to look them up."
+
+const bedsText = (min: number | null, max: number | null): string | null =>
+  min != null && max != null ? (min === max ? `${min} beds` : `${min} to ${max} beds`)
+    : min != null ? `${min}+ beds` : max != null ? `up to ${max} beds` : null
 
 function canon(n: string | null | undefined): string | null {
   if (!n) return null
@@ -85,10 +98,9 @@ function geoMatches(
       const c = canon(h)
       if (c) rowHoods.add(c)
     }
-    const hit = wantHoods.some(w =>
-      rowHoods.has(w) || [...rowHoods].some(r => r.includes(w) || w.includes(r)),
-    )
-    if (!hit) return false
+    // Brief 43 PR 7 (Q13): exact canonical names, so Williamsburg no longer pulls
+    // in East Williamsburg (nor Harlem East Harlem); nearby adds adjacent areas.
+    if (!wantHoods.some(w => rowHoods.has(w))) return false
   }
   return true
 }
@@ -127,6 +139,17 @@ export function bedsMatches(
   return rLo <= qHi && qLo <= rHi
 }
 
+// Brief 43 PR 7 (Q10): does a party's budget fit the asked price (or range)?
+// Scores the asked price nearest the budget against the budget itself, so a
+// $1.0M-$2.0M buyer is a full fit for $1.8M and a max-only $2.0M buyer too (the
+// old test compared the budget's midpoint). Up to 5% past the budget is a near
+// fit (priceOverlapScore's default tolerance); no budget at all is no fit.
+export function budgetOverlap(range: { min: number; max: number }, budgetMin: number | null, budgetMax: number | null): number {
+  const lo = Math.min(range.min, range.max), hi = Math.max(range.min, range.max)
+  const asked = hi < (budgetMin ?? 0) ? hi : lo > (budgetMax ?? Number.POSITIVE_INFINITY) ? lo : Math.max(lo, budgetMin ?? 0)
+  return priceOverlapScore(asked, budgetMin, budgetMax)
+}
+
 export async function searchParties(rawInput: SearchPartiesInput): Promise<SearchPartiesResult> {
   const input = searchPartiesInputSchema.parse(rawInput)
   const organizationId = await getCurrentOrgId()
@@ -134,16 +157,19 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
   const limit = input.limit ?? 50
   const includeTestData = input.includeTestData ?? true  // seed-only test mode: default on
   const wantBorough = input.borough ?? null
-  const wantHoods = (input.neighborhoods ?? []).map(canon).filter((c): c is string => c != null)
+  const wantHoods = wantedHoods(input.neighborhoods, input.nearby)
   const range = input.priceRangeOverlaps ?? null
 
-  // Which sources does the requested role touch?
+  // Brief 43 PR 5 (D11 [Ryan, 2026-10-18]): no seller or landlord lists.
+  if (input.role === 'seller' || input.role === 'landlord') {
+    return { cards: [], totalMatched: 0, filtersApplied: input, note: SELLERS_NOT_SEARCHABLE }
+  }
+
+  // Which sides does the requested role touch?
   const wantOppRoles: Array<'buyer' | 'renter'> =
     input.role === 'buyer' ? ['buyer']
     : input.role === 'renter' ? ['renter']
-    : input.role == null ? ['buyer', 'renter']
-    : [] // seller/landlord -> Mojo only
-  const wantMojo = input.role == null || input.role === 'seller' || input.role === 'landlord'
+    : ['buyer', 'renter']
 
   const cards: PartyCard[] = []
 
@@ -191,10 +217,7 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
 
       let overlap: number | undefined
       if (range) {
-        // Party budget midpoint vs the queried range — reuses the listing helper.
-        const mid = p.minPrice != null && p.maxPrice != null ? (p.minPrice + p.maxPrice) / 2
-          : p.maxPrice ?? p.minPrice
-        overlap = priceOverlapScore(mid ?? null, range.min, range.max)
+        overlap = budgetOverlap(range, p.minPrice, p.maxPrice)
         if (overlap === 0) continue
       }
 
@@ -215,35 +238,53 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
     }
   }
 
-  // ── Mojo CRM seller/landlord leads (always real data) ─────────────────────
-  // TEST_MODE_ONLY hard gate: Mojo is always real data, so skip the entire
-  // block when test mode is on. wantMojo stays computed but the query never runs.
-  if (wantMojo && !isTestModeOnly()) {
-    const leads = await prisma.mojoContact.findMany({
-      where: { organizationId },
-      take: 500,
-      orderBy: { updatedAt: 'desc' },
-      select: {
-        id: true, fullName: true, phone: true, neighborhood: true,
-        city: true, address: true,
-      },
-    })
-    for (const m of leads) {
-      if (!geoMatches(wantBorough, wantHoods, null, [m.neighborhood, m.city, m.address])) continue
-      cards.push({
-        id: m.id,
-        kind: 'party',
-        role: input.role === 'landlord' ? 'landlord' : 'seller',
-        category: 'MOJO_LEAD',
-        title: `${m.fullName}${m.neighborhood ? ` — ${m.neighborhood}` : m.address ? ` — ${m.address}` : ''}`,
-        name: m.fullName,
-        phone: m.phone,
-        neighborhood: m.neighborhood ?? null,
-        beds: null,
-        priceRange: null,
-        isTestData: false,
-      })
+  // ── Buyers and renters stored in Ryan's CRM table (MojoContact intent BUYER/RENTER) ──
+  // Brief 43 PR 5 (Q8): nightly matching already uses them as demand
+  // (lib/matching/adapters.ts mojoContactToBuyerData: neighborhood or
+  // initialNeighborhood, budgetMin/Max, bedsMin/Max). Same test-data rules as the
+  // inbox side above. No phone on the card: Ryan asked about demand, and this
+  // keeps contact details to the one seller he names (D11) [engineering precaution].
+  const intents = wantOppRoles.map(r => (r === 'buyer' ? 'BUYER' : 'RENTER'))
+  const crmWhere: Prisma.MojoContactWhereInput = { organizationId, intent: { in: intents } }
+  if (!includeTestData) crmWhere.isTestData = false
+  if (isTestModeOnly()) crmWhere.isTestData = true
+  const crmParties = await prisma.mojoContact.findMany({
+    where: crmWhere,
+    take: 500,
+    orderBy: { updatedAt: 'desc' },
+    select: {
+      id: true, fullName: true, intent: true, neighborhood: true, initialNeighborhood: true, city: true,
+      bedsMin: true, bedsMax: true, budgetMin: true, budgetMax: true, isTestData: true,
+    },
+  })
+  for (const m of crmParties) {
+    const hood = m.neighborhood ?? m.initialNeighborhood ?? null
+    if (!geoMatches(wantBorough, wantHoods, null, [hood, m.city])) continue
+    if (!bedsMatches(input.beds ?? null, input.bedsMin ?? null, input.bedsMax ?? null, null, m.bedsMin, m.bedsMax)) continue
+
+    let overlap: number | undefined
+    if (range) {
+      // Same budget test as the inbox side above (Brief 43 PR 7, Q10).
+      overlap = budgetOverlap(range, m.budgetMin, m.budgetMax)
+      if (overlap === 0) continue
     }
+
+    const role = m.intent === 'RENTER' ? 'renter' : 'buyer'
+    const beds = bedsText(m.bedsMin, m.bedsMax)
+    cards.push({
+      id: m.id,
+      kind: 'party',
+      role,
+      category: role === 'renter' ? 'CRM_RENTER' : 'CRM_BUYER',
+      title: `CRM ${role}${hood ? ` in ${hood}` : ''}${beds ? `, ${beds}` : ''}`,
+      name: m.fullName,
+      phone: null,
+      neighborhood: hood,
+      beds: m.bedsMin != null && m.bedsMin === m.bedsMax ? m.bedsMin : null,
+      priceRange: m.budgetMin != null && m.budgetMax != null ? [m.budgetMin, m.budgetMax] : null,
+      ...(overlap !== undefined ? { priceOverlapScore: overlap } : {}),
+      isTestData: m.isTestData,
+    })
   }
 
   if (range) cards.sort((a, b) => (b.priceOverlapScore ?? 0) - (a.priceOverlapScore ?? 0))

@@ -7,6 +7,7 @@ import { anthropicTool } from '../../../../lib/__tests__/fakeAiFetch'
 // it reaches the page or the database. The real chat route, with fake Prisma and
 // scripted AI replies; no database, no network. Everyone here is fictional.
 
+// Brief 43 PR 5 (D11): Drift reaches a CRM seller through find_seller; search_parties no longer lists sellers.
 const PAT_ROW = { id: 'mojo_pr3', fullName: 'Pat Example', phone: '7185550142', neighborhood: 'Bedford-Stuyvesant', city: 'Brooklyn', address: '88 Example Ave' }
 const LEAKY = {
   channel: 'email', audience: 'buyer_side', subject: 'The home at 88 Example Ave',
@@ -21,7 +22,7 @@ const assistantRow = () => db.messages.find(m => m.role === 'assistant') as { co
 test('a flagged draft gets one rewrite; when that still leaks, the clean-up reaches the JSON and the database', async () => {
   reset()
   db.mojoContacts = [PAT_ROW]
-  script.push(anthropicTool('search_parties', { role: 'seller' }), reply(LEAKY), reply(LEAKY))
+  script.push(anthropicTool('find_seller', { name: 'Pat Example' }), reply(LEAKY), reply(LEAKY))
   const { status, json } = await postChat({ message: 'draft a note to the buyer about the home at 88 Example Ave' })
   assert.equal(status, 200)
   assert.deepEqual(json.draft, {
@@ -59,7 +60,7 @@ test('a flagged draft gets one rewrite; when that still leaks, the clean-up reac
 test('a clean rewrite is used as it is, signed "Ryan Martin"', async () => {
   reset()
   db.mojoContacts = [PAT_ROW]
-  script.push(anthropicTool('search_parties', { role: 'seller' }), reply(LEAKY), reply(CLEAN))
+  script.push(anthropicTool('find_seller', { name: 'Pat Example' }), reply(LEAKY), reply(CLEAN))
   const { json } = await postChat({ message: 'draft a note to the buyer about the home at 88 Example Ave' })
   assert.deepEqual(json.draft, { ...CLEAN, body: CLEAN.body.replace(/Ryan$/, 'Ryan Martin') })
 })

@@ -19,6 +19,9 @@ import ReportModal from '@/components/ReportModal'
 import ReportPreviewCard from '@/components/ReportPreviewCard'
 import FragmentBlock from '@/components/FragmentBlock'
 import DraftCard from '@/components/chat/DraftCard'
+import SellerCards from '@/components/chat/SellerCard'
+import { splitStoredCards } from '@/components/chat/sellerCardView'
+import type { SellerCard } from '@/lib/chat/sellerCard'
 import { showToast } from '@/components/Toast'
 import type { AttachedReport, AttachedFragment } from '@/lib/reports/uiTypes'
 import type { Draft } from '@/lib/chat/draft'
@@ -111,6 +114,8 @@ interface Message {
   // Brief 43 PR 3 — a draft to copy (the route's `draft`; on reload GET /api/chat
   // reads it back out of the stored reply, carried through via ...m).
   draft?: Draft | null
+  // Brief 43 PR 5: the one CRM seller find_seller returned (stored in dealsJson).
+  sellerCards?: SellerCard[]
   createdAt: string
 }
 
@@ -555,6 +560,9 @@ function MemoryView({
 
                       {/* Brief 43 PR 3 — a draft to copy; nothing sends */}
                       {m.draft && <DraftCard draft={m.draft} />}
+
+                      {/* Brief 43 PR 5 — the CRM seller card (name, phone, Open in CRM) */}
+                      <SellerCards cards={m.sellerCards ?? []} />
 
                       {/* Brief 28.0 — inline fragment (single report section) */}
                       {m.attachedFragment && <FragmentBlock fragment={m.attachedFragment} />}
@@ -1095,7 +1103,7 @@ function ChatPageInner() {
         .then(d => {
           const msgs: Message[] = (d.messages ?? []).map((m: Record<string, unknown>) => ({
             ...m,
-            deals: (m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined) ?? [],
+            ...splitStoredCards((m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined)),
             suggestions: Array.isArray(m.suggestions) ? m.suggestions : [],
           }))
           setMessages(msgs)
@@ -1155,7 +1163,7 @@ function ChatPageInner() {
         return
       }
       if (data.sessionId) setCurrentSessionId(data.sessionId)
-      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, attachedReport: data.attachedReport ?? null, attachedFragment: data.attachedFragment ?? null, draft: data.draft ?? null, createdAt: new Date().toISOString() }])
+      setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], sellerCards: data.sellerCards ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, attachedReport: data.attachedReport ?? null, attachedFragment: data.attachedFragment ?? null, draft: data.draft ?? null, createdAt: new Date().toISOString() }])
     } catch {
       setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: 'Something went wrong. Try again.', createdAt: new Date().toISOString() }])
     } finally { setLoading(false) }
@@ -1170,7 +1178,7 @@ function ChatPageInner() {
       const d = await res.json()
       const msgs: Message[] = (d.messages ?? []).map((m: Record<string, unknown>) => ({
         ...m,
-        deals: (m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined) ?? [],
+        ...splitStoredCards((m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined)),
         suggestions: Array.isArray(m.suggestions) ? m.suggestions : [],
       }))
       setMessages(msgs)
@@ -1258,7 +1266,7 @@ function ChatPageInner() {
                 const d = await res.json()
                 const msgs: Message[] = (d.messages ?? []).map((m: Record<string, unknown>) => ({
                   ...m,
-                  deals: (m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined) ?? [],
+                  ...splitStoredCards((m.dealsJson as unknown[] | undefined) ?? (m.deals as unknown[] | undefined)),
                   suggestions: Array.isArray(m.suggestions) ? m.suggestions : [],
                 }))
                 setMessages(msgs)
