@@ -315,7 +315,7 @@ export async function POST(req: NextRequest) {
             type: 'array',
             items: { type: 'string' },
             // Brief 43 PR 8 (Q14): these are the cards the page shows, in this order.
-            description: 'The ids of the cards you mention, in the order you mention them (e.g. SEED_SALE_06). Ryan sees only these cards, in this order, so "the second one" is the second card you named. Leave it empty only when you mention no card.',
+            description: 'The ids of every card your reply tells Ryan about, in the order you bring them up (e.g. SEED_SALE_06), including ones you only count: "Two sales; the stronger is X" lists both, X first. Ryan sees only these cards, in this order, so "the second one" is the second card here. Leave it empty only when your reply is about no card.',
           },
           // Brief 27.0 — report attachments. Fill attachedReport ONLY on a turn you
           // just called generate_report; fill attachedFragment ONLY on a turn you
@@ -596,10 +596,18 @@ export async function POST(req: NextRequest) {
       if (serverAttachedReport || serverAttachedFragment || creatingSession) {
         const reportSession = await ensureSession()
         const storedUserMsg = files.length > 0 ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]` : userMessage
+        // Brief 43 PR 8 (review r1): the reply keeps the note of the report it saved
+        // (its buyer id and report id), so "just the near-misses for that buyer"
+        // keeps the same buyer after a slow report (#15, #16).
+        const timedOutShown = footerFromTurn({
+          buyerId:  reportBuyerId(toolResultsForGuard),
+          reportId: (serverAttachedReport as AttachedReport | null)?.reportId ?? null,
+        })
         await prisma.chatMessage.create({ data: { organizationId, sessionId: reportSession.id, role: 'user', content: storedUserMsg } })
         await prisma.chatMessage.create({
           data: {
-            organizationId, sessionId: reportSession.id, role: 'assistant', content: TIMED_OUT_REPLY,
+            organizationId, sessionId: reportSession.id, role: 'assistant',
+            content: encodeStoredReply({ response: TIMED_OUT_REPLY, suggestions: [], shown: timedOutShown }),
             attachedReport:   (serverAttachedReport ?? undefined) as unknown as object | undefined,
             attachedFragment: (serverAttachedFragment ?? undefined) as unknown as object | undefined,
           },
@@ -865,13 +873,15 @@ export async function POST(req: NextRequest) {
     // (MOJO_LEAD ids belong to MojoContact) surface in Sonnet's text (name+phone),
     // matching the prior pipeline where Mojo was context, not a card.
     const oppCardIds = [...seenCardIds].filter(id => id.length > 0)
+    const hydrated = oppCardIds.length > 0
+      ? await prisma.extractedOpportunity.findMany({ where: { id: { in: oppCardIds } }, include: oppIncludeForCards })
+      : []
     // Brief 43 PR 8 (Q14): the page shows the cards Drift named, in its order, so
     // "the second one" is the second card Ryan sees. A reply that named none shows
     // every card found, best match first, as before (lib/chat/shownFooter.ts).
-    const shownPick = pickShownCards(oppCardIds, aiResult.referencedDeals)
-    const hydrated = shownPick.ids.length > 0
-      ? await prisma.extractedOpportunity.findMany({ where: { id: { in: shownPick.ids } }, include: oppIncludeForCards })
-      : []
+    // Review r1: only a card the page can show counts as named (a CRM contact from
+    // search_parties has none), so a reply naming only those keeps the cards found.
+    const shownPick = pickShownCards(hydrated.map(d => d.id), aiResult.referencedDeals)
     // matchScore: fractional price overlap when the model filtered by budget,
     // else the extraction confidenceScore (unknown-fit fallback, same as before).
     const deals = orderShownDeals(hydrated

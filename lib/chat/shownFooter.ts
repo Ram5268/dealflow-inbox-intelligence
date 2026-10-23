@@ -32,9 +32,10 @@ export type ShownFooter = {
 }
 
 // ── Which cards the page shows ──────────────────────────────────────────────
-// The cards Drift named this turn, in its order: only ids a tool returned this
-// turn count (an invented or stale id is dropped), each once. None left: every
-// card found, ranked by match as before.
+// The cards Drift named this turn, in its order: only cards the page can show
+// count (the route passes the ids a tool returned this turn that loaded as
+// cards, so an invented or stale id, or a CRM contact, is dropped), each once.
+// None left: every card found, ranked by match as before.
 export function pickShownCards(seenIds: readonly string[], referenced: unknown): { ids: string[]; inReplyOrder: boolean } {
   const seen = new Set(seenIds)
   const ids: string[] = []
@@ -146,8 +147,9 @@ export function shownNoteText(f: ShownFooter | null, opts: { withCards: boolean 
 }
 
 // Drift's own copy of a note (it may mimic its history) never reaches Ryan.
-// Linear: a literal, then a negated class.
-export const SHOWN_NOTE_ECHO = /[ \t\n]{0,4}\[Shown with this reply[^\]]*\]/g
+// Linear: a literal, then a negated class. Review r1: any capitalisation, and a
+// copy cut off before its closing bracket.
+export const SHOWN_NOTE_ECHO = /[ \t\n]{0,4}\[Shown with this reply[^\]]*(?:\]|$)/gi
 
 // The buyer this turn's report or report section was for: the last report tool
 // call that produced one (only those reach the guard's tool results).

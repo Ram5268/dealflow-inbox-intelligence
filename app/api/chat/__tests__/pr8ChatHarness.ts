@@ -17,6 +17,7 @@ export const db = {
   messages: [] as Row[],
   reports: [] as Row[],
   interactions: [] as Row[],
+  crmContacts: [] as Row[], // review r1: CRM contacts search_parties returns (no card on the page)
 }
 let seq = 0
 const newId = (p: string) => `${p}_${++seq}`
@@ -32,6 +33,7 @@ function oppMatches(row: Row, where: Row = {}): boolean {
 
 const models: Record<string, Record<string, (args: Args) => Promise<unknown>>> = {
   organization: { findUnique: async () => ({ id: 'org_pr8' }) },
+  mojoContact: { findMany: async () => db.crmContacts },
   chatSession: {
     findUnique: async ({ where }) => db.sessions.find(s => s.id === where?.id) ?? null,
     create: async ({ data }) => { const row = { id: newId('sess'), title: null, ...data }; db.sessions.push(row); return row },
@@ -107,7 +109,7 @@ ai.reply(req => {
 })
 
 export function reset() {
-  db.opportunities = []; db.sessions = []; db.messages = []; db.reports = []; db.interactions = []
+  db.opportunities = []; db.sessions = []; db.messages = []; db.reports = []; db.interactions = []; db.crmContacts = []
   script.length = 0; driftCalls.length = 0
 }
 

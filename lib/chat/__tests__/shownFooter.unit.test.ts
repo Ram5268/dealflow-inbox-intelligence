@@ -137,6 +137,9 @@ test("Drift's copy of a note is taken out of its reply (linear on long input)", 
   assert.equal('88 Example Ave fits. [Shown with this reply: 1) 88 Example Ave (id opp_88)]'.replace(SHOWN_NOTE_ECHO, ''), '88 Example Ave fits.')
   assert.equal('Two.\n\n[Shown with this reply: Buyer id: b]\nMore.'.replace(SHOWN_NOTE_ECHO, ''), 'Two.\nMore.')
   assert.equal('A [note] stays.'.replace(SHOWN_NOTE_ECHO, ''), 'A [note] stays.')
+  // Review r1 (nit): another capitalisation, or a copy cut off before its bracket.
+  assert.equal('Two. [shown with this reply: 1) 88 Example Ave (id opp_88)]'.replace(SHOWN_NOTE_ECHO, ''), 'Two.')
+  assert.equal('Two.\n\n[Shown with this reply: 1) 88 Example Ave (id opp_88'.replace(SHOWN_NOTE_ECHO, ''), 'Two.')
   const t0 = Date.now()
   ;(' '.repeat(50_000) + '[Shown with this reply' + 'x'.repeat(200_000)).replace(SHOWN_NOTE_ECHO, '')
   assert.ok(Date.now() - t0 < 500)
@@ -150,6 +153,8 @@ test('RYAN_MD: "that one" comes from the Shown note, not a tool result that is n
   assert.match(s3, /"The second one" is item 2 of the latest card list/)
   assert.match(s3, /"that buyer" or "same buyer" is the latest buyer id/)
   assert.match(s3, /Never write one/)
+  // Review r1 (nit): after a drill-down to one card, an ordinal still counts in the earlier list.
+  assert.match(s3, /doesn't replace that list/)
   assert.match(s3, /"Which buyer\?" or "Which listing\?"/)
 })
 
@@ -157,4 +162,6 @@ test('drift_response: the cards Ryan sees are the ones Drift names, in its order
   const route = readFileSync(join(ROOT, 'app/api/chat/route.ts'), 'utf8')
   assert.doesNotMatch(route, /does not gate which cards Ryan sees/)
   assert.match(route, /Ryan sees only these cards, in this order/)
+  // Review r1: a card Drift only counts is named too (#4 "Two coming-soon sales; the stronger is ...", then #5).
+  assert.match(route, /including ones you only count/)
 })

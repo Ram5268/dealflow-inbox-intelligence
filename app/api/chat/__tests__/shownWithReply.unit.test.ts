@@ -153,3 +153,36 @@ test('older stored replies (plain text, or JSON with no note) still load', async
   const { messages } = await getChat('sess_old')
   assert.deepEqual(messages.filter(m => m.role === 'assistant').slice(0, 2).map(m => m.content), ['Two coming-soon sales in Bed-Stuy.', "Here's a draft."])
 })
+
+// Review r1: a CRM contact from search_parties (a CRM seller today, a CRM buyer
+// after PR 5) has no card on the page. A reply that names only such contacts
+// must not hide the listing cards found.
+test('naming only a CRM contact keeps the cards found, best match first; naming one listing too shows that one', async () => {
+  for (const [named, expected] of [[['crm_1'], ['opp_188', 'opp_88', 'opp_12']], [['crm_1', 'opp_12'], ['opp_12']]] as const) {
+    reset()
+    db.opportunities = [...LISTINGS]
+    db.crmContacts = [{ id: 'crm_1', fullName: 'Pat Example', phone: '(718) 555-0142', intent: 'BUYER', isTestData: false, neighborhood: 'Bedford-Stuyvesant', city: 'Brooklyn', address: '77 Sample St' }]
+    script.push(
+      anthropicTool('search_listings', { category: ['COMING_SOON_SALE'] }),
+      anthropicTool('search_parties', { neighborhoods: ['Bedford-Stuyvesant'] }),
+      reply('Three coming-soon sales, and your contact in Bed-Stuy.', [...named]),
+    )
+    const { json } = await postChat({ message: 'any coming soon in bedstuy?' })
+    assert.deepEqual(ids(json.deals), expected, JSON.stringify(named))
+    // The homeowner's details never ride along in the stored note.
+    assert.ok(!/Pat Example|555-0142|77 Sample St|crm_1/.test(assistantRows()[0].content), assistantRows()[0].content)
+  }
+})
+
+// Review r1: the guard's prior-cards grounding (the last reply's dealsJson) still
+// covers a card Ryan saw, a turn later, with no new search.
+test("a fact from a card Ryan saw is still grounded next turn (the guard's prior cards)", async () => {
+  reset()
+  db.opportunities = [{ ...LISTINGS[1], extractedTitle: 'Coming soon from Example Holdings LLC' }, LISTINGS[0]]
+  script.push(anthropicTool('search_listings', { category: ['COMING_SOON_SALE'] }), reply('88 Example Ave at $1,850,000.', ['opp_88']))
+  const first = await postChat({ message: 'any coming soon in bedstuy?' })
+  script.push(reply('Example Holdings LLC has 88 Example Ave coming soon.', ['opp_88']))
+  const second = await postChat({ message: 'who is selling the first one?', sessionId: first.json.sessionId })
+  assert.equal(second.json.response, 'Example Holdings LLC has 88 Example Ave coming soon.')
+  assert.equal(driftCalls.length, 3, 'no guard retry')
+})
