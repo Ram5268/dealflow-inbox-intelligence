@@ -15,6 +15,7 @@ from . import config
 from .deeds import deed_table, match_deeds
 from .features import alteration_events, base_features, cond_features, month_indexes, r2_features, xy
 from .frame import build_frame, class_group, roll_for, roll_releases_of, subjects
+from .gapfill import deed_sales, missing_months
 from .raw import Raw
 from .sales import build_sales
 
@@ -37,6 +38,15 @@ class Inputs:
         log(f"sales: {len(self.sales):,} rows, cut-over {self.sales_info['cutover']}, through {self.sales_info['rolling_last_sale']} ({time.time() - t0:.0f}s)")
         self.pluto = raw.pluto().drop_duplicates("bbl").reset_index(drop=True)
         self.deeds = deed_table(raw.acris_master(), raw.acris_legals())
+        # Brief 49 PR 6 (Ryan's open item 5.4): months neither sales file covers yet (a run between
+        # February and June) are rebuilt from ACRIS deeds, then matched and screened like any sale.
+        gap = missing_months(self.sales_info)
+        added = deed_sales(self.deeds, self.pluto, self.sales, gap)
+        if len(added):
+            self.sales = pd.concat([self.sales, added], ignore_index=True)
+        self.sales_info.update(gap_months_rebuilt=len(gap), gap_sales_rebuilt=int(len(added)))
+        if gap:
+            log(f"sales: {len(added):,} rebuilt from ACRIS deeds for {len(gap)} month(s) neither DOF file covers yet ({gap[0].date()}..{gap[-1].date()})")
         self.cand = match_deeds(self.sales, self.deeds, self.end)
         log(f"deeds matched: {int(self.cand['acris_matched'].sum()):,} of {len(self.cand):,} 1-4 family sales since {config.ACRIS_START.date()} ({time.time() - t0:.0f}s)")
         self.roll = raw.roll(set(self.cand["bbl"]))

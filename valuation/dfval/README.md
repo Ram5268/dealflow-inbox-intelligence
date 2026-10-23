@@ -57,7 +57,10 @@ VALUATION_IMPORT_SECRET=... python -m valuation.dfval run --data <folder> --out 
    rolling file covers the last 12 months and the annualized file whole years, so they overlap; the
    cut-over is chosen each run as the first full month of the rolling file, and each sale comes from
    exactly one source. Tax-lot numbers are rebuilt from borough, block and lot (the city's own `bbl`
-   column points condo sales at the billing lot).
+   column points condo sales at the billing lot). Between February and June the two files leave 1–4
+   months uncovered (the annualized year posts about June); those months are rebuilt from the ACRIS
+   deeds of 1–4 family lots, with the building's PLUTO facts, and then matched and screened like DOF
+   sales (`gapfill.py`, Brief 49).
 2. **Deeds.** Each 1–4 family sale since July 2022 is matched to its ACRIS deed (Master + Legals
    only; the property's borough comes from Legals). Exact repeated rows in the city's files are
    dropped; repeated documents that differ in amount or share stay as candidates, and the sale's
