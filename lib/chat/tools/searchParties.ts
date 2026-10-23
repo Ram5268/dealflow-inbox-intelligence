@@ -264,10 +264,8 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
 
     let overlap: number | undefined
     if (range) {
-      // Same budget test as the inbox side above.
-      const mid = m.budgetMin != null && m.budgetMax != null ? (m.budgetMin + m.budgetMax) / 2
-        : m.budgetMax ?? m.budgetMin
-      overlap = priceOverlapScore(mid ?? null, range.min, range.max)
+      // Same budget test as the inbox side above (Brief 43 PR 7, Q10).
+      overlap = budgetOverlap(range, m.budgetMin, m.budgetMax)
       if (overlap === 0) continue
     }
 
