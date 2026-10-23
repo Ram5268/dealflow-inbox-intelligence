@@ -42,7 +42,8 @@ def build_sales(raw: Raw) -> tuple[pd.DataFrame, dict]:
     cut = rolling_cutover(rol["date"])
     ann = ann[ann["date"] < cut]
     rol = rol[rol["date"] >= cut]
-    # Months with no sales in either file (the annualized year not yet posted): reported, not filled.
+    # Months with no sales in either file (the annualized year not yet posted): counted here and
+    # rebuilt from ACRIS deeds later, once the deeds are loaded (gapfill.py, Brief 49 PR 6).
     ann_last = ann["date"].max()
     gap_months = max(0, (cut.year - ann_last.year) * 12 + cut.month - ann_last.month - 1) if pd.notna(ann_last) else None
     allf = pd.concat([xls, ann, rol], ignore_index=True)

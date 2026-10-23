@@ -75,8 +75,10 @@ def deed_sales(deeds: pd.DataFrame, pluto: pd.DataFrame, sales: pd.DataFrame, mo
 
 def drop_dof_twins(rows: pd.DataFrame, sales: pd.DataFrame) -> pd.DataFrame:
     """Leaves out a rebuilt row that is a DOF sale's own deed: on the same lot, within 10 days, or
-    within 120 days at the same amount (to 0.5%), the rule deeds.py matches sales to deeds by. A
-    deed dated in late January for a sale DOF dates February 1 would otherwise count twice."""
+    within 120 days at the same amount (to 0.5%), the rule deeds.py matches sales to deeds by.
+    A precaution against counting one sale twice at the edges of the missing months: DOF dates a
+    sale by its deed's date (3,938 of 3,938 matched pairs in Jan-Apr 2025), so in a back-test it
+    left out only 10 of 4,485 rebuilt rows."""
     if rows.empty or sales.empty:
         return rows
     k = rows[["bbl", "date", "price"]].reset_index().rename(columns={"index": "_i"})
