@@ -57,6 +57,7 @@ test("the playbook describes the lookups DealFlow actually does", () => {
   assert.doesNotMatch(RYAN_MD, /Trigger ACRIS lookup/i)
   assert.doesNotMatch(RYAN_MD, /to trigger the ACRIS fetch/i)
   assert.doesNotMatch(RYAN_MD, /auto-populates if X was in a recent tool result/i)
+  assert.doesNotMatch(RYAN_MD, /ACRIS lookup, whatever/) // review r1/r2: STEP 2 lists no records lookup as a tool call
   assert.match(RYAN_MD, /address in Ryan's previous message/)
   assert.match(RYAN_MD, /ask Ryan for the address/i)
 })

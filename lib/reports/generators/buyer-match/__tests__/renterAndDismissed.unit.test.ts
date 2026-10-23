@@ -65,6 +65,35 @@ test('a buyer still gets the mortgage read at the current rate', async () => {
   assert.ok(s.sources.some(x => x.type === 'fred'))
 })
 
+// Review r2: a buyer or renter who gave only a minimum ("$3,000+"; mapISO
+// stores minPrice 3000 and price 3000) has no ceiling. The budget check used to
+// read that minimum as the ceiling ("up to $3,000 a month; 0 of the 3 matched
+// rentals are within it") while the same report's fit lines called them "in
+// budget". It now says the budget starts there, with no maximum on file.
+test('a minimum-only budget is never read as a ceiling', async () => {
+  const floorRenter = emailBuyer({ id: 'renter_floor', category: 'RENTER_INQUIRY', neighborhoods: ['Crown Heights'],
+    minBeds: null, maxBeds: null, minPrice: 3000, maxPrice: null })
+  const floorBuyer = emailBuyer({ id: 'buyer_floor', minPrice: 1_600_000, maxPrice: null })
+  assert.deepEqual([floorRenter.price, floorBuyer.price], [3000, 1_600_000], 'stored the way mapISO stores them')
+  const flats = [3200, 3500, 3800].map((price, n) => emailListing({ id: `floor_rental_${n}`, category: 'RENTAL_LISTING', price, beds: 1 }))
+  const db = makeFakePrisma({
+    extractedOpportunity: [floorRenter, floorBuyer, ...flats],
+    mojoContact: [],
+    match: flats.map(f => listingMatch(f.id as string, 'renter_floor')),
+    matchDismissal: [],
+  }).prisma as unknown as PrismaClient
+
+  const rent = await budgetRealitySection(await gatherContext({ buyerId: 'renter_floor', prisma: db }))
+  assert.doesNotMatch(rent.content.prose ?? '', /up to|within it/, rent.content.prose)
+  assert.match(rent.content.prose ?? '', /The renter's budget starts at \$3,000 a month, with no maximum on file\./)
+  assert.ok(!(rent.content.metrics ?? []).some(m => m.label === 'Budget ceiling'))
+
+  const buy = await budgetRealitySection(await gatherContext({ buyerId: 'buyer_floor', prisma: db }))
+  assert.doesNotMatch(buy.content.prose ?? '', /ceiling is|20% down|mortgage/, buy.content.prose)
+  assert.match(buy.content.prose ?? '', /The buyer's budget starts at \$1,600,000, with no maximum on file\./)
+  assert.ok(!buy.sources.some(x => x.type === 'fred'), 'no mortgage read without a ceiling')
+})
+
 test('a dismissed match stays out of the report, whichever way the dismissal is stored', async () => {
   const report = await generateBuyerMatchReport({ buyerId: 'buyer_m29', prisma })
   assert.match(report.markdown, /\b101 Sample St/)

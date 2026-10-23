@@ -12,7 +12,7 @@ import type { GenContext, MatchedListing, SectionResult, SourceRef } from '../..
 import { nowISO } from '../../types'
 // Relative (not @/) so the generator chain runs under ts-node in `npm test`.
 import { getCurrentMortgageRate, estimateMonthlyPayment } from '../../../../mortgageRates'
-import { money, budgetCeiling } from './_format'
+import { money, budgetCeiling, noCeilingLine } from './_format'
 
 function median(xs: number[]): number | null {
   if (!xs.length) return null
@@ -68,7 +68,7 @@ export async function budgetRealitySection(ctx: GenContext): Promise<SectionResu
 
   const budgetProse = ceiling != null
     ? ` The buyer's ceiling is ${money(ceiling)}.`
-    : ` The buyer's budget ceiling is not on file.`
+    : noCeilingLine(b, 'buyer', money)
 
   return {
     key: 'budget-reality',
@@ -109,7 +109,7 @@ function renterBudgetSection(ctx: GenContext, matches: MatchedListing[]): Sectio
     prose += '.'
     metrics.push({ label: 'Budget ceiling', value: perMonth(ceiling), source: 'inbox' })
   } else {
-    prose += ` The renter's budget is not on file.`
+    prose += noCeilingLine(ctx.buyer, 'renter', perMonth)
   }
 
   return {
