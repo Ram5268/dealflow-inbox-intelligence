@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import type { MatchFitResult } from '../scorerTypes'
 import { HOT_MIN_FIT, WARM_MIN_FIT } from '../tiers'
 import { fitReason } from '../fitReason'
@@ -22,8 +23,18 @@ export interface Candidate {
 // Review Queue ('needs_review') are skipped [planner's fix list, approved by Ryan
 // 2026-10-19; Brief 40 audit M11], and so are ones closed there as rejected or
 // stale [engineering precaution]. Both columns are non-null with defaults, so
-// there's no null trap. Mojo buyer contacts are unchanged.
-export const IN_PLAY_BUYER_REQUEST = { isDuplicate: false, processingStatus: 'active' } as const
+// there's no null trap. A request read out of a sold comp (provenance
+// 'comp_reference') isn't a live buyer either, as in Drift's party search
+// [engineering precaution; Brief 40 audit M11, Brief 6.3]. That column is
+// nullable, so the OR is the null-safe form (see EXCLUDE_COMP_REFERENCE in
+// lib/matching/engine.ts). Requests still active with a pending Review Queue
+// item (a warning flag, such as low confidence) are still scored, as everywhere
+// else in the app. Mojo buyer contacts are unchanged.
+export const IN_PLAY_BUYER_REQUEST = {
+  isDuplicate: false,
+  processingStatus: 'active',
+  OR: [{ provenance: null }, { provenance: { not: 'comp_reference' } }],
+} satisfies Prisma.ExtractedOpportunityWhereInput
 
 export { HOT_MIN_FIT, WARM_MIN_FIT }
 export const tierOf = (mf: number): 'HOT' | 'WARM' | 'POSSIBLE' => (mf >= HOT_MIN_FIT ? 'HOT' : mf >= WARM_MIN_FIT ? 'WARM' : 'POSSIBLE')

@@ -233,6 +233,9 @@ test('one AuditLog row, CRM_IMPORT_SCORING, with counts only', async () => {
   assert.equal(details.requested, REQUEST_IDS.length)
   assert.equal(details.scored, 3)
   assert.equal(details.ranked, 2)
+  // Brief 48 (PR 10): the 7 buyer requests and the Mojo buyer are all scored, so
+  // the in-play buyer filter can't quietly empty this fixture's demand.
+  assert.equal((details.scoring as Row).buyers, 8)
 })
 
 test('SCORING_INCLUDE_TEST_BUYERS: test buyers count as demand only when it is exactly "true"', async () => {

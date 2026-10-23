@@ -11,8 +11,8 @@ import { runNightlyScoring } from '../runScoring'
 // Review Queue, used to count as a buyer: it took places in sellers' top 10, the
 // call list ranked on it, and the CRM showed it as a matching buyer [planner's fix
 // list, approved by Ryan 2026-10-19]. Rejected and stale requests (closed in the
-// Review Queue) are left out the same way [engineering precaution]. Every buyer
-// and seller here is invented.
+// Review Queue), and requests read out of a sold comp, are left out the same way
+// [engineering precaution]. Every buyer and seller here is invented.
 
 const quiet = async <T>(fn: () => Promise<T>): Promise<T> => {
   const { warn, error } = console
@@ -37,6 +37,8 @@ const DUPLICATE_FLAG_ONLY = isoBuyer('buyer-b-copy', {
 const IN_REVIEW = isoBuyer('buyer-in-review', { maxPrice: 1_700_000, processingStatus: 'needs_review' })
 const REJECTED = isoBuyer('buyer-rejected', { maxPrice: 1_700_000, processingStatus: 'rejected' })
 const STALE = isoBuyer('buyer-stale', { maxPrice: 1_700_000, processingStatus: 'stale' })
+const COMP = isoBuyer('buyer-comp', { maxPrice: 1_700_000, provenance: 'comp_reference' })
+const RECOVERED = isoBuyer('buyer-recovered', { maxPrice: 1_700_000, provenance: 'buried_recovery' })
 const counterparts = (matches: Row[]) => new Set(matches.map(m => m.counterpartId))
 
 test('a buyer request marked duplicate is not scored', async () => {
@@ -70,4 +72,30 @@ test('otherwise the night is the same as one without those requests', async () =
   // The fixture really scores: every seller has a match, and the in-play buyers are all used.
   assert.equal(without.result.sellersCovered, without.result.sellers)
   assert.deepEqual([...counterparts(without.matches)].sort(), [...BUYERS.map(b => b.id), MOJO_BUYER.id].sort())
+})
+
+test('a request read out of a sold comp is not scored; a recovered one and a plain one are', async () => {
+  const { result, matches } = await night(orgTables({ extractedOpportunity: [...BUYERS.map(b => ({ ...b, provenance: null })), COMP, RECOVERED] }))
+  assert.equal(result.buyers, BUYERS.length + 2, 'the 4 plain requests, the recovered one and the Mojo buyer')
+  assert.equal(counterparts(matches).has('buyer-comp'), false)
+  assert.equal(counterparts(matches).has('buyer-recovered'), true)
+})
+
+test('the night after a request is marked duplicate or sent back to review, its old matches are deleted and the places refilled', async () => {
+  process.env.SCORING_INCLUDE_TEST_BUYERS = 'true'
+  const x = isoBuyer('buyer-x', { maxPrice: 1_700_000 })
+  const y = isoBuyer('buyer-y', { maxPrice: 1_650_000, buyerArchetype: 'CASH_BUYER' })
+  current.world = nightlyWorld(orgTables({ extractedOpportunity: [...BUYERS, x, y] }))
+  await quiet(() => runNightlyScoring())
+  const held = current.world.data.match.filter(m => m.counterpartId === 'buyer-x' || m.counterpartId === 'buyer-y').length
+  assert.ok(held > 0, 'the two requests hold matches on night 1')
+  for (const o of current.world.data.extractedOpportunity) {
+    if (o.id === 'buyer-x') Object.assign(o, { isDuplicate: true, processingStatus: 'duplicate' })
+    if (o.id === 'buyer-y') Object.assign(o, { processingStatus: 'needs_review' })
+  }
+  const second = (await quiet(() => runNightlyScoring())) as unknown as Row
+  assert.equal(current.world.data.match.filter(m => m.counterpartId === 'buyer-x' || m.counterpartId === 'buyer-y').length, 0)
+  assert.equal(second.deleted, held)
+  const fresh = await night(orgTables())
+  assert.equal(second.kept, fresh.result.kept)
 })
