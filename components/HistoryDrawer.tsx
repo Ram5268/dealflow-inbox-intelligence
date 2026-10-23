@@ -2,6 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { shouldRetitle } from '@/lib/chat/retitleOnce'
+
+// Brief 43 PR 16 (Q36): the untitled chats already sent for titling in this page load.
+const retitleAsked = new Set<string>()
 
 interface Session {
   id: string
@@ -249,8 +253,8 @@ export default function HistoryDrawer({ isOpen, onClose, onNewChat, givenName }:
       .then(r => r.json())
       .then(async d => {
         setSessions(d.sessions ?? [])
-        const hasUntitled = (d.sessions ?? []).some((s: Session) => !s.title) && !showArchived
-        if (hasUntitled) {
+        // Brief 43 PR 16 (Q36): once per untitled chat per page load, not on every open.
+        if (!showArchived && shouldRetitle(d.sessions ?? [], retitleAsked)) {
           try {
             await fetch('/api/chat/retitle', { method: 'POST' })
             const r2 = await fetch(`/api/chat/sessions${showArchived ? '?archived=true' : ''}`)

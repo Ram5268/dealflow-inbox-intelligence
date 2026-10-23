@@ -94,8 +94,14 @@ test('route: the grounding is this turn\'s tool results and side lookups, not RY
   const src = readFileSync(join(__dirname, '../../../../app/api/chat/route.ts'), 'utf8')
   const call = src.match(/const groundingCorpus = buildGuardGrounding\(([^)]*)\)/)
   assert.ok(call, 'the route builds its grounding with buildGuardGrounding')
-  assert.match(call[1], /toolResultsForGuard, priorDealCards, dynamicSystemBlock/)
+  // Brief 43 PR 16 (review r1): turnFacts is the side-lookup block plus the attached files' text.
+  assert.match(call[1], /toolResultsForGuard, priorDealCards, (?:dynamicSystemBlock|turnFacts)/)
   assert.doesNotMatch(call[1], /RYAN_MD|sideChannelText/)
+  const facts = src.match(/const turnFacts = (.*)/)
+  if (facts) {
+    assert.match(facts[1], /^\[dynamicSystemBlock, await fileFactsText\]/)
+    assert.doesNotMatch(facts[1], /RYAN_MD/)
+  }
   // The deed binding reads the reply it checks.
   assert.match(src, /groundingCorpus,\s*currentResponse,?\s*\)/)
 })

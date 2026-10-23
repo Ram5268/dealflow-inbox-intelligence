@@ -7,7 +7,9 @@ import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { graphEnabled } from '@/lib/graphAccess'
-import { recentHistoryQuery, oldestFirst, historyForModel } from '@/lib/chat/history'
+import { recentHistoryQuery, historyWindow, historyForModel } from '@/lib/chat/history'
+import { buildUserBlocks, fileEvidence, PDF_UNREADABLE_REPLY, type FileData } from '@/lib/chat/fileBlocks'
+import { pdfTextForChat } from '@/lib/attachmentParser'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
@@ -77,13 +79,6 @@ function trimCardForGuard(card: Record<string, unknown>): Record<string, unknown
   return out
 }
 
-interface FileData {
-  name: string
-  mimeType: string
-  type: 'image' | 'text' | 'binary'
-  content: string // base64 for image/binary, plain text for text
-}
-
 async function parseBinary(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
   try {
     if (/\.docx$/i.test(filename) || mimeType.includes('wordprocessingml')) {
@@ -115,6 +110,7 @@ export async function POST(req: NextRequest) {
   // lib/spendGuard.ts.
   const spendRefusal = await guardChat(req)
   if (spendRefusal) return spendRefusal
+  let hadPdf = false // Brief 43 PR 16 (review r1): for the catch below
   try {
     const body = await req.json()
     const userMessage: string = (body.message ?? '').trim()
@@ -140,7 +136,8 @@ export async function POST(req: NextRequest) {
 
     // Load conversation history for this session only: the newest 30 messages,
     // oldest first (Brief 41: it used to be the oldest 30).
-    const history = session ? oldestFirst(await prisma.chatMessage.findMany(recentHistoryQuery(session.id))) : []
+    // Brief 43 PR 16 (Q43): and whether older messages were left out, so the model is told.
+    const { history, earlierNotShown } = historyWindow(session ? await prisma.chatMessage.findMany(recentHistoryQuery(session.id)) : [])
 
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
@@ -257,39 +254,18 @@ export async function POST(req: NextRequest) {
     // actually returned), not pre-fetched from a retrieval pool.
     const oppIncludeForCards = { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } }
 
-    // ── Process files into text + Anthropic image blocks ────────────────────
-    // Anthropic image source is raw base64 (NOT a data: URL) and requires
-    // media_type ∈ {image/jpeg, image/png, image/gif, image/webp}.
-    type AImagePart = {
-      type: 'image'
-      source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string }
-    }
-    type ATextPart = { type: 'text'; text: string }
-    type AUserPart = ATextPart | AImagePart
-
-    const imageParts: AImagePart[] = []
-    let textContent = userMessage || '(Please analyze the attached file.)'
-
-    for (const file of files) {
-      if (file.type === 'image') {
-        const mt = file.mimeType as AImagePart['source']['media_type']
-        const media_type: AImagePart['source']['media_type'] =
-          mt === 'image/jpeg' || mt === 'image/png' || mt === 'image/gif' || mt === 'image/webp' ? mt : 'image/png'
-        imageParts.push({
-          type: 'image',
-          source: { type: 'base64', media_type, data: file.content },
-        })
-      } else if (file.type === 'text') {
-        textContent += `\n\n--- File: ${file.name} ---\n${file.content.slice(0, 15000)}\n---`
-      } else if (file.type === 'binary') {
-        const buffer = Buffer.from(file.content, 'base64')
-        const extracted = await parseBinary(buffer, file.name, file.mimeType)
-        textContent += `\n\n--- File: ${file.name} ---\n${extracted.slice(0, 15000)}\n---`
-      }
-    }
+    // ── Process files into Anthropic text, image and PDF blocks ─────────────
+    // Brief 43 PR 16 (Q30, Q42; N9, E-03): a PDF goes as a document block Claude
+    // reads, and a file cut at 15,000 characters says so (lib/chat/fileBlocks.ts).
+    const userBlocks = await buildUserBlocks(userMessage, files, parseBinary)
+    hadPdf = userBlocks.some(b => b.type === 'document')
+    // Brief 43 PR 16 (review r1): the files' text for both checks below (turnFacts),
+    // pulled while Drift works, for at most LOOKUP_TIMEOUT_MS.
+    const fileFactsText = files.length > 0
+      ? withTimeout(fileEvidence(userBlocks, pdfTextForChat), LOOKUP_TIMEOUT_MS, 'file text').then(r => (isTimedOut(r) ? null : r), () => null)
+      : Promise.resolve(null)
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const userBlocks: AUserPart[] = [{ type: 'text', text: textContent }, ...imageParts]
 
     // ── System prompt: SYSTEM_PROMPT + RYAN_MD cached; dynamic side-channel block uncached ──
     // The dynamic block carries composeContext's side-channels (live StreetEasy,
@@ -373,7 +349,8 @@ export async function POST(req: NextRequest) {
     // Brief 43 PR 3 (review r1): a reply stored as JSON (a draft) goes to the model
     // as its text plus the draft, the way the draft rewrite shows it, not as JSON.
     // Brief 43 PR 8 (Q14): and the note of the cards, buyer and report it showed.
-    const anthropicHistory: Anthropic.Messages.MessageParam[] = historyForModel(history)
+    // Brief 43 PR 16 (Q43): a long chat's first turn says "(earlier messages not shown)".
+    const anthropicHistory: Anthropic.Messages.MessageParam[] = historyForModel(history, { earlierNotShown })
     // Brief 43 PR 8 x PR 9 (#16): the buyers and cards earlier replies showed.
     const shownInChat = shownIdsInChat(history)
 
@@ -750,7 +727,10 @@ export async function POST(req: NextRequest) {
     // "per ACRIS" used to look grounded. Both checks now read this turn's tool
     // results and side-lookup blocks; deed facts bind to this turn's ACRIS block
     // (toolBinding.ts) [engineering precaution].
-    const groundingCorpus = buildGuardGrounding(toolResultsForGuard, priorDealCards, dynamicSystemBlock || null)
+    // Brief 43 PR 16 (review r1): plus what Drift read in this turn's files, so a
+    // correct reply quoting an attached file isn't flagged as made up.
+    const turnFacts = [dynamicSystemBlock, await fileFactsText].filter(Boolean).join('\n\n') || null
+    const groundingCorpus = buildGuardGrounding(toolResultsForGuard, priorDealCards, turnFacts)
 
     if (guardApplies) {
       let attempt = 0
@@ -774,15 +754,18 @@ export async function POST(req: NextRequest) {
         // side-lookup facts (lib/chat/guards/factFree.ts) [engineering precaution].
         const factFree = !skipRepeat && !factCheckNeeded({
           reply: currentResponse, draft: normalizeDraft(currentDraft),
-          toolCalls: toolResultsForGuard.length, factLookups: composed.factLookups,
+          // Brief 43 PR 16 (review r1): an attached file counts as a lookup, so a
+          // reply on a file turn always gets the fact-check.
+          toolCalls: toolResultsForGuard.length, factLookups: composed.factLookups + (files.length > 0 ? 1 : 0),
         })
         // Brief 43 PR 15 (Q31): the fact-check gets this turn's side-lookup text
         // without RYAN_MD (rules and vocabulary, not facts: about 3,100 tokens on
         // every call). The regex grounding (groundingCorpus) is unchanged here.
+        // Brief 43 PR 16 (review r1): both also get the files' text (turnFacts).
         const checked = budget.pastHard() || skipRepeat || factFree
           ? null
           : await withTimeout(
-              verifyResponse(userMessage || queryText, toolResultsForGuard, dynamicSystemBlock || null, withDraft(currentResponse, currentDraft)),
+              verifyResponse(userMessage || queryText, toolResultsForGuard, turnFacts, withDraft(currentResponse, currentDraft)),
               budget.msLeft(TURN_CEILING_MS), 'fact-check')
         if (!skipRepeat && !factFree && (!checked || isTimedOut(checked))) factCheckSkipped = true
         const verifier = skipRepeat
@@ -1084,6 +1067,16 @@ export async function POST(req: NextRequest) {
       draft,
     })
   } catch (err) {
+    // Brief 43 PR 16 (review r1): when the AI refuses a message with a PDF (a
+    // locked or damaged file), Ryan gets a calm reply, not the raw error
+    // [engineering precaution]. Nothing is saved.
+    if (hadPdf && err instanceof Anthropic.BadRequestError) {
+      console.error('[DealFlow] Chat API: the AI refused a message with a PDF:', err.status)
+      return NextResponse.json({
+        response: PDF_UNREADABLE_REPLY, deals: [], seListings: [], seFilterUrl: null,
+        attachedReport: null, attachedFragment: null, draft: null,
+      })
+    }
     console.error('[DealFlow] Chat API error:', err)
     return NextResponse.json(
       { error: String(err), response: `Server error: ${String(err)}` },

@@ -47,7 +47,10 @@ export async function POST(req: NextRequest) {
     if (!session) {
       if (writeToChat) {
         const organizationId = await getCurrentOrgId()
-        session = await prisma.chatSession.create({ data: { organizationId }, select: { id: true, organizationId: true } })
+        // Brief 43 PR 16 (Q36; N13): titled from the template name, since the chat
+        // has no message of Ryan's for the title call to read (it stayed untitled
+        // and kept History's retitle call going).
+        session = await prisma.chatSession.create({ data: { organizationId, title: template.name }, select: { id: true, organizationId: true } })
       } else if (!sessionId) {
         return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
       } else {
