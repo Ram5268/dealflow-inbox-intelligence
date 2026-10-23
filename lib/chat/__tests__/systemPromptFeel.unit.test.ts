@@ -104,8 +104,10 @@ test('D8: while Outlook is off, Drift says so and keeps the details in chat', ()
   assert.match(GRAPH_ON_CALENDAR_NOTE, /plain yes/)
 })
 
-test('RYAN_MD\'s locked-template reply has no em-dash', () => {
-  const line = RYAN_MD.split('\n').find(l => l.startsWith('"That\'s the [template name]'))
-  assert.ok(line, 'the locked-template reply line')
+// Brief 48 PR 19 [Ryan 1.11]: the locked templates are gone; the reply to a
+// request for another report is the line checked now.
+test('RYAN_MD\'s other-report reply has no em-dash', () => {
+  const line = RYAN_MD.split('\n').find(l => l.startsWith('"DealFlow makes one report'))
+  assert.ok(line, 'the other-report reply line')
   assert.ok(!line.includes('—'), line)
 })

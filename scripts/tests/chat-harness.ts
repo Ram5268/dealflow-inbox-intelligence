@@ -151,17 +151,14 @@ const PROMPTS: Prompt[] = [
   { label: 'B30/F53 that buyer we were talking about (fresh)', sessionKey: 'b30-f53',
     msg: 'what about that buyer we were talking about', expect: ['which buyer', '?'] },
 
-  // Block B — Phase 2 locked-template routing (Section 6b must respond, not fabricate).
-  { label: 'B30/P01 CMA locked', sessionKey: 'b30-p01',
-    msg: 'run a CMA on 30 Park Place', expect: ['not', 'unlocked', 'roadmap'] },
-  { label: 'B30/P02 price adjustment locked', sessionKey: 'b30-p02',
-    msg: 'should we drop the price on 40 Bond', expect: ['not', 'unlocked'] },
-  { label: 'B30/U01 acquisition screening locked', sessionKey: 'b30-u01',
-    msg: 'should I buy 400 W 15th', expect: ['not', 'unlocked'] },
-  { label: 'B30/O02 market snapshot locked', sessionKey: 'b30-o02',
-    msg: "how's the market in tribeca", expect: ['not', 'unlocked'] },
-  { label: 'B30/M01 seller activity locked', sessionKey: 'b30-m01',
-    msg: 'seller update for 30 Park Place', expect: ['not', 'unlocked'] },
+  // Block B — another report (RYAN_MD Section 6b must respond, not fabricate).
+  // Brief 48 PR 19 [Ryan 1.11]: the 20 locked templates are gone. A request for
+  // another report gets "DealFlow makes one report, the Buyer Match report";
+  // a plain question ("how's the market in tribeca") is answered from the tools.
+  { label: 'B30/P01 CMA: one report', sessionKey: 'b30-p01',
+    msg: 'run a CMA on 30 Park Place', expect: ['one report', 'buyer match'] },
+  { label: 'B30/M01 seller update: one report', sessionKey: 'b30-m01',
+    msg: 'seller update for 30 Park Place', expect: ['one report', 'buyer match'] },
 
   // Block C — non-report workflow patterns (Section 7 + 8).
   { label: 'B30/inbox review recent', sessionKey: 'b30-inbox',

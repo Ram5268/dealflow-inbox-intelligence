@@ -91,14 +91,14 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
 
 // Brief 27.0 — Report Engine tools. generate_report builds + SAVES a full report
 // (preview card, Phase 1b); generate_report_section returns ONE section inline in
-// chat (cheaper, no save). Only unlocked templates are generatable (buyer-match in
-// Phase 1a). For buyer-match, params.buyerId is a BUYER_ISO / RENTER_INQUIRY id —
+// chat (cheaper, no save). Brief 48 PR 19 [Ryan 1.11]: buyer-match is the only
+// template. For buyer-match, params.buyerId is a BUYER_ISO / RENTER_INQUIRY id —
 // resolve it with search_parties first if you only have a name. Brief 48 PR 13
 // (Q8): or a buyer or renter stored in Ryan's CRM table (search_parties' CRM cards).
 export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
   name: 'generate_report',
   description:
-    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for [buyer]", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for [buyer]"), use generate_report_section instead. Only unlocked templates work (currently: buyer-match). For buyer-match, params must be { buyerId }, where buyerId is the id of a buyer or renter that search_parties returned in this turn, or one in the Shown note of an earlier reply in this chat; any other id is refused. Call search_parties first, and if nothing matches exactly, ask Ryan which buyer he means.',
+    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for [buyer]", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for [buyer]"), use generate_report_section instead. The only template is buyer-match (the Buyer Match report). For buyer-match, params must be { buyerId }, where buyerId is the id of a buyer or renter that search_parties returned in this turn, or one in the Shown note of an earlier reply in this chat; any other id is refused. Call search_parties first, and if nothing matches exactly, ask Ryan which buyer he means.',
   input_schema: {
     type: 'object',
     properties: {
