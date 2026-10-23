@@ -62,12 +62,20 @@ export function pickInternalEstimate(rows: EstimateRow[], now: Date): InternalEs
 }
 
 // One seller's valuations in published runs (the import keeps about a dozen runs).
+// A failed read gives no estimate rather than failing the seller lookup: the contact
+// and buyers still come back [engineering precaution]. Only the error's class is
+// logged: its message could quote the query.
 export async function loadInternalEstimate(organizationId: string, contactId: string, now: Date = new Date()): Promise<InternalEstimate | null> {
-  const rows = await prisma.propertyValuation.findMany({
-    where: { organizationId, contactId, run: { published: true } },
-    select: { runId: true, value: true, low: true, high: true, asOf: true, createdAt: true, run: { select: { publishedAt: true } } },
-  })
-  return pickInternalEstimate(rows, now)
+  try {
+    const rows = await prisma.propertyValuation.findMany({
+      where: { organizationId, contactId, run: { published: true } },
+      select: { runId: true, value: true, low: true, high: true, asOf: true, createdAt: true, run: { select: { publishedAt: true } } },
+    })
+    return pickInternalEstimate(rows, now)
+  } catch (e) {
+    console.warn(`[chat] our estimate couldn't be read (${e instanceof Error ? e.constructor.name : 'unknown'}): none given`)
+    return null
+  }
 }
 
 // ── How Drift says it ───────────────────────────────────────────────────────

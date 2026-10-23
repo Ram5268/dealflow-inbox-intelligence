@@ -207,8 +207,79 @@ test('a later draft repeating the estimate from an earlier reply is blocked too;
   assert.ok(r.flags.some(f => f.kind === 'homeowner_price' && /1\.83/.test(f.match)), JSON.stringify(r.flags))
   assert.ok(!OUR_FIGURES.test(JSON.stringify(r.cleaned)), JSON.stringify(r.cleaned))
 
+  // Review r1: once our estimate is in the chat, a later draft's other figures get the
+  // homeowner rule too (it may be about that home), so a budget figure is flagged.
   const budget = { ...draft, body: 'Hi Jordan,\n\nWith your $2.4M budget, a 3-family in Bed-Stuy may suit you.\n\nRyan Martin' }
-  assert.deepEqual(checkDraft(budget, ctx).flags, [])
+  assert.ok(checkDraft(budget, ctx).flags.some(f => f.kind === 'homeowner_price'))
+})
+
+test('review r1: a later draft carrying our estimate rounded or reworded is blocked too', async () => {
+  const { buildDraftContext, checkDraft } = await import('../guards/draftPrivacy')
+  const history = [
+    { role: 'user', content: "what's Pat Example's house worth?" },
+    { role: 'assistant', content: TARGET_LINE, dealsJson: [] },
+  ]
+  const ctx = buildDraftContext({ toolResults: [], userMessage: 'draft a note to my buyer Jordan about that house', history })
+  for (const s of [
+    'It is priced around $1.8M.', 'We think it is about 1.8 million.', 'It should trade just under two million.',
+    'It is in the $1.5M–$2.1M range.', 'It should go for about 1.8.', 'Expect high 1s.', 'Roughly $1.8MM.', 'Figure about $2M.',
+  ]) {
+    const draft = { channel: 'email' as const, audience: 'buyer_side' as const, body: `Hi Jordan,\n\nA 3-family in Bed-Stuy may suit you. ${s}\n\nRyan Martin` }
+    const r = checkDraft(draft, ctx)
+    assert.ok(r.flags.some(f => f.kind === 'homeowner_price'), s)
+    assert.ok(!/1\.8|1\.5|2\.1|\$2M|two million|high 1s/i.test(JSON.stringify(r.cleaned)), `${s} -> ${JSON.stringify(r.cleaned)}`)
+  }
+})
+
+test("review r1: an earlier reply's other 'estimated' figure isn't ours; a listing keeps its price", async () => {
+  const { buildDraftContext, checkDraft } = await import('../guards/draftPrivacy')
+  const listing = { id: 'SEED_SALE_06', category: 'ACTIVE_SALE_LISTING', address: '12 Sample St', price: 1_400_000 }
+  const history = [
+    { role: 'user', content: 'what would the payment be on 12 Sample St with 20% down?' },
+    { role: 'assistant', content: "The estimated monthly payment on $1,400,000 with 20% down is about $7,600 at today's rate.", dealsJson: [listing] },
+  ]
+  const ctx = buildDraftContext({ toolResults: [], userMessage: 'draft a note to my buyer Jordan about 12 Sample St', history })
+  assert.deepEqual(ctx.ourFigures, [])
+  const draft = { channel: 'email' as const, audience: 'buyer_side' as const, body: 'Hi Jordan,\n\n12 Sample St is listed at $1,400,000 and may suit you.\n\nRyan Martin' }
+  assert.deepEqual(checkDraft(draft, ctx).flags, [])
+})
+
+test('review r1: a failed read of our values gives no estimate, never a failed lookup, and logs the error class only', async () => {
+  world()
+  const warnings: string[] = []
+  const warn = console.warn
+  console.warn = (...a: unknown[]) => { warnings.push(a.map(String).join(' ')) }
+  fake.failValuationReads(true)
+  try {
+    const { runCrmSellerTool, newCrmSellerTurn } = await tools()
+    const found = await runCrmSellerTool('find_seller', { name: 'Pat Example' }, newCrmSellerTurn())
+    const out = found.output as { match: Record<string, unknown> }
+    assert.equal(out.match.name, 'Pat Example')
+    assert.equal(out.match.internalEstimate, null)
+    assert.equal((found.forModel as { match: Record<string, unknown> }).match.internalEstimate, null)
+    const buyers = await runCrmSellerTool('get_seller_matches', { name: 'Pat Example' }, newCrmSellerTurn())
+    assert.equal((buyers.output as { count: number }).count, 1)
+    assert.equal((buyers.output as { seller: Record<string, unknown> }).seller.internalEstimate, null)
+  } finally {
+    fake.failValuationReads(false)
+    console.warn = warn
+  }
+  assert.ok(warnings.some(w => w.includes('TypeError')), warnings.join('\n'))
+  assert.ok(!warnings.some(w => w.includes('10.0.0.1')), 'only the error class is logged')
+})
+
+test("review r1: an earlier reply's last asking price is kept out of a later draft too", async () => {
+  const { buildDraftContext, checkDraft } = await import('../guards/draftPrivacy')
+  const history = [
+    { role: 'user', content: "what's Pat Example's house worth?" },
+    { role: 'assistant', content: `${TARGET_LINE} It was last listed at $1,950,000 and expired.`, dealsJson: [] },
+  ]
+  const ctx = buildDraftContext({ toolResults: [], userMessage: 'draft an email to my buyer Jordan', history })
+  assert.ok(ctx.ourFigures?.includes(1_950_000), JSON.stringify(ctx.ourFigures))
+  const draft = { channel: 'email' as const, audience: 'buyer_side' as const, body: 'Hi Jordan,\n\nA 3-family in Bed-Stuy may suit you. It was listed at $1.95M before.\n\nRyan Martin' }
+  const r = checkDraft(draft, ctx)
+  assert.ok(r.flags.some(f => f.kind === 'homeowner_price'))
+  assert.ok(!/1\.95|1,950/.test(JSON.stringify(r.cleaned)), JSON.stringify(r.cleaned))
 })
 
 test("the prompt: Our estimate (D9), labeled internal, with its range and date; none on file; never in anything sent", async () => {

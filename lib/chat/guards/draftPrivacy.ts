@@ -376,7 +376,12 @@ function prepare(ctx: DraftContext): Prepared {
   const names = identity.map((h, i) => (h.name ? namePatterns(h.name, i < homeowners.length) : { find: [], greeting: null }))
   return {
     homeowners,
-    anchored: homeowners.length > 0 || homeownerCores.length > 0 || typedCores.length > 0 || !!ctx.homeownerHomeAsked,
+    // Brief 43 PR 12 review: once our estimate is in this chat, a draft may be about
+    // that home with no seller in this turn's tools ("draft a note to Jordan about
+    // that house"), so its figures and price hints ("$1.8M", "just under two
+    // million", "about 1.8", "high 1s") get the homeowner rule too, not only our
+    // exact figures [engineering precaution].
+    anchored: homeowners.length > 0 || homeownerCores.length > 0 || typedCores.length > 0 || !!ctx.homeownerHomeAsked || (ctx.ourFigures?.length ?? 0) > 0,
     names: names.flatMap(n => n.find),
     greetings: names.map(n => n.greeting).filter((g): g is RegExp => !!g),
     phones: identity.map(h => h.phone ?? '').filter(Boolean),
@@ -671,16 +676,20 @@ function estimateFigures(toolResults: ReadonlyArray<ToolOutput>): number[] {
   return out
 }
 
-// ... and every figure in a sentence of an earlier reply that names an estimate
-// ("Our internal estimate is $1.83M, likely $1.52M–$2.14M, as of Oct 1."), so a
-// draft asked for a turn later can't carry it either [engineering precaution].
-const ESTIMATE_WORD = /\bestimate/gi
+// ... and every figure in a sentence of an earlier reply that gives our estimate
+// ("Our internal estimate is $1.83M, likely $1.52M–$2.14M, as of Oct 1.") or the
+// seller's last asking price ("It was last listed at $1,950,000 and expired.", the
+// prompt's wording), so a draft asked for a turn later can't carry it either
+// [engineering precaution]. Only "internal estimate" / "our estimate": a reply's
+// "estimated monthly payment on $1,400,000" is about a listing, whose asking price
+// may stay in a draft.
+const OUR_FIGURE_CUE = /\b(?:(?:internal|our)[ \t]+(?:internal[ \t]+)?estimate|last[ \t]+listed[ \t]+at)\b/gi
 function estimateFiguresSaid(history: ReadonlyArray<{ role: string; content: string }>): number[] {
   const out: number[] = []
   for (const m of history) {
     if (m.role !== 'assistant') continue
     const text = readStoredReply(m.content ?? '').response
-    for (const w of text.matchAll(ESTIMATE_WORD)) {
+    for (const w of text.matchAll(OUR_FIGURE_CUE)) {
       for (const f of sentenceAround(text, w.index ?? 0, w[0].length).matchAll(MONEY)) {
         const v = moneyValue(f[0])
         if (v != null && v > 0) out.push(v)

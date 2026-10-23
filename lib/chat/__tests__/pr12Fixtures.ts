@@ -16,7 +16,10 @@ const OCT_1 = new Date(Date.UTC(2026, 9, 1))
 
 export function makeFakePrisma(tables: Record<string, Row[]>) {
   const fake = makePr6FakePrisma(tables)
+  let failing = false
   const findMany = async (args: { where?: Row; select?: Record<string, unknown> } = {}) => {
+    // Review r1: a failed read, as a dropped database connection would give.
+    if (failing) throw new TypeError('pr12Fixtures: connection to 10.0.0.1 lost while reading the values')
     const where = args.where ?? {}
     for (const k of Object.keys(where)) if (!['organizationId', 'contactId', 'run'].includes(k)) throw new Error(`pr12Fixtures: unsupported filter "${k}"`)
     const runWhere = (where.run ?? {}) as Row
@@ -44,7 +47,7 @@ export function makeFakePrisma(tables: Record<string, Row[]>) {
       return prop === 'propertyValuation' ? { ...(model as object), findMany } : model
     },
   })
-  return { ...fake, prisma }
+  return { ...fake, prisma, failValuationReads: (on: boolean) => { failing = on } }
 }
 
 // A run of the monthly valuation job: published 18 days ago, values as of Oct 1.
