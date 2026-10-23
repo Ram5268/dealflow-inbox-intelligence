@@ -63,7 +63,8 @@ test('same-millisecond messages keep one order (id breaks the tie)', () => {
 
 test('the chat route loads history through these helpers', () => {
   const route = readFileSync(join(ROOT, 'app/api/chat/route.ts'), 'utf8')
-  assert.match(route, /const history = oldestFirst\(await prisma\.chatMessage\.findMany\(recentHistoryQuery\(session\.id\)\)\)/)
+  // Brief 43 PR 4: a new chat has no row (and no history) until its first save.
+  assert.match(route, /const history = (?:session \? )?oldestFirst\(await prisma\.chatMessage\.findMany\(recentHistoryQuery\(session\.id\)\)\)/)
   assert.doesNotMatch(route, /orderBy: \{ createdAt: 'asc' \},\s*take: 30/)
 })
 

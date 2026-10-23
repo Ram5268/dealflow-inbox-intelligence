@@ -25,6 +25,32 @@ VALUATION_IMPORT_SECRET=... python -m valuation.dfval run --data <folder> --out 
   precaution, Brief 44 §4). Exit code 3 means a `--publish` run ran but a gate failed, so nothing was published.
 - `python -m valuation.dfval reproduce ...` is the local two-part reproduction check (below).
 
+## Every month, on its own (Brief 49)
+
+`.github/workflows/valuation-monthly.yml` runs the whole thing on GitHub Actions:
+
+- **When:** 10:00 UTC on the 20th, after the city posts the month's sales (around the 15th). The
+  run on the 23rd is the backup: it does nothing when DealFlow's public status page already shows
+  values "as of" the 1st of this month, and otherwise tries again (a failed 20th, or one that still
+  had last month's sales).
+- **By hand:** Actions → valuation-monthly → Run workflow. Leave "publish" unticked for a dry run,
+  which builds and checks everything and sends nothing.
+- **Steps:** check free disk space; install the pinned versions (one environment for
+  `valuation/fetch`, one for this package); run both test suites; decide what the run does
+  (`python -m valuation.dfval plan`); download into the runner's temp folder (`valuation/fetch`,
+  with the NYC Open Data key pair); `run` (with `--publish` on a publish run); print the summary
+  (`python -m valuation.dfval summary`: counts and gate results only).
+- **Red means the run needs a look.** A failed download, a failed gate (on a dry run too) or a
+  failed request publishes nothing, and DealFlow keeps the last published values. Values are
+  published only after every gate passed and every request succeeded; the summary says
+  "Published: yes" when they were.
+- **A publish run started by hand must use main** (engineering precaution: only reviewed code
+  publishes); asked from another branch, it stops red before downloading anything.
+- **What it keeps:** `summary.json` and the download's `manifest.json`, for 90 days: counts,
+  accuracy numbers and one median rounded to $10,000. No home's value, address, tax lot or contact.
+- **Secrets:** `NYC_SOCRATA_KEY_ID` and `NYC_SOCRATA_KEY_SECRET` go only to the download step
+  (without them the download is anonymous); `VALUATION_IMPORT_SECRET` only to the valuation step.
+
 ## What a run does
 
 1. **Sales.** DOF's 2003–2015 Excel files, then DOF annualized sales, then DOF rolling sales. The

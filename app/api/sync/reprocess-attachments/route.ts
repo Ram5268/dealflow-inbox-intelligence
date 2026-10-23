@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getMessageAttachments, testConnection } from '@/lib/microsoftGraph'
 import { parseAttachment } from '@/lib/attachmentParser'
 import { isIngestionTestModeOnly } from '@/lib/config/ingestionTestMode'
+import { maintenanceEnabled, MAINTENANCE_OFF_BODY } from '@/lib/config/maintenance'
 
 export const maxDuration = 300
 
@@ -49,7 +50,12 @@ async function processEmail(graphMessageId: string, dbId: string): Promise<{ sta
   }
 }
 
+// Maintenance route (Brief 41's H6 switch, added here in Brief 48 PR 2
+// [planner, Brief 48]): off unless MAINTENANCE_ENABLED=true. Nothing in the app
+// calls it; past the switches it fetches from Outlook the attachments of every
+// email with no saved attachment text, and saves that text.
 export async function POST() {
+  if (!maintenanceEnabled()) return NextResponse.json(MAINTENANCE_OFF_BODY, { status: 403 })
   // Brief 6.0 — ingestion isolation gate. Blocks production attachment
   // reprocessing (real Graph fetches + DB writes) during fixture validation.
   if (isIngestionTestModeOnly()) {

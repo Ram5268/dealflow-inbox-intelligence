@@ -11,7 +11,7 @@ import requests
 
 from valuation.fetch import allowlist
 from valuation.fetch.allowlist import DATASETS, NotAllowed
-from valuation.fetch.client import USER_AGENT, Client
+from valuation.fetch.client import TIMEOUT, USER_AGENT, Client
 from valuation.fetch.socrata import download_dataset
 
 PLUTO = DATASETS["64uk-42ks"]
@@ -198,6 +198,7 @@ def test_key_pair_goes_to_nyc_open_data_only(server, session, helpers, run_cli, 
     for call in session.calls:
         assert call.headers["User-Agent"] == USER_AGENT
         assert call.allow_redirects is False
+        assert call.timeout == TIMEOUT  # every request can fail, never hang (Brief 49 review)
         if urlsplit(call.url).hostname == allowlist.NYC_OPEN_DATA:
             sent = requests.Request("GET", call.url, auth=call.auth).prepare().headers["Authorization"]
             assert sent == basic

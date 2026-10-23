@@ -1,4 +1,5 @@
 // NYC DOB data via NYC Open Data (free, no API key needed for low volume)
+import { fetchWithTimeout } from './chat/turnBudget'
 
 interface DobPermit {
   job_type: string
@@ -72,12 +73,14 @@ export async function lookupDOB(address: string): Promise<DobResult | null> {
       $order: 'issue_date DESC',
     })
 
+    // Brief 43 PR 4 (M32): each fetch gives up after LOOKUP_TIMEOUT_MS
+    // (fetchWithTimeout's default) [engineering precaution].
     const [permitsRes, violationsRes] = await Promise.all([
-      fetch(
+      fetchWithTimeout(
         `https://data.cityofnewyork.us/resource/ipu4-2q9a.json?${permitParams}`,
         { headers: { 'X-App-Token': process.env.SOCRATA_APP_TOKEN ?? '' } }
       ).catch(() => null),
-      fetch(
+      fetchWithTimeout(
         `https://data.cityofnewyork.us/resource/3h2n-5cm9.json?${violationParams}`,
         { headers: { 'X-App-Token': process.env.SOCRATA_APP_TOKEN ?? '' } }
       ).catch(() => null),

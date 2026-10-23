@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import ChatSurfaceShell from '@/components/ChatSurfaceShell'
 import { showToast } from '@/components/Toast'
+import { homeClockText, minuteClock } from '@/lib/time/homeClock'
 
 interface GreetData {
   overnightEmails: number
@@ -12,29 +13,6 @@ interface GreetData {
   newMatches?: number
   newShowingConfirmations?: number
   pendingReviewCount?: number
-}
-
-function greetWord(): string {
-  const h = new Date().getHours()
-  if (h >= 5 && h < 12) return 'morning'
-  if (h >= 12 && h < 17) return 'afternoon'
-  return 'evening'
-}
-
-function timePeriod(): string {
-  const h = new Date().getHours()
-  if (h >= 4  && h < 7)  return 'DAWN'
-  if (h >= 7  && h < 12) return 'MORNING'
-  if (h >= 12 && h < 17) return 'AFTERNOON'
-  if (h >= 17 && h < 21) return 'EVENING'
-  return 'NIGHT'
-}
-
-function eyebrowDate(): string {
-  const d = new Date()
-  const day = d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: false })
-  return `${day} · ${time}`
 }
 
 function formatTime(iso: string): string {
@@ -62,6 +40,11 @@ export default function GreetPage() {
   const [calData, setCalData] = useState<CalToday | null | undefined>(undefined)
   const [market, setMarket] = useState<MarketPulse | null>(null)
   const [syncing, setSyncing] = useState(false)
+  // Brief 48 (PR 4): the clock words come from the phone's clock only after the page has loaded. The
+  // server's render and the phone's first render both show placeholders, so they match and React no
+  // longer throws error #418 (lib/time/homeClock.ts).
+  const minute = useSyncExternalStore(minuteClock.subscribe, minuteClock.getSnapshot, minuteClock.getServerSnapshot)
+  const clock = homeClockText(minute === null ? null : new Date(minute))
 
   useEffect(() => {
     fetch('/api/user/profile').then(r => r.json()).then(d => setGivenName(d.givenName ?? null)).catch(() => showToast("Couldn't load profile"))
@@ -230,7 +213,7 @@ export default function GreetPage() {
           paddingTop: 4,
           paddingBottom: 2,
         }}>
-          {data ? String(oppCount).padStart(2, '0') : '—'} · {timePeriod()}
+          {data ? String(oppCount).padStart(2, '0') : '—'} · {clock.period}
         </div>
 
         {/* Content — vertically centered */}
@@ -243,7 +226,7 @@ export default function GreetPage() {
             color: 'rgba(255,255,255,0.55)',
             marginBottom: 10,
           }}>
-            {eyebrowDate()}
+            {clock.eyebrow}
           </div>
 
           {/* Greeting */}
@@ -255,7 +238,7 @@ export default function GreetPage() {
             lineHeight: 1.05,
             color: '#fff',
           }}>
-            Good {greetWord()},<br />
+            {clock.greeting}<br />
             <span style={{ fontStyle: 'italic', color: 'rgba(255,255,255,0.85)' }}>
               {givenName ?? 'Ryan'}.
             </span>

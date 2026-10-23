@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import {
   USE_OUR_ESTIMATES, ROLLBACK_ACTION, switchIsOn, readOurEstimatesSwitch, newestPublishedValues, loadPublishedValues,
   applyOurEstimates, withOurEstimates, rollbackCheck, pickTonight, recordRollback, parseSwitchArgs, runSwitchCommand,
-  type SwitchCheck,
+  MAX_VALUE_AGE_DAYS, recentEnough, type SwitchCheck,
 } from '../ourEstimates'
 import { precomputeSubstitutionCounts } from '../compsCache'
 import { makeListing, makeBuyer, makeContext } from './fixtures'
@@ -45,6 +45,8 @@ test('reading the switch: one FeatureFlag read; a missing row, any other value o
 
 // ── Our published values ────────────────────────────────────────────────────
 
+// The scoring run's clock in these tests (Brief 49: values older than 100 days are ignored).
+const NOW = day('2026-10-25')
 const published = (d: string | null) => ({ publishedAt: d ? day(d) : null })
 const ROWS = [
   { contactId: 'a', value: 1_500_000, createdAt: day('2026-09-20'), run: published('2026-09-21') },
@@ -59,15 +61,15 @@ const ROWS = [
 ]
 
 test("each seller's value comes from its newest published valuation, never an older month's", () => {
-  const values = newestPublishedValues(ROWS)
+  const values = newestPublishedValues(ROWS, NOW)
   assert.deepEqual([...values].sort(), [['a', 1_600_000], ['c', 2_100_000], ['e', 1_200_000]])
-  assert.deepEqual([...newestPublishedValues([...ROWS].reverse())].sort(), [...values].sort()) // order doesn't matter
+  assert.deepEqual([...newestPublishedValues([...ROWS].reverse(), NOW)].sort(), [...values].sort()) // order doesn't matter
 })
 
 test("loadPublishedValues reads the organization's published runs only", async () => {
   const asked: unknown[] = []
   const db = { propertyValuation: { findMany: async (a: unknown) => { asked.push(a); return ROWS } } }
-  const values = await loadPublishedValues(db as never, 'org-1')
+  const values = await loadPublishedValues(db as never, 'org-1', NOW)
   assert.deepEqual(asked, [{
     where: { organizationId: 'org-1', run: { published: true } },
     select: { contactId: true, value: true, createdAt: true, run: { select: { publishedAt: true } } },
@@ -124,7 +126,7 @@ test('switch off: the inputs come back as they are, and no valuation is read', a
 test('switch on: sellers priced by our values, few-alternatives counts redone with them, switch-off inputs kept', async () => {
   const listings = [seller('a'), seller('s-far'), seller('s-none'), makeListing({ id: 'o', neighborhood: 'Park Slope', price: 1_400_000 })]
   const buyers = [makeBuyer({ id: 'b1', neighborhoods: ['Park Slope'], priceMax: 1_600_000 })]
-  const ctx = makeContext({ substitutionCounts: precomputeSubstitutionCounts(buyers, listings) })
+  const ctx = makeContext({ substitutionCounts: precomputeSubstitutionCounts(buyers, listings), now: NOW })
   assert.equal(ctx.substitutionCounts.get('b1'), 4) // unknown prices all count
   const rows = [...ROWS, { contactId: 's-far', value: 3_500_000, createdAt: day('2026-10-20'), run: published('2026-10-21') }]
   const db = { featureFlag: { findUnique: async () => ({ enabled: true }) }, propertyValuation: { findMany: async () => rows } }
@@ -149,6 +151,74 @@ test('switch on but our values unreadable: scored without them, marked as failed
   assert.equal(out.listings, inputs.listings)
   assert.equal(out.ctx, inputs.ctx)
   assert.deepEqual(out.ourEstimates, { applied: 0, failed: true, without: { listings: inputs.listings, ctx: inputs.ctx } })
+})
+
+// ── Brief 49 (PR 3): values older than 100 days are ignored ────────────────
+
+const daysBefore = (now: Date, days: number) => new Date(now.getTime() - days * 86_400_000)
+const aged = (contactId: string, value: number, days: number) =>
+  ({ contactId, value, createdAt: daysBefore(NOW, days), run: { publishedAt: daysBefore(NOW, days) } })
+
+test('a value is recent enough up to 100 days after its run was published, never without a publish time', () => {
+  assert.equal(MAX_VALUE_AGE_DAYS, 100)
+  assert.equal(recentEnough(daysBefore(NOW, 30), NOW), true)
+  assert.equal(recentEnough(daysBefore(NOW, 100), NOW), true)
+  assert.equal(recentEnough(new Date(daysBefore(NOW, 100).getTime() - 1), NOW), false)
+  assert.equal(recentEnough(daysBefore(NOW, 101), NOW), false)
+  assert.equal(recentEnough(daysBefore(NOW, -1), NOW), true) // a clock slightly behind the import's
+  assert.equal(recentEnough(null, NOW), false)
+})
+
+test('switch on: a 101-day-old run is ignored and that seller is matched without a price; a 30-day-old run is used', async () => {
+  const listings = [seller('old'), seller('recent'), seller('edge')]
+  const rows = [aged('old', 1_500_000, 101), aged('recent', 1_600_000, 30), aged('edge', 1_700_000, 100)]
+  const db = { featureFlag: { findUnique: async () => ({ enabled: true }) }, propertyValuation: { findMany: async () => rows } }
+  const ctx = makeContext({ now: NOW })
+  const out = await withOurEstimates(db as never, 'org-1', { listings, buyers: [], ctx })
+  assert.deepEqual(out.listings.map(l => [l.id, l.price ?? null, l.ourEstimate ?? false]), [
+    ['old', null, false], ['recent', 1_600_000, true], ['edge', 1_700_000, true],
+  ])
+  assert.equal(out.listings[0], listings[0]) // the stale seller passes through untouched, as before Brief 44
+  assert.equal(out.ourEstimates?.applied, 2)
+  // The newest run decides: an older run's value never stands in for a stale newer one.
+  const later = await withOurEstimates({ ...db, propertyValuation: { findMany: async () => [aged('old', 1_400_000, 400), aged('old', 1_500_000, 101)] } } as never,
+    'org-1', { listings: [seller('old')], buyers: [], ctx })
+  assert.equal(later.ourEstimates?.applied, 0)
+})
+
+test('switch on: the age is measured against the scoring run\'s own clock', async () => {
+  const rows = [aged('a', 1_500_000, 60)] // 60 days before NOW
+  const db = { featureFlag: { findUnique: async () => ({ enabled: true }) }, propertyValuation: { findMany: async () => rows } }
+  const run = async (now: Date) =>
+    (await withOurEstimates(db as never, 'org-1', { listings: [seller('a')], buyers: [], ctx: makeContext({ now }) })).ourEstimates?.applied
+  assert.equal(await run(NOW), 1)
+  assert.equal(await run(new Date(NOW.getTime() + 41 * 86_400_000)), 0) // 101 days after publishing
+})
+
+test('loadPublishedValues ages values against today when no clock is given (the preview script)', async () => {
+  const today = new Date()
+  const rows = [
+    { contactId: 'fresh', value: 1_000_000, createdAt: daysBefore(today, 1), run: { publishedAt: daysBefore(today, 1) } },
+    { contactId: 'stale', value: 1_000_000, createdAt: daysBefore(today, 101), run: { publishedAt: daysBefore(today, 101) } },
+  ]
+  const values = await loadPublishedValues({ propertyValuation: { findMany: async () => rows } } as never, 'org-1')
+  assert.deepEqual([...values.keys()], ['fresh'])
+})
+
+test('switch off: nothing changes and no valuation is read, whatever the values\' age', async () => {
+  const reads: string[] = []
+  const rows = [aged('a', 1_500_000, 101), aged('b', 1_600_000, 30)]
+  const inputs = { listings: [seller('a'), seller('b')], buyers: [makeBuyer({ id: 'b1' })], ctx: makeContext({ now: NOW }) }
+  for (const row of [null, { enabled: false }]) {
+    reads.length = 0
+    const db = {
+      featureFlag: { findUnique: async () => { reads.push('flag'); return row } },
+      propertyValuation: { findMany: async () => { reads.push('values'); return rows } },
+    }
+    const out = await withOurEstimates(db as never, 'org-1', inputs)
+    assert.equal(out, inputs)
+    assert.deepEqual(reads, ['flag'])
+  }
 })
 
 // ── Automatic rollback (Brief 44 data step V4, step 4) ─────────────────────

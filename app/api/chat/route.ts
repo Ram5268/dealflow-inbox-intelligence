@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
+import { guardChat } from '@/lib/spendGuard'
 import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
@@ -19,17 +20,24 @@ import { getGenerator, type SectionResult } from '@/lib/reports/generators'
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
 import { buildGroundingCorpus, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
-import { logGuardFireEvent } from '@/lib/chat/guards/instrumentation'
+import { logGuardFireEvent, timedOutGuardInput } from '@/lib/chat/guards/instrumentation'
+import { createTurnBudget, deadlineSignal, withTimeout, isTimedOut, LOOKUP_TIMEOUT_MS, TURN_SOFT_MS, TURN_HARD_MS, TURN_CEILING_MS, TIMED_OUT_REPLY } from '@/lib/chat/turnBudget'
 import { buildSystemBlocks, RYAN_MD } from '@/lib/chat/systemBlocks'
 import { SYSTEM_PROMPT, VOICE_INSTRUCTION } from '@/lib/chat/systemPrompt'
 import {
   MAX_GUARD_RETRIES,
   selectCannedFallback,
+  repeatedActionClaim,
+  skipVerifierForRepeatClaim,
+  skippedVerification,
   buildFeedbackPrompt,
   formatFlagLines,
   type GuardAttempt,
   type GuardTelemetry,
 } from '@/lib/chat/guards/retry'
+import { DRAFT_FIELD_SCHEMA, buildDraftContext, draftAsText, enforceDraftPrivacy } from '@/lib/chat/guards/draftPrivacy'
+import { encodeStoredReply, readStoredReply, storedReplyForModel } from '@/lib/chat/storedReply'
+import { normalizeDraft } from '@/lib/chat/draft'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -89,7 +97,15 @@ async function parseBinary(buffer: Buffer, filename: string, mimeType: string): 
 }
 
 export async function POST(req: NextRequest) {
+  // Brief 43 PR 4: the turn's clock (createTurnBudget below) starts here, so
+  // guardChat's database checks count against the 52 s budget too.
   const t0 = Date.now()
+  // Brief 43 PR 17 [engineering precaution]: DealFlow has no login [Ryan,
+  // 2026-09-24], so the daily spend cap and per-address limits run first,
+  // before the parser (a paid call), Claude, or any session work. See
+  // lib/spendGuard.ts.
+  const spendRefusal = await guardChat(req)
+  if (spendRefusal) return spendRefusal
   try {
     const body = await req.json()
     const userMessage: string = (body.message ?? '').trim()
@@ -101,18 +117,21 @@ export async function POST(req: NextRequest) {
 
     const organizationId = await getCurrentOrgId()
 
-    // Resolve or create session
+    // Resolve the session. Brief 43 PR 4 (Q4): a new chat's row is created only
+    // when something is saved to it (this turn's messages, or a report), so a
+    // turn that runs out of time leaves no empty chat in History [engineering
+    // precaution]. ensureSession creates it once, however many callers ask.
     const sessionId: string | undefined = body.sessionId
     let session = sessionId
       ? await prisma.chatSession.findUnique({ where: { id: sessionId } })
       : null
-    if (!session) {
-      session = await prisma.chatSession.create({ data: { organizationId } })
-    }
+    let creatingSession: Promise<NonNullable<typeof session>> | null = null
+    const ensureSession = async () =>
+      session ?? (session = await (creatingSession ??= prisma.chatSession.create({ data: { organizationId } })))
 
     // Load conversation history for this session only: the newest 30 messages,
     // oldest first (Brief 41: it used to be the oldest 30).
-    const history = oldestFirst(await prisma.chatMessage.findMany(recentHistoryQuery(session.id)))
+    const history = session ? oldestFirst(await prisma.chatMessage.findMany(recentHistoryQuery(session.id))) : []
 
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
@@ -156,10 +175,12 @@ export async function POST(req: NextRequest) {
     // runCalendarConfirm (injectable, unit-tested). The two-step gate (a plain
     // yes via isCalendarConfirm + lastPendingEvent) stays inline above.
     if (isConfirmMessage && lastPendingEvent) {
+      // Always an existing chat: the pending event came from its history.
+      const confirmSession = await ensureSession()
       try {
         const result = await runCalendarConfirm({
           organizationId,
-          sessionId: session.id,
+          sessionId: confirmSession.id,
           userMessage,
           pendingEvent: {
             subject:  lastPendingEvent.subject,
@@ -192,14 +213,14 @@ export async function POST(req: NextRequest) {
             touchSession:   (id) => prisma.chatSession.update({ where: { id }, data: { updatedAt: new Date() } }),
           },
         })
-        return NextResponse.json({ sessionId: session.id, response: result.text, deals: [], suggestions: [] })
+        return NextResponse.json({ sessionId: confirmSession.id, response: result.text, deals: [], suggestions: [] })
       } catch (err) {
         // Brief 41 (M17): never fall through to the AI after a failed confirm (it
         // could claim the event was booked). runCalendarConfirm only throws
         // before the calendar write (after it, failures are logged and the
         // "Done" reply still goes out), so nothing was booked.
         console.error('[DealFlow] Calendar confirm error:', err)
-        return NextResponse.json({ sessionId: session.id, response: CALENDAR_CONFIRM_FAILED, deals: [], suggestions: [] })
+        return NextResponse.json({ sessionId: confirmSession.id, response: CALENDAR_CONFIRM_FAILED, deals: [], suggestions: [] })
       }
     }
 
@@ -321,15 +342,20 @@ export async function POST(req: NextRequest) {
             },
             required: ['templateId', 'sectionKey'],
           },
+          // Brief 43 PR 3 (Q3) — an email or text to copy, apart from the reply;
+          // its rules are in the field's description (lib/chat/guards/draftPrivacy.ts).
+          draft: DRAFT_FIELD_SCHEMA,
         },
         required: ['response', 'suggestions', 'referencedDeals'],
       } as Anthropic.Messages.Tool.InputSchema,
     }
 
     // Brief 41: the model's conversation must start with a user turn.
+    // Brief 43 PR 3 (review r1): a reply stored as JSON (a draft) goes to the model
+    // as its text plus the draft, the way the draft rewrite shows it, not as JSON.
     const anthropicHistory: Anthropic.Messages.MessageParam[] = startAtUserTurn(history).map(m => ({
       role: m.role as 'user' | 'assistant',
-      content: m.content,
+      content: m.role === 'assistant' ? storedReplyForModel(m.content) : m.content,
     }))
 
     // ── Sonnet 4.6 tool_use loop ─────────────────────────────────────────────
@@ -345,9 +371,10 @@ export async function POST(req: NextRequest) {
     // are always correct and the attachment survives guard rewrites.
     let serverAttachedReport: AttachedReport | null = null
     let serverAttachedFragment: AttachedFragment | null = null
-    // session is non-null here; capture the id so the report-tool closure below
-    // doesn't re-widen it to nullable.
-    const activeSessionId = session.id
+    // Brief 43 PR 4: report saves under way (handleReportTool). A turn that runs
+    // out of time waits briefly for them, so its chat and reply carry the report
+    // and nothing is written after the reply [engineering precaution].
+    const reportSaves: Promise<void>[] = []
     const messages: Anthropic.Messages.MessageParam[] = [
       ...anthropicHistory,
       { role: 'user', content: userBlocks },
@@ -389,22 +416,31 @@ export async function POST(req: NextRequest) {
 
       if (tu.name === 'generate_report') {
         const generated = await generator.full({ ...params, prisma, anthropic })
-        const report = await prisma.report.create({
-          data: {
-            templateId,
-            params: params as object,
-            sections: generated.sections as unknown as object,
-            markdown: generated.markdown,
-            sources: generated.sources as unknown as object,
-            sessionId: activeSessionId,
-            buyerId,
-          },
-          select: { id: true },
-        })
-        serverAttachedReport = {
-          reportId: report.id, templateId, templateName: template.name,
-          subject: generated.subject, sectionCount: generated.sections.length, matchCount: generated.matchCount,
-        }
+        // Brief 43 PR 4: a report finished after the turn's ceiling isn't saved;
+        // the reply (TIMED_OUT_REPLY) has gone, and a late save would leave a
+        // chat with no messages in History [engineering precaution].
+        if (budget.msLeft(TURN_CEILING_MS) === 0) throw new Error('out of time')
+        const saving = (async () => {
+          const saved = await prisma.report.create({
+            data: {
+              templateId,
+              params: params as object,
+              sections: generated.sections as unknown as object,
+              markdown: generated.markdown,
+              sources: generated.sources as unknown as object,
+              sessionId: (await ensureSession()).id, // Brief 43 PR 4: a report's chat is saved with it
+              buyerId,
+            },
+            select: { id: true },
+          })
+          serverAttachedReport = {
+            reportId: saved.id, templateId, templateName: template.name,
+            subject: generated.subject, sectionCount: generated.sections.length, matchCount: generated.matchCount,
+          }
+          return saved
+        })()
+        reportSaves.push(saving.then(() => undefined, () => undefined))
+        const report = await saving
         const result = {
           reportId: report.id, templateName: template.name, subject: generated.subject,
           sectionCount: generated.sections.length, matchCount: generated.matchCount, saved: true,
@@ -422,15 +458,40 @@ export async function POST(req: NextRequest) {
       return result
     }
 
+    // ── Brief 43 PR 4 (Q4; M23): the turn's time budget, from the request's start ──
+    // Past TURN_SOFT_MS (40 s) no more tool rounds; past TURN_HARD_MS (50 s) no
+    // new model call; at TURN_CEILING_MS (52 s) any call or tool round still
+    // running is cut off, well inside Vercel's 60 s (lib/chat/turnBudget.ts)
+    // [engineering precaution].
+    const budget = createTurnBudget(t0, { softMs: TURN_SOFT_MS, hardMs: TURN_HARD_MS })
+    const turnDeadline = deadlineSignal(budget.msLeft(TURN_CEILING_MS))
+    // Every model call goes through withinTurn: cut off at the ceiling (the signal
+    // stops the request; the timeout also covers an SDK retry wait, which ignores
+    // the signal), or after capMs if sooner, it resolves to null. Any other
+    // failure still throws.
+    const withinTurn = async <T>(call: Promise<T>, capMs = Infinity): Promise<T | null> => {
+      try {
+        const result = await withTimeout(call, Math.min(capMs, budget.msLeft(TURN_CEILING_MS)), 'model call')
+        return isTimedOut(result) ? null : result
+      } catch (err) {
+        if (turnDeadline.signal.aborted) return null
+        throw err
+      }
+    }
+    let softCut = false           // the soft deadline ended the tool rounds
+    let factCheckSkipped = false  // the hard deadline skipped (or cut off) a fact-check
+
     for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
-      const completion = await anthropic.messages.create({
+      if (budget.pastSoft()) { softCut = true; break } // Brief 43 PR 4: Drift writes its reply now
+      const completion = await withinTurn(anthropic.messages.create({
         model: CHAT_MODEL,
         max_tokens: 4096,
         system: systemBlocks,
         messages,
         tools,
         tool_choice: { type: 'any' },
-      })
+      }, { signal: turnDeadline.signal }))
+      if (!completion) break // cut off at the ceiling: the turn ends with TIMED_OUT_REPLY below
       tokensIn  += completion.usage?.input_tokens  ?? 0
       tokensOut += completion.usage?.output_tokens ?? 0
 
@@ -450,7 +511,10 @@ export async function POST(req: NextRequest) {
       if (toolUses.length === 0) break  // shouldn't happen under tool_choice='any'
 
       messages.push({ role: 'assistant', content: completion.content })
-      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = await Promise.all(
+      // Brief 43 PR 4: the tool round is on the turn's clock too. A report (its
+      // own Sonnet call) or a search still running at the ceiling ends the turn
+      // with TIMED_OUT_REPLY below [engineering precaution].
+      const toolRound = await withTimeout(Promise.all(
         toolUses.map(async (tu) => {
           // Report tools (generate_report / generate_report_section) run + save here.
           if (REPORT_TOOL_NAMES.has(tu.name)) {
@@ -486,30 +550,91 @@ export async function POST(req: NextRequest) {
           }
           return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify(output) }
         }),
-      )
+      ), budget.msLeft(TURN_CEILING_MS), 'tool round')
+      if (isTimedOut(toolRound)) break
+      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = toolRound
       messages.push({ role: 'user', content: toolResults })
 
       if (iter === MAX_ITERATIONS - 1) maxIterationsHit = true
     }
 
     // Force a final structured reply if the loop exhausted its budget without one.
-    if (!aiResult) {
-      console.warn('[chat] MAX_ITERATIONS reached without drift_response — forcing final reply')
-      maxIterationsHit = true
-      const forced = await anthropic.messages.create({
+    // Brief 43 PR 4: also when the soft deadline ended the tool rounds; past the
+    // hard deadline no new model call starts, and the turn ends below.
+    if (!aiResult && !budget.pastHard()) {
+      console.warn(softCut
+        ? '[chat] soft deadline reached, forcing final reply'
+        : '[chat] MAX_ITERATIONS reached without drift_response — forcing final reply')
+      if (!softCut) maxIterationsHit = true
+      const forced = await withinTurn(anthropic.messages.create({
         model: CHAT_MODEL,
         max_tokens: 4096,
         system: systemBlocks,
         messages,
         tools: [responseTool],
         tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
-      })
-      tokensIn  += forced.usage?.input_tokens  ?? 0
-      tokensOut += forced.usage?.output_tokens ?? 0
-      const forcedUse = forced.content.find(
+      }, { signal: turnDeadline.signal }))
+      tokensIn  += forced?.usage?.input_tokens  ?? 0
+      tokensOut += forced?.usage?.output_tokens ?? 0
+      const forcedUse = forced?.content.find(
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
       )
-      aiResult = (forcedUse?.input as AiResult) ?? { response: 'Sorry, I had trouble pulling that together. Try rephrasing?', suggestions: [], referencedDeals: [] }
+      if (forced) aiResult = (forcedUse?.input as AiResult) ?? { response: 'Sorry, I had trouble pulling that together. Try rephrasing?', suggestions: [], referencedDeals: [] }
+    }
+
+    // ── Brief 43 PR 4 (Q4): out of time before Drift had a reply ──────────────
+    // Nothing is saved to the chat, so a new chat leaves no empty row in History
+    // and an existing one stays as it was; unless this turn already saved a
+    // report (or started saving one, which made the chat row), then the exchange
+    // is saved so the chat isn't empty and the report stays reachable.
+    // Written: one counts-only guard-log row (verdict 'timeout') and the usual
+    // spend row, so a daily cap still counts the turn [engineering precaution].
+    if (!aiResult) {
+      const elapsedMs = Date.now() - t0
+      // A report save that started before the ceiling: give it up to 2 s to land.
+      if (reportSaves.length > 0) await withTimeout(Promise.all(reportSaves), 2_000, 'report save')
+      if (serverAttachedReport || serverAttachedFragment || creatingSession) {
+        const reportSession = await ensureSession()
+        const storedUserMsg = files.length > 0 ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]` : userMessage
+        await prisma.chatMessage.create({ data: { organizationId, sessionId: reportSession.id, role: 'user', content: storedUserMsg } })
+        await prisma.chatMessage.create({
+          data: {
+            organizationId, sessionId: reportSession.id, role: 'assistant', content: TIMED_OUT_REPLY,
+            attachedReport:   (serverAttachedReport ?? undefined) as unknown as object | undefined,
+            attachedFragment: (serverAttachedFragment ?? undefined) as unknown as object | undefined,
+          },
+        })
+      }
+      const timedOutSessionId = session?.id ?? null
+      await logGuardFireEvent(timedOutGuardInput({
+        organizationId, sessionId: timedOutSessionId, elapsedMs, toolCalls: allToolCalls, finalResponseSent: TIMED_OUT_REPLY,
+      }))
+      let timedOutInteractionId: string | null = null
+      try {
+        const interaction = await prisma.driftInteraction.create({
+          data: {
+            query:          userMessage || queryText,
+            parsedFilters:  { toolCalls: allToolCalls, maxIterationsHit, timedOut: true } as unknown as object,
+            topCards:       [],
+            responseTimeMs: elapsedMs,
+            modelUsed:      CHAT_MODEL,
+            tokensIn,
+            tokensOut,
+            // Same formula as the interaction row at the end of the turn.
+            costUsd:        (tokensIn / 1_000_000) * CHAT_INPUT_PER_M + (tokensOut / 1_000_000) * CHAT_OUTPUT_PER_M,
+          },
+          select: { id: true },
+        })
+        timedOutInteractionId = interaction.id
+      } catch (err) {
+        console.error('[DealFlow] DriftInteraction logging failed (non-fatal):', err)
+      }
+      turnDeadline.clear()
+      return NextResponse.json({
+        sessionId: timedOutSessionId, interactionId: timedOutInteractionId, response: TIMED_OUT_REPLY,
+        deals: [], suggestions: [], seListings: [], seFilterUrl: null,
+        attachedReport: serverAttachedReport, attachedFragment: serverAttachedFragment, draft: null,
+      })
     }
 
     // ── Brief 5.1 — Hallucination guard (regex + Sonnet verifier, informed retry) ──
@@ -528,6 +653,14 @@ export async function POST(req: NextRequest) {
     const guardEnabled = process.env.HALLUCINATION_GUARD_ENABLED !== 'false'
     const guardApplies = guardEnabled && !aiResult.pendingEvent
     let currentResponse = aiResult.response ?? ''
+    // Brief 43 PR 3 (review r1): the draft goes through the fact-check with the
+    // reply (the verifier only; the regex scan and PR 2's never-sent check read
+    // the reply alone), and a guard rewrite may correct it.
+    let currentDraft: unknown = (aiResult as { draft?: unknown }).draft
+    const withDraft = (response: string, draft: unknown) => {
+      const d = normalizeDraft(draft)
+      return d ? draftAsText(response, d) : response
+    }
     // Brief 11.0 Fix #2 — the first thing Sonnet tried to say, before any guard
     // correction/fallback overwrites currentResponse. Logged for guard-fire audit.
     const assistantAttempt = currentResponse
@@ -559,18 +692,38 @@ export async function POST(req: NextRequest) {
       let attempt = 0
       while (attempt <= MAX_GUARD_RETRIES) {
         const regexFlags = filterToolBoundFlags(
-          scanForStructuralHallucinations(currentResponse),
+          // Brief 43 PR 2: the user's message lets the never-sent check read
+          // "Done" after a send request ("send it") as a claim.
+          scanForStructuralHallucinations(currentResponse, { userMessage }),
           groundingCorpus,
         )
-        const verifier = await verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, currentResponse)
+        // Brief 43 PR 2: a repeated action claim gets NEVER_SENT_REPLY whatever
+        // the fact-check says, so skip that paid call. Brief 43 PR 3: the
+        // fact-check reads the reply plus its draft. Brief 43 PR 4: past the hard
+        // deadline the fact-check doesn't start, and one still running at the
+        // ceiling is dropped; the reply is then regex-checked only [engineering
+        // precaution].
+        const skipRepeat = skipVerifierForRepeatClaim(guardHistory, regexFlags)
+        const checked = budget.pastHard() || skipRepeat
+          ? null
+          : await withTimeout(
+              verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, withDraft(currentResponse, currentDraft)),
+              budget.msLeft(TURN_CEILING_MS), 'fact-check')
+        if (!skipRepeat && (!checked || isTimedOut(checked))) factCheckSkipped = true
+        const verifier = skipRepeat
+          ? skippedVerification()
+          : checked && !isTimedOut(checked) ? checked : { isGrounded: true, flags: [], costUsd: 0, latencyMs: 0 }
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
         if (regexFlags.length === 0 && verifier.isGrounded) break
 
         attempt++
-        if (attempt > MAX_GUARD_RETRIES) {
+        // Brief 43 PR 2: a second "sent / booked / done" claim gets the fixed
+        // NEVER_SENT_REPLY now, not another rewrite [Ryan, 2026-09-24].
+        // Brief 43 PR 4: past the hard deadline, no rewrite either.
+        if (attempt > MAX_GUARD_RETRIES || repeatedActionClaim(guardHistory) || budget.pastHard()) {
           // Contextual fallback — pick the variant matching what the final
-          // attempt actually flagged (public-records vs finance vs
-          // self-description vs generic) instead of always assuming records.
+          // attempt actually flagged (never-sent vs public-records vs finance
+          // vs self-description vs generic) instead of always assuming records.
           const finalFlags = guardHistory[guardHistory.length - 1]
           currentResponse = selectCannedFallback({
             regexFlags: finalFlags?.regexFlags ?? [],
@@ -585,17 +738,25 @@ export async function POST(req: NextRequest) {
         const flagLines = formatFlagLines(regexFlags, verifier.flags)
         const retryMessages: Anthropic.Messages.MessageParam[] = [
           ...messages,
-          { role: 'assistant', content: currentResponse },
+          { role: 'assistant', content: withDraft(currentResponse, currentDraft) },
           { role: 'user', content: buildFeedbackPrompt(flagLines) },
         ]
-        const retry = await anthropic.messages.create({
+        const retry = await withinTurn(anthropic.messages.create({
           model: CHAT_MODEL,
           max_tokens: 4096,
           system: systemBlocks,
           messages: retryMessages,
           tools,
           tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
-        })
+        }, { signal: turnDeadline.signal }))
+        if (!retry) {
+          // Brief 43 PR 4: cut off at the ceiling mid-rewrite. The last attempt
+          // was flagged, so the stock reply goes out, as when retries run out.
+          const last = guardHistory[guardHistory.length - 1]
+          currentResponse = selectCannedFallback({ regexFlags: last?.regexFlags ?? [], verifierFlags: last?.verifierFlags ?? [] })
+          fellbackToCanned = true
+          break
+        }
         tokensIn  += retry.usage?.input_tokens  ?? 0
         tokensOut += retry.usage?.output_tokens ?? 0
         const retryUse = retry.content.find(
@@ -604,6 +765,7 @@ export async function POST(req: NextRequest) {
         const retryResult = retryUse?.input as AiResult | undefined
         if (retryResult) {
           currentResponse   = retryResult.response ?? currentResponse
+          currentDraft      = (retryResult as { draft?: unknown }).draft ?? currentDraft
           latestSuggestions = retryResult.suggestions ?? latestSuggestions
           latestReferenced  = retryResult.referencedDeals ?? latestReferenced
         }
@@ -627,6 +789,10 @@ export async function POST(req: NextRequest) {
       totalVerifierCostUsd: guardHistory.reduce((a, h) => a + h.verifierCost, 0),
     }
 
+    // Brief 43 PR 4: a new chat's row is made now, just before this turn's
+    // messages are saved below.
+    session = await ensureSession()
+
     // Brief 11.0 Fix #2 — one guard-fire row per guarded turn (pass / retry /
     // canned_fallback). Fire-and-forget: logGuardFireEvent swallows its own
     // errors, and we don't await it so instrumentation never adds latency or
@@ -644,6 +810,49 @@ export async function POST(req: NextRequest) {
         finalResponseSent:  currentResponse,
       })
     }
+
+    // ── Brief 43 PR 3 (Q3, spot #17) — draft privacy ─────────────────────────
+    // A draft (an email or text for Ryan to copy; nothing is sent [Ryan,
+    // 2026-09-24]) comes back in drift_response.draft, apart from the reply the
+    // guard above checked. It's held to the rules for anything sent against this
+    // turn's CRM homeowners, the street addresses Ryan typed and the listings
+    // found (lib/chat/guards/draftPrivacy.ts). A failed check gets one rewrite
+    // with feedback (a forced drift_response, like the guard's retry), then the
+    // deterministic clean-up, or a short decline. A canned guard fallback drops
+    // the draft along with the reply it came with.
+    const replyBeforeDraftCheck = aiResult.response ?? ''
+    const draftResult = await enforceDraftPrivacy({
+      draft:    fellbackToCanned ? null : currentDraft,
+      response: replyBeforeDraftCheck,
+      ctx:      buildDraftContext({ toolResults: toolResultsForGuard, userMessage, history, contextBlock: dynamicSystemBlock }),
+      // Brief 43 PR 4: no draft rewrite past the hard deadline (no new model
+      // call), and one still running at the ceiling is cut off; the
+      // deterministic clean-up then stands [engineering precaution].
+      allowRewrite: !budget.pastHard(),
+      rewrite:  async (feedback, previous) => {
+        const redo = await withinTurn(anthropic.messages.create({
+          model: CHAT_MODEL,
+          max_tokens: 4096,
+          system: systemBlocks,
+          messages: [
+            ...messages,
+            { role: 'assistant', content: draftAsText(replyBeforeDraftCheck, previous) },
+            { role: 'user', content: feedback },
+          ],
+          tools,
+          tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
+        }, { signal: turnDeadline.signal }))
+        if (!redo) return null
+        tokensIn  += redo.usage?.input_tokens  ?? 0
+        tokensOut += redo.usage?.output_tokens ?? 0
+        const redoUse = redo.content.find(
+          (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
+        )
+        return (redoUse?.input as { draft?: unknown } | undefined)?.draft ?? null
+      },
+    })
+    const draft = draftResult.draft
+    aiResult = { ...aiResult, response: draftResult.response }
 
     const cleanResponse = (aiResult.response ?? '')
       .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
@@ -672,11 +881,10 @@ export async function POST(req: NextRequest) {
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`
       : userMessage
 
-    // Store pendingEvent in assistant message content as JSON so confirm flow can read it
+    // Store pendingEvent in assistant message content as JSON so confirm flow can read it.
+    // Brief 43 PR 3: a draft is stored the same way (no migration); GET reads it back.
     const pendingEvent = aiResult.pendingEvent ?? null
-    const storedAssistantContent = pendingEvent
-      ? JSON.stringify({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent })
-      : cleanResponse
+    const storedAssistantContent = encodeStoredReply({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent, draft })
 
     // Save messages to this session
     await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'user', content: storedMsg } })
@@ -695,10 +903,15 @@ export async function POST(req: NextRequest) {
     })
 
     // Generate title after the first exchange in a new session (no title yet)
-    if (!session.title && history.length === 0) {
+    // Brief 43 PR 4: no title call past the hard deadline (History titles it later).
+    if (!session.title && history.length === 0 && !budget.pastHard()) {
       try {
         const openaiForTitle = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-        const titleCompletion = await openaiForTitle.chat.completions.create({
+        // The cap also stops the request itself, so a slow title doesn't keep
+        // going (and get retried by the SDK) after the reply has gone.
+        // Same length as withinTurn's wait below, so the stop comes first.
+        const titleCap = deadlineSignal(Math.min(LOOKUP_TIMEOUT_MS, budget.msLeft(TURN_CEILING_MS)))
+        const titleCompletion = await withinTurn(openaiForTitle.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: 'Generate a 4-7 word title that summarizes this real estate conversation. Title case, no punctuation at end, no quotes. Examples: "Brooklyn Buyer ISO Matches", "Coming Soon Under 2M", "Off Market Tribeca Search"' },
@@ -706,8 +919,9 @@ export async function POST(req: NextRequest) {
           ],
           max_tokens: 20,
           temperature: 0.3,
-        })
-        const title = titleCompletion.choices[0].message.content?.trim().replace(/^["']|["']$/g, '')
+        }, { signal: AbortSignal.any([turnDeadline.signal, titleCap.signal]) }), LOOKUP_TIMEOUT_MS) // a slow title can't hold up a finished reply
+          .finally(() => titleCap.clear())
+        const title = titleCompletion?.choices[0].message.content?.trim().replace(/^["']|["']$/g, '')
         if (title) await prisma.chatSession.update({ where: { id: session.id }, data: { title } })
       } catch { /* non-fatal */ }
     } else {
@@ -735,7 +949,12 @@ export async function POST(req: NextRequest) {
       const interaction = await prisma.driftInteraction.create({
         data: {
           query:          userMessage || storedMsg,
-          parsedFilters:  { toolCalls: allToolCalls, maxIterationsHit, guard: guardTelemetry } as unknown as object,
+          // Brief 43 PR 3: draftPrivacy records what a draft was flagged for (kinds only, never the text).
+          // Brief 43 PR 4: deadline records whether the turn's clock cut anything short.
+          parsedFilters:  {
+            toolCalls: allToolCalls, maxIterationsHit, guard: guardTelemetry, deadline: { softCut, factCheckSkipped },
+            ...(draftResult.outcome !== 'none' ? { draftPrivacy: { outcome: draftResult.outcome, flagKinds: draftResult.flagKinds, rewrote: draftResult.rewrote } } : {}),
+          } as unknown as object,
           topCards:       topCards as unknown as object[],
           responseTimeMs: Date.now() - t0,
           modelUsed:      CHAT_MODEL,
@@ -750,6 +969,7 @@ export async function POST(req: NextRequest) {
       console.error('[DealFlow] DriftInteraction logging failed (non-fatal):', err)
     }
 
+    turnDeadline.clear()
     return NextResponse.json({
       sessionId:    session.id,
       interactionId,
@@ -762,6 +982,8 @@ export async function POST(req: NextRequest) {
       // produced no report/fragment.
       attachedReport:   serverAttachedReport,
       attachedFragment: serverAttachedFragment,
+      // Brief 43 PR 3 — the checked draft to copy, or null.
+      draft,
     })
   } catch (err) {
     console.error('[DealFlow] Chat API error:', err)
@@ -779,5 +1001,14 @@ export async function GET(req: NextRequest) {
     where: { sessionId },
     orderBy: { createdAt: 'asc' },
   })
-  return NextResponse.json({ messages })
+  // Brief 43 PR 3: a reply stored as JSON (a draft or a calendar proposal) is
+  // shown as its text, with its draft beside it.
+  return NextResponse.json({
+    messages: messages.map(m => (m.role === 'assistant' ? { ...m, ...replyFields(m.content) } : m)),
+  })
+}
+
+function replyFields(content: string) {
+  const { response, draft } = readStoredReply(content)
+  return { content: response, draft }
 }

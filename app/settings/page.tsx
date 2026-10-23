@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import TopNav from '@/components/TopNav'
+import { digestScheduleLabel } from '@/lib/time/newYork'
 
 interface ConnectionResult {
   ok: boolean; displayName?: string; mail?: string; error?: string
@@ -217,21 +218,15 @@ export default function SettingsPage() {
             <>
               <Toggle label="Morning digest" on={notif.digestEnabled} onChange={v => saveNotif({ digestEnabled: v })} />
               <Toggle label="Realtime HOT alerts" on={notif.realtimeEnabled} onChange={v => saveNotif({ realtimeEnabled: v })} />
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0' }}>
-                <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>Digest time</span>
-                <input
-                  type="time"
-                  value={notif.digestTime}
-                  onChange={e => saveNotif({ digestTime: e.target.value })}
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '6px 10px', color: '#fff', fontSize: 16, colorScheme: 'dark' }}
-                />
-              </div>
               <div style={{ marginTop: 10 }}>
                 <Btn onClick={sendTestPush} variant="ghost">Send Test Push</Btn>
                 {testResult2 && <p style={{ marginTop: 8, fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{testResult2}</p>}
               </div>
+              {/* Brief 48 (PR 4): no digest-time picker. It did nothing: the digest runs at a fixed hour (vercel.json).
+                  This line says when it really arrives, true in summer and winter [planner]. It renders only in the
+                  browser, after the preferences load, so the server never renders it. */}
               <p style={{ marginTop: 10, fontSize: 11, color: 'rgba(255,255,255,0.25)', lineHeight: 1.5 }}>
-                Digest currently runs daily at 8:00 AM ET. {notifSaving ? 'Saving…' : ''}
+                {digestScheduleLabel(new Date())}. {notifSaving ? 'Saving…' : ''}
               </p>
             </>
           ) : (
