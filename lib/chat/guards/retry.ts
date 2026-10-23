@@ -90,6 +90,8 @@ export interface GuardAttempt {
   attempt: number
   regexFlags: RegexFlag[]
   verifierFlags: VerifierFlag[]
+  // Brief 43 PR 15 (Q31): the fact-check was skipped on a fact-free reply (factFree.ts).
+  verifierSkipped?: 'fact_free'
   verifierCost: number
   // Brief 43 PR 10 (Q32): the fact-check failed or answered garbage on this
   // attempt, so its reply was accepted on the regex check alone.

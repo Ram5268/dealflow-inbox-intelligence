@@ -243,7 +243,8 @@ export async function searchListings(rawInput: SearchListingsInput): Promise<Sea
   const input = searchListingsInputSchema.parse(rawInput)
   const organizationId = await getCurrentOrgId()
 
-  const limit = input.limit ?? 50
+  // Brief 43 PR 15 (Q31): 20 cards unless Drift asks for more (was 50); totalMatched still has the full count.
+  const limit = input.limit ?? 20
   // Brief 43 PR 7 (N6): default 0, so "under $X" is a hard ceiling.
   const tolerance = input.priceTolerance ?? 0
 
