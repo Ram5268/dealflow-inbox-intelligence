@@ -71,3 +71,17 @@ test('the chat page files replies through the chat view', () => {
   const report = src.slice(reportAt, src.indexOf('function userQuestionFor(', reportAt))
   assert.match(report, /chatView\.isCurrent\(/, 'a report finished after a switch stays in its own chat too')
 })
+
+// Review r1: a History load overtaken by another switch no longer clears
+// "Loading…" (its finally is skipped), so opening a new empty chat must clear
+// it itself, or the new chat shows "Loading…" in place of its messages until
+// another chat is opened from History.
+test('a new chat clears an overtaken chat load\'s "Loading…"', () => {
+  const src = readFileSync(join(__dirname, '../../../app/chat/page.tsx'), 'utf8')
+  const opens = [...src.matchAll(/chatView\.open\(null\)/g)]
+  assert.ok(opens.length >= 2, 'new chat, two ways')
+  for (const m of opens) {
+    const block = src.slice(m.index!, src.indexOf('setSessionKey(', m.index!))
+    assert.match(block, /setLoadingHistory\(false\)/)
+  }
+})

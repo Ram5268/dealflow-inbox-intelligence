@@ -58,18 +58,26 @@ const T0 = Date.UTC(2026, 9, 1)
 let i = 0
 const next = () => ++i
 
-// An email buyer or renter request (ExtractedOpportunity BUYER_ISO / RENTER_INQUIRY).
+// An email buyer or renter request (ExtractedOpportunity BUYER_ISO / RENTER_INQUIRY),
+// stored the way mapISO stores one (lib/extraction/schemas.ts): `beds` and `price`
+// hold the range's midpoint ("3-4 BR" is beds 3.5), or a lone min or max, unless
+// the test sets them (review r1).
 export function emailBuyer(over: Row = {}): Row {
   const n = next()
-  return {
+  const row: Row = {
     id: `buyer_${n}`, organizationId: 'org_pr5', category: 'BUYER_ISO', extractedTitle: `Example buyer request ${n}`,
     neighborhoods: ['Park Slope'], neighborhood: null, borough: 'Brooklyn',
-    minBeds: 3, maxBeds: 4, beds: null, minPrice: 1_500_000, maxPrice: 2_000_000, price: null,
+    minBeds: 3, maxBeds: 4, minPrice: 1_500_000, maxPrice: 2_000_000,
     mustHaves: null, dealbreakers: null, timeline: null, propertyTypes: [], isTestData: true,
     isDuplicate: false, processingStatus: 'active',
     createdAt: new Date(T0 + n * 60_000), updatedAt: new Date(T0 + n * 60_000),
     ...over,
   }
+  const num = (k: string) => (row[k] as number | null | undefined) ?? null
+  const [minB, maxB, minP, maxP] = [num('minBeds'), num('maxBeds'), num('minPrice'), num('maxPrice')]
+  if (!('beds' in over)) row.beds = minB != null && maxB != null ? (minB + maxB) / 2 : maxB ?? minB
+  if (!('price' in over)) row.price = minP && maxP ? Math.round((minP + maxP) / 2) : maxP ?? minP
+  return row
 }
 
 // A listing from an email (ExtractedOpportunity on the supply side). Public, so

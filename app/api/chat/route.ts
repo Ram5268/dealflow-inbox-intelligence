@@ -428,7 +428,9 @@ export async function POST(req: NextRequest) {
       if (unresolved) return unresolved
 
       if (tu.name === 'generate_report') {
-        const generated = await generator.full({ ...params, prisma, anthropic: reportAnthropic })
+        // Brief 48 PR 13 (Q44; review r1): this organization only, after the
+        // params, as POST /api/reports does [engineering precaution].
+        const generated = await generator.full({ ...params, prisma, anthropic: reportAnthropic, organizationId })
         // Brief 43 PR 4: a report finished after the turn's ceiling isn't saved;
         // the reply (TIMED_OUT_REPLY) has gone, and a late save would leave a
         // chat with no messages in History [engineering precaution].
@@ -464,7 +466,7 @@ export async function POST(req: NextRequest) {
 
       // generate_report_section
       const sectionKey = input.sectionKey ?? ''
-      const section = await generator.section({ ...params, sectionKey, prisma, anthropic: reportAnthropic })
+      const section = await generator.section({ ...params, sectionKey, prisma, anthropic: reportAnthropic, organizationId })
       serverAttachedFragment = { templateId, sectionKey, title: section.title, content: section.content, sources: section.sources }
       const result = { templateId, sectionKey, title: section.title, content: section.content }
       toolResultsForGuard.push({ name: tu.name, input: tu.input, output: result })

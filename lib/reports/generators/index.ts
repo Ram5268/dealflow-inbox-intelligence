@@ -15,9 +15,9 @@ export type Generator = {
 }
 
 // Brief 48 PR 13 (Q44): organizationId scopes every read, and the buyer must
-// belong to it. POST /api/reports passes the current organization after the
-// request's params; Drift's report tool passes none, so the buyer's own is used
-// (a value in its params can only name the buyer's own, or the buyer is "not found").
+// belong to it. POST /api/reports and Drift's report tools pass the current
+// organization after the request's params, so a param can't change it. With
+// none (scripts, tests), the buyer's own organization is used.
 const orgOf = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
 
 export const GENERATOR_REGISTRY: Record<string, Generator> = {

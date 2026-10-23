@@ -8,7 +8,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { PrismaClient } from '@prisma/client'
-import { makeFakePrisma, emailBuyer, emailListing, listingMatch, ORG } from '../../../__tests__/pr13FakePrisma'
+import { makeFakePrisma, emailBuyer, emailListing, listingMatch, contact, ORG } from '../../../__tests__/pr13FakePrisma'
 import { gatherContext } from '../context'
 import { offMarketSection } from '../sections/off-market'
 
@@ -19,9 +19,13 @@ const theirs = emailListing({ id: 'theirs', address: '51 Sample St', organizatio
 const offOurs = emailListing({ id: 'off_ours', category: 'OFF_MARKET_SALE', address: '52 Sample St', neighborhood: 'Park Slope' })
 const offTheirs = emailListing({ id: 'off_theirs', category: 'OFF_MARKET_SALE', address: '53 Sample St', neighborhood: 'Park Slope', organizationId: OTHER })
 
+// Review r1: another organization's rows that aren't buyers either.
+const theirLead = emailListing({ id: 'their_lead', category: 'SELLER_LEAD', organizationId: OTHER })
+const theirSeller = contact({ id: 'their_seller', intent: 'SELLER', organizationId: OTHER })
+
 const fake = makeFakePrisma({
-  extractedOpportunity: [buyer, ours, theirs, offOurs, offTheirs],
-  mojoContact: [],
+  extractedOpportunity: [buyer, ours, theirs, offOurs, offTheirs, theirLead],
+  mojoContact: [theirSeller],
   match: [
     listingMatch('ours', 'buyer_q44', { tier: 'HOT' }),
     // A row in another organization naming the same buyer id.
@@ -33,6 +37,15 @@ const prisma = fake.prisma as unknown as PrismaClient
 
 test("another organization's buyer id is not found", async () => {
   await assert.rejects(gatherContext({ buyerId: 'buyer_q44', prisma, organizationId: OTHER }), /not found/)
+})
+
+test("another organization's id is \"not found\" before anything else is said about it (review r1)", async () => {
+  for (const id of ['their_lead', 'their_seller']) {
+    await assert.rejects(gatherContext({ buyerId: id, prisma, organizationId: ORG }), (e: Error) => {
+      assert.equal(e.message, `buyer-match: buyer ${id} not found`)
+      return true
+    })
+  }
 })
 
 test("the report reads only its organization's matches and off-market leads", async () => {

@@ -14,8 +14,8 @@
 // Brief 48 PR 13 (M29): a match Ryan dismissed stays out of the report, as it
 // does on /matches.
 // Brief 48 PR 13 (Q44): every read is scoped to one organization: the one the
-// caller passes (POST /api/reports), else the buyer's own (Drift's report tool,
-// whose buyer ids come from organization-scoped searches) [engineering precaution].
+// caller passes (POST /api/reports, Drift's report tools), else the buyer's own
+// [engineering precaution].
 import { Category } from '@prisma/client'
 import type { PrismaClient } from '@prisma/client'
 import type { GenContext, BuyerRecord, MatchedListing } from '../types'
@@ -44,12 +44,17 @@ const notFound = (buyerId: string) => new Error(`buyer-match: buyer ${buyerId} n
 
 type Loaded = { buyer: BuyerRecord; organizationId: string; counterpartType: 'opportunity' | 'mojo' }
 
-async function loadEmailBuyer(prisma: PrismaClient, buyerId: string): Promise<Loaded | null> {
+// Another organization's row is "not found", before anything else is said
+// about it (review r1) [engineering precaution].
+const otherOrg = (rowOrg: string, organizationId: string | undefined) => !!organizationId && rowOrg !== organizationId
+
+async function loadEmailBuyer(prisma: PrismaClient, buyerId: string, organizationId: string | undefined): Promise<Loaded | null> {
   const row = await prisma.extractedOpportunity.findUnique({
     where: { id: buyerId },
     select: BUYER_SELECT,
   })
   if (!row) return null
+  if (otherOrg(row.organizationId, organizationId)) throw notFound(buyerId)
   if (row.category !== Category.BUYER_ISO && row.category !== Category.RENTER_INQUIRY) {
     throw new Error(
       `buyer-match: ${buyerId} is category ${row.category}, not a demand party (BUYER_ISO / RENTER_INQUIRY). ` +
@@ -80,9 +85,10 @@ async function loadEmailBuyer(prisma: PrismaClient, buyerId: string): Promise<Lo
   return { buyer, organizationId: row.organizationId, counterpartType: 'opportunity' }
 }
 
-async function loadCrmBuyer(prisma: PrismaClient, buyerId: string): Promise<Loaded | null> {
+async function loadCrmBuyer(prisma: PrismaClient, buyerId: string, organizationId: string | undefined): Promise<Loaded | null> {
   const row = await prisma.mojoContact.findUnique({ where: { id: buyerId }, select: CRM_BUYER_SELECT })
   if (!row) return null
+  if (otherOrg(row.organizationId, organizationId)) return null
   // Brief 5.0's test mode never reads a real CRM contact.
   if (isTestModeOnly() && !row.isTestData) return null
   if (row.intent !== 'BUYER' && row.intent !== 'RENTER') {
@@ -122,8 +128,8 @@ export async function gatherContext({
   prisma: PrismaClient
   organizationId?: string
 }): Promise<GenContext> {
-  const loaded = (await loadEmailBuyer(prisma, buyerId)) ?? (await loadCrmBuyer(prisma, buyerId))
-  if (!loaded || (organizationId && loaded.organizationId !== organizationId)) throw notFound(buyerId)
+  const loaded = (await loadEmailBuyer(prisma, buyerId, organizationId)) ?? (await loadCrmBuyer(prisma, buyerId, organizationId))
+  if (!loaded) throw notFound(buyerId)
   const { buyer, counterpartType } = loaded
   const orgId = organizationId ?? loaded.organizationId
 

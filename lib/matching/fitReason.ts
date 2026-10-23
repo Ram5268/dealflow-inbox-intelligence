@@ -216,14 +216,19 @@ export function listingFitReason(listing: ListingFacts, buyer: BuyerAsk): string
     else if (!getAdjacent(here).some(n => wanted.includes(n))) drawbacks.push(WEAK_LABELS.neighborhood)
   }
 
-  const max = buyer.maxPrice ?? buyer.price
+  // The buyer's ask as nightly matching reads it (lib/matching/adapters.ts,
+  // opportunityToBuyerData): an email buyer's `price` and `beds` hold mapISO's
+  // midpoint of a range, or a lone min or max ("3-4 BR" is stored as beds 3.5,
+  // "$1.6M+" as price $1.6M), so they count only when no range was given.
+  // A lone budget figure is the ceiling.
+  const max = buyer.maxPrice ?? (buyer.minPrice == null ? buyer.price : null)
   if (listing.price != null && (max != null || buyer.minPrice != null)) {
     if (max != null && listing.price > max) drawbacks.push(WEAK_LABELS.price)
     else if (buyer.minPrice == null || listing.price >= buyer.minPrice) strengths.push(FIT_LABELS.price)
   }
 
-  const bedsMin = buyer.beds ?? buyer.minBeds
-  const bedsMax = buyer.beds ?? buyer.maxBeds
+  const bedsMin = buyer.minBeds ?? (buyer.maxBeds == null ? buyer.beds : null)
+  const bedsMax = buyer.maxBeds ?? (buyer.minBeds == null ? buyer.beds : null)
   if (listing.beds != null && (bedsMin != null || bedsMax != null)) {
     const inRange = (bedsMin == null || listing.beds >= bedsMin) && (bedsMax == null || listing.beds <= bedsMax)
     if (inRange) strengths.push(FIT_LABELS.beds)

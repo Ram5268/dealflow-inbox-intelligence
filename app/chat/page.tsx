@@ -1120,6 +1120,7 @@ function ChatPageInner() {
       dispatch({ type: 'RESET_NEW' })
       chatView.open(null)
       setLoading(false)
+      setLoadingHistory(false) // an older chat's load, overtaken, no longer clears it
       setCurrentSessionId(null)
       setMessages([])
       setShowShader(true); setSessionKey(k => k + 1)
@@ -1172,6 +1173,7 @@ function ChatPageInner() {
     dispatch({ type: 'RESET_NEW' })
     chatView.open(null)
     setLoading(false)
+    setLoadingHistory(false) // an older chat's load, overtaken, no longer clears it
     setCurrentSessionId(null)
     setMessages([])
     setShowShader(true); setSessionKey(k => k + 1)

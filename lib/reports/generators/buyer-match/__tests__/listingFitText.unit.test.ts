@@ -79,3 +79,21 @@ test('listingFitReason: only what the facts show, in the nightly wording', () =>
   // An exact bedroom count, and a buyer with only a price.
   assert.equal(listingFitReason({ neighborhood: null, price: 900_000, beds: 2 }, { ...b, minPrice: null, maxPrice: null, price: 1_000_000, minBeds: null, maxBeds: null, beds: 2 }), 'In budget, bedroom count')
 })
+
+// Review r1: an email buyer as mapISO stores it (lib/extraction/schemas.ts):
+// "3-4 BR, $1.5-2.0M" keeps beds 3.5 and price $1.75M beside the range, and a
+// lone "2+ BR" or "$1.6M+" fills beds or price from it. The line reads the
+// range, as nightly matching does (lib/matching/adapters.ts).
+test('listingFitReason reads a buyer the way mapISO stores it', () => {
+  const range = { neighborhoods: ['Park Slope'], minBeds: 3, maxBeds: 4, beds: 3.5, minPrice: 1_500_000, maxPrice: 2_000_000, price: 1_750_000 }
+  assert.equal(listingFitReason({ neighborhood: 'Park Slope', price: 1_800_000, beds: 3 }, range), 'Right neighborhood, in budget, bedroom count')
+  assert.equal(listingFitReason({ neighborhood: 'Park Slope', price: 1_800_000, beds: 4 }, range), 'Right neighborhood, in budget, bedroom count')
+  assert.equal(listingFitReason({ neighborhood: 'Park Slope', price: 1_800_000, beds: 5 }, range), 'Right neighborhood, in budget; weaker on bedrooms')
+  const twoPlus = { neighborhoods: ['Park Slope'], minBeds: 2, maxBeds: null, beds: 2, minPrice: null, maxPrice: null, price: null }
+  assert.equal(listingFitReason({ neighborhood: 'Park Slope', price: null, beds: 3 }, twoPlus), 'Right neighborhood, bedroom count')
+  const pricePlus = { neighborhoods: ['Park Slope'], minBeds: null, maxBeds: null, beds: null, minPrice: 1_600_000, maxPrice: null, price: 1_600_000 }
+  assert.equal(listingFitReason({ neighborhood: 'Park Slope', price: 1_800_000, beds: null }, pricePlus), 'Right neighborhood, in budget')
+  assert.equal(listingFitReason({ neighborhood: 'Park Slope', price: 1_500_000, beds: null }, pricePlus), 'Right neighborhood')
+  const upTo = { neighborhoods: ['Park Slope'], minBeds: null, maxBeds: 2, beds: 2, minPrice: null, maxPrice: 1_600_000, price: 1_600_000 }
+  assert.equal(listingFitReason({ neighborhood: 'Park Slope', price: 1_700_000, beds: 1 }, upTo), 'Right neighborhood, bedroom count; weaker on price')
+})
