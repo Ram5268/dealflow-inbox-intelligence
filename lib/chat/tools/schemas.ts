@@ -7,6 +7,7 @@
 // Keep these in lockstep with the Zod schemas — the Zod .parse() is the runtime
 // guard, this is the model-facing contract.
 import type Anthropic from '@anthropic-ai/sdk'
+import { BUYER_ARCHETYPES } from './partyFilters'
 
 // Brief 43 PR 7 (Q11-Q13, Q40; N6): "under" is a hard ceiling, an area is that
 // area, an address is that address, and building facts are on the card.
@@ -92,7 +93,7 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
 export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
   name: 'generate_report',
   description:
-    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for Sarah", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for Sarah"), use generate_report_section instead. Only unlocked templates work (currently: buyer-match). For buyer-match, params must be { buyerId }, where buyerId is a BUYER_ISO or RENTER_INQUIRY opportunity id — call search_parties first to resolve a name to an id.',
+    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for [buyer]", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for [buyer]"), use generate_report_section instead. Only unlocked templates work (currently: buyer-match). For buyer-match, params must be { buyerId }, where buyerId is the id of a buyer or renter that search_parties returned in this turn, or one in the Shown note of an earlier reply in this chat; any other id is refused. Call search_parties first, and if nothing matches exactly, ask Ryan which buyer he means.',
   input_schema: {
     type: 'object',
     properties: {
@@ -100,7 +101,7 @@ export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
       params: {
         type: 'object',
         description: 'Template-specific params, e.g. { buyerId: "abc123" } for buyer-match.',
-        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties).' } },
+        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties this turn, or an earlier Shown note).' } },
       },
     },
     required: ['templateId', 'params'],
@@ -110,7 +111,7 @@ export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
 export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
   name: 'generate_report_section',
   description:
-    'Generate a SINGLE SECTION of a report template, for inline chat display. Use when the user asks about a specific piece ("what are the near-misses for Sarah", "give me the budget check on this buyer", "curated matches for the Soho buyer"). Cheaper and faster than a full report and NOT saved. Returns structured section content that you should restate in full in your reply so the user sees it. For buyer-match, sectionKey is one of: criteria, matching-inventory, curated-matches, near-misses, off-market, budget-reality, showing-schedule, recommended-adjustment; params is { buyerId }.',
+    'Generate a SINGLE SECTION of a report template, for inline chat display. Use when the user asks about a specific piece ("what are the near-misses for [buyer]", "give me the budget check on this buyer", "curated matches for the Soho buyer"). Cheaper and faster than a full report and NOT saved. Returns structured section content that you should restate in full in your reply so the user sees it. For buyer-match, sectionKey is one of: criteria, matching-inventory, curated-matches, near-misses, off-market, budget-reality, showing-schedule, recommended-adjustment; params is { buyerId }, a buyer id that search_parties returned in this turn, or one in the Shown note of an earlier reply in this chat (any other id is refused).',
   input_schema: {
     type: 'object',
     properties: {
@@ -119,7 +120,7 @@ export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
       params: {
         type: 'object',
         description: 'Template-specific params, e.g. { buyerId: "abc123" }.',
-        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties).' } },
+        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties this turn, or an earlier Shown note).' } },
       },
     },
     required: ['templateId', 'sectionKey', 'params'],
@@ -163,6 +164,16 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
         description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
       limit: { type: 'number', description: 'Max cards to return (default 50, max 200).' },
+      // Brief 43 PR 9 (Q15, Q41): lib/chat/tools/partyFilters.ts.
+      query: {
+        type: 'string',
+        description: 'A buyer\'s or renter\'s name, their agent\'s name, or a distinctive word from their request\'s title. Every word (up to 8) must appear as a whole word in the request\'s title, the agent\'s name or the buyer\'s name; no results means nobody by that name is on file. Put an area, beds or budget in neighborhoods, bedsMin/bedsMax or priceRangeOverlaps, never in query (a title may spell an area differently). Cards carry agentName.',
+      },
+      archetype: {
+        type: 'string',
+        enum: Object.keys(BUYER_ARCHETYPES),
+        description: 'Buyer type: CASH_BUYER, EXCHANGE_1031 (1031-exchange buyers), TRADITIONAL_FINANCING, INVESTOR_LANDLORD, FIRST_TIME_FHA, LUXURY_ALL_CASH or LUXURY_FINANCED. Matches the stored type, or a request with none stored that names it ("1031", "FHA"). Cards carry archetype in plain words.',
+      },
     },
     required: [],
   } as Anthropic.Messages.Tool.InputSchema,
