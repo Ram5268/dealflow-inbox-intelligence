@@ -11,7 +11,7 @@ import { loadMatchBuckets, persistBatch, queueMatchWhere, type QueueEntry, type 
 // for in one call [engineering precaution]. Every id here is invented.
 const PG_MAX_PARAMS = 32_767
 // Measured on Postgres 18 + Prisma 7.8: a CallQueueEntry row binds 11 parameters
-// (the 9 fields persistBatch passes, plus the generated id and generatedAt).
+// (the 10 fields persistBatch passes, plus the generated id).
 const PARAMS_PER_CALL_LIST_ROW = 11
 
 const tooMany = (n: number) => Object.assign(new Error(`${n} parameters: the query parameter limit supported by your database is exceeded`), { code: 'P2029' })
@@ -27,32 +27,32 @@ const entry = (i: number): QueueEntry => ({
 })
 
 test('the call list is written in inserts that each stay under the parameter limit, delete first and log last (4,000 sellers)', () => {
-  const calls: string[] = []
-  const written: string[] = []
+  type Row = { contactId: string; rank: number; generatedAt: Date }
+  type Op = { op: string; data?: Row[] }
   const db = {
     callQueueEntry: {
-      deleteMany: (a: unknown) => { calls.push('deleteMany'); return a },
-      createMany: (a: { data: { contactId: string; rank: number }[] }) => {
+      deleteMany: (): Op => ({ op: 'deleteMany' }),
+      createMany: (a: { data: Row[] }): Op => {
         const params = a.data.length * PARAMS_PER_CALL_LIST_ROW
         if (params > PG_MAX_PARAMS) throw tooMany(params)
-        calls.push(`createMany:${a.data.length}`)
-        written.push(...a.data.map(r => `${r.rank}:${r.contactId}`))
-        return a
+        return { op: 'createMany', data: a.data }
       },
     },
-    auditLog: { create: (a: { data: { action: string } }) => { calls.push(`audit:${a.data.action}`); return a } },
+    auditLog: { create: (a: { data: { action: string } }): Op => ({ op: `audit:${a.data.action}` }) },
   } as unknown as Pick<PrismaClient, 'callQueueEntry' | 'auditLog'>
   const entries = Array.from({ length: 4_000 }, (_, i) => entry(i))
 
-  const ops = persistBatch(db, 'org', entries, 'run-1', stats)
+  // The one list handed to $transaction, in the order it runs.
+  const ops = persistBatch(db, 'org', entries, 'run-1', stats) as unknown as Op[]
 
-  assert.equal(calls[0], 'deleteMany')
-  assert.equal(calls[calls.length - 1], 'audit:CALL_QUEUE_BUILD')
-  const inserts = calls.slice(1, -1)
-  assert.ok(inserts.length > 1 && inserts.every(c => c.startsWith('createMany:')), JSON.stringify(calls))
-  // Every row once, in rank order; and all of it handed back as one list for one $transaction.
-  assert.deepEqual(written, entries.map(e => `${e.rank}:${e.contactId}`))
-  assert.equal(ops.length, calls.length)
+  assert.equal(ops[0].op, 'deleteMany')
+  assert.equal(ops[ops.length - 1].op, 'audit:CALL_QUEUE_BUILD')
+  const inserts = ops.slice(1, -1)
+  assert.ok(inserts.length > 1 && inserts.every(o => o.op === 'createMany'), JSON.stringify(ops.map(o => o.op)))
+  // Every row once, in rank order, and the whole list stamped with one time.
+  const rows = inserts.flatMap(o => o.data ?? [])
+  assert.deepEqual(rows.map(r => `${r.rank}:${r.contactId}`), entries.map(e => `${e.rank}:${e.contactId}`))
+  assert.equal(new Set(rows.map(r => r.generatedAt.getTime())).size, 1)
 })
 
 test("the call list's dismissal check reads listing categories in calls under the limit, each listing once (66,000 inbox matches)", async () => {

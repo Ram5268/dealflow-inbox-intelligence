@@ -78,10 +78,10 @@ export class CallQueueRefusedError extends Error {
 }
 
 // Brief 48 (PR 14, item 4.12): rows per insert. A row binds 11 parameters (the
-// 9 fields below, plus the generated id and generatedAt), so 1,000 rows is 11,000,
+// 10 fields below, plus the generated id), so 1,000 rows is 11,000,
 // well under Postgres's 32,767 a statement. Prisma 7.8 would split one big insert
 // itself, right at the limit; this doesn't rely on it [engineering precaution].
-export const CALL_LIST_WRITE_CHUNK = 1_000
+const CALL_LIST_WRITE_CHUNK = 1_000
 
 // Brief 35: the persist transaction replaces the org's list and records the run
 // in AuditLog. Brief 47 (PR 1): an empty batch is refused here too (buildCallQueue
@@ -93,10 +93,13 @@ export function persistBatch(
   orgId: string, entries: QueueEntry[], generationRunId: string, stats: QueueStats,
 ) {
   if (entries.length === 0) throw new CallQueueRefusedError()
+  // One generatedAt for the whole list, as one insert gave it: Prisma stamps
+  // @default(now()) per insert, so each chunk would get its own time.
+  const generatedAt = new Date()
   const rows = entries.map(e => ({
     organizationId: orgId, contactId: e.contactId, rank: e.rank, priorityScore: e.priorityScore,
     reason: e.reason, primaryMatchId: e.primaryMatchId, contributingMatchIds: e.contributingMatchIds,
-    contributions: e.contributions, generationRunId,
+    contributions: e.contributions, generationRunId, generatedAt,
   }))
   const deleteOld = db.callQueueEntry.deleteMany({ where: { organizationId: orgId } })
   const inserts = []
