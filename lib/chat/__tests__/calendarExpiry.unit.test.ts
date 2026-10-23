@@ -98,3 +98,20 @@ test('stored chat rows carry no suggestions (D7)', async () => {
   await confirm(deps, '2026-10-20T19:00:00Z', new Date(NOW - HOUR))
   for (const m of rec.messages) assert.ok(!('suggestions' in m), JSON.stringify(m))
 })
+
+// Review r1: a start time with no zone is New York's clock (Outlook books it
+// with timeZone America/New_York), whatever the server's own zone is.
+test('proposalExpiry: a zone-less start time is read as New York time', () => {
+  // 12:30 PM in New York on Thu Oct 22 2026 (16:30Z); "3 pm today" is still ahead.
+  const now = Date.parse('2026-10-22T16:30:00Z')
+  const proposedAt = new Date(now - 60_000)
+  assert.equal(proposalExpiry({ startISO: '2026-10-22T15:00:00', proposedAt, now }), null)
+  assert.equal(proposalExpiry({ startISO: '2026-10-22T15:00', proposedAt, now }), null)
+  assert.equal(proposalExpiry({ startISO: '2026-10-22T12:00:00', proposedAt, now }), 'passed')
+  assert.equal(proposalExpiry({ startISO: '2026-10-22T15:00:00-04:00', proposedAt, now }), null)
+  assert.equal(proposalExpiry({ startISO: '2026-10-22T15:00:00Z', proposedAt, now }), 'passed')
+  // Winter time (UTC-5): 9 AM on Jan 14 is 14:00Z.
+  const jan = Date.parse('2027-01-14T13:30:00Z')
+  assert.equal(proposalExpiry({ startISO: '2027-01-14T09:00:00', proposedAt: new Date(jan - 60_000), now: jan }), null)
+  assert.equal(proposalExpiry({ startISO: '2027-01-14T08:00:00', proposedAt: new Date(jan - 60_000), now: jan }), 'passed')
+})

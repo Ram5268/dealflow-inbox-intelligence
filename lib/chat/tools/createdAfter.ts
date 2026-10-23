@@ -3,10 +3,11 @@
 // came in today / this week" is a real date filter. Drift reads today's date
 // from the TODAY line in its per-turn context (lib/chat/context/today.ts).
 // Only an ISO date or date-time is accepted ("friday at 3" would otherwise
-// parse as a date in 2001); a date alone means midnight in New York
-// [engineering precaution].
+// parse as a date in 2001); a date alone means midnight in New York, and a
+// date-time with no zone is New York's clock (review r1) [engineering precaution].
 import { z } from 'zod'
 import { startOfNewYorkDay } from '../../time/newYork'
+import { proposalStartMs } from '../calendarConfirm'
 
 const ISO = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/
@@ -20,7 +21,9 @@ function newYorkMidnight(y: number, m: number, d: number): Date {
 export function createdAfterDate(value: string): Date {
   const day = DATE_ONLY.exec(value)
   if (day) return newYorkMidnight(Number(day[1]), Number(day[2]), Number(day[3]))
-  return new Date(value)
+  // Review r1: "2026-10-19T08:00" is 8 AM in New York, not on the server's clock
+  // (UTC on Vercel); the same reading as a calendar proposal's time (F9).
+  return new Date(proposalStartMs(value.replace(' ', 'T')))
 }
 
 function isRealDate(value: string): boolean {

@@ -110,7 +110,7 @@ Param inference for reports:
 - If a template is locked or unknown, the tool returns an error; relay it plainly and do not retry.
 
 Presenting reports in your drift_response:
-- After generate_report: set attachedReport with the ids from the tool result, and write response EXACTLY as: "Done. Here's the Buyer Match report for {subject}." Nothing more: the report card under your reply opens every section.
+- After generate_report: set attachedReport with the ids from the tool result, and write response EXACTLY as: "Done. Here's the Buyer Match report for {buyer}." where {buyer} is the buyer's name from the tool result's subject, without its date. Nothing more: the report card under your reply opens every section.
 - After generate_report_section: set attachedFragment, and write response as the section's content in full, readable prose. Restate the actual addresses, prices, and reasons from the tool result so Ryan can read the section directly in the chat. Do not invent anything beyond what the tool returned.
 
 Tool structure:
@@ -121,7 +121,9 @@ Reply through the drift_response tool: plain text (no markdown, no bullet dashes
 //   Q38): no stock openers ("Certainly." etc., spot #18), no em-dashes, no "!",
 //   no system words in replies (spot #5 said "tool results");
 // - the generate_report line: "Done. Here's the Buyer Match report for
-//   {subject}." (N8; Ryan's target wording, DRIFT_SCRIPT #15);
+//   {buyer}." (N8; Ryan's target wording, DRIFT_SCRIPT #15). The tool's
+//   subject is "<buyer name> — <date>" (buyer-match/index.ts), so the prompt
+//   asks for the name alone (review r1);
 // - "Tool structure:": no follow-up suggestions (D7, a Brief 42 default), and
 //   the calendar follows the per-turn CALENDAR note: D8 (a Brief 42 default)
 //   while Outlook is paused [Ryan, 2026-09-24], pendingEvent only while it is

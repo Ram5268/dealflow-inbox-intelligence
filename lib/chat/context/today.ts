@@ -6,9 +6,11 @@
 
 import { NEW_YORK_TIME_ZONE as NY } from '../../time/newYork'
 
-function partOfDay(hour: number): 'morning' | 'afternoon' | 'evening' {
-  if (hour >= 5 && hour < 12) return 'morning'
-  if (hour >= 12 && hour < 17) return 'afternoon'
+// Review r1: midnight to 5 AM is "night", not "evening".
+function partOfDay(hour: number): 'night' | 'morning' | 'afternoon' | 'evening' {
+  if (hour < 5) return 'night'
+  if (hour < 12) return 'morning'
+  if (hour < 17) return 'afternoon'
   return 'evening'
 }
 

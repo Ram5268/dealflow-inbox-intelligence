@@ -24,6 +24,10 @@ test('createdAfterDate: a date alone is midnight in New York; a time is taken as
   assert.equal(createdAfterDate('2026-01-15').toISOString(), '2026-01-15T05:00:00.000Z') // EST
   assert.equal(createdAfterDate('2026-10-19T12:30:00Z').toISOString(), '2026-10-19T12:30:00.000Z')
   assert.equal(createdAfterDate('2026-10-19T08:00:00-04:00').toISOString(), '2026-10-19T12:00:00.000Z')
+  // Review r1: a date-time with no zone is New York's clock, whatever the server's zone.
+  assert.equal(createdAfterDate('2026-10-19T08:00').toISOString(), '2026-10-19T12:00:00.000Z') // EDT
+  assert.equal(createdAfterDate('2026-10-19 08:00:00').toISOString(), '2026-10-19T12:00:00.000Z')
+  assert.equal(createdAfterDate('2026-01-15T08:00:00').toISOString(), '2026-01-15T13:00:00.000Z') // EST
 })
 
 test('createdAfter must be an ISO date: loose phrases are refused', async () => {

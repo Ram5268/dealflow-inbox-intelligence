@@ -17,11 +17,32 @@ export const PROPOSAL_MAX_AGE_MS = 24 * 60 * 60 * 1000
 export const CALENDAR_PROPOSAL_PASSED = "That time has already passed, so I didn't add it to your calendar."
 export const CALENDAR_PROPOSAL_STALE = "That proposal is more than a day old, so I didn't add it to your calendar. Tell me the time again if you still want it."
 
+// Review r1: a start time with no zone ("2026-10-22T15:00:00") is New York's
+// clock: createCalendarEvent sends it with timeZone 'America/New_York', so that
+// is when Outlook books it. Date.parse would read it in the server's zone (UTC
+// on Vercel), 4 to 5 hours early, and refuse a same-day "yes" as passed.
+const ZONE = /(?:Z|[+-]\d{2}(?::?\d{2})?)$/i
+const NY_CLOCK = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York', year: 'numeric', month: 'numeric', day: 'numeric',
+  hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23',
+})
+function newYorkOffsetMs(ms: number): number {
+  const p = Object.fromEntries(NY_CLOCK.formatToParts(ms).map(x => [x.type, Number(x.value)]))
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - Math.floor(ms / 1000) * 1000
+}
+export function proposalStartMs(startISO: string): number {
+  const s = startISO.trim()
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) || ZONE.test(s)) return Date.parse(s)
+  const asUtc = Date.parse(`${s}Z`)
+  if (Number.isNaN(asUtc)) return Date.parse(s)
+  return asUtc - newYorkOffsetMs(asUtc - newYorkOffsetMs(asUtc))
+}
+
 // 'invalid' = the start time can't be read; 'passed' = it is now or earlier;
 // 'stale' = proposed more than PROPOSAL_MAX_AGE_MS ago. null = still good. An
 // unknown or unreadable proposal time (older callers) skips the age check.
 export function proposalExpiry(args: { startISO: string; proposedAt?: Date | string | null; now: number }): 'invalid' | 'passed' | 'stale' | null {
-  const start = Date.parse(args.startISO)
+  const start = proposalStartMs(args.startISO)
   if (Number.isNaN(start)) return 'invalid'
   if (start <= args.now) return 'passed'
   const proposed = args.proposedAt == null ? NaN : new Date(args.proposedAt).getTime()

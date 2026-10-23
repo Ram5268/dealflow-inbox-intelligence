@@ -56,3 +56,24 @@ test('long inputs stay fast (no runaway regex)', () => {
   cleanReplyText(long)
   assert.ok(Date.now() - t0 < 200, `took ${Date.now() - t0} ms`)
 })
+
+// Review r1: a dash next to a link was read as a line's start or end and
+// dropped with its spaces, gluing the link to the next word ("…/sale/1234567 —
+// 3 beds" became "…/sale/12345673 beds", a different listing).
+test('a link next to an em-dash keeps its own characters and its space', () => {
+  assert.equal(cleanReplyText('It is here: https://www.streeteasy.com/sale/1234567 — 3 beds at $1,850,000.'), 'It is here: https://www.streeteasy.com/sale/1234567, 3 beds at $1,850,000.')
+  assert.equal(cleanReplyText('Open it — https://www.streeteasy.com/sale/1234567'), 'Open it, https://www.streeteasy.com/sale/1234567')
+  assert.equal(cleanReplyText('https://a.example/x — first, then https://b.example/y!'), 'https://a.example/x, first, then https://b.example/y!')
+  assert.equal(cleanReplyText('Line\nhttps://a.example/x\n— next'), 'Line\nhttps://a.example/x\nnext')
+  assert.equal(cleanReplyText('Two links: https://a.example/x https://b.example/y.'), 'Two links: https://a.example/x https://b.example/y.')
+})
+
+test('a tight em-dash between numbers is a range (an en-dash); a spaced one is still a comma', () => {
+  assert.equal(cleanReplyText('The range is $1.2M—$1.4M, with 2—3 beds, 9:00—10:00 AM.'), 'The range is $1.2M–$1.4M, with 2–3 beds, 9:00–10:00 AM.')
+  assert.equal(cleanReplyText('Asking $1,850,000 — 2 buyers fit.'), 'Asking $1,850,000, 2 buyers fit.')
+})
+
+test('"!?" keeps its question mark, and "!" before an em-dash is not doubled up', () => {
+  assert.equal(cleanReplyText('Really!?'), 'Really?')
+  assert.equal(cleanReplyText('Two fit! — the first is coming soon.'), 'Two fit. the first is coming soon.')
+})

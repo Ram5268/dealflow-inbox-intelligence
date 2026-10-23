@@ -48,7 +48,10 @@ test("counts in Ryan's #10 wording, the call list in the CRM Queue, and no buyer
 })
 
 test('"your CRM", not "Mojo": the tools line, the behavior lines and RYAN_MD', () => {
-  assert.ok(!/mojo/i.test(SYSTEM_PROMPT), 'no "Mojo" in SYSTEM_PROMPT')
+  // Brief 43 PR 14 (Q38): the one line that bans system words in replies names
+  // "Mojo" among them; no other line calls Ryan's CRM that.
+  const lines = SYSTEM_PROMPT.split('\n').filter(l => /mojo/i.test(l))
+  assert.ok(lines.every(l => l.includes('Never use system words in replies')), `no other "Mojo" in SYSTEM_PROMPT: ${lines.join(' | ')}`)
   assert.ok(!/mojo leads/i.test(RYAN_MD), 'no "Mojo leads" in RYAN_MD')
   assert.match(SYSTEM_PROMPT, /search_parties \(buyers and renters\), find_seller \(one CRM seller Ryan names\) and count_sellers \(how many CRM sellers\)/)
   assert.match(SYSTEM_PROMPT, /Extra context \(live StreetEasy listings, your CRM seller counts, mortgage/)

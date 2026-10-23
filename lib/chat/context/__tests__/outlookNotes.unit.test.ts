@@ -11,14 +11,15 @@ import { todayLine } from '../today'
 import { graphPausedEmailBlock, GRAPH_PAUSED_CALENDAR_BLOCK, GRAPH_ON_CALENDAR_NOTE } from '../../../graphAccess'
 import type { ParsedQuery } from '../../../retrieval/types'
 
-let newestEmail: Date | null | 'throw' = null
+let newestEmail: Date | null | 'throw' | 'hang' = null
 const reads: unknown[] = []
 ;(globalThis as unknown as { prisma: unknown }).prisma = {
   rawEmail: {
-    findFirst: async (args: unknown) => {
+    findFirst: (args: unknown) => {
       reads.push(args)
-      if (newestEmail === 'throw') throw new Error('db down')
-      return newestEmail ? { receivedDateTime: newestEmail } : null
+      if (newestEmail === 'hang') return new Promise(() => {})
+      if (newestEmail === 'throw') return Promise.reject(new Error('db down'))
+      return Promise.resolve(newestEmail ? { receivedDateTime: newestEmail } : null)
     },
   },
 }
@@ -33,6 +34,10 @@ test('todayLine: the date and the part of the day, in New York', () => {
   // Just after midnight UTC is still the evening before in New York.
   assert.equal(todayLine(new Date('2026-10-20T01:30:00Z')), '\n\nTODAY: Monday, October 19, 2026, 9:30 PM in New York (evening).')
   assert.equal(todayLine(new Date('2026-10-19T17:00:00Z')), '\n\nTODAY: Monday, October 19, 2026, 1:00 PM in New York (afternoon).')
+  // Review r1: midnight to 5 AM is night.
+  assert.equal(todayLine(new Date('2026-10-20T06:30:00Z')), '\n\nTODAY: Tuesday, October 20, 2026, 2:30 AM in New York (night).')
+  assert.equal(todayLine(new Date('2026-10-20T04:00:00Z')), '\n\nTODAY: Tuesday, October 20, 2026, 12:00 AM in New York (night).')
+  assert.equal(todayLine(new Date('2026-10-20T09:00:00Z')), '\n\nTODAY: Tuesday, October 20, 2026, 5:00 AM in New York (morning).')
 })
 
 test('graphPausedEmailBlock: email reading is paused, with the newest email date', () => {
@@ -67,6 +72,21 @@ test('Outlook paused and the read fails: still paused, just without the date', a
   newestEmail = 'throw'
   const { calendarFetcher } = await import('../calendar')
   const { block } = await calendarFetcher(input)
+  assert.ok(block?.includes(GRAPH_PAUSED_CALENDAR_BLOCK))
+  assert.ok(block?.includes(graphPausedEmailBlock(null)))
+})
+
+// Review r1: a read that never answers can't hold the turn or lose the notes.
+test('Outlook paused and the read hangs: the notes still come back, without the date, in about 1.5 s', async () => {
+  delete process.env.GRAPH_ENABLED
+  newestEmail = 'hang'
+  const { calendarFetcher, NEWEST_EMAIL_READ_MS } = await import('../calendar')
+  assert.equal(NEWEST_EMAIL_READ_MS, 1_500)
+  const t0 = Date.now()
+  const { block } = await calendarFetcher(input)
+  const took = Date.now() - t0
+  assert.ok(took >= 1_400 && took < 3_000, `took ${took} ms`)
+  assert.match(block ?? '', /^\n\nTODAY: /)
   assert.ok(block?.includes(GRAPH_PAUSED_CALENDAR_BLOCK))
   assert.ok(block?.includes(graphPausedEmailBlock(null)))
 })

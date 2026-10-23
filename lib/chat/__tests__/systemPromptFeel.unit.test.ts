@@ -4,7 +4,7 @@
 //
 // Rule sources:
 // - N8: the report line reads "Done. Here's the Buyer Match report for
-//   {subject}." (Ryan's target wording, DRIFT_SCRIPT #15);
+//   {buyer}." (Ryan's target wording, DRIFT_SCRIPT #15);
 // - D7 [Brief 42 default]: no hidden follow-up suggestions;
 // - D8 [Brief 42 default]: calendar off, so Drift says so and keeps the details
 //   in chat; the pendingEvent lines only while Outlook is on (Q33);
@@ -30,9 +30,11 @@ function paragraph(text: string, anchor: string, withHeading = false): string {
   return text.slice(start, end === -1 ? undefined : end)
 }
 
-test('N8: the report line is "Done. Here\'s the Buyer Match report for {subject}."', () => {
+test('N8: the report line is "Done. Here\'s the Buyer Match report for {buyer}." with the name alone', () => {
   const block = paragraph(SYSTEM_PROMPT, 'Presenting reports in your drift_response:')
-  assert.ok(block.includes('"Done. Here\'s the Buyer Match report for {subject}."'), block)
+  assert.ok(block.includes('"Done. Here\'s the Buyer Match report for {buyer}."'), block)
+  // Review r1: the tool's subject is "<name> — <date>"; the reply carries the name only.
+  assert.match(block, /buyer's name from the tool result's subject, without its date/)
   assert.ok(!BOTH.includes('Phase 1b'), 'no "Phase 1b"')
   assert.ok(!BOTH.includes('Report generated'), 'no "Report generated"')
   assert.doesNotMatch(block, /suggestion/i)

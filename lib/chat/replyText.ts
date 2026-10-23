@@ -5,13 +5,24 @@
 // calm, no exclamation marks, no em-dashes) whatever the model wrote:
 // - an em-dash becomes a comma, or goes away at the start or end of a line and
 //   next to other punctuation;
-// - "!" becomes a period ("?!" a question mark).
-// En-dashes in ranges ("2–5", "$1.2M–$1.5M") and hyphens stay. Links are left
-// exactly as they are. Drafts (drift_response.draft) are not touched here.
+// - "!" becomes a period ("?!" and "!?" a question mark).
+// En-dashes in ranges ("2–5", "$1.2M–$1.5M") and hyphens stay; an em-dash used
+// as a range, with no space around it ("$1.2M—$1.4M", "2—3"), becomes an
+// en-dash. Links are left exactly as they are, and never glued to the next
+// word. Drafts (drift_response.draft) are not touched here.
 
-const URL = /(https?:\/\/\S+)/
+const URL = /https?:\/\/\S+/g
+// Review r1: each link is swapped for this one character while the text is
+// cleaned, so a dash next to a link is read as being mid-sentence (a comma),
+// never as a line's start or end (dropped, which glued "…/sale/123 — 3 beds"
+// into "…/sale/1233 beds", a different listing). A private-use character
+// never appears in a reply.
+const LINK = '\uE000'
 const BLANK = new Set([' ', '\t'])
-const STOPS_AFTER = new Set([',', '.', ';', ':', '?'])
+const STOPS_AFTER = new Set([',', '.', ';', ':', '?', '!'])
+// A tight em-dash between two numbers is a range: "2—3", "$1.2M—$1.4M", "9:00—10:00".
+const RANGE_LEFT = /\d[KkMm%]?$/
+const RANGE_RIGHT = /^\$?\d/
 const STOPS_BEFORE = new Set(['.', ',', ';', ':', '?', '!', ')'])
 
 // Plain loops, not regexes, around the dash: a long run of spaces can't slow them.
@@ -35,7 +46,9 @@ function noEmDashes(text: string): string {
     const right = trimBlankStart(part)
     const lineStart = left === '' || left.endsWith('\n')
     const lineEnd = right === '' || right.startsWith('\n') || STOPS_BEFORE.has(right[0])
-    if (lineStart || lineEnd) out = left + right
+    const tight = left.length === out.length && right.length === part.length
+    if (tight && RANGE_LEFT.test(left) && RANGE_RIGHT.test(right)) out = `${left}–${right}`
+    else if (lineStart || lineEnd) out = left + right
     else if (STOPS_AFTER.has(left[left.length - 1])) out = `${left} ${right}`
     else out = `${left}, ${right}`
   }
@@ -56,14 +69,18 @@ function stripDealTags(text: string): string {
 }
 
 function calm(text: string): string {
-  // "!" (and "!!!", "!.") becomes a period; "?!" keeps its question mark.
-  return noEmDashes(text).replace(/([?.])?!+\.?/g, (_m, p: string | undefined) => p ?? '.')
+  // "!" (and "!!!", "!.") becomes a period; "?!" and "!?" keep the question mark.
+  return noEmDashes(text).replace(/([?.])?!+([?.])?/g, (_m, a?: string, b?: string) => (a === '?' || b === '?' ? '?' : '.'))
 }
 
 export function cleanReplyText(text: string): string {
   const stripped = stripDealTags(text
     .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
     .replace(/\*([^*]+)\*/g, '$1'))       // strip *italic*
-  // Odd pieces of the split are links; only the text between them changes.
-  return stripped.split(URL).map((part, i) => (i % 2 === 1 ? part : calm(part))).join('')
+    .split(LINK).join('')
+  // Links sit out the clean-up as LINK and come back unchanged, in order.
+  const links: string[] = []
+  const masked = stripped.replace(URL, link => { links.push(link); return LINK })
+  let n = 0
+  return calm(masked).replace(/\uE000/g, () => links[n++] ?? '')
 }

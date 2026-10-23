@@ -83,6 +83,7 @@ test('Q38: em-dashes and "!" never reach the page or the database', async () => 
 
 test('old rows with suggestions (and an old proposal) still load and read as text', async () => {
   reset()
+  db.sessions.push({ id: 'sess_pr3', title: null }) // Brief 43 PR 4: the chat's row exists
   db.messages.push(
     { id: 'old_1', sessionId: 'sess_pr3', role: 'user', content: 'book a showing friday', createdAt: new Date('2026-09-01T12:00:00Z') },
     {
@@ -105,6 +106,7 @@ test('old rows with suggestions (and an old proposal) still load and read as tex
 
 test('F9: a "yes" to an old proposal with an unreadable time gets the paused reply, not an error', async () => {
   reset()
+  db.sessions.push({ id: 'sess_pr3', title: null }) // Brief 43 PR 4: the chat's row exists
   delete process.env.GRAPH_ENABLED
   db.messages.push(
     { id: 'old_1', sessionId: 'sess_pr3', role: 'user', content: 'book a showing friday', createdAt: new Date('2026-09-01T12:00:00Z') },
