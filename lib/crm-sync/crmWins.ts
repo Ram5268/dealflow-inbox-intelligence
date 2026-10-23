@@ -3,6 +3,9 @@ import type { PrismaClient } from '@prisma/client'
 import type { CrmLeadRow } from './crmReader'
 import type { SyncPlan } from './plan'
 import { COLUMNS, toUpsertRow, type UpsertReturn } from './upsert'
+import { phoneKey } from './mapLead'
+import { normalizeStreet } from './addressNormalize'
+import { isOptOutWording } from '../chat/sellerCard'
 
 // Brief 48 (PR 7, item 1.5): "CRM wins" for the CRM → DealFlow lead copy
 // [Ryan, 2026-10-19: yes, behind a switch with a preview]. Ryan works leads in
@@ -21,7 +24,7 @@ import { COLUMNS, toUpsertRow, type UpsertReturn } from './upsert'
 //   - the phone and email lists become the CRM's lists when the CRM has any;
 //   - neighborhood is still written only when the seller is first copied, and
 //     metadata is still merged (old || new), so marks like crmOptOut stay.
-// Four refinements [engineering precaution]:
+// Five refinements [engineering precaution]:
 //   - the name: only the CRM lead's own name replaces DealFlow's. When the CRM
 //     lead has none, the copy names the seller from the CRM's display name or
 //     the Mojo ID, which isn't a name to overwrite a real one with;
@@ -34,7 +37,12 @@ import { COLUMNS, toUpsertRow, type UpsertReturn } from './upsert'
 //     2026-10-19: keep anything DealFlow wrote itself]. Later runs replace only
 //     the part above the line (crmWinsNotes);
 //   - a do-not-call status (the words the call list's hard filter excludes,
-//     lib/ranking/hardFilters.ts) is never replaced by one that isn't;
+//     lib/ranking/hardFilters.ts, or the opt-out wording Drift's "do not
+//     contact" badge reads, lib/chat/sellerCard.ts isOptOutWording) is never
+//     replaced by one that isn't;
+//   - a 0 from the CRM in a number field (square feet, year built, units) is
+//     Mojo's "unknown", like 0 beds and baths (mapLead nonZero), so it never
+//     replaces DealFlow's number;
 //   - a seller with per-phone do-not-call flags or phone types stored
 //     (phoneDncFlags, phoneTypes: lined up with the phone list by position)
 //     keeps its phone list, so a flag can't end up on the wrong number.
@@ -60,7 +68,8 @@ export async function readCrmWinsSwitch(db: Pick<PrismaClient, 'featureFlag'>): 
 
 // ── scripts/brief48-crm-wins-switch.ts ──────────────────────────────────────
 
-export const CRM_WINS_USAGE = 'usage: npx tsx scripts/brief48-crm-wins-switch.ts [--on | --off] [--apply [--i-mean-live]]'
+export const CRM_WINS_USAGE =
+  'usage: npx tsx scripts/brief48-crm-wins-switch.ts [--on [--preimage-dir <dir>] | --off | --restore <before-copy file>] [--apply [--i-mean-live]]'
 
 // The script's own arguments (dbGuard's scriptArgs: without --apply, --dry-run, --i-mean-live).
 export function parseCrmWinsArgs(args: readonly string[]): 'on' | 'off' | null | 'usage' {
@@ -99,6 +108,21 @@ export const DO_NOT_CALL_STATUS = ['do_not_call', 'do not call', 'dnc', 'opt-out
 export const isDoNotCallStatus = (s: unknown): boolean =>
   typeof s === 'string' && DO_NOT_CALL_STATUS.some(w => s.toLowerCase().includes(w))
 
+// Brief 48 (PR 7 review r1) [engineering precaution]: Drift's "do not contact"
+// badge (lib/chat/crmSellers.ts doNotContact) also reads opt-out wording in
+// status ("Remove me from your list", "Stop calling", "Do-Not-Call"), which the
+// words above miss. Under keep-old, status stayed the first call result the copy
+// saw, so the badge stayed; with CRM wins it becomes the latest one. So a status
+// with either kind of wording is kept unless the CRM's is one too. The wording
+// check is JavaScript, so runSync reads the current statuses (STATUS_SQL) and
+// sends the decision with each row (keepStatus).
+export const isOptOutStatus = (s: unknown): boolean => isDoNotCallStatus(s) || (typeof s === 'string' && isOptOutWording(s))
+export const crmWinsKeepStatus = (current: unknown, crm: unknown): boolean => isOptOutStatus(current) && !isOptOutStatus(crm)
+
+// $1 = organizationId. Every real seller's current status (read only with the switch on).
+export const STATUS_SQL = `
+SELECT id, status FROM "MojoContact" WHERE "organizationId" = $1 AND NOT "isTestData" AND status IS NOT NULL`
+
 // The CRM lead's own name (the field Ryan edits: the CRM's lead page writes
 // name and displayName together), or null when it has none.
 export const crmOwnName = (lead: Pick<CrmLeadRow, 'name'>): string | null => (lead.name ?? '').replace(/\s+/g, ' ').trim() || null
@@ -119,10 +143,10 @@ export function crmWinsNotes(old: string | null, crm: string | null): string | n
 
 // The row the CRM-wins statements take: the CRM's values as they are (the phone
 // and email lists unmerged), plus the lead's own name.
-export function toCrmWinsRow({ contact, keeper }: SyncPlan['upserts'][number], ownName: string | null) {
+export function toCrmWinsRow({ contact, keeper }: SyncPlan['upserts'][number], ownName: string | null, keepStatus = false) {
   const { phones, emails, ...fields } = contact
   return {
-    ...fields, id: keeper?.id ?? randomUUID(), crmOwnName: ownName,
+    ...fields, id: keeper?.id ?? randomUUID(), crmOwnName: ownName, keepStatus,
     phone: phones[0] ?? null, additionalPhones: phones.slice(1), email: emails[0] ?? null, additionalEmails: emails.slice(1),
   }
 }
@@ -134,6 +158,9 @@ const q = (c: string) => `"${c}"`
 const UPDATED = COLUMNS.filter(([, , mode]) => mode !== 'insert')
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`
 const dncSql = (v: string) => `EXISTS (SELECT 1 FROM unnest(ARRAY[${DO_NOT_CALL_STATUS.map(lit).join(', ')}]) AS w WHERE strpos(lower(COALESCE(${v}, '')), w) > 0)`
+// The property facts where a CRM 0 is Mojo's "unknown" (see above). Named, not every
+// number column: elsewhere a 0 can be a fact (a loan balance of 0 is free and clear).
+const NUMERIC = new Set(['unitCount', 'propertyBeds', 'propertyBaths', 'buildingSqft', 'yearBuilt'])
 const PHONES_REPLACE = `s."phone" IS NOT NULL AND cardinality(COALESCE(m."phoneDncFlags", '{}')) = 0 AND cardinality(COALESCE(m."phoneTypes", '{}')) = 0`
 const H = lit(NOTES_KEPT_HEADING)
 const NOTES_SQL = `CASE WHEN s."notes" IS NULL OR m."notes" IS NULL OR strpos(s."notes", m."notes") > 0 THEN COALESCE(s."notes", m."notes")
@@ -146,15 +173,15 @@ export function crmWinsExpr(c: string): string {
     case 'fullName': return `COALESCE(s."crmOwnName", m."fullName")`
     case 'phone': case 'additionalPhones': return `CASE WHEN ${PHONES_REPLACE} THEN s.${q(c)} ELSE m.${q(c)} END`
     case 'email': case 'additionalEmails': return `CASE WHEN s."email" IS NOT NULL THEN s.${q(c)} ELSE m.${q(c)} END`
-    case 'status': return `CASE WHEN ${dncSql('m."status"')} AND NOT ${dncSql('s."status"')} THEN m."status" ELSE COALESCE(s."status", m."status") END`
+    case 'status': return `CASE WHEN s."keepStatus" OR (${dncSql('m."status"')} AND NOT ${dncSql('s."status"')}) THEN m."status" ELSE COALESCE(s."status", m."status") END`
     case 'notes': return NOTES_SQL
     case 'metadata': return `COALESCE(m."metadata", '{}'::jsonb) || s."metadata"`
-    default: return `COALESCE(s.${q(c)}, m.${q(c)})`
+    default: return NUMERIC.has(c) ? `COALESCE(NULLIF(s.${q(c)}, 0), m.${q(c)})` : `COALESCE(s.${q(c)}, m.${q(c)})`
   }
 }
 
 const SRC = `WITH src AS (
-  SELECT * FROM jsonb_to_recordset($1::jsonb) AS r(id text, "mojoId" text, "crmOwnName" text, ${COLUMNS.map(([c, t]) => `${q(c)} ${t}`).join(', ')})
+  SELECT * FROM jsonb_to_recordset($1::jsonb) AS r(id text, "mojoId" text, "crmOwnName" text, "keepStatus" boolean, ${COLUMNS.map(([c, t]) => `${q(c)} ${t}`).join(', ')})
 )`
 const snapshot = (alias: string) => `jsonb_build_object(${UPDATED.map(([c]) => `'${c}', ${alias}.${q(c)}`).join(', ')})`
 
@@ -208,10 +235,10 @@ export function crmWinsAfter(before: Snapshot, row: CrmWinsRow, flagged: boolean
       case 'fullName': after[c] = row.crmOwnName ?? m; break
       case 'phone': case 'additionalPhones': after[c] = phones ? s(c) : m; break
       case 'email': case 'additionalEmails': after[c] = s('email') != null ? s(c) : m; break
-      case 'status': after[c] = isDoNotCallStatus(m) && !isDoNotCallStatus(s(c)) ? m : s(c) ?? m; break
+      case 'status': after[c] = row.keepStatus || (isDoNotCallStatus(m) && !isDoNotCallStatus(s(c))) ? m : s(c) ?? m; break
       case 'notes': after[c] = crmWinsNotes(m as string | null, s(c) as string | null); break
       case 'metadata': after[c] = { ...((m as object | null) ?? {}), ...((s(c) as object | null) ?? {}) }; break
-      default: after[c] = s(c) ?? m
+      default: after[c] = (NUMERIC.has(c) && s(c) === 0 ? null : s(c)) ?? m
     }
   }
   return after
@@ -268,6 +295,52 @@ export function crmWinsRunCounts(returned: UpsertReturn[]) {
   return { filled, changed, erased, notesKeptBelow: updated.filter(r => had(r.after) && !had(r.before)).length }
 }
 
+// Brief 48 (PR 7 review r1) [engineering precaution]: the mass-change limit. Under
+// keep-old any change rolled the copy back. With CRM wins changes are the point, but
+// a broken CRM read (a bad join, a renamed field) could still rewrite every seller in
+// one morning, and a value the CRM normally leaves blank would then stay wrong (a
+// blank never erases). So a run that drops DealFlow's phone numbers or emails, or
+// replaces names or streets, for more than massChangeLimit() sellers rolls back,
+// except on the first copy after the switch is turned on (the preview is that run's
+// check). To let a known bulk change through, turn the switch off and on again.
+export const MASS_CHANGE_MIN = 50
+export const MASS_CHANGE_SHARE = 0.1
+export const massChangeLimit = (existingSellers: number): number =>
+  Math.max(MASS_CHANGE_MIN, Math.ceil(MASS_CHANGE_SHARE * existingSellers))
+
+export interface IdentityLosses { phonesDropped: number; emailsDropped: number; namesReplaced: number; streetsReplaced: number }
+const keysOf = (s: Snapshot, first: string, rest: string, key: (v: string) => string | null) =>
+  new Set([s[first], ...((s[rest] as unknown[] | null) ?? [])].filter((v): v is string => typeof v === 'string').map(key).filter(Boolean))
+const nameKey = (v: unknown) => (typeof v === 'string' ? v.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '') || null : null)
+
+// Per seller (counts only): a phone number (by its 10 digits) or an email DealFlow had
+// is gone; a name or a street (normalized) was replaced by a different one.
+export function identityLosses(pairs: Array<{ before: Snapshot; after: Snapshot }>): IdentityLosses {
+  const out: IdentityLosses = { phonesDropped: 0, emailsDropped: 0, namesReplaced: 0, streetsReplaced: 0 }
+  const dropped = (b: Snapshot, a: Snapshot, first: string, rest: string, key: (v: string) => string | null) => {
+    const kept = keysOf(a, first, rest, key)
+    return [...keysOf(b, first, rest, key)].some(k => !kept.has(k))
+  }
+  for (const { before, after } of pairs) {
+    if (dropped(before, after, 'phone', 'additionalPhones', phoneKey)) out.phonesDropped++
+    if (dropped(before, after, 'email', 'additionalEmails', e => e.trim().toLowerCase() || null)) out.emailsDropped++
+    const n0 = nameKey(before.fullName), n1 = nameKey(after.fullName)
+    if (n0 && n1 && n0 !== n1) out.namesReplaced++
+    const s0 = normalizeStreet(before.address as string | null), s1 = normalizeStreet(after.address as string | null)
+    if (s0 && s1 && s0 !== s1) out.streetsReplaced++
+  }
+  return out
+}
+
+export const overMassChangeLimit = (losses: IdentityLosses, limit: number): string[] =>
+  Object.entries(losses).filter(([, n]) => n > limit).map(([k, n]) => `${k} ${n}`)
+
+// $1 = organizationId. Whether the newest applied copy ran with the switch on: false
+// on the first copy after the switch is turned on (or with no copy yet).
+export const CRM_WINS_RAN_LAST_SQL = `
+SELECT COALESCE((SELECT "detailsJson"->>'crmWins' = 'true' FROM "AuditLog"
+  WHERE "organizationId" = $1 AND action = 'CRM_LEAD_SYNC' ORDER BY "createdAt" DESC, id DESC LIMIT 1), false) AS "ranLast"`
+
 // ── scripts/brief48-crm-wins-preview.ts ─────────────────────────────────────
 
 // One existing seller as the preview reads it: its row as the statements'
@@ -307,16 +380,17 @@ export function crmWinsPreview(
       else newSellers++
       continue
     }
-    const row = toCrmWinsRow(u, ownNames.get(u.contact.mojoId) ?? null)
+    const row = toCrmWinsRow(u, ownNames.get(u.contact.mojoId) ?? null, crmWinsKeepStatus(cur.before.status, u.contact.status))
     const after = crmWinsAfter(cur.before, row, cur.flagged)
     wins.push({ mojoId: u.contact.mojoId, before: cur.before, after })
     today.push({ mojoId: u.contact.mojoId, before: cur.before, after: keepOldAfter(cur.before, toUpsertRow(u)) })
     if (had(after) && !had(cur.before)) notesKeptBelow++
-    if (isDoNotCallStatus(cur.before.status) && row.status != null && !isDoNotCallStatus(row.status)) doNotCallKept++
+    if (row.status != null && row.status !== cur.before.status && after.status === cur.before.status) doNotCallKept++
     if (cur.flagged && row.phone != null && !same([row.phone, ...row.additionalPhones], [cur.before.phone, ...((cur.before.additionalPhones as string[] | null) ?? [])])) phoneListsKept++
   }
   const w = countFieldChanges(wins)
   const k = countFieldChanges(today)
+  const limit = massChangeLimit(wins.length)
   return {
     sellersCompared: wins.length,
     newSellers, // inserted the same way whichever way the switch is set
@@ -330,6 +404,9 @@ export function crmWinsPreview(
       notesKeptBelow,
       doNotCallKept,
       phoneListsKept,
+      // A later copy (not the first after the switch is turned on) rolls back over the limit.
+      identityLosses: identityLosses(wins),
+      massChangeLimit: limit,
     },
     keepOldToday: {
       sellersChanged: today.filter(changedAny).length,

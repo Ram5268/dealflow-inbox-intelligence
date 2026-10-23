@@ -6,7 +6,8 @@ import {
   DUPLICATES_SQL, LEGACY_SQL, REKEY_SQL, REMOVED_SQL, UPSERT_SQL, diffUpdates, toUpsertRow, type UpsertReturn,
 } from './upsert'
 import {
-  CRM_WINS_INSERT_SQL, CRM_WINS_UPDATE_SQL, crmOwnName, crmWinsRunCounts, readCrmWinsSwitch, toCrmWinsRow,
+  CRM_WINS_INSERT_SQL, CRM_WINS_RAN_LAST_SQL, CRM_WINS_UPDATE_SQL, STATUS_SQL, crmOwnName, crmWinsKeepStatus, crmWinsRunCounts,
+  identityLosses, massChangeLimit, overMassChangeLimit, readCrmWinsSwitch, toCrmWinsRow,
 } from './crmWins'
 
 // Brief 34: CRM → DealFlow lead sync. Used by nightly-pipeline step 1 and by
@@ -73,8 +74,13 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
   // Brief 48 (PR 7): read once per copy; a failed read is off.
   const crmWins = await readCrmWinsSwitch(prisma)
   const ownNames = new Map(leads.map(l => [l.mojoId, crmOwnName(l)]))
-  const rows = crmWins
-    ? plan.upserts.map(u => toCrmWinsRow(u, ownNames.get(u.contact.mojoId) ?? null))
+  // Brief 48 (PR 7 review r1): DealFlow's statuses, for the opt-out wording rule (crmWins.ts).
+  const statuses = crmWins
+    ? new Map((await prisma.$queryRawUnsafe<{ id: string; status: string }[]>(STATUS_SQL, org.id)).map(r => [r.id, r.status]))
+    : null
+  const rows = statuses
+    ? plan.upserts.map(u => toCrmWinsRow(u, ownNames.get(u.contact.mojoId) ?? null,
+      !!u.keeper && crmWinsKeepStatus(statuses.get(u.keeper.id) ?? null, u.contact.status)))
     : plan.upserts.map(toUpsertRow)
   try {
     return await prisma.$transaction(async tx => {
@@ -99,6 +105,15 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
       }
       if (wins && wins.erased.length > 0) {
         throw new Error(`CRM-wins rule violated: ${wins.erased.length} values went blank (rolled back)`)
+      }
+      // Brief 48 (PR 7 review r1) [engineering precaution]: the mass-change limit (crmWins.ts).
+      if (wins) {
+        const limit = massChangeLimit(plan.upserts.filter(u => u.keeper).length)
+        const over = overMassChangeLimit(identityLosses(returned.filter(r => !r.inserted)), limit)
+        if (over.length > 0) {
+          const [{ ranLast }] = await tx.$queryRawUnsafe<{ ranLast: boolean }[]>(CRM_WINS_RAN_LAST_SQL, org.id)
+          if (ranLast) throw new Error(`CRM-wins mass change (rolled back): ${over.join(', ')} sellers, over the limit of ${limit}`)
+        }
       }
       const { filled } = wins ?? keepOld!
       const insertedIds = new Set(returned.filter(r => r.inserted).map(r => r.mojoId))

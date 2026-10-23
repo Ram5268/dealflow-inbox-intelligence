@@ -20,9 +20,9 @@ import { mapLead, markOptOut } from '../mapLead'
 import { planSync, type ExistingRow } from '../plan'
 import { EXISTING_SQL, ORG_SLUG, runCrmLeadSync } from '../runSync'
 import {
-  CURRENT_SQL, NOTES_KEPT_HEADING, crmOwnName, crmWinsAfter, crmWinsPreview, toCrmWinsRow, type CurrentRow,
+  CURRENT_SQL, NOTES_KEPT_HEADING, crmOwnName, crmWinsAfter, crmWinsKeepStatus, crmWinsPreview, toCrmWinsRow, type CurrentRow,
 } from '../crmWins'
-import { DF_ORG, P, cleanup, createCrmTables, dump, requireTestUrls, seed, withoutMs } from './crmSyncDb'
+import { CRM_ORG, DF_ORG, P, cleanup, createCrmTables, dump, requireTestUrls, seed, withoutMs, type SeedLead } from './crmSyncDb'
 
 const { crmUrl } = requireTestUrls()
 const SKIP = !crmUrl
@@ -81,7 +81,8 @@ test('switch on: the SQL writes what the in-memory rules predict, and the audit 
   for (const u of plan.upserts) {
     if (!u.keeper) continue
     const cur = was.get(u.keeper.id)!
-    const predicted = crmWinsAfter(cur.before, toCrmWinsRow(u, ownNames.get(u.contact.mojoId) ?? null), cur.flagged)
+    const keep = crmWinsKeepStatus(cur.before.status, u.contact.status)
+    const predicted = crmWinsAfter(cur.before, toCrmWinsRow(u, ownNames.get(u.contact.mojoId) ?? null, keep), cur.flagged)
     // metadata: crmUpdatedAt and friends merge in as the copy always did.
     assert.deepStrictEqual(json(now.get(u.keeper.id)!.before), json(predicted), u.contact.mojoId)
     compared++
@@ -165,4 +166,72 @@ test('switch on: a second copy changes nothing, and a dry run writes nothing', {
   assert.equal(dry.crmWins, true)
   assert.ok(Object.keys(dry.changed ?? {}).length > 0, 'the dry run saw the changes')
   assert.deepStrictEqual(json(await dump(df)), before, 'and wrote nothing (no audit row either)')
+})
+
+// ── Brief 48 (PR 7 review r1) ───────────────────────────────────────────────
+
+test('review r1: opt-out wording in a status stays, and a CRM 0 never replaces a number', { skip: SKIP }, async () => {
+  await seededOn()
+  // DealFlow's status for the no-name seller is opt-out wording Drift reads; the CRM's latest is "Contact".
+  await df.query(`UPDATE "MojoContact" SET status = 'Stop calling' WHERE id = $1`, [`${P}mc_noname`])
+  // The CRM's Year Built for the blanks seller is 0 (Mojo's unknown); DealFlow has 1920.
+  const [{ id: def }] = (await crm.query(`SELECT id FROM "CustomFieldDefinition" WHERE "organizationId" = $1 AND name = 'Year Built'`, [CRM_ORG])).rows
+  await crm.query(`INSERT INTO "CustomFieldValue" (id, "organizationId", "definitionId", "objectType", "objectId", "valueNumber") VALUES ($1, $2, $3, 'lead', $4, 0)`,
+    [`${P}cfv_r1_year`, CRM_ORG, def, `${P}lead_blanks`])
+  const { plan, ownNames } = await planned()
+  const was = await current()
+  const preview = crmWinsPreview(plan, was, ownNames)
+  await runCrmLeadSync()
+  const { contacts } = json(await dump(df))
+  const row = (k: string) => contacts.find((r: { mojoId: string }) => r.mojoId === k)
+  assert.equal(row(`${P}m_noname`).status, 'Stop calling')
+  assert.equal(row(`${P}m_blanks`).yearBuilt, 1920)
+  // and the in-memory rules (the preview) agree
+  const now = await current()
+  for (const u of plan.upserts) {
+    if (!u.keeper) continue
+    const cur = was.get(u.keeper.id)!
+    const keep = crmWinsKeepStatus(cur.before.status, u.contact.status)
+    assert.deepStrictEqual(json(now.get(u.keeper.id)!.before), json(crmWinsAfter(cur.before, toCrmWinsRow(u, ownNames.get(u.contact.mojoId) ?? null, keep), cur.flagged)), u.contact.mojoId)
+  }
+  assert.equal(preview.withCrmWins.doNotCallKept, 2) // the Do Not Call seller and this one
+})
+
+// 60 made-up sellers, phones (718) 555-0100 to 555-0159.
+const MANY = 60
+const many = (): { leads: SeedLead[]; rows: Array<Record<string, unknown>> } => {
+  const leads: SeedLead[] = [], rows: Array<Record<string, unknown>> = []
+  for (let i = 0; i < MANY; i++) {
+    const phone = `7185550${String(100 + i).slice(-3)}`
+    leads.push({ key: `many${i}`, mojoId: `${P}m_many${i}`, name: `Test Owner ${i}`, displayName: `Test Owner ${i}`, street: `${i + 1} Example Ave`,
+      phones: [`+1${phone}`], emails: [], fields: { 'Property City': { t: 'Brooklyn' }, 'Property State': { t: 'NY' }, 'Property Zip Code': { t: '11221' } } })
+    rows.push({ id: `${P}mc_many${i}`, mojoId: `${P}m_many${i}`, fullName: `Test Owner ${i}`, phone, address: `${i + 1} Example Ave`, city: 'Brooklyn',
+      state: 'NY', zipCode: '11221', metadata: { source: 'crm', crmLeadId: `${P}lead_many${i}` } })
+  }
+  return { leads, rows }
+}
+// A broken CRM read: every lead now has the next lead's phone.
+const shiftPhones = () => crm.query(`UPDATE "ContactPhone" SET phone = '+1718555' || lpad((100 + ((substring(id from 'many([0-9]+)_')::int + 1) % ${MANY}))::text, 4, '0') WHERE starts_with(id, $1)`, [P])
+const phones = async () => (await df.query(`SELECT phone FROM "MojoContact" WHERE "organizationId" = $1 ORDER BY "mojoId"`, [DF_ORG])).rows.map(r => r.phone)
+const setSwitch = (on: boolean) => df.query(`INSERT INTO "FeatureFlag" (id, enabled, "updatedAt") VALUES ('CRM_WINS', $1, now()) ON CONFLICT (id) DO UPDATE SET enabled = $1`, [on])
+
+test('review r1: a later copy that drops most sellers\' phone numbers rolls back; the first copy after switching on is let through', { skip: SKIP }, async () => {
+  await cleanup(df, crm)
+  const { leads, rows } = many()
+  await seed(df, crm, leads, rows)
+  await setSwitch(false)
+  await runCrmLeadSync() // keep-old
+  await setSwitch(true)
+  await runCrmLeadSync() // the first CRM-wins copy: nothing to change
+  const good = await phones()
+  await shiftPhones()
+  await assert.rejects(runCrmLeadSync(), /CRM-wins mass change \(rolled back\): phonesDropped 60 sellers, over the limit of 50/)
+  assert.deepEqual(await phones(), good, 'nothing written')
+  // Turned off and on again: the next copy is a first run, and goes through.
+  await setSwitch(false)
+  await runCrmLeadSync()
+  await setSwitch(true)
+  const r = await runCrmLeadSync()
+  assert.equal(r.changed?.phone, MANY)
+  assert.notDeepEqual(await phones(), good)
 })

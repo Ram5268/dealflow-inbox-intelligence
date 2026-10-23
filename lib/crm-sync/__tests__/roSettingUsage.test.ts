@@ -30,6 +30,8 @@ const SETS_ONLY: Record<string, string> = {
     'points crmQuery at the CRM test database it seeds (CRM_TEST_DATABASE_URL, refused unless *_test or *_perf)',
   'lib/crm-sync/__tests__/crmWins.integration.test.ts':
     'points crmQuery at the CRM test database it seeds (CRM_TEST_DATABASE_URL, refused unless *_test or *_perf)',
+  'lib/crm-sync/__tests__/crmWinsRestore.integration.test.ts':
+    'points crmQuery at the CRM test database it seeds (CRM_TEST_DATABASE_URL, refused unless *_test or *_perf)',
 }
 const SKIP_DIRS = new Set(['node_modules', '.next', '.git', '.vercel'])
 const CODE = /\.[cm]?[jt]sx?$/

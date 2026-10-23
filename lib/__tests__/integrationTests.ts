@@ -11,4 +11,5 @@ export const INTEGRATION_TESTS: ReadonlyArray<{ file: string; runner: 'tsx' | 't
   // Brief 48 (PR 7): the CRM lead copy on Postgres 18; also need CRM_TEST_DATABASE_URL.
   { file: 'lib/crm-sync/__tests__/crmSyncGolden.integration.test.ts', runner: 'tsx' },
   { file: 'lib/crm-sync/__tests__/crmWins.integration.test.ts', runner: 'tsx' },
+  { file: 'lib/crm-sync/__tests__/crmWinsRestore.integration.test.ts', runner: 'tsx' },
 ]

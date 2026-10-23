@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   CRM_WINS, CRM_WINS_INSERT_SQL, CRM_WINS_UPDATE_SQL, DO_NOT_CALL_STATUS, NOTES_KEPT_HEADING, countFieldChanges, crmOwnName,
-  crmWinsAfter, crmWinsIsOn, crmWinsNotes, crmWinsPreview, crmWinsRunCounts, isDoNotCallStatus, keepOldAfter, parseCrmWinsArgs,
-  readCrmWinsSwitch, runCrmWinsSwitch, toCrmWinsRow, type CurrentRow, type Snapshot,
+  crmWinsAfter, crmWinsIsOn, crmWinsKeepStatus, crmWinsNotes, crmWinsPreview, crmWinsRunCounts, identityLosses, isDoNotCallStatus,
+  keepOldAfter, massChangeLimit, overMassChangeLimit, parseCrmWinsArgs, readCrmWinsSwitch, runCrmWinsSwitch, toCrmWinsRow,
+  type CurrentRow, type Snapshot,
 } from '../crmWins'
 import { COLUMNS, UPSERT_SQL, toUpsertRow } from '../upsert'
 import { mapLead, type CrmContact } from '../mapLead'
@@ -173,9 +174,10 @@ test('keepOldAfter: the keep-old rule only fills blanks and appends to the phone
 test('a new seller gets the same row either way (only the id and the name hint differ)', () => {
   const contact = mapLead(lead)
   const { id: a, ...keepOld } = toUpsertRow({ contact, keeper: null })
-  const { id: b, crmOwnName: name, ...wins } = toCrmWinsRow({ contact, keeper: null }, 'Pat Example')
+  const { id: b, crmOwnName: name, keepStatus, ...wins } = toCrmWinsRow({ contact, keeper: null }, 'Pat Example')
   assert.deepEqual(wins, keepOld)
   assert.ok(a && b && name)
+  assert.equal(keepStatus, false)
 })
 
 test('counts: fills, changes, and a value that went blank (which rolls the copy back); a shorter phone list is no erase', () => {
@@ -233,4 +235,52 @@ test('the preview script only reads: a read-only connection, checked before the 
   assert.ok(src.indexOf(`SHOW transaction_read_only`) < src.indexOf('readCrmLeads(ORG_SLUG)'))
   assert.match(src, /if \(APPLY\) \{\s+console\.error\('This script only reads: it has no --apply\.'\)/)
   assert.doesNotMatch(src, /runCrmLeadSync|dryRun/, 'not the copy\'s rollback dry run')
+})
+
+// ── Brief 48 (PR 7 review r1) ───────────────────────────────────────────────
+
+test('review r1: a status with Drift\'s opt-out wording is kept, so the "do not contact" badge stays', async () => {
+  // Drift's badge itself; lib/prisma is never used here (a stand-in, so nothing connects).
+  ;(globalThis as unknown as { prisma?: unknown }).prisma ??= {}
+  const { doNotContact } = await import('../../chat/crmSellers')
+  for (const old of ['Remove me from your list', 'Stop calling', 'Do-Not-Call', "Don't call", 'STOP', 'Do Not Call']) {
+    assert.equal(crmWinsKeepStatus(old, 'No Answer'), true, old)
+    const row = toCrmWinsRow(upsert(mapLead({ ...lead, fields: { 'Last Call Result': { t: 'No Answer', n: null, d: null } } })), 'Pat Example', crmWinsKeepStatus(old, 'No Answer'))
+    const after = crmWinsAfter({ ...before, status: old, metadata: {} }, row, false)
+    assert.equal(after.status, old, old)
+    // Drift's badge (lastCallResult in metadata is the CRM's latest, "No Answer").
+    assert.equal(doNotContact({ phoneDncFlags: [], metadata: { lastCallResult: 'No Answer' }, status: after.status as string }), true, old)
+  }
+  assert.equal(crmWinsKeepStatus('No Answer', 'Contact'), false)
+  assert.equal(crmWinsKeepStatus('Remove me from your list', 'Do Not Call'), false, 'an opt-out from the CRM still lands')
+  assert.equal(crmWinsKeepStatus(null, 'Contact'), false)
+  assert.ok(flat(CRM_WINS_UPDATE_SQL).includes(`"status" = CASE WHEN s."keepStatus" OR (`))
+  assert.ok(flat(CRM_WINS_UPDATE_SQL).includes(`"keepStatus" boolean`))
+})
+
+test('review r1: a CRM 0 in a number field never replaces DealFlow\'s number', () => {
+  const zeros = mapLead({ ...lead, fields: { 'Square Footage': { t: null, n: 0, d: null }, 'Year Built': { t: null, n: 0, d: null } } })
+  const after = crmWinsAfter({ ...before, buildingSqft: 2400, yearBuilt: 1920 }, toCrmWinsRow(upsert(zeros), 'Pat Example'), false)
+  assert.deepEqual([after.buildingSqft, after.yearBuilt], [2400, 1920])
+  const real = mapLead({ ...lead, fields: { 'Square Footage': { t: null, n: 2600, d: null } } })
+  assert.equal(crmWinsAfter({ ...before, buildingSqft: 2400 }, toCrmWinsRow(upsert(real), 'Pat Example'), false).buildingSqft, 2600)
+  const upd = flat(CRM_WINS_UPDATE_SQL)
+  for (const c of ['unitCount', 'propertyBeds', 'propertyBaths', 'buildingSqft', 'yearBuilt']) {
+    assert.ok(upd.includes(`"${c}" = COALESCE(NULLIF(s."${c}", 0), m."${c}")`), c)
+  }
+})
+
+test('review r1: the mass-change limit counts dropped numbers and emails and replaced names and streets', () => {
+  assert.equal(massChangeLimit(0), 50)
+  assert.equal(massChangeLimit(1498), 150)
+  const b: Snapshot = { fullName: 'Pat Example', phone: '(718) 555-0101', additionalPhones: ['7185550102'], email: 'pat@example.com', additionalEmails: [], address: '12 Sample St' }
+  const same = { ...b, phone: '7185550101', fullName: 'PAT  EXAMPLE', address: '12 Sample Street', additionalPhones: ['7185550102', '7185550103'] }
+  assert.deepEqual(identityLosses([{ before: b, after: same }]), { phonesDropped: 0, emailsDropped: 0, namesReplaced: 0, streetsReplaced: 0 })
+  const other = { ...b, phone: '7185550109', additionalPhones: [], email: 'jordan@example.com', fullName: 'Jordan Sample', address: '14 Sample St' }
+  assert.deepEqual(identityLosses([{ before: b, after: other }]), { phonesDropped: 1, emailsDropped: 1, namesReplaced: 1, streetsReplaced: 1 })
+  assert.deepEqual(identityLosses([{ before: { ...b, fullName: null, address: null }, after: other }]).namesReplaced, 0, 'a fill is no loss')
+  assert.equal(identityLosses([{ before: { ...b, fullName: '陈 例' }, after: { ...b, fullName: '李 例' } }]).namesReplaced, 1, 'any script')
+  assert.deepEqual(overMassChangeLimit({ phonesDropped: 51, emailsDropped: 50, namesReplaced: 0, streetsReplaced: 0 }, 50), ['phonesDropped 51'])
+  const src = readFileSync(join(__dirname, '../runSync.ts'), 'utf8')
+  assert.match(src, /if \(ranLast\) throw new Error\(`CRM-wins mass change \(rolled back\): \$\{over\.join\(', '\)\} sellers, over the limit of \$\{limit\}`\)/)
 })
