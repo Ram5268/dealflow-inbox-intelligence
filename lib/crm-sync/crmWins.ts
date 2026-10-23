@@ -57,12 +57,31 @@ export function crmWinsIsOn(row: unknown): boolean {
   return typeof row === 'object' && row !== null && (row as { enabled?: unknown }).enabled === true
 }
 
-export async function readCrmWinsSwitch(db: Pick<PrismaClient, 'featureFlag'>): Promise<boolean> {
+// The switch's state, or null when it couldn't be read (the copy then runs keep-old).
+export async function readCrmWinsSwitchState(db: Pick<PrismaClient, 'featureFlag'>): Promise<boolean | null> {
   try {
     return crmWinsIsOn(await db.featureFlag.findUnique({ where: { id: CRM_WINS }, select: { enabled: true } }))
   } catch (e) {
     console.warn(`[crm-sync] the ${CRM_WINS} switch couldn't be read (${className(e)}): copying with the keep-old rule`)
-    return false
+    return null
+  }
+}
+
+export async function readCrmWinsSwitch(db: Pick<PrismaClient, 'featureFlag'>): Promise<boolean> {
+  return (await readCrmWinsSwitchState(db)) ?? false
+}
+
+// Brief 48 (PR 7 review r2, nit 5; executor, 2026-10-23) [engineering precaution]: the copy
+// reads the switch again as the first statement of its transaction, locked FOR SHARE. A
+// restore or the switch script that changes the switch while a copy runs then waits for the
+// copy to finish (they update this row), and a copy that finds the switch changed since it
+// planned (a restore committed in between) rolls back instead of writing over the restore.
+export const SWITCH_IN_TRANSACTION_SQL = `SELECT enabled FROM "FeatureFlag" WHERE id = '${CRM_WINS}' FOR SHARE`
+
+export class CrmWinsSwitchChanged extends Error {
+  constructor() {
+    super(`the ${CRM_WINS} switch changed while the copy was being planned; rolled back, nothing written (the next copy runs as usual)`)
+    this.name = 'CrmWinsSwitchChanged'
   }
 }
 
@@ -94,7 +113,7 @@ export async function runCrmWinsSwitch(
   if (enabled === crmWinsIsOn(row)) return [`${state}, unchanged`]
   if (!apply) return [state, `Dry run: nothing changed. Add --apply to turn it ${wanted}.`]
   await db.featureFlag.upsert({ where: { id: CRM_WINS }, update: { enabled }, create: { id: CRM_WINS, enabled } })
-  return [`${state} -> ${wanted}. The next CRM copy (7:00 am, or scripts/crm-lead-sync.ts) uses it.`]
+  return [`${state} -> ${wanted}. The next CRM copy (the nightly run at 09:00 UTC, or scripts/crm-lead-sync.ts) uses it.`]
 }
 
 // ── The rules ───────────────────────────────────────────────────────────────
@@ -117,7 +136,15 @@ export const isDoNotCallStatus = (s: unknown): boolean =>
 // check is JavaScript, so runSync reads the current statuses (STATUS_SQL) and
 // sends the decision with each row (keepStatus).
 export const isOptOutStatus = (s: unknown): boolean => isDoNotCallStatus(s) || (typeof s === 'string' && isOptOutWording(s))
-export const crmWinsKeepStatus = (current: unknown, crm: unknown): boolean => isOptOutStatus(current) && !isOptOutStatus(crm)
+// Brief 48 (PR 7 review r2) [engineering precaution]: each reader on its own. The call
+// list's words are a substring match, so "Non-DNC" and "DNC scrub passed" count, while
+// Drift's wording leaves those out on purpose; so a CRM status one reader calls an opt-out
+// could still drop the other's mark (DealFlow's "DNC" replaced by the CRM's "Non-DNC"
+// lost Drift's badge). DealFlow's status is kept when the CRM's would lose a mark either
+// reader sees in it today.
+const optOutWording = (s: unknown): boolean => typeof s === 'string' && isOptOutWording(s)
+export const crmWinsKeepStatus = (current: unknown, crm: unknown): boolean =>
+  (isDoNotCallStatus(current) && !isDoNotCallStatus(crm)) || (optOutWording(current) && !optOutWording(crm))
 
 // $1 = organizationId. Every real seller's current status (read only with the switch on).
 export const STATUS_SQL = `
@@ -302,7 +329,8 @@ export function crmWinsRunCounts(returned: UpsertReturn[]) {
 // blank never erases). So a run that drops DealFlow's phone numbers or emails, or
 // replaces names or streets, for more than massChangeLimit() sellers rolls back,
 // except on the first copy after the switch is turned on (the preview is that run's
-// check). To let a known bulk change through, turn the switch off and on again.
+// check). To let a known bulk change through, turn the switch off and on again with
+// scripts/brief48-crm-wins-switch.ts (CRM_WINS_RAN_LAST_SQL).
 export const MASS_CHANGE_MIN = 50
 export const MASS_CHANGE_SHARE = 0.1
 export const massChangeLimit = (existingSellers: number): number =>
@@ -335,11 +363,17 @@ export function identityLosses(pairs: Array<{ before: Snapshot; after: Snapshot 
 export const overMassChangeLimit = (losses: IdentityLosses, limit: number): string[] =>
   Object.entries(losses).filter(([, n]) => n > limit).map(([k, n]) => `${k} ${n}`)
 
-// $1 = organizationId. Whether the newest applied copy ran with the switch on: false
-// on the first copy after the switch is turned on (or with no copy yet).
+// $1 = organizationId. Whether a copy with the switch on has been applied since the switch
+// was last set (FeatureFlag.updatedAt): false on the first copy after it is turned on.
+// Brief 48 (PR 7 review r2) [engineering precaution]: keyed on the switch, not on the newest
+// copy. Keyed on the newest copy, a morning the switch couldn't be read (that copy runs
+// keep-old and writes its audit row) gave the next morning a free pass, and turning the
+// switch off and on again did nothing unless a copy ran in between. Both times are written
+// by Prisma in UTC (the switch script, the restore, runSync's audit row); set the switch
+// only through scripts/brief48-crm-wins-switch.ts.
 export const CRM_WINS_RAN_LAST_SQL = `
-SELECT COALESCE((SELECT "detailsJson"->>'crmWins' = 'true' FROM "AuditLog"
-  WHERE "organizationId" = $1 AND action = 'CRM_LEAD_SYNC' ORDER BY "createdAt" DESC, id DESC LIMIT 1), false) AS "ranLast"`
+SELECT EXISTS (SELECT 1 FROM "AuditLog" a JOIN "FeatureFlag" f ON f.id = 'CRM_WINS'
+  WHERE a."organizationId" = $1 AND a.action = 'CRM_LEAD_SYNC' AND a."detailsJson"->>'crmWins' = 'true' AND a."createdAt" >= f."updatedAt") AS "ranLast"`
 
 // ── scripts/brief48-crm-wins-preview.ts ─────────────────────────────────────
 

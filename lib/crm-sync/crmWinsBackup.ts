@@ -2,17 +2,22 @@ import { join } from 'node:path'
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { PREIMAGE_DIR_FLAG } from '../privateRecord'
 import { COLUMNS } from './upsert'
-import { CRM_WINS, parseCrmWinsArgs } from './crmWins'
+import { CRM_WINS, crmWinsKeepStatus, parseCrmWinsArgs } from './crmWins'
 
 // Brief 48 (PR 7 review r1; data step DS-4, Brief 48 §4: every data step has a before-copy
 // and a restore) [executor, 2026-10-23]. Turning the CRM_WINS switch off stops further
 // changes but doesn't undo the ones already made. So `scripts/brief48-crm-wins-switch.ts
 // --on --apply` first saves a private before-copy of every column the copy can change, for
-// every CRM seller (metadata.source 'crm'; never test data), and `--restore <file>` turns
-// the switch off and puts those columns back exactly, in one transaction. The copy's own
-// key changes (a re-key to a new Mojo ID) don't come from the switch, so mojoId is saved to
-// identify the row but never written back. One exception [engineering precaution, Brief 43
-// PR 5]: a do-not-contact mark (metadata.crmOptOut) added since is kept.
+// every real seller the copy reads (runSync EXISTING_SQL: never test data), and `--restore
+// <file>` turns the switch off and puts those columns back exactly, in one transaction. The
+// copy's own key changes (a re-key to a new Mojo ID) don't come from the switch, so mojoId is
+// saved to identify the row but never written back. Two exceptions [engineering precaution;
+// D11, Ryan 2026-10-18]: a do-not-contact mark (metadata.crmOptOut, Brief 43 PR 5) added
+// since is kept, and so is a do-not-call or opt-out status that arrived since
+// (keepStatusesAddedSince).
+// Brief 48 (PR 7 review r2): all of EXISTING_SQL's rows, not only those marked crm today: a
+// legacy row a CRM lead claims later, a removed seller who comes back, or a spreadsheet row
+// re-keyed later is written by the copy too.
 // The file holds names, phone numbers and notes: it is written owner-only outside every
 // git checkout (lib/privateRecord.ts) and its contents are never printed.
 
@@ -37,7 +42,7 @@ export interface BeforeCopy {
 export const BEFORE_COPY_SQL = `
 SELECT jsonb_build_object('id', m.id, 'mojoId', m."mojoId", ${COPIED_COLUMNS.map(([c]) => `'${c}', m.${q(c)}`).join(', ')}) AS row
 FROM "MojoContact" m
-WHERE m."organizationId" = $1 AND NOT m."isTestData" AND m.metadata->>'source' = 'crm'
+WHERE m."organizationId" = $1 AND NOT m."isTestData"
 ORDER BY m.id`
 
 export async function readBeforeCopy(db: Pick<PrismaClient, '$queryRawUnsafe'>, organizationId: string, now = new Date()): Promise<BeforeCopy> {
@@ -83,21 +88,59 @@ UPDATE "MojoContact" AS m SET "updatedAt" = now(), ${columns.map(c => `${q(c)} =
 FROM ${recordset(columns)}
 WHERE m.id = r.id AND m."organizationId" = $2 AND NOT m."isTestData" AND ${differs(columns)}`
 
-export interface RestoreCounts { rowsInFile: number; found: number; missing: number; differ: number }
+// addedSince: sellers first copied after the before-copy (not in the file), which a restore
+// leaves as they are.
+export interface RestoreCounts { rowsInFile: number; found: number; missing: number; differ: number; statusesKept: number; addedSince: number }
+
+// $1 = organizationId, $2 = jsonb array of the file's ids. Read only.
+const ADDED_SINCE_SQL = `
+SELECT count(*)::int AS n FROM "MojoContact"
+WHERE "organizationId" = $1 AND NOT "isTestData" AND id NOT IN (SELECT jsonb_array_elements_text($2::jsonb))`
+
+// Brief 48 (PR 7 review r2) [engineering precaution; D11, Ryan 2026-10-18]: like the crmOptOut
+// mark, a status that arrived since is kept where the copy itself would keep it over the saved
+// one (crmWinsKeepStatus, the saved status as the incoming value). Otherwise a "DNC" the CRM
+// sent would leave the call list's filter for good (keep-old never replaces a status) and
+// Drift's badge until the next copy.
+export function keepStatusesAddedSince(copy: BeforeCopy, current: ReadonlyMap<string, string | null>): BeforeCopy {
+  if (!copy.columns.includes('status')) return copy
+  return {
+    ...copy,
+    rows: copy.rows.map(r => {
+      const now = current.get(r.id as string)
+      return now !== undefined && crmWinsKeepStatus(now, r.status) ? { ...r, status: now } : r
+    }),
+  }
+}
+const keptCount = (copy: BeforeCopy, kept: BeforeCopy) => kept.rows.filter((r, i) => r !== copy.rows[i]).length
+
+// $1 = organizationId, $2 = jsonb array of the file's ids. Their current statuses (locked
+// inside the restore's transaction).
+const currentStatusSql = (lock: boolean) => `
+SELECT id, status FROM "MojoContact"
+WHERE "organizationId" = $1 AND NOT "isTestData" AND id IN (SELECT jsonb_array_elements_text($2::jsonb))${lock ? '\nFOR UPDATE' : ''}`
+async function currentStatuses(db: Pick<PrismaClient, '$queryRawUnsafe'>, copy: BeforeCopy, lock: boolean): Promise<Map<string, string | null>> {
+  if (!copy.columns.includes('status')) return new Map()
+  const rows = await db.$queryRawUnsafe<{ id: string; status: string | null }[]>(currentStatusSql(lock), copy.organizationId, JSON.stringify(copy.rows.map(r => r.id)))
+  return new Map(rows.map(r => [r.id, r.status]))
+}
 
 export async function restoreCheck(db: Pick<PrismaClient, '$queryRawUnsafe'>, copy: BeforeCopy): Promise<RestoreCounts> {
-  const [r] = await db.$queryRawUnsafe<{ found: number; differ: number }[]>(restoreCheckSql(copy.columns), JSON.stringify(copy.rows), copy.organizationId)
-  return { rowsInFile: copy.rows.length, found: r.found, missing: copy.rows.length - r.found, differ: r.differ }
+  const kept = keepStatusesAddedSince(copy, await currentStatuses(db, copy, false))
+  const [r] = await db.$queryRawUnsafe<{ found: number; differ: number }[]>(restoreCheckSql(copy.columns), JSON.stringify(kept.rows), copy.organizationId)
+  const [a] = await db.$queryRawUnsafe<{ n: number }[]>(ADDED_SINCE_SQL, copy.organizationId, JSON.stringify(copy.rows.map(x => x.id)))
+  return { rowsInFile: copy.rows.length, found: r.found, missing: copy.rows.length - r.found, differ: r.differ, statusesKept: keptCount(copy, kept), addedSince: a.n }
 }
 
 // One transaction: the switch goes off, the columns go back, one AuditLog row (counts
 // only). Then a read-only check of what still differs (only rows with a do-not-contact
-// mark added since can).
+// mark added since can, and they are counted as kept, not as differing).
 export async function applyRestore(db: PrismaClient, copy: BeforeCopy): Promise<RestoreCounts & { restored: number; stillDiffer: number }> {
   const before = await restoreCheck(db, copy)
   const restored = await db.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.featureFlag.upsert({ where: { id: CRM_WINS }, update: { enabled: false }, create: { id: CRM_WINS, enabled: false } })
-    const n = await tx.$executeRawUnsafe(restoreSql(copy.columns), JSON.stringify(copy.rows), copy.organizationId)
+    const kept = keepStatusesAddedSince(copy, await currentStatuses(tx, copy, true))
+    const n = await tx.$executeRawUnsafe(restoreSql(copy.columns), JSON.stringify(kept.rows), copy.organizationId)
     await tx.auditLog.create({
       data: { organizationId: copy.organizationId, action: RESTORE_ACTION, detailsJson: { beforeCopyAt: copy.createdAt, rowsInFile: before.rowsInFile, missing: before.missing, restored: n } },
     })

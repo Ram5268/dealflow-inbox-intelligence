@@ -7,7 +7,8 @@ import {
 } from './upsert'
 import {
   CRM_WINS_INSERT_SQL, CRM_WINS_RAN_LAST_SQL, CRM_WINS_UPDATE_SQL, STATUS_SQL, crmOwnName, crmWinsKeepStatus, crmWinsRunCounts,
-  identityLosses, massChangeLimit, overMassChangeLimit, readCrmWinsSwitch, toCrmWinsRow,
+  CrmWinsSwitchChanged, SWITCH_IN_TRANSACTION_SQL, identityLosses, massChangeLimit, overMassChangeLimit, readCrmWinsSwitchState,
+  toCrmWinsRow,
 } from './crmWins'
 
 // Brief 34: CRM → DealFlow lead sync. Used by nightly-pipeline step 1 and by
@@ -72,7 +73,8 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
 
   const plan = planSync(contacts, await prisma.$queryRawUnsafe<ExistingRow[]>(EXISTING_SQL, org.id))
   // Brief 48 (PR 7): read once per copy; a failed read is off.
-  const crmWins = await readCrmWinsSwitch(prisma)
+  const switchState = await readCrmWinsSwitchState(prisma)
+  const crmWins = switchState === true
   const ownNames = new Map(leads.map(l => [l.mojoId, crmOwnName(l)]))
   // Brief 48 (PR 7 review r1): DealFlow's statuses, for the opt-out wording rule (crmWins.ts).
   const statuses = crmWins
@@ -84,6 +86,12 @@ export async function runCrmLeadSync({ dryRun = false } = {}): Promise<CrmSyncRe
     : plan.upserts.map(toUpsertRow)
   try {
     return await prisma.$transaction(async tx => {
+      // Brief 48 (PR 7 review r2, nit 5): the switch again, locked, unless it couldn't be read
+      // at all (then the copy is keep-old, as before).
+      if (switchState !== null) {
+        const [flag] = await tx.$queryRawUnsafe<{ enabled: boolean }[]>(SWITCH_IN_TRANSACTION_SQL)
+        if ((flag?.enabled === true) !== crmWins) throw new CrmWinsSwitchChanged()
+      }
       const rekeyed = await tx.$executeRawUnsafe(REKEY_SQL, JSON.stringify(plan.rekeys))
       const returned: UpsertReturn[] = []
       for (let i = 0; i < rows.length; i += CHUNK) {

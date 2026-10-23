@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   BEFORE_COPY_KIND, BEFORE_COPY_SQL, COPIED_COLUMNS, RestoreRefused, defaultBeforeCopyDir, parseBeforeCopy, parseSwitchCommand,
-  restoreCheckSql, restoreSql,
+  keepStatusesAddedSince, restoreCheckSql, restoreSql,
 } from '../crmWinsBackup'
 import { assertSelectOnly } from '../roClient'
 
@@ -26,10 +26,11 @@ test('the switch command: state, on (with a private folder), off, restore; anyth
   assert.equal(defaultBeforeCopyDir('/Users/someone'), '/Users/someone/dev/brief48-dealflow-fixes/private')
 })
 
-test('the before-copy: every column the copy writes on an existing seller, CRM sellers only, never test data', () => {
+test('the before-copy: every column the copy writes on an existing seller, every row the copy can claim, never test data', () => {
   const sql = flat(BEFORE_COPY_SQL)
   assert.doesNotThrow(() => assertSelectOnly(BEFORE_COPY_SQL))
-  assert.match(sql, /WHERE m\."organizationId" = \$1 AND NOT m\."isTestData" AND m\.metadata->>'source' = 'crm'/)
+  // Brief 48 (PR 7 review r2): the copy's own scope (runSync EXISTING_SQL), not only rows marked crm today.
+  assert.match(sql, /WHERE m\."organizationId" = \$1 AND NOT m\."isTestData" ORDER BY m\.id$/)
   assert.ok(sql.includes(`'id', m.id, 'mojoId', m."mojoId"`))
   for (const [c] of COPIED_COLUMNS) assert.ok(sql.includes(`'${c}', m."${c}"`), c)
   assert.ok(!COPIED_COLUMNS.some(([c]) => c === 'neighborhood'), 'written only when a seller is first copied')
@@ -67,4 +68,21 @@ test('the switch script saves the before-copy before turning the switch on, and 
   assert.ok(save > 0 && save < src.lastIndexOf(`runCrmWinsSwitch(prisma, 'on', true)`), 'saved first')
   assert.doesNotMatch(src, /console\.log\([^)]*copy\.rows\b(?!\.length)/, 'only the count of rows is printed')
   assert.match(src, /if \(!APPLY\) \{\s+console\.log\('Dry run: nothing changed\. Add --apply to turn the switch off/)
+})
+
+test('review r2: the restore keeps a do-not-call or opt-out status that arrived since, as the copy itself would', () => {
+  const copy = parseBeforeCopy({
+    kind: BEFORE_COPY_KIND, version: 1, createdAt: '2026-10-23T22:00:00.000Z', organizationId: 'org_1', columns: ['status', 'notes'],
+    rows: [{ id: 'a', status: 'No Answer', notes: null }, { id: 'b', status: 'Contact', notes: null }, { id: 'c', status: 'DNC', notes: null }, { id: 'd', status: 'Contact', notes: 'x' }, { id: 'e', status: null, notes: null }],
+  }, 'org_1')
+  const now = new Map<string, string | null>([['a', 'DNC'], ['b', 'Remove me from your list'], ['c', 'Contact'], ['d', 'Interested'], ['e', 'Stop calling']])
+  assert.deepEqual(keepStatusesAddedSince(copy, now).rows.map(r => r.status), ['DNC', 'Remove me from your list', 'DNC', 'Contact', 'Stop calling'])
+  const noStatus = { ...copy, columns: ['notes'] }
+  assert.equal(keepStatusesAddedSince(noStatus, now), noStatus)
+})
+
+test('review r2: --restore refuses a before-copy file that others can read, before reading it', () => {
+  const src = readFileSync(join(__dirname, '../../../scripts/brief48-crm-wins-switch.ts'), 'utf8')
+  const check = src.indexOf(`if (cmd.kind === 'restore' && (statSync(cmd.file).mode & 0o077) !== 0) {`)
+  assert.ok(check > 0 && check < src.indexOf('prisma.organization.findUniqueOrThrow') && check < src.indexOf('readFileSync(cmd.file'), 'checked first')
 })

@@ -1,8 +1,8 @@
 // Brief 48 (PR 7): the CRM_WINS switch, which decides whether the morning CRM → DealFlow
 // lead copy lets the CRM's values replace DealFlow's (lib/crm-sync/crmWins.ts) [Ryan,
 // 2026-10-19: yes, behind a switch]. The executor turns it on in Brief 48 data step DS-4,
-// after scripts/brief48-crm-wins-preview.ts. It takes effect at the next copy (7:00 am, or
-// scripts/crm-lead-sync.ts). Turning it off stops further changes but doesn't undo the ones
+// after scripts/brief48-crm-wins-preview.ts. It takes effect at the next copy (the nightly run
+// at 09:00 UTC, or scripts/crm-lead-sync.ts). Turning it off stops further changes but doesn't undo the ones
 // made; --restore does (lib/crm-sync/crmWinsBackup.ts). Prints the switch's state and counts
 // only. It uses the DATABASE_URL in its environment only (it doesn't load .env).
 //
@@ -13,10 +13,12 @@
 //   npx tsx scripts/brief48-crm-wins-switch.ts --off --apply    # turn it off (changes made stay)
 //   npx tsx scripts/brief48-crm-wins-switch.ts --restore <file>          # dry run: counts only
 //   npx tsx scripts/brief48-crm-wins-switch.ts --restore <file> --apply  # switch off + the saved columns back, one transaction
+// Never run `--restore --apply` between 08:50 and 09:30 UTC, around the nightly copy (a copy that
+// finds the switch changed under it rolls back, but the restore then waits on it).
 // The before-copy goes to ~/dev/brief48-dealflow-fixes/private/ (or --preimage-dir <dir>):
 // an owner-only folder outside every git checkout, an owner-only file, its path printed,
 // its contents (names, numbers, notes) never.
-import { readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { prisma } from '../lib/prisma'
@@ -43,13 +45,18 @@ async function main() {
     for (const line of await runCrmWinsSwitch(prisma, cmd.kind === 'off' ? 'off' : null, APPLY)) console.log(line)
     return
   }
+  // Brief 48 (PR 7 review r2) [engineering precaution]: the file holds names and numbers; one
+  // that others can read is refused before anything is read, so a stray copy gets noticed.
+  if (cmd.kind === 'restore' && (statSync(cmd.file).mode & 0o077) !== 0) {
+    throw new RestoreRefused('others can read that before-copy; make it owner-only first (chmod 600); nothing changed')
+  }
   const org = await prisma.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG }, select: { id: true } })
   const flag = await prisma.featureFlag.findUnique({ where: { id: CRM_WINS }, select: { enabled: true } })
   if (cmd.kind === 'restore') {
     const copy = parseBeforeCopy(JSON.parse(readFileSync(cmd.file, 'utf8')), org.id)
     const c = await restoreCheck(prisma, copy)
     console.log(`${CRM_WINS}: ${describeCrmWins(flag)}`)
-    console.log(`Before-copy from ${copy.createdAt}: ${c.rowsInFile} sellers' rows; ${c.found} found, ${c.missing} gone; ${c.differ} differ now.`)
+    console.log(`Before-copy from ${copy.createdAt}: ${c.rowsInFile} sellers' rows; ${c.found} found, ${c.missing} gone; ${c.differ} differ now; do-not-call statuses that arrived since, kept: ${c.statusesKept}; sellers first copied since (left as they are): ${c.addedSince}.`)
     if (!APPLY) {
       console.log('Dry run: nothing changed. Add --apply to turn the switch off and put those rows back, in one transaction.')
       return

@@ -20,7 +20,7 @@ import { mapLead, markOptOut } from '../mapLead'
 import { planSync, type ExistingRow } from '../plan'
 import { EXISTING_SQL, ORG_SLUG, runCrmLeadSync } from '../runSync'
 import {
-  CURRENT_SQL, NOTES_KEPT_HEADING, crmOwnName, crmWinsAfter, crmWinsKeepStatus, crmWinsPreview, toCrmWinsRow, type CurrentRow,
+  CURRENT_SQL, NOTES_KEPT_HEADING, crmOwnName, crmWinsAfter, crmWinsKeepStatus, crmWinsPreview, runCrmWinsSwitch, toCrmWinsRow, type CurrentRow,
 } from '../crmWins'
 import { CRM_ORG, DF_ORG, P, cleanup, createCrmTables, dump, requireTestUrls, seed, withoutMs, type SeedLead } from './crmSyncDb'
 
@@ -213,7 +213,9 @@ const many = (): { leads: SeedLead[]; rows: Array<Record<string, unknown>> } => 
 // A broken CRM read: every lead now has the next lead's phone.
 const shiftPhones = () => crm.query(`UPDATE "ContactPhone" SET phone = '+1718555' || lpad((100 + ((substring(id from 'many([0-9]+)_')::int + 1) % ${MANY}))::text, 4, '0') WHERE starts_with(id, $1)`, [P])
 const phones = async () => (await df.query(`SELECT phone FROM "MojoContact" WHERE "organizationId" = $1 ORDER BY "mojoId"`, [DF_ORG])).rows.map(r => r.phone)
-const setSwitch = (on: boolean) => df.query(`INSERT INTO "FeatureFlag" (id, enabled, "updatedAt") VALUES ('CRM_WINS', $1, now()) ON CONFLICT (id) DO UPDATE SET enabled = $1`, [on])
+// Brief 48 (PR 7 review r2): through the switch script's own code, which stamps the switch's
+// updatedAt (the first-copy pass is keyed on it).
+const setSwitch = (on: boolean) => runCrmWinsSwitch(prisma, on ? 'on' : 'off', true)
 
 test('review r1: a later copy that drops most sellers\' phone numbers rolls back; the first copy after switching on is let through', { skip: SKIP }, async () => {
   await cleanup(df, crm)
@@ -234,4 +236,31 @@ test('review r1: a later copy that drops most sellers\' phone numbers rolls back
   const r = await runCrmLeadSync()
   assert.equal(r.changed?.phone, MANY)
   assert.notDeepEqual(await phones(), good)
+})
+
+// ── Brief 48 (PR 7 review r2) ───────────────────────────────────────────────
+
+test('review r2: only turning the switch off and on again gives a free pass; a copy that couldn\'t read the switch doesn\'t', { skip: SKIP }, async () => {
+  await cleanup(df, crm)
+  const { leads, rows } = many()
+  await seed(df, crm, leads, rows)
+  await setSwitch(true)
+  await runCrmLeadSync() // the first CRM-wins copy: nothing to change
+  const good = await phones()
+  await shiftPhones()
+  await assert.rejects(runCrmLeadSync(), /phonesDropped 60 sellers, over the limit of 50/)
+  // One morning the switch can't be read: that copy runs keep-old (and writes its audit row) ...
+  await df.query(`ALTER TABLE "FeatureFlag" RENAME TO "FeatureFlag_b48r2"`)
+  try {
+    assert.equal((await runCrmLeadSync()).crmWins, undefined)
+  } finally {
+    await df.query(`ALTER TABLE "FeatureFlag_b48r2" RENAME TO "FeatureFlag"`)
+  }
+  // ... and the next morning's mass change still rolls back.
+  await assert.rejects(runCrmLeadSync(), /phonesDropped 60 sellers, over the limit of 50/)
+  assert.deepEqual(await phones(), good, 'nothing written')
+  // Off and on again with the switch script, no copy in between (the PR's instruction): one morning goes through.
+  await setSwitch(false)
+  await setSwitch(true)
+  assert.equal((await runCrmLeadSync()).changed?.phone, MANY)
 })

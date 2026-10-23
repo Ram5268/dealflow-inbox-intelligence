@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
-  CRM_WINS, CRM_WINS_INSERT_SQL, CRM_WINS_UPDATE_SQL, DO_NOT_CALL_STATUS, NOTES_KEPT_HEADING, countFieldChanges, crmOwnName,
+  CRM_WINS, CRM_WINS_INSERT_SQL, CRM_WINS_RAN_LAST_SQL, CRM_WINS_UPDATE_SQL, DO_NOT_CALL_STATUS, NOTES_KEPT_HEADING, countFieldChanges, crmOwnName,
   crmWinsAfter, crmWinsIsOn, crmWinsKeepStatus, crmWinsNotes, crmWinsPreview, crmWinsRunCounts, identityLosses, isDoNotCallStatus,
   keepOldAfter, massChangeLimit, overMassChangeLimit, parseCrmWinsArgs, readCrmWinsSwitch, runCrmWinsSwitch, toCrmWinsRow,
   type CurrentRow, type Snapshot,
@@ -13,6 +13,7 @@ import { mapLead, type CrmContact } from '../mapLead'
 import type { CrmLeadRow } from '../crmReader'
 import type { ExistingRow, SyncPlan } from '../plan'
 import { applyHardFilters } from '../../ranking/hardFilters'
+import { isOptOutWording } from '../../chat/sellerCard'
 
 // Brief 48 (PR 7, item 1.5): the CRM_WINS switch and the "CRM wins" rules [Ryan,
 // 2026-10-19]. Pure: the database is faked; the SQL's behaviour on real Postgres is in
@@ -78,8 +79,10 @@ test('the switch script: arguments, state, dry run, apply on and off', async () 
 
 test('the copy reads the switch once and, off, runs exactly the keep-old statements and self-check it always ran', () => {
   const src = readFileSync(join(__dirname, '../runSync.ts'), 'utf8')
-  assert.match(src, /const crmWins = await readCrmWinsSwitch\(prisma\)/)
-  assert.equal(src.match(/readCrmWinsSwitch\(/g)?.length, 1)
+  // Brief 48 (PR 7 review r2): read once before planning, and again (locked) inside the transaction.
+  assert.match(src, /const switchState = await readCrmWinsSwitchState\(prisma\)\n  const crmWins = switchState === true/)
+  assert.equal(src.match(/readCrmWinsSwitchState\(/g)?.length, 1)
+  assert.ok(src.indexOf('SWITCH_IN_TRANSACTION_SQL)') < src.indexOf('REKEY_SQL, JSON.stringify'), 'the locked read comes first in the transaction')
   assert.match(src, /: plan\.upserts\.map\(toUpsertRow\)/)
   assert.match(src, /if \(!crmWins\) returned\.push\(\.\.\.await tx\.\$queryRawUnsafe<UpsertReturn\[\]>\(UPSERT_SQL, chunk, org\.id\)\)/)
   assert.ok(src.includes('throw new Error(`keep-old rule violated on ${changed.length} values (rolled back): ${changed.slice(0, 10).join(\', \')}`)'))
@@ -283,4 +286,28 @@ test('review r1: the mass-change limit counts dropped numbers and emails and rep
   assert.deepEqual(overMassChangeLimit({ phonesDropped: 51, emailsDropped: 50, namesReplaced: 0, streetsReplaced: 0 }, 50), ['phonesDropped 51'])
   const src = readFileSync(join(__dirname, '../runSync.ts'), 'utf8')
   assert.match(src, /if \(ranLast\) throw new Error\(`CRM-wins mass change \(rolled back\): \$\{over\.join\(', '\)\} sellers, over the limit of \$\{limit\}`\)/)
+})
+
+// ── Brief 48 (PR 7 review r2) ───────────────────────────────────────────────
+
+test('review r2: a status keeps every do-not-contact mark it has: the call list\'s words and Drift\'s wording, each on its own', () => {
+  const callList = (s: string | null) => applyHardFilters({ status: s, tags: [], groups: [], phones: [], phoneDncFlags: [], matchCount: 1, allMatchesRental: false }).excluded
+  const badge = (s: string | null) => s != null && isOptOutWording(s)
+  // "Non-DNC" and "DNC scrub passed" are do-not-call to the call list's substring match but not to Drift's wording.
+  const optOut = ['Do Not Call', 'DNC', 'do_not_call', 'Opted Out', 'Remove me from your list', 'Stop calling', 'STOP', 'Unsubscribe', "Don't call", 'Non-DNC', 'DNC scrub passed']
+  const other = [null, 'Contact', 'No Answer', 'Not interested', 'May stop by Tuesday']
+  for (const cur of [...optOut, ...other]) for (const crm of [...optOut, ...other]) {
+    const row = toCrmWinsRow(upsert(mapLead({ ...lead, fields: crm == null ? {} : { 'Last Call Result': { t: crm, n: null, d: null } } })), 'Pat Example', crmWinsKeepStatus(cur, crm))
+    const after = crmWinsAfter({ ...before, status: cur, metadata: {} }, row, false).status as string | null
+    const pair = `${cur} <- ${crm} = ${after}`
+    if (callList(cur)) assert.ok(callList(after), `the call list still leaves them out: ${pair}`)
+    if (badge(cur)) assert.ok(badge(after), `Drift's badge stays: ${pair}`)
+    if (!callList(cur) && !badge(cur) && (callList(crm) || badge(crm))) assert.equal(after, crm, `an opt-out from the CRM lands: ${pair}`)
+  }
+})
+
+test('review r2: the first-copy pass belongs to the switch (its last change), not to the newest copy', () => {
+  const sql = flat(CRM_WINS_RAN_LAST_SQL)
+  assert.ok(sql.includes(`JOIN "FeatureFlag" f ON f.id = 'CRM_WINS'`), sql)
+  assert.ok(sql.includes(`a."detailsJson"->>'crmWins' = 'true' AND a."createdAt" >= f."updatedAt"`), sql)
 })
