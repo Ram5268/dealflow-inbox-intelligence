@@ -4,7 +4,7 @@
 // to go on, and the greeting ("Good morning, Ryan.", DRIFT_SCRIPT #1) needs
 // the part of the day [engineering precaution]. Pure.
 
-const NY = 'America/New_York'
+import { NEW_YORK_TIME_ZONE as NY } from '../../time/newYork'
 
 function partOfDay(hour: number): 'morning' | 'afternoon' | 'evening' {
   if (hour >= 5 && hour < 12) return 'morning'

@@ -7,6 +7,7 @@
 // Keep these in lockstep with the Zod schemas — the Zod .parse() is the runtime
 // guard, this is the model-facing contract.
 import type Anthropic from '@anthropic-ai/sdk'
+import { CREATED_AFTER_DESCRIPTION } from './createdAfter'
 
 // Brief 43 PR 7 (Q11-Q13, Q40; N6): "under" is a hard ceiling, an area is that
 // area, an address is that address, and building facts are on the card.
@@ -75,6 +76,8 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
         type: 'boolean',
         description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
+      // Brief 43 PR 14 (Q29, M21).
+      createdAfter: { type: 'string', description: CREATED_AFTER_DESCRIPTION },
       limit: {
         type: 'number',
         description: 'Max cards to return (default 50, max 200). Use a high limit for broad "show me everything" queries.',
@@ -162,6 +165,8 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
         type: 'boolean',
         description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
+      // Brief 43 PR 14 (Q29, M21).
+      createdAfter: { type: 'string', description: CREATED_AFTER_DESCRIPTION },
       limit: { type: 'number', description: 'Max cards to return (default 50, max 200).' },
     },
     required: [],

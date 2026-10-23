@@ -40,6 +40,7 @@ import { isTestModeOnly } from '@/lib/config/testMode'
 import { bedsMatches } from './searchParties'
 import { hoodSqlTerms, hoodsMatch, wantedHoods } from './neighborhoodMatch'
 import { addressMatch, addressSqlTerm, houseNumberSqlTerms, parseStreetAddress } from './addressMatch'
+import { createdAfterSchema, createdAfterWhere } from './createdAfter'
 
 // Listing categories this tool exposes (sale + rental supply the chat surfaces).
 const SALE_CATS = ['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'ACTIVE_SALE_LISTING'] as const
@@ -76,6 +77,8 @@ export const searchListingsInputSchema = z.object({
   priceTolerance: z.number().min(0).max(0.3).optional(),
   includeTestData: z.boolean().optional(),
   limit: z.number().int().positive().max(200).optional(),
+  // Brief 43 PR 14 (Q29): only items added on or after this date (./createdAfter.ts).
+  createdAfter: createdAfterSchema.optional(),
 })
 
 export type SearchListingsInput = z.infer<typeof searchListingsInputSchema>
@@ -184,6 +187,7 @@ export function listingsWhere(input: SearchListingsInput, organizationId: string
     category: { in: resolveCategories(input) },
     isDuplicate: false,
     processingStatus: 'active',
+    ...createdAfterWhere(input.createdAfter), // Brief 43 PR 14 (Q29)
   }
   if (!(input.includeTestData ?? true)) where.isTestData = false  // seed-only test mode: default on
   // TEST_MODE_ONLY hard gate: force seed data, overriding whatever Haiku sent
