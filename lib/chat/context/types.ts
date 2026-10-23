@@ -25,6 +25,8 @@ export interface ContextResult {
   // Forwarded to the response JSON by route.ts.
   liveSeListings?: LiveSeListing[]
   seFilterUrl?:    string | null
+  // Brief 43 PR 15 (Q37): live StreetEasy searches run (each at most one RapidAPI request).
+  streetEasySearches?: number
 }
 
 export type ContextFetcher = (input: ContextInput) => Promise<ContextResult>

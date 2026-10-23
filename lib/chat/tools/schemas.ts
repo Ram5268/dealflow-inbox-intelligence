@@ -81,7 +81,8 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
       createdAfter: { type: 'string', description: CREATED_AFTER_DESCRIPTION },
       limit: {
         type: 'number',
-        description: 'Max cards to return (default 50, max 200). Use a high limit for broad "show me everything" queries.',
+        // Brief 43 PR 15 (Q31): default 20 (was 50); each card is paid for again on every later round.
+        description: 'Max cards to return (default 20, max 200). Use a high limit for broad "show me everything" queries.',
       },
     },
     required: [],
@@ -168,7 +169,7 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
       },
       // Brief 43 PR 14 (Q29, M21).
       createdAfter: { type: 'string', description: CREATED_AFTER_DESCRIPTION },
-      limit: { type: 'number', description: 'Max cards to return (default 50, max 200).' },
+      limit: { type: 'number', description: 'Max cards to return (default 20, max 200).' }, // Brief 43 PR 15: was 50
       // Brief 43 PR 9 (Q15, Q41): lib/chat/tools/partyFilters.ts.
       query: {
         type: 'string',

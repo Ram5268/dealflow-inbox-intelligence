@@ -57,13 +57,14 @@ export const liveStreetEasyFetcher: ContextFetcher = async ({ parsed, pastedText
       (liveSeListings.length > 0 ? listingLines : '(no matching listings found in your database for this query)') +
       (seFilterUrl ? `\n\nBrowse all matching listings on StreetEasy: ${seFilterUrl}` : '')
 
-    return { block, liveSeListings, seFilterUrl }
+    return { block, liveSeListings, seFilterUrl, streetEasySearches: 1 }
   } catch (err) {
     console.error('[SE search] error:', err)
     return {
       block: seFilterUrl ? `\n\nBrowse matching listings on StreetEasy: ${seFilterUrl}` : null,
       liveSeListings: [],
       seFilterUrl,
+      streetEasySearches: 1, // Brief 43 PR 15: counted even when it failed or timed out
     }
   }
 }

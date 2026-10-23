@@ -26,9 +26,12 @@ import { unresolvedBuyer, shownIdsInChat } from '@/lib/chat/tools/reportBuyerGat
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
 import { buildGuardGrounding, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
-import { logGuardFireEvent, timedOutGuardInput } from '@/lib/chat/guards/instrumentation'
+import { logGuardFireEvent, timedOutGuardInput, streetEasyLog } from '@/lib/chat/guards/instrumentation'
+import { factCheckNeeded } from '@/lib/chat/guards/factFree'
+import { newUsageTally, addUsage, turnCostUsd, usageRecord, countingClient } from '@/lib/chat/turnCost'
+import { cacheLastToolResult } from '@/lib/chat/promptCache'
 import { createTurnBudget, deadlineSignal, withTimeout, isTimedOut, LOOKUP_TIMEOUT_MS, TURN_SOFT_MS, TURN_HARD_MS, TURN_CEILING_MS, TIMED_OUT_REPLY } from '@/lib/chat/turnBudget'
-import { buildSystemBlocks, RYAN_MD } from '@/lib/chat/systemBlocks'
+import { buildSystemBlocks } from '@/lib/chat/systemBlocks'
 import { SYSTEM_PROMPT, VOICE_INSTRUCTION } from '@/lib/chat/systemPrompt'
 import {
   MAX_GUARD_RETRIES,
@@ -54,9 +57,7 @@ import Anthropic from '@anthropic-ai/sdk'
 // originally shipped on it, but the 32-query stress test traced its
 // prompt-adherence bugs to model choice; Sonnet cleared them.
 const CHAT_MODEL = 'claude-sonnet-4-6'
-// Sonnet 4.6 list pricing: $3 / 1M input, $15 / 1M output.
-const CHAT_INPUT_PER_M = 3
-const CHAT_OUTPUT_PER_M = 15
+// Sonnet 4.6 list pricing, cache writes and reads included: lib/chat/turnCost.ts (Brief 43 PR 15).
 // Safety cap on the tool_use loop — if the model hasn't finished after this many
 // search rounds it's spinning; we force a final structured reply.
 const MAX_ITERATIONS = 6
@@ -382,8 +383,12 @@ export async function POST(req: NextRequest) {
     const toolResultsForGuard: ToolResultForVerify[] = []
     const seenCardIds = new Set<string>()
     const cardOverlap = new Map<string, number>()   // id → priceOverlapScore (for matchScore)
-    let tokensIn = 0
-    let tokensOut = 0
+    // Brief 43 PR 15 (Q37): every call's usage, cache tokens included, for
+    // DriftInteraction.costUsd (lib/chat/turnCost.ts). The report generators'
+    // own Sonnet call (recommended-adjustment) is counted through their client.
+    const mainUsage = newUsageTally()
+    const reportUsage = newUsageTally()
+    const reportAnthropic = countingClient(anthropic, reportUsage)
     let aiResult: AiResult | null = null
     let maxIterationsHit = false
 
@@ -415,7 +420,7 @@ export async function POST(req: NextRequest) {
       if (unresolved) return unresolved
 
       if (tu.name === 'generate_report') {
-        const generated = await generator.full({ ...params, prisma, anthropic })
+        const generated = await generator.full({ ...params, prisma, anthropic: reportAnthropic })
         // Brief 43 PR 4: a report finished after the turn's ceiling isn't saved;
         // the reply (TIMED_OUT_REPLY) has gone, and a late save would leave a
         // chat with no messages in History [engineering precaution].
@@ -451,7 +456,7 @@ export async function POST(req: NextRequest) {
 
       // generate_report_section
       const sectionKey = input.sectionKey ?? ''
-      const section = await generator.section({ ...params, sectionKey, prisma, anthropic })
+      const section = await generator.section({ ...params, sectionKey, prisma, anthropic: reportAnthropic })
       serverAttachedFragment = { templateId, sectionKey, title: section.title, content: section.content, sources: section.sources }
       const result = { templateId, sectionKey, title: section.title, content: section.content }
       toolResultsForGuard.push({ name: tu.name, input: tu.input, output: result })
@@ -492,8 +497,7 @@ export async function POST(req: NextRequest) {
         tool_choice: { type: 'any' },
       }, { signal: turnDeadline.signal }))
       if (!completion) break // cut off at the ceiling: the turn ends with TIMED_OUT_REPLY below
-      tokensIn  += completion.usage?.input_tokens  ?? 0
-      tokensOut += completion.usage?.output_tokens ?? 0
+      addUsage(mainUsage, completion.usage)
 
       // drift_response = terminal. Take it even if searches appear in the same turn
       // (we instruct against that; finalizing avoids an unmatched-tool_use error).
@@ -572,6 +576,8 @@ export async function POST(req: NextRequest) {
       if (isTimedOut(toolRound)) break
       const toolResults: Anthropic.Messages.ToolResultBlockParam[] = toolRound
       messages.push({ role: 'user', content: toolResults })
+      // Brief 43 PR 15 (Q31): the next round reads all this from the prompt cache.
+      cacheLastToolResult(messages)
 
       if (iter === MAX_ITERATIONS - 1) maxIterationsHit = true
     }
@@ -592,8 +598,7 @@ export async function POST(req: NextRequest) {
         tools: [responseTool],
         tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
       }, { signal: turnDeadline.signal }))
-      tokensIn  += forced?.usage?.input_tokens  ?? 0
-      tokensOut += forced?.usage?.output_tokens ?? 0
+      if (forced) addUsage(mainUsage, forced.usage)
       const forcedUse = forced?.content.find(
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
       )
@@ -634,20 +639,22 @@ export async function POST(req: NextRequest) {
       const timedOutSessionId = session?.id ?? null
       await logGuardFireEvent(timedOutGuardInput({
         organizationId, sessionId: timedOutSessionId, elapsedMs, toolCalls: allToolCalls, finalResponseSent: TIMED_OUT_REPLY,
+        streetEasy: { searches: composed.streetEasySearches, listings: composed.liveSeListings.length }, // Brief 43 PR 15
       }))
+      // Brief 43 PR 15 (Q37): the same cost as the row at the end of the turn (no fact-check ran).
+      const timedOutUsage = { main: mainUsage, reports: reportUsage, verifierCostUsd: 0 }
       let timedOutInteractionId: string | null = null
       try {
         const interaction = await prisma.driftInteraction.create({
           data: {
             query:          userMessage || queryText,
-            parsedFilters:  { toolCalls: allToolCalls, maxIterationsHit, timedOut: true } as unknown as object,
+            parsedFilters:  { toolCalls: allToolCalls, maxIterationsHit, timedOut: true, usage: usageRecord(timedOutUsage) } as unknown as object,
             topCards:       [],
             responseTimeMs: elapsedMs,
             modelUsed:      CHAT_MODEL,
-            tokensIn,
-            tokensOut,
-            // Same formula as the interaction row at the end of the turn.
-            costUsd:        (tokensIn / 1_000_000) * CHAT_INPUT_PER_M + (tokensOut / 1_000_000) * CHAT_OUTPUT_PER_M,
+            tokensIn:       mainUsage.inputTokens,
+            tokensOut:      mainUsage.outputTokens,
+            costUsd:        turnCostUsd(timedOutUsage),
           },
           select: { id: true },
         })
@@ -706,16 +713,12 @@ export async function POST(req: NextRequest) {
     // isn't flagged as a hallucination and forced to the canned fallback.
     // Extracted once here so the same text is reused across both guard calls and
     // every retry-loop iteration below.
-    // Brief 29.0 — RYAN_MD is always-on grounded evidence too (same principle):
-    // vocabulary Sonnet draws from the personal glossary ("hot matches",
-    // "off-market", neighborhood shorthand) must not be flagged as hallucinated.
-    // Fold it in ahead of the per-turn dynamic block.
-    // Brief 43 PR 10 (Q17): for the fact-check only (Brief 43 PR 15 takes it out
-    // there too). The regex guard's grounding is this turn's tool results and
-    // side-lookup blocks, not RYAN_MD: RYAN_MD names ACRIS, DOB and StreetEasy,
-    // so every invented "per ACRIS" used to look grounded. Deed facts bind to
-    // this turn's ACRIS block (toolBinding.ts) [engineering precaution].
-    const sideChannelText = [RYAN_MD, dynamicSystemBlock].filter(Boolean).join('\n\n') || null
+    // Brief 29.0 folded RYAN_MD in here too. Brief 43 PR 10 (Q17) took it out of
+    // the regex guard's grounding, and Brief 43 PR 15 (Q31) out of the
+    // fact-check: RYAN_MD names ACRIS, DOB and StreetEasy, so every invented
+    // "per ACRIS" used to look grounded. Both checks now read this turn's tool
+    // results and side-lookup blocks; deed facts bind to this turn's ACRIS block
+    // (toolBinding.ts) [engineering precaution].
     const groundingCorpus = buildGuardGrounding(toolResultsForGuard, priorDealCards, dynamicSystemBlock || null)
 
     if (guardApplies) {
@@ -735,16 +738,26 @@ export async function POST(req: NextRequest) {
         // ceiling is dropped; the reply is then regex-checked only [engineering
         // precaution].
         const skipRepeat = skipVerifierForRepeatClaim(guardHistory, regexFlags)
-        const checked = budget.pastHard() || skipRepeat
+        // Brief 43 PR 15 (Q31): no fact-check on a fact-free reply ("thanks",
+        // "Good morning, Ryan.") with no draft, on a turn with no tool or
+        // side-lookup facts (lib/chat/guards/factFree.ts) [engineering precaution].
+        const factFree = !skipRepeat && !factCheckNeeded({
+          reply: currentResponse, draft: normalizeDraft(currentDraft),
+          toolCalls: toolResultsForGuard.length, factLookups: composed.factLookups,
+        })
+        // Brief 43 PR 15 (Q31): the fact-check gets this turn's side-lookup text
+        // without RYAN_MD (rules and vocabulary, not facts: about 3,100 tokens on
+        // every call). The regex grounding (groundingCorpus) is unchanged here.
+        const checked = budget.pastHard() || skipRepeat || factFree
           ? null
           : await withTimeout(
-              verifyResponse(userMessage || queryText, toolResultsForGuard, sideChannelText, withDraft(currentResponse, currentDraft)),
+              verifyResponse(userMessage || queryText, toolResultsForGuard, dynamicSystemBlock || null, withDraft(currentResponse, currentDraft)),
               budget.msLeft(TURN_CEILING_MS), 'fact-check')
-        if (!skipRepeat && (!checked || isTimedOut(checked))) factCheckSkipped = true
+        if (!skipRepeat && !factFree && (!checked || isTimedOut(checked))) factCheckSkipped = true
         const verifier = skipRepeat
           ? skippedVerification()
           : checked && !isTimedOut(checked) ? checked : { isGrounded: true, flags: [], costUsd: 0, latencyMs: 0 }
-        guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, verifierCost: verifier.costUsd })
+        guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, ...(factFree ? { verifierSkipped: 'fact_free' as const } : {}), verifierCost: verifier.costUsd })
         // Brief 43 PR 10 (Q32): a fact-check that failed or answered garbage
         // accepts the reply (the regex check above still ran); log it here.
         if (verifier.error) guardHistory[guardHistory.length - 1].verifierError = verifier.error
@@ -791,8 +804,7 @@ export async function POST(req: NextRequest) {
           fellbackToCanned = true
           break
         }
-        tokensIn  += retry.usage?.input_tokens  ?? 0
-        tokensOut += retry.usage?.output_tokens ?? 0
+        addUsage(mainUsage, retry.usage)
         const retryUse = retry.content.find(
           (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
         )
@@ -837,7 +849,8 @@ export async function POST(req: NextRequest) {
         userTurn:           userMessage || queryText,
         priorAssistantTurn: lastAssistantMsg?.content ?? null,
         assistantAttempt,
-        toolCallsAttempted: allToolCalls,
+        // Brief 43 PR 15 (Q37): plus this turn's live StreetEasy searches, counts only.
+        toolCallsAttempted: [...allToolCalls, ...streetEasyLog(composed.streetEasySearches, composed.liveSeListings.length)],
         telemetry:          guardTelemetry,
         finalResponseSent:  currentResponse,
       })
@@ -875,8 +888,7 @@ export async function POST(req: NextRequest) {
           tool_choice: { type: 'tool', name: RESPONSE_TOOL_NAME },
         }, { signal: turnDeadline.signal }))
         if (!redo) return null
-        tokensIn  += redo.usage?.input_tokens  ?? 0
-        tokensOut += redo.usage?.output_tokens ?? 0
+        addUsage(mainUsage, redo.usage)
         const redoUse = redo.content.find(
           (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
         )
@@ -990,7 +1002,10 @@ export async function POST(req: NextRequest) {
     }))
     // Brief 3.0: parsedFilters records the tool calls the model actually made
     // (what it searched for + how many matched). Cost is at Sonnet 4.6 pricing.
-    const costUsd = (tokensIn / 1_000_000) * CHAT_INPUT_PER_M + (tokensOut / 1_000_000) * CHAT_OUTPUT_PER_M
+    // Brief 43 PR 15 (Q37): cache writes and reads, the report-section call and
+    // the fact-checks included (lib/chat/turnCost.ts); PR 17's daily cap sums it.
+    const turnUsage = { main: mainUsage, reports: reportUsage, verifierCostUsd: guardTelemetry.totalVerifierCostUsd }
+    const costUsd = turnCostUsd(turnUsage)
     let interactionId: string | null = null
     try {
       const interaction = await prisma.driftInteraction.create({
@@ -1000,13 +1015,15 @@ export async function POST(req: NextRequest) {
           // Brief 43 PR 4: deadline records whether the turn's clock cut anything short.
           parsedFilters:  {
             toolCalls: allToolCalls, maxIterationsHit, guard: guardTelemetry, deadline: { softCut, factCheckSkipped },
+            usage: usageRecord(turnUsage), // Brief 43 PR 15: the tallies behind costUsd (counts and dollars)
             ...(draftResult.outcome !== 'none' ? { draftPrivacy: { outcome: draftResult.outcome, flagKinds: draftResult.flagKinds, rewrote: draftResult.rewrote } } : {}),
           } as unknown as object,
           topCards:       topCards as unknown as object[],
           responseTimeMs: Date.now() - t0,
           modelUsed:      CHAT_MODEL,
-          tokensIn,
-          tokensOut,
+          // Drift's own calls' uncached input and output, as before; cache tokens are in parsedFilters.usage.
+          tokensIn:       mainUsage.inputTokens,
+          tokensOut:      mainUsage.outputTokens,
           costUsd,
         },
         select: { id: true },

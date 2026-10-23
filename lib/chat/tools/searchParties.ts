@@ -163,7 +163,8 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
   const input = searchPartiesInputSchema.parse(rawInput)
   const organizationId = await getCurrentOrgId()
 
-  const limit = input.limit ?? 50
+  // Brief 43 PR 15 (Q31): 20 cards unless Drift asks for more (was 50); totalMatched still has the full count.
+  const limit = input.limit ?? 20
   const includeTestData = input.includeTestData ?? true  // seed-only test mode: default on
   // Brief 43 PR 9 (Q15): no guessing. A query of filler words only ("the buyer")
   // finds nothing rather than every buyer.

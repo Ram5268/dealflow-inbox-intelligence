@@ -444,7 +444,8 @@ test('route wiring: the guard passes the user message, skips the thrown-away fac
   // Brief 43 PR 4: the same skip, merged with the time budget (no fact-check
   // past the hard deadline either).
   assert.match(src, /const skipRepeat = skipVerifierForRepeatClaim\(guardHistory, regexFlags\)/)
-  assert.match(src, /budget\.pastHard\(\) \|\| skipRepeat\s*\?\s*null\s*:\s*await withTimeout\(\s*verifyResponse\(/)
+  // Brief 43 PR 15: and none on a fact-free reply (factFree).
+  assert.match(src, /budget\.pastHard\(\) \|\| skipRepeat \|\| factFree\s*\?\s*null\s*:\s*await withTimeout\(\s*verifyResponse\(/)
   assert.match(src, /const verifier = skipRepeat\s*\?\s*skippedVerification\(\)/)
 })
 

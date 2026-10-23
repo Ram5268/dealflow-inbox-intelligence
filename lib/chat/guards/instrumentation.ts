@@ -24,14 +24,17 @@ export function deriveVerdict(t: GuardTelemetry): GuardVerdict {
   return 'retry'
 }
 
-// Flag text from the final attempt — the reason this turn tripped the guard (if
+// Flag text from the first flagged attempt: the reason this turn tripped the guard (if
 // it did). Empty string when the turn passed clean.
 //
 // Brief 43 PR 10 (Q32): plus a note for any attempt whose fact-check failed or
 // answered garbage, so a reply accepted on the regex check alone shows in the
 // guard log even when it passed.
 export function summarizeReason(t: GuardTelemetry): string {
-  const last = t.history[t.history.length - 1]
+  // Brief 43 PR 15 (Q35): it used to be the final attempt's flags, which are
+  // empty after a retry that ended clean, so no retry ever had a reason.
+  // (`last` is the attempt the reason is read from.)
+  const last = t.history.find(h => h.regexFlags.length > 0 || h.verifierFlags.length > 0) ?? t.history[t.history.length - 1]
   if (!last) return ''
   const errors = t.history
     .filter(h => h.verifierError)
@@ -66,6 +69,7 @@ export function timedOutGuardInput(input: {
   elapsedMs: number
   toolCalls: Array<{ name: string; totalMatched: number }>
   finalResponseSent: string
+  streetEasy?: { searches: number; listings: number } // Brief 43 PR 15
 }): GuardFireEventInput {
   const n = input.toolCalls.length
   return {
@@ -74,12 +78,26 @@ export function timedOutGuardInput(input: {
     userTurn:           '',
     priorAssistantTurn: null,
     assistantAttempt:   '',
-    toolCallsAttempted: input.toolCalls.map(c => ({ name: c.name, totalMatched: c.totalMatched })),
+    toolCallsAttempted: [
+      ...input.toolCalls.map(c => ({ name: c.name, totalMatched: c.totalMatched })),
+      ...streetEasyLog(input.streetEasy?.searches ?? 0, input.streetEasy?.listings ?? 0),
+    ],
     telemetry:          { enabled: true, finalAttempt: 0, fellbackToCanned: false, history: [], totalVerifierCostUsd: 0 },
     finalResponseSent:  input.finalResponseSent,
     verdict:            'timeout',
     reason:             `timed out after ${(input.elapsedMs / 1000).toFixed(1)} s with ${n} tool call${n === 1 ? '' : 's'}`,
   }
+}
+
+/**
+ * Brief 43 PR 15 (Q37; Brief 42 Z-07): the live StreetEasy searches this turn's
+ * side lookup ran (each is at most one RapidAPI request, from the monthly
+ * quota), as an entry after the tool calls in the guard row's
+ * toolCallsAttempted. Counts only: no neighbourhoods, prices or links. None
+ * when no search ran.
+ */
+export function streetEasyLog(searches: number, listings: number): Array<{ name: 'streeteasy_search'; searches: number; listings: number }> {
+  return searches > 0 ? [{ name: 'streeteasy_search', searches, listings }] : []
 }
 
 /**

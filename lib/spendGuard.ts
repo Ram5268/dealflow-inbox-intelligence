@@ -47,8 +47,10 @@ export const DICTATION_TOO_LARGE_MESSAGE = 'That recording is too long. Try a sh
 export const LIMIT_DEFAULTS = {
   // Brief 43 §4 PR 17's $5, summed from DriftInteraction.costUsd over the New York day.
   CHAT_DAILY_USD_CAP: 5,
-  // Backstop while costUsd undercounts (no cache tokens; no fact-check, parser
-  // or title calls) until Brief 43 PR 15. 200 is 20 normal days, or Stage 2
+  // Backstop for what costUsd still misses. Brief 43 PR 15 added cache tokens,
+  // the fact-checks and the report-section call; the gpt-4o-mini parser and
+  // title calls (about 0.01¢ each) and a turn whose row failed to write are
+  // still uncounted. 200 is 20 normal days, or Stage 2
   // plus a normal day 2.5 times over; at Brief 46's typical 4–7¢ a message it
   // bounds a day at roughly $8–14 even if costUsd saw nothing.
   CHAT_DAILY_MESSAGE_CAP: 200,
