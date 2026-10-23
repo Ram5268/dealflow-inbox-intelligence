@@ -55,7 +55,7 @@ test('a short chat has no marker', () => {
 })
 
 test("PR 8's Shown notes still ride along with the marker", () => {
-  const reply = encodeStoredReply({ response: 'Here is the report.', suggestions: [], shown: { reportId: 'rep_1', buyerId: 'buyer_1' } })
+  const reply = encodeStoredReply({ response: 'Here is the report.', shown: { reportId: 'rep_1', buyerId: 'buyer_1' } })
   const sent = historyForModel([{ role: 'user', content: 'run the report' }, { role: 'assistant', content: reply }], { earlierNotShown: true })
   assert.equal(sent[0].content, `${EARLIER_NOT_SHOWN}\n\nrun the report`)
   assert.match(sent[1].content, /^Here is the report\.\n\n\[Shown with this reply/)

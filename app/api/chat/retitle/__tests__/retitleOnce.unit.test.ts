@@ -65,7 +65,7 @@ test('archived chats are ignored, and a titled chat is never re-titled', async (
 
 test("Drift's stored reply is read as its text, never as raw JSON", async () => {
   const draft = { channel: 'email' as const, audience: 'buyer_side' as const, subject: 'A two-family', body: 'Hi Pat, one fits.' }
-  chat('with_draft', { reply: encodeStoredReply({ response: 'One fits; here is a draft.', suggestions: ['Show more'], draft }) })
+  chat('with_draft', { reply: encodeStoredReply({ response: 'One fits; here is a draft.', draft }) })
   await retitle()
   const sent = JSON.stringify(ai.requests[0].body)
   assert.match(sent, /Assistant replied: One fits; here is a draft\./)

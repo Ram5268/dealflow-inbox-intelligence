@@ -13,7 +13,7 @@ import VoiceConversation from '@/components/VoiceConversation'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 import { chatErrorReply } from '@/lib/chat/chatErrorReply'
-import { FILE_TOO_BIG_NOTE, fileKind, filesTooBig } from '@/lib/chat/fileSize'
+import { FILE_TOO_BIG_NOTE, TEXT_READ_BYTES, fileKind, filesTooBig, textToSend } from '@/lib/chat/fileSize'
 import ReportPickerSheet from '@/components/ReportPickerSheet'
 import BuyerPickerSheet from '@/components/BuyerPickerSheet'
 import ReportModal from '@/components/ReportModal'
@@ -1053,8 +1053,9 @@ async function processFile(file: File): Promise<{ name: string; mimeType: string
       }
       reader.readAsDataURL(file)
     } else if (kind === 'text') {
-      reader.onload = e => resolve({ name: file.name, mimeType: file.type, type: 'text', content: e.target?.result as string })
-      reader.readAsText(file)
+      // Brief 43 PR 16 (review r1): only the start goes (lib/chat/fileSize.ts textToSend).
+      reader.onload = e => resolve({ name: file.name, mimeType: file.type, type: 'text', content: textToSend(e.target?.result as string) })
+      reader.readAsText(file.slice(0, TEXT_READ_BYTES))
     } else {
       reader.onload = e => resolve({ name: file.name, mimeType: file.type, type: 'binary', content: (e.target?.result as string).split(',')[1] })
       reader.readAsDataURL(file)

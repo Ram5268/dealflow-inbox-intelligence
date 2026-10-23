@@ -111,7 +111,7 @@ async function describePdfWithVision(base64: string, filename: string): Promise<
   return content
 }
 
-async function extractPdfText(buffer: Buffer): Promise<string> {
+async function extractPdfText(buffer: Buffer, maxPages = MAX_PDF_PAGES): Promise<string> {
   try {
     const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs')
     const loadingTask = pdfjsLib.getDocument({
@@ -122,7 +122,7 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     })
     const doc = await loadingTask.promise
     const pages: string[] = []
-    const numPages = Math.min(doc.numPages, MAX_PDF_PAGES)
+    const numPages = Math.min(doc.numPages, maxPages)
     for (let i = 1; i <= numPages; i++) {
       const page = await doc.getPage(i)
       const content = await page.getTextContent()
@@ -137,6 +137,14 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   } catch {
     return ''
   }
+}
+
+// Brief 43 PR 16 (review r1): the text of a PDF attached in chat, for Drift's
+// fact-check only (Claude itself reads the PDF as a document block). Local and
+// free; the first CHAT_PDF_TEXT_PAGES pages [engineering precaution].
+export const CHAT_PDF_TEXT_PAGES = 20
+export function pdfTextForChat(base64: string): Promise<string> {
+  return extractPdfText(Buffer.from(base64, 'base64'), CHAT_PDF_TEXT_PAGES)
 }
 
 async function describeImage(base64: string, mimeType: string): Promise<string> {

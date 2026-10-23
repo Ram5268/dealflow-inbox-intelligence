@@ -8,7 +8,8 @@ import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { graphEnabled } from '@/lib/graphAccess'
 import { recentHistoryQuery, historyWindow, historyForModel } from '@/lib/chat/history'
-import { buildUserBlocks, type FileData } from '@/lib/chat/fileBlocks'
+import { buildUserBlocks, fileEvidence, PDF_UNREADABLE_REPLY, type FileData } from '@/lib/chat/fileBlocks'
+import { pdfTextForChat } from '@/lib/attachmentParser'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest) {
   // lib/spendGuard.ts.
   const spendRefusal = await guardChat(req)
   if (spendRefusal) return spendRefusal
+  let hadPdf = false // Brief 43 PR 16 (review r1): for the catch below
   try {
     const body = await req.json()
     const userMessage: string = (body.message ?? '').trim()
@@ -256,6 +258,12 @@ export async function POST(req: NextRequest) {
     // Brief 43 PR 16 (Q30, Q42; N9, E-03): a PDF goes as a document block Claude
     // reads, and a file cut at 15,000 characters says so (lib/chat/fileBlocks.ts).
     const userBlocks = await buildUserBlocks(userMessage, files, parseBinary)
+    hadPdf = userBlocks.some(b => b.type === 'document')
+    // Brief 43 PR 16 (review r1): the files' text for both checks below (turnFacts),
+    // pulled while Drift works, for at most LOOKUP_TIMEOUT_MS.
+    const fileFactsText = files.length > 0
+      ? withTimeout(fileEvidence(userBlocks, pdfTextForChat), LOOKUP_TIMEOUT_MS, 'file text').then(r => (isTimedOut(r) ? null : r), () => null)
+      : Promise.resolve(null)
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -719,7 +727,10 @@ export async function POST(req: NextRequest) {
     // "per ACRIS" used to look grounded. Both checks now read this turn's tool
     // results and side-lookup blocks; deed facts bind to this turn's ACRIS block
     // (toolBinding.ts) [engineering precaution].
-    const groundingCorpus = buildGuardGrounding(toolResultsForGuard, priorDealCards, dynamicSystemBlock || null)
+    // Brief 43 PR 16 (review r1): plus what Drift read in this turn's files, so a
+    // correct reply quoting an attached file isn't flagged as made up.
+    const turnFacts = [dynamicSystemBlock, await fileFactsText].filter(Boolean).join('\n\n') || null
+    const groundingCorpus = buildGuardGrounding(toolResultsForGuard, priorDealCards, turnFacts)
 
     if (guardApplies) {
       let attempt = 0
@@ -743,15 +754,18 @@ export async function POST(req: NextRequest) {
         // side-lookup facts (lib/chat/guards/factFree.ts) [engineering precaution].
         const factFree = !skipRepeat && !factCheckNeeded({
           reply: currentResponse, draft: normalizeDraft(currentDraft),
-          toolCalls: toolResultsForGuard.length, factLookups: composed.factLookups,
+          // Brief 43 PR 16 (review r1): an attached file counts as a lookup, so a
+          // reply on a file turn always gets the fact-check.
+          toolCalls: toolResultsForGuard.length, factLookups: composed.factLookups + (files.length > 0 ? 1 : 0),
         })
         // Brief 43 PR 15 (Q31): the fact-check gets this turn's side-lookup text
         // without RYAN_MD (rules and vocabulary, not facts: about 3,100 tokens on
         // every call). The regex grounding (groundingCorpus) is unchanged here.
+        // Brief 43 PR 16 (review r1): both also get the files' text (turnFacts).
         const checked = budget.pastHard() || skipRepeat || factFree
           ? null
           : await withTimeout(
-              verifyResponse(userMessage || queryText, toolResultsForGuard, dynamicSystemBlock || null, withDraft(currentResponse, currentDraft)),
+              verifyResponse(userMessage || queryText, toolResultsForGuard, turnFacts, withDraft(currentResponse, currentDraft)),
               budget.msLeft(TURN_CEILING_MS), 'fact-check')
         if (!skipRepeat && !factFree && (!checked || isTimedOut(checked))) factCheckSkipped = true
         const verifier = skipRepeat
@@ -1053,6 +1067,16 @@ export async function POST(req: NextRequest) {
       draft,
     })
   } catch (err) {
+    // Brief 43 PR 16 (review r1): when the AI refuses a message with a PDF (a
+    // locked or damaged file), Ryan gets a calm reply, not the raw error
+    // [engineering precaution]. Nothing is saved.
+    if (hadPdf && err instanceof Anthropic.BadRequestError) {
+      console.error('[DealFlow] Chat API: the AI refused a message with a PDF:', err.status)
+      return NextResponse.json({
+        response: PDF_UNREADABLE_REPLY, deals: [], seListings: [], seFilterUrl: null,
+        attachedReport: null, attachedFragment: null, draft: null,
+      })
+    }
     console.error('[DealFlow] Chat API error:', err)
     return NextResponse.json(
       { error: String(err), response: `Server error: ${String(err)}` },

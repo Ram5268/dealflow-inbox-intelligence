@@ -21,6 +21,10 @@ export const FILE_CUT_NOTE = '(file cut at 15,000 characters)'
 // [engineering precaution]. Claude takes up to 32 MB and 600 pages.
 export const PDF_LIMIT_BASE64_CHARS = 4_500_000
 
+// Brief 43 PR 16 (review r1): Drift's reply when the AI refuses a message with
+// a PDF (a locked or damaged file) [engineering precaution].
+export const PDF_UNREADABLE_REPLY = "I couldn't read that PDF. It may be locked or damaged. Try another copy, or paste the part you need."
+
 type UserBlock = Anthropic.Messages.TextBlockParam | Anthropic.Messages.ImageBlockParam | Anthropic.Messages.DocumentBlockParam
 type ImageMediaType = Anthropic.Messages.Base64ImageSource['media_type']
 
@@ -69,4 +73,30 @@ export async function buildUserBlocks(
 
   // Claude reads a document best when it comes before the question.
   return [...documents, { type: 'text', text }, ...images]
+}
+
+// Brief 43 PR 16 (review r1): what Drift read in this turn's files, as evidence
+// for the fact-check and the regex guard's grounding corpus. Without it a
+// correct reply quoting a file ("3,200 square feet", an LLC on the deed) is
+// flagged as made up and swapped for a stock reply, after two rewrites that
+// each send the PDF again. Text, Word and Excel files: the sections already in
+// the user turn. PDFs: their text, pulled locally (pdfText). Bounded
+// [engineering precaution]; null when no file was attached.
+export const FILE_EVIDENCE_LIMIT = 20_000
+export async function fileEvidence(
+  blocks: readonly UserBlock[],
+  pdfText: (base64: string) => Promise<string>,
+): Promise<string | null> {
+  const parts: string[] = []
+  for (const b of blocks) {
+    if (b.type === 'document' && b.source.type === 'base64') {
+      const text = await pdfText(b.source.data).catch(() => '')
+      if (text.trim()) parts.push(fileSection(b.title ?? 'PDF', text).trim())
+    } else if (b.type === 'text') {
+      const at = b.text.indexOf('\n\n--- File: ')
+      if (at >= 0) parts.push(b.text.slice(at).trim())
+    }
+  }
+  const text = parts.join('\n\n').slice(0, FILE_EVIDENCE_LIMIT)
+  return text ? `FILES RYAN ATTACHED THIS TURN (what Drift read in them):\n${text}` : null
 }
