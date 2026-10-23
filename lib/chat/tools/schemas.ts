@@ -77,7 +77,8 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
       },
       limit: {
         type: 'number',
-        description: 'Max cards to return (default 50, max 200). Use a high limit for broad "show me everything" queries.',
+        // Brief 43 PR 15 (Q31): default 20 (was 50); each card is paid for again on every later round.
+        description: 'Max cards to return (default 20, max 200). Use a high limit for broad "show me everything" queries.',
       },
     },
     required: [],
@@ -162,7 +163,7 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
         type: 'boolean',
         description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
-      limit: { type: 'number', description: 'Max cards to return (default 50, max 200).' },
+      limit: { type: 'number', description: 'Max cards to return (default 20, max 200).' }, // Brief 43 PR 15: was 50
     },
     required: [],
   } as Anthropic.Messages.Tool.InputSchema,

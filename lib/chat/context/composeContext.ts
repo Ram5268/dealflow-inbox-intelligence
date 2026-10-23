@@ -1,6 +1,8 @@
 import { PRE_RETRIEVAL_FETCHERS, POST_RETRIEVAL_FETCHERS, FETCHER_SOURCES } from './registry'
 import type { ContextFetcher, ContextInput, ContextResult, LiveSeListing } from './types'
 import { withTimeout, isTimedOut, tallyLookupTimeouts, lookupTimeoutNote, type LookupTally } from '../turnBudget'
+import { mortgageFetcher } from './mortgage'
+import { calendarFetcher } from './calendar'
 
 // Brief 43 PR 4 (Q4; M32): the most one side lookup may take. Its outside
 // fetches give up sooner (LOOKUP_TIMEOUT_MS, 6 s); this also covers a slow
@@ -12,7 +14,20 @@ export interface ComposedContext {
   post:           string              // concat of all POST-retrieval fetcher blocks
   liveSeListings: LiveSeListing[]     // structured payload from liveStreetEasy fetcher
   seFilterUrl:    string | null       // structured payload from liveStreetEasy fetcher
+  // Brief 43 PR 15 (Q31): how many side lookups brought this message's own
+  // facts (the fact-check is skipped only when none did; guards/factFree.ts).
+  factLookups:    number
+  // Brief 43 PR 15 (Q37): live StreetEasy searches run, for the guard log.
+  streetEasySearches: number
 }
+
+// Brief 43 PR 15: blocks that come with every turn, whatever the message: today's
+// mortgage rate (a number, which a reply with no digits or number words can't
+// repeat) and the calendar's line (the paused note while Outlook is paused;
+// calendar events aren't among the fact-check's topics, llmVerifier.ts). Every
+// other block counts as this message's facts, a lookup's timeout note included
+// [engineering precaution].
+const EVERY_TURN = new Set<ContextFetcher>([mortgageFetcher, calendarFetcher])
 
 // Brief 43 PR 4: a lookup that runs out of time, or whose outside fetch did,
 // gives Drift a one-line note ("live StreetEasy didn't answer in time") instead
@@ -56,5 +71,10 @@ export async function composeContext(input: ContextInput): Promise<ComposedConte
   // Check both groups for forward compatibility.
   const { liveSeListings, seFilterUrl } = collectStructured([...preResults, ...postResults])
 
-  return { pre, post, liveSeListings, seFilterUrl }
+  const fetchers = [...PRE_RETRIEVAL_FETCHERS, ...POST_RETRIEVAL_FETCHERS]
+  const results = [...preResults, ...postResults]
+  const factLookups = results.filter((r, i) => r.block && !EVERY_TURN.has(fetchers[i])).length
+  const streetEasySearches = results.reduce((n, r) => n + (r.streetEasySearches ?? 0), 0)
+
+  return { pre, post, liveSeListings, seFilterUrl, factLookups, streetEasySearches }
 }
