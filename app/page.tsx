@@ -59,25 +59,22 @@ export default function GreetPage() {
   async function subscribeToPushIfNeeded() {
     if ('serviceWorker' in navigator && 'PushManager' in window) {
       navigator.serviceWorker.register('/sw.js').then(async reg => {
-        const vapidRes = await fetch('/api/push/key')
-        const { publicKey } = await vapidRes.json()
-        if (!publicKey) return
-
-        const existing = await reg.pushManager.getSubscription()
-        if (existing) return // already subscribed
-
-        const permission = await Notification.requestPermission()
-        if (permission !== 'granted') return
-
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: publicKey,
+        // Brief 48 (PR 5): a browser that's already signed up sends its sign-up again,
+        // so a device removed in Settings, or refused at the 5-device limit, comes back
+        // once there's room; a refusal shows a calm toast (lib/push/checkInSignUp.ts).
+        const { signUpOnCheckIn } = await import('@/lib/push/checkInSignUp')
+        const outcome = await signUpOnCheckIn({
+          publicKey: async () => ((await (await fetch('/api/push/key')).json()).publicKey ?? '') as string,
+          existing: () => reg.pushManager.getSubscription(),
+          requestPermission: () => Notification.requestPermission(),
+          subscribe: publicKey => reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: publicKey }),
+          send: async signUp => (await fetch('/api/push/subscribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(signUp),
+          })).status,
         })
-        await fetch('/api/push/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sub),
-        })
+        if (outcome.result === 'full') showToast(outcome.message)
       }).catch(() => {})
     }
   }
