@@ -153,7 +153,8 @@ function upsertLeads(data: Record<string, Row[]>, rows: Row[], orgId: string) {
   for (const r of rows) {
     const old = data.mojoContact.find(m => m.mojoId === r.mojoId)
     if (!old) {
-      data.mojoContact.push({ ...mojoContact(r.id as string, r.mojoId as string), ...r, organizationId: orgId, intent: 'SELLER', isTestData: false })
+      // Brief 48 (PR 9): a seller with no CRM tags is inserted with NULL tags, which Prisma reads as [].
+      data.mojoContact.push({ ...mojoContact(r.id as string, r.mojoId as string), ...r, tags: r.tags ?? [], organizationId: orgId, intent: 'SELLER', isTestData: false })
       out.push({ mojoId: r.mojoId, inserted: true, before: {}, after: {} })
       continue
     }
@@ -165,6 +166,10 @@ function upsertLeads(data: Record<string, Row[]>, rows: Row[], orgId: string) {
         const o = (old[c] as unknown[]) ?? []
         const n = (r[c] as unknown[]) ?? []
         if (JSON.stringify(o) === JSON.stringify(n.slice(0, o.length))) old[c] = n
+      } else if (mode === 'union') {
+        // Brief 48 (PR 9): tags. The CRM's values not already there are added; no CRM list leaves them as they are.
+        const o = (old[c] as unknown[] | null) ?? []
+        if (r[c] != null) old[c] = [...o, ...(r[c] as unknown[]).filter(x => !o.includes(x))]
       } else if (blank(old[c])) old[c] = r[c] ?? null
     }
     const after = Object.fromEntries(UPDATED.map(([c]) => [c, old[c]]))

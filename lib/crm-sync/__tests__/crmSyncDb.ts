@@ -171,13 +171,15 @@ export async function seed(df: Client, crm: Client, leads: SeedLead[] = CRM_LEAD
   await df.query(`INSERT INTO "Organization" (id, name, slug, "updatedAt") VALUES ($1, 'Test organization', 'dealflow-ryan', now())`, [DF_ORG])
   await df.query(`INSERT INTO "MojoContact" (id, "mojoId", "fullName", phone, email, address, city, state, "zipCode", neighborhood, "propertyTypeDetail",
       "unitCount", "propertyBeds", "yearBuilt", "lastCalled", "lastDialDate", status, notes, "mojoList", "phoneDncFlags", metadata, "isTestData",
-      tags, groups, "createdAt", "updatedAt", "organizationId")
+      tags, groups, "equityBalance", "isVacant", "priorListingStatus", "createdAt", "updatedAt", "organizationId")
     SELECT c.id, c."mojoId", c."fullName", c.phone, c.email, c.address, c.city, c.state, c."zipCode", c.neighborhood, c."propertyTypeDetail",
       c."unitCount", c."propertyBeds", c."yearBuilt", c."lastCalled", c."lastDialDate", c.status, c.notes, c."mojoList", COALESCE(c."phoneDncFlags", '{}'),
-      c.metadata, COALESCE(c."isTestData", false), '{}', '{}', '2026-09-25 12:00:00', now(), $2
+      c.metadata, COALESCE(c."isTestData", false), COALESCE(c.tags, '{}'), '{}', c."equityBalance", c."isVacant", c."priorListingStatus",
+      '2026-09-25 12:00:00', now(), $2
     FROM jsonb_to_recordset($1::jsonb) AS c(id text, "mojoId" text, "fullName" text, phone text, email text, address text, city text, state text,
       "zipCode" text, neighborhood text, "propertyTypeDetail" text, "unitCount" int, "propertyBeds" float8, "yearBuilt" int, "lastCalled" timestamp,
-      "lastDialDate" timestamp, status text, notes text, "mojoList" text, "phoneDncFlags" boolean[], metadata jsonb, "isTestData" boolean)`,
+      "lastDialDate" timestamp, status text, notes text, "mojoList" text, "phoneDncFlags" boolean[], metadata jsonb, "isTestData" boolean,
+      tags text[], "equityBalance" float8, "isVacant" boolean, "priorListingStatus" text)`,
   [JSON.stringify(rows), DF_ORG])
 }
 
