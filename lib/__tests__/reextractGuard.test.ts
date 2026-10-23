@@ -54,8 +54,9 @@ test('only "force": true forces the swap', () => {
 test('the route decides before it swaps, swaps only when allowed, and reports what it kept', () => {
   const s = readFileSync(join(ROOT, 'app/api/sync/reextract/route.ts'), 'utf8')
   const fresh = s.indexOf('for (const ext of listingEntries(results))')
-  const count = s.indexOf('const saved = await prisma.extractedOpportunity.count({ where: { rawEmailId: email.id } })')
-  const decide = s.indexOf('const decision = reextractSwapDecision({ saved, fresh: fresh.length, force })')
+  // Brief 48 (PR 15): the saved listings are read as ids (their matches are deleted in the swap).
+  const count = s.indexOf("const savedIds = (await prisma.extractedOpportunity.findMany({ where: { rawEmailId: email.id }, select: { id: true } })).map(o => o.id)")
+  const decide = s.indexOf('const decision = reextractSwapDecision({ saved: savedIds.length, fresh: fresh.length, force })')
   const gate = s.indexOf('if (decision.swap) {')
   const tx = s.indexOf('await prisma.$transaction([')
   assert.ok(fresh > 0 && count > fresh && decide > count && gate > decide && tx > gate, 'listings, count, decision, then the swap')

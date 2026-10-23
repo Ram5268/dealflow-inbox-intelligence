@@ -5,6 +5,7 @@ import { classifyAndExtractEmail } from '@/lib/ai'
 import { buildOpportunityText, upsertOpportunityEmbedding } from '@/lib/embeddings'
 import { Category, TransactionType } from '@prisma/client'
 import { maintenanceEnabled, MAINTENANCE_OFF_BODY } from '@/lib/config/maintenance'
+import { deleteListingsAndMatches } from '@/lib/extraction/listingMatches'
 
 export const maxDuration = 300
 
@@ -85,9 +86,11 @@ export async function POST(req: NextRequest) {
           const ext = results.find(r => r.isRelevant && r.category !== 'NOISE') ?? results[0]
           if (!ext) { failed++; return }
 
-          // If now classified as NOISE, delete the opportunity
+          // If now classified as NOISE, delete the opportunity. Brief 48 (PR 15):
+          // with its matches, in one transaction; nothing cascades
+          // (lib/extraction/listingMatches.ts) [engineering precaution].
           if (!ext.isRelevant || ext.category === 'NOISE') {
-            await prisma.extractedOpportunity.delete({ where: { id: opp.id } })
+            await prisma.$transaction(tx => deleteListingsAndMatches(tx, { id: opp.id }))
             reclassified++
             if (opp.category !== 'NOISE') categoryChanged++
             return

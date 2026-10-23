@@ -2,7 +2,7 @@ import { prisma } from './prisma'
 import { normalizeAddress } from './domain/Address'
 import { isTestModeOnly } from './config/testMode'
 import { statusUpdateFor, SE_CHECKABLE_CATEGORIES } from './streetEasyStatusUpdate'
-import { dateExpiryCutoffs, PAST_EVENT_CATEGORIES, COMING_SOON_EXPIRY_CATEGORIES, AGED_REVIEW_CATEGORIES } from './dateExpiryRules'
+import { dateExpiryCutoffs, PAST_EVENT_CATEGORIES, COMING_SOON_EXPIRY_CATEGORIES, AGED_REVIEW_CATEGORIES, AGED_REVIEW_FLAG, AGED_REVIEW_SUGGESTION } from './dateExpiryRules'
 import { fetchWithTimeout, isLookupTimeout, LOOKUP_TIMEOUT_MS } from './chat/turnBudget'
 
 // Brief 3.0 follow-up — trial-mode kill switch. In seed-only trial mode there's
@@ -98,7 +98,9 @@ const NEIGHBORHOOD_TO_SE_AREA: Record<string, string> = {
 }
 
 // ── Quota safety rail (Phase X.0) ────────────────────────────────────────────
-// Centralized monthly counter + hard pause at 4900/5000 (98% of PRO budget).
+// Centralized monthly counter + hard stop at 9,500 of the 10,000 calls a month
+// (95%; RapidApiUsage.monthlyBudget defaults to 10,000). Brief 48 (PR 15): this
+// comment gave the old plan's limit.
 // Every RapidAPI call flows through seRequest, so this is the single chokepoint.
 // Callers should catch QuotaExhaustedError if they want to skip API-dependent
 // work; existing try/catch around sweep/sync functions already swallows it.
@@ -649,7 +651,14 @@ export async function sweepDateExpirations(): Promise<number> {
   }
 
   // General staleness: any active supply-side listing older than 90 days
-  // with no StreetEasy verification — mark needs_review, not auto-stale
+  // with no StreetEasy verification — mark needs_review, not auto-stale.
+  // Brief 48 (PR 15): with a pending Review Queue item, in the same transaction,
+  // since /review lists queue items, not statuses; before, the listing just left
+  // search and matching with nothing asking about it. One item per listing: one
+  // already waiting in the queue gets no second item, and a listing whose 90-day
+  // item Ryan already decided is left alone, so approving it (which makes it active
+  // again, still never checked) doesn't bring it back every day [engineering
+  // precaution, following lib/streetEasyMissRepair.ts].
   const aged = await prisma.extractedOpportunity.findMany({
     where: {
       processingStatus: 'active',
@@ -657,13 +666,30 @@ export async function sweepDateExpirations(): Promise<number> {
       streetEasyCheckedAt: null,
       createdAt: { lt: cut.agedBefore },
     },
-    select: { id: true },
+    select: { id: true, organizationId: true, rawEmailId: true },
   })
+  const items = aged.length === 0 ? [] : await prisma.reviewQueueItem.findMany({
+    where: { opportunityId: { in: aged.map(a => a.id) }, OR: [{ flagReason: AGED_REVIEW_FLAG }, { status: 'pending' }] },
+    select: { opportunityId: true, flagReason: true, status: true },
+  })
+  const askedBefore = new Set(items.filter(i => i.flagReason === AGED_REVIEW_FLAG && i.status !== 'pending').map(i => i.opportunityId))
+  const waiting = new Set(items.filter(i => i.status === 'pending').map(i => i.opportunityId))
 
-  for (const { id } of aged) {
-    await prisma.extractedOpportunity.update({
-      where: { id },
-      data: { processingStatus: 'needs_review' },
+  for (const { id, organizationId, rawEmailId } of aged) {
+    if (askedBefore.has(id)) continue
+    await prisma.$transaction(async (tx) => {
+      await tx.extractedOpportunity.update({
+        where: { id },
+        data: { processingStatus: 'needs_review' },
+      })
+      if (!waiting.has(id)) {
+        await tx.reviewQueueItem.create({
+          data: {
+            organizationId, opportunityId: id, rawEmailId,
+            flagReason: AGED_REVIEW_FLAG, suggestedAction: AGED_REVIEW_SUGGESTION, status: 'pending',
+          },
+        })
+      }
     })
     expiredCount++
   }
@@ -691,10 +717,13 @@ export async function runDailyStatusSweep(): Promise<{
   const expiredFound   = await sweepDateExpirations()
 
   // 4. Re-verify individual records not checked in 7+ days.
-  // Sized for RapidAPI PRO tier (~5000 calls/month). Each sweep consumes
+  // Sized when the plan allowed about 5,000 calls a month. Each sweep consumes
   // ~2x this number because sweepForDelistings + sweepForActivations both
-  // call the API. At 75: cron uses ~4500 calls/month, leaving ~500 for
-  // on-demand syncOpportunityStatus calls from /api/sync/run (Check In).
+  // call the API. At 75, a daily sweep would use ~4,500 calls a month, under the
+  // hard stop at 9,500 of 10,000 (checkAndIncrementQuota), leaving room for the
+  // on-demand syncOpportunityStatus calls from /api/sync/run (Check In). Brief 48
+  // (PR 15): the limit here was the old one. The sweep itself runs by hand only
+  // (Brief 48 PR 2).
   //
   // orderBy uses `nulls: 'first'` so never-checked records (streetEasyCheckedAt
   // IS NULL) are processed before previously-checked ones — Postgres' default
