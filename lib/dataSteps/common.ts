@@ -12,10 +12,11 @@
 //   - a read-only check afterwards (also alone: --check <before-copy>);
 //   - --restore <before-copy> undoes a run (a dry run, then --apply --expect <n>).
 // Pure helpers here; the database work is in lib/dataSteps/rows.ts.
-import { readFileSync, statSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { closeSync, existsSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
-import { PREIMAGE_DIR_FLAG, privateFileName, writePrivateJson } from '../privateRecord'
+import { PREIMAGE_DIR_FLAG, PrivateDirRefusal, assertOwnerOnly, assertPrivateDir, makeOwnerOnly, privateFileName } from '../privateRecord'
 
 // A refusal: nothing was written. The scripts print the message and exit 2.
 export class DataStepRefusal extends Error {}
@@ -23,6 +24,7 @@ export class DataStepRefusal extends Error {}
 export const EXPECT_FLAG = '--expect'
 export const CHECK_FLAG = '--check'
 export const RESTORE_FLAG = '--restore'
+export const PLAN_FLAG = '--plan' // Brief 48 review: the dry run's plan fingerprint (lib/dataSteps/runner.ts)
 export const ORG_SLUG = 'dealflow-ryan'
 export const BEFORE_COPY_FORMAT = 'brief48-data-step-before-copy/1'
 
@@ -43,6 +45,14 @@ export function parseExpect(argv: readonly string[]): number | null {
   if (value === null) return null
   if (!/^\d+$/.test(value)) throw new DataStepRefusal(`Refusing: ${EXPECT_FLAG} needs a whole number (the dry run's count), got "${value}". Nothing changed.`)
   return Number(value)
+}
+
+// --plan <code>: the 12-character fingerprint a dry run printed (optional).
+export function parsePlan(argv: readonly string[]): string | null {
+  const value = flagValue(argv, PLAN_FLAG)
+  if (value === null) return null
+  if (!/^[0-9a-f]{12}$/.test(value)) throw new DataStepRefusal(`Refusing: ${PLAN_FLAG} needs the 12-character plan fingerprint the dry run printed, got "${value}". Nothing changed.`)
+  return value
 }
 
 export type Mode = { kind: 'plan' } | { kind: 'check'; file: string } | { kind: 'restore'; file: string }
@@ -121,9 +131,46 @@ export function beforeCopyName(step: StepId, now: Date): string {
   return privateFileName(`brief48-${step.toLowerCase()}`, now)
 }
 
-// Written once (never overwritten), owner-only, outside every git checkout.
+// Written once (never overwritten), owner-only, outside every git checkout, with
+// lib/privateRecord.ts's folder rules (a new folder is made 0700; an existing one
+// must already be owner-only).
+// Brief 48 review (engineering precaution): atomic. The copy goes to a temporary
+// file (0600) in the same folder, is flushed to disk (fsync), and is then given
+// its name with a hard link, which fails if the name exists. So the named file is
+// either the whole copy or absent, even if the run is killed or the Mac loses
+// power mid-write; a half-written copy can never be taken for a whole one.
 export function writeBeforeCopy(dir: string, repoRoot: string, copy: BeforeCopy, now: Date): string {
-  return writePrivateJson(dir, repoRoot, beforeCopyName(copy.step, now), copy)
+  const name = beforeCopyName(copy.step, now)
+  const real = assertPrivateDir(dir, repoRoot)
+  if (existsSync(real)) {
+    assertOwnerOnly(real)
+  } else {
+    mkdirSync(real, { recursive: true, mode: 0o700 })
+    makeOwnerOnly(real)
+  }
+  const file = join(real, name)
+  if (existsSync(file)) throw new PrivateDirRefusal(`Refusing: ${name} exists already; a before-copy is never overwritten. Nothing changed.`)
+  const tmp = join(real, `.${name}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`)
+  const fd = openSync(tmp, 'wx', 0o600)
+  try {
+    try {
+      const data = Buffer.from(`${JSON.stringify(copy, null, 2)}\n`, 'utf8')
+      for (let at = 0; at < data.length;) at += writeSync(fd, data, at, data.length - at)
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
+    linkSync(tmp, file) // EEXIST if the name was taken meanwhile: never overwritten
+  } finally {
+    unlinkSync(tmp)
+  }
+  try { // the folder entry itself, so the name survives a crash too
+    const dfd = openSync(real, 'r')
+    try { fsyncSync(dfd) } finally { closeSync(dfd) }
+  } catch {
+    // some file systems can't fsync a folder; the file's own data is already on disk
+  }
+  return file
 }
 
 // Reads a before-copy for `step` on `database`. Refuses a file others can

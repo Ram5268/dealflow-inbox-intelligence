@@ -114,6 +114,7 @@ test('the summary is counts only, and --expect is the number of duplicates', () 
   assert.equal(s.expect, 3)
   assert.equal(s.duplicates.toRemove, 3)
   assert.equal(s.duplicates.keptRecords, 2)
+  assert.deepEqual(s.duplicates.keptRecordsBySource, { crm: 2 })
   assert.equal(s.rowsWritten, 4)
   assert.doesNotMatch(JSON.stringify(s), /csv_[a-z0-9]|"(d|k)\d"/i) // no spreadsheet keys or row ids in the summary
 })
@@ -123,4 +124,10 @@ test("a row of any other table with a foreign key to a duplicate (found in the c
   const b = ds1Blockers(facts({ otherForeignKeys: { '"SomeTable"."contactId"': 2, '"Other"."ownerId"': 0 } }))
   assert.equal(b.length, 1)
   assert.match(b[0], /2 row\(s\) of "SomeTable"\."contactId" point at a duplicate/)
+})
+
+test('the kept records are counted by their metadata.source', () => {
+  const f = facts({ keepers: [keeper('k1', { source: 'crm' }), keeper('k2', { source: 'legacy' }), keeper('k3', { source: null })],
+    duplicates: [dup('d1', 'k1'), dup('d2', 'k2'), dup('d3', 'k3'), dup('d4', 'k1')] })
+  assert.deepEqual(ds1Summary(planDs1(f), f, {}).duplicates.keptRecordsBySource, { '(none)': 1, crm: 1, legacy: 1 })
 })

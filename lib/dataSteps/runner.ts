@@ -9,14 +9,15 @@
 //   --restore     dry run of the restore; with --apply --expect <n>, the restore in one
 //                 transaction, then a read-only check that every row is back.
 import type { PrismaClient } from '@prisma/client'
+import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
 import { PrivateDirRefusal, assertPrivateDir, defaultPrivateDir } from '../privateRecord'
 import {
-  DataStepRefusal, ORG_SLUG, RESTORE_FLAG, assertExpect, beforeCopyDirFrom, defaultBeforeCopyDir, parseExpect, parseMode, readBeforeCopy,
+  DataStepRefusal, ORG_SLUG, PLAN_FLAG, RESTORE_FLAG, assertExpect, beforeCopyDirFrom, defaultBeforeCopyDir, parseExpect, parseMode, parsePlan, readBeforeCopy,
   someIds, writeBeforeCopy, type BeforeCopy, type StepId,
 } from './common'
 import { applyRestore, checkApplied, checkRestored, loadRestoreFacts, planRestore, type RestorePlan } from './restore'
-import { auditRow, orgIdBySlug, readOnly, writeTransaction, type Tx } from './rows'
+import { auditRow, orgIdBySlug, readOnly, writeTransaction, type Table, type Tx } from './rows'
 
 export interface PlanResult<P> {
   plan: P
@@ -32,6 +33,9 @@ export interface Step<P> {
   title: string
   unit: string // what --expect counts, e.g. "duplicate copies"
   restoreAction: string // the AuditLog action of a restore (each step's apply writes its own)
+  // Locked against writes first in the step's write transactions, its restore's
+  // too (lib/dataSteps/rows.ts writeTransaction).
+  lockTables: readonly Table[]
   // mentions: null = count them now (the dry run); else the dry run's counts.
   plan(tx: Tx, orgId: string, argv: readonly string[], mentions: Record<string, number> | null): Promise<PlanResult<P>>
   newCopy(database: string, orgId: string, now: Date, r: PlanResult<P>): BeforeCopy
@@ -53,6 +57,23 @@ export const EXIT = { ok: 0, failed: 1, refused: 2, checkFailed: 3 } as const
 
 const show = (o: unknown) => JSON.stringify(o, null, 2)
 
+const isPlainObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
+
+// Brief 48 review (engineering precaution): the parts of two plan summaries
+// that differ, as dotted key paths (key names only, never their values).
+export function planDifferences(a: unknown, b: unknown, at = ''): string[] {
+  if (isPlainObject(a) && isPlainObject(b)) {
+    return [...new Set([...Object.keys(a), ...Object.keys(b)])].flatMap(k => planDifferences(a[k], b[k], at ? `${at}.${k}` : k))
+  }
+  return JSON.stringify(a) === JSON.stringify(b) ? [] : [at || '(the whole plan)']
+}
+
+// Brief 48 review: a short code for a plan summary (counts and ids only), printed
+// by every dry run; --plan <code> makes --apply refuse unless its plan is that one.
+export function planFingerprint(summary: unknown): string {
+  return createHash('sha256').update(JSON.stringify(summary)).digest('hex').slice(0, 12)
+}
+
 // Runs one invocation; returns the process exit code.
 export async function runStep<P>(step: Step<P>, o: RunOptions): Promise<number> {
   const log = o.log ?? ((l: string) => console.log(l))
@@ -72,21 +93,27 @@ export async function runStep<P>(step: Step<P>, o: RunOptions): Promise<number> 
 
 async function runPlan<P>(step: Step<P>, o: RunOptions, log: (l: string) => void, now: () => Date): Promise<number> {
   const expect = parseExpect(o.argv)
+  const planCode = parsePlan(o.argv)
   const dir = beforeCopyDirFrom(o.argv)
   if (o.apply) assertPrivateDir(dir, o.repoRoot) // refuse a bad folder before reading anything
   const dry = await readOnly(o.db, async tx => step.plan(tx, await orgIdBySlug(tx, ORG_SLUG), o.argv, null))
   log(`${step.id}: ${step.title}. Database "${o.database ?? '(not set)'}", organization ${ORG_SLUG}.`)
   for (const n of dry.notices) log(`NOTE: ${n}`)
   log(show(dry.summary))
+  const fingerprint = planFingerprint(dry.summary)
+  log(`Plan fingerprint: ${fingerprint}`)
   if (!o.apply) {
     if (dry.refusals.length) log(`--apply would refuse: ${dry.refusals.join(' ')}`)
     else if (dry.expect === 0) log('Dry run: nothing changed, and there is nothing to do.')
-    else log(`Dry run: nothing changed. To apply exactly this plan, re-run with --apply --expect ${dry.expect} (on the live database also --i-mean-live).`)
+    else log(`Dry run: nothing changed. To apply exactly this plan, re-run with --apply --expect ${dry.expect} ${PLAN_FLAG} ${fingerprint} (on the live database also --i-mean-live).`)
     return EXIT.ok
   }
   if (dry.refusals.length) throw new DataStepRefusal(`Refusing: ${dry.refusals.join(' ')} Nothing changed.`)
   if (dry.expect === 0) { log('Nothing to do: nothing changed.'); return EXIT.ok }
   assertExpect(expect, dry.expect, step.unit)
+  if (planCode !== null && planCode !== fingerprint) {
+    throw new DataStepRefusal(`Refusing: the plan is now ${fingerprint}, not the ${planCode} of the dry run given to ${PLAN_FLAG} (something changed since). Nothing changed. Re-run the dry run.`)
+  }
   if (!o.database) throw new DataStepRefusal("Refusing: the database name can't be read from DATABASE_URL. Nothing changed.")
 
   const at = now()
@@ -98,10 +125,17 @@ async function runPlan<P>(step: Step<P>, o: RunOptions, log: (l: string) => void
       const r = await step.plan(tx, orgId, o.argv, dry.mentions)
       if (r.refusals.length) throw new DataStepRefusal(`Refusing: ${r.refusals.join(' ')} Rolled back; nothing changed.`)
       assertExpect(expect, r.expect, step.unit)
+      // Brief 48 review (engineering precaution): "apply exactly this plan". --expect
+      // pins one number; any other count that moved since the dry run (e.g. the
+      // nightly ran in between) refuses too.
+      const moved = planDifferences(dry.summary, r.summary)
+      if (moved.length) {
+        throw new DataStepRefusal(`Refusing: the plan changed since the dry run (${someIds(moved, 5).join('; ')}). Rolled back; nothing changed. Re-run the dry run.`)
+      }
       const copy = step.newCopy(database, orgId, at, r)
       done.copy = copy
       await step.apply(tx, r, copy, c => (done.file = writeBeforeCopy(dir, o.repoRoot, c, at)))
-    })
+    }, step.lockTables)
   } catch (e) {
     if (done.file) log(`The before-copy was written (${done.file}) but the transaction was rolled back: nothing changed. Re-run the dry run.`)
     throw e
@@ -137,6 +171,7 @@ function restoreSummary(p: RestorePlan) {
 
 async function runRestore<P>(step: Step<P>, o: RunOptions, file: string, log: (l: string) => void): Promise<number> {
   const expect = parseExpect(o.argv)
+  const planCode = parsePlan(o.argv)
   const copy = readBeforeCopy(file, step.id, o.database)
   const dry = await readOnly(o.db, async tx => {
     const orgId = await orgIdBySlug(tx, ORG_SLUG)
@@ -144,25 +179,36 @@ async function runRestore<P>(step: Step<P>, o: RunOptions, file: string, log: (l
     return planRestore(copy, await loadRestoreFacts(tx, copy))
   })
   log(`${step.id}: restore from ${basename(file)}. Database "${o.database}".`)
-  log(show(restoreSummary(dry)))
+  const drySummary = restoreSummary(dry)
+  log(show(drySummary))
+  // As for a run: the restore's plan is pinned too, not only its row count.
+  const fingerprint = planFingerprint(drySummary)
+  log(`Plan fingerprint: ${fingerprint}`)
   const refused = Object.keys(dry.refusals)
   if (!o.apply) {
     if (refused.length) log(`--apply would refuse: ${refused.join('; ')}.`)
     else if (dry.writes === 0) log('Dry run: nothing changed, and there is nothing to restore.')
-    else log(`Dry run: nothing changed. To restore, re-run with ${RESTORE_FLAG} <file> --apply --expect ${dry.writes} (on the live database also --i-mean-live).`)
+    else log(`Dry run: nothing changed. To restore, re-run with ${RESTORE_FLAG} <file> --apply --expect ${dry.writes} ${PLAN_FLAG} ${fingerprint} (on the live database also --i-mean-live).`)
     return EXIT.ok
   }
   if (refused.length) throw new DataStepRefusal(`Refusing to restore: ${refused.join('; ')}. Nothing changed.`)
   if (dry.writes === 0) { log('Nothing to restore: nothing changed.'); return EXIT.ok }
   assertExpect(expect, dry.writes, 'rows')
+  if (planCode !== null && planCode !== fingerprint) {
+    throw new DataStepRefusal(`Refusing: the restore plan is now ${fingerprint}, not the ${planCode} of the dry run given to ${PLAN_FLAG} (something changed since). Nothing changed. Re-run the dry run.`)
+  }
   const plan = await writeTransaction(o.db, async tx => {
     const p = planRestore(copy, await loadRestoreFacts(tx, copy))
     if (Object.keys(p.refusals).length) throw new DataStepRefusal(`Refusing to restore: ${Object.keys(p.refusals).join('; ')}. Rolled back; nothing changed.`)
     assertExpect(expect, p.writes, 'rows')
+    const moved = planDifferences(drySummary, restoreSummary(p))
+    if (moved.length) {
+      throw new DataStepRefusal(`Refusing: the restore plan changed since the dry run (${someIds(moved, 5).join('; ')}). Rolled back; nothing changed. Re-run the dry run.`)
+    }
     await applyRestore(tx, p)
     await auditRow(tx, copy.organizationId, step.restoreAction, { beforeCopy: basename(file), rowsWritten: p.writes, perTable: p.counts, skipped: p.skipped })
     return p
-  })
+  }, step.lockTables)
   log('Restored in one transaction.')
   const check = await readOnly(o.db, tx => checkRestored(tx, plan))
   log(`Restore check (read-only): ${check.ok ? 'OK' : 'PROBLEMS FOUND'}`)

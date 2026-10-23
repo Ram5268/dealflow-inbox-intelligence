@@ -3,7 +3,7 @@
 // File system only (temporary folders, removed afterwards): no DB, no network.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -76,6 +76,29 @@ test('a before-copy is written once, owner-only, and read back only for its own 
     writeFileSync(other, JSON.stringify({ format: 'something-else', step: 'DS-1' }), { mode: 0o600 })
     assert.throws(() => readBeforeCopy(other, 'DS-1', 'b48_x_test'), /isn't a Brief 48 before-copy/)
     assert.throws(() => readBeforeCopy(join(dir, 'missing.json'), 'DS-1', 'b48_x_test'), /can't read/)
+  })
+})
+
+test('the before-copy is written atomically: no temporary file is left, and an existing name is never replaced', () => {
+  withTemp(tmp => {
+    const dir = join(tmp, 'private')
+    const now = new Date('2026-10-23T12:00:00.000Z')
+    const copy = emptyBeforeCopy('DS-3', 'b48_x_test', 'org-1', now)
+    copy.removed = { Match: [{ id: 'm1', reason: 'x'.repeat(200_000) }] } // a big copy
+    const file = writeBeforeCopy(dir, ROOT, copy, now)
+    assert.deepEqual(readdirSync(dir), [file.split('/').pop()])
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')).removed.Match[0].reason.length, 200_000)
+    const first = readFileSync(file, 'utf8')
+    assert.throws(() => writeBeforeCopy(dir, ROOT, emptyBeforeCopy('DS-3', 'b48_x_test', 'org-1', now), now), /never overwritten/)
+    assert.equal(readFileSync(file, 'utf8'), first)
+    assert.deepEqual(readdirSync(dir), [file.split('/').pop()]) // still no temporary file
+    // An existing folder others can read is refused and left as it was.
+    const open = join(tmp, 'open')
+    mkdirSync(open, { mode: 0o755 })
+    chmodSync(open, 0o755)
+    assert.throws(() => writeBeforeCopy(open, ROOT, copy, now), /others can read/)
+    assert.deepEqual(readdirSync(open), [])
+    assert.equal(statSync(open).mode & 0o777, 0o755)
   })
 })
 

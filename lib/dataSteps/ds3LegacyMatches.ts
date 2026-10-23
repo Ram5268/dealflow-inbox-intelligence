@@ -243,6 +243,8 @@ export const ds3Step: Step<Ds3Plan> = {
   title: "remove the old matcher's leftover match rows",
   unit: 'old-matcher rows',
   restoreAction: DS3_RESTORE_ACTION,
+  // No foreign key stops a new call-list or feedback row naming a removed match mid-transaction [Brief 48 review].
+  lockTables: ['Match', 'OutcomeFeedback', 'CallQueueEntry'],
   async plan(tx, orgId, argv, mentions) {
     const candidates = await loadDs3Candidates(tx)
     const ids = planDs3(orgId, candidates, [], [], null).remove

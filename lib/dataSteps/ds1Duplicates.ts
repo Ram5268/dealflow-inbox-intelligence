@@ -22,20 +22,28 @@
 //   OutcomeFeedback                                    move opportunityId; a removed match id → null
 //   any other table with a foreign key to MojoContact  refuse if a row points at a duplicate. Found in the
 //                                                      database's own catalog, so DS-1 never names or reads
-//                                                      the table of DealFlow's own value estimates (Brief 44):
-//                                                      Ryan's rule (2026-10-17) keeps its readers to an allowed
-//                                                      list (lib/valuations/__tests__/readers.unit.test.ts).
-//                                                      Values are made for CRM sellers only, so none is
-//                                                      expected; that table's ON DELETE CASCADE would
-//                                                      otherwise remove them unseen.
+//                                                      the table of DealFlow's own value estimates (Brief 44).
+//                                                      Those values appear only on Ryan's own CRM lead page
+//                                                      [Ryan, 2026-10-17]; the list of files allowed to read
+//                                                      them (lib/valuations/__tests__/readers.unit.test.ts,
+//                                                      Brief 49) is an [engineering precaution]. Values are
+//                                                      made for CRM sellers only, so none is expected; that
+//                                                      table's ON DELETE CASCADE would otherwise remove them
+//                                                      unseen.
 // Counted, never rewritten: AuditLog, chat, reports, Drift's interaction rows,
 // the review queue, the Zapier log and mojo_raw (lib/dataSteps/rows.ts MENTION_TARGETS).
 //
 // Refuses to run when any duplicate's duplicateOf is missing or points at no
-// row, at a row in another organization, at a test row, at itself or at
-// another duplicate [Brief 48, executor]; and when a duplicate isn't a csv_*
-// copy or carries a CRM lead id (a CRM lead could be keyed to it)
+// row, at a row in another organization, at itself or at another duplicate
+// [Brief 48, executor]; and when it points at a test row, or a duplicate isn't
+// a csv_* copy or carries a CRM lead id (a CRM lead could be keyed to it)
 // [engineering precaution].
+//
+// Its write transaction first locks Match, MatchDismissal, OutcomeFeedback and
+// CallQueueEntry against writes (none has a foreign key that would stop a new
+// row naming a duplicate or a removed match mid-transaction) [Brief 48 review,
+// engineering precaution]. Run it outside the nightly (4:45–5:30 am) and the
+// 7:00 am CRM copy.
 import { DataStepRefusal, emptyBeforeCopy, someIds, sum, type BeforeCopy, type ChangedRow, type Row } from './common'
 import {
   applyChanges, auditRow, count, countMentions, deleteRows, fetchRows, inIds, json,
@@ -182,6 +190,13 @@ export function planDs1(f: Ds1Facts): Ds1Plan {
   }
 }
 
+export function keptBySource(p: Ds1Plan, f: Ds1Facts): Record<string, number> {
+  const used = new Set(Object.values(p.keeperOf))
+  const out: Record<string, number> = {}
+  for (const k of f.keepers) if (used.has(k.id)) out[k.source ?? '(none)'] = (out[k.source ?? '(none)'] ?? 0) + 1
+  return Object.fromEntries(Object.entries(out).sort(([a], [b]) => (a < b ? -1 : 1)))
+}
+
 export function ds1Writes(p: Ds1Plan): number {
   return p.duplicates.length + p.removeMatches.length + p.removeDismissals.length + p.changeDismissals.length +
     p.removeQueue.length + p.changeQueue.length + p.changeCallLogs.length + p.changeInstantly.length +
@@ -195,6 +210,8 @@ export function ds1Summary(p: Ds1Plan, f: Ds1Facts, mentions: Record<string, num
     duplicates: {
       toRemove: p.duplicates.length,
       keptRecords: new Set(Object.values(p.keeperOf)).size,
+      // Brief 48 review: what the kept records are, by metadata.source ('crm' expected).
+      keptRecordsBySource: keptBySource(p, f),
       leftAlone: p.outOfScope,
     },
     refusals: refusalCounts,
@@ -401,6 +418,7 @@ export const ds1Step: Step<{ plan: Ds1Plan; facts: Ds1Facts }> = {
   title: 'remove the duplicate spreadsheet copies',
   unit: 'duplicate copies',
   restoreAction: DS1_RESTORE_ACTION,
+  lockTables: ['Match', 'MatchDismissal', 'OutcomeFeedback', 'CallQueueEntry'],
   async plan(tx, orgId, _argv, mentions) {
     const facts = await loadDs1Facts(tx, orgId)
     const plan = planDs1(facts)

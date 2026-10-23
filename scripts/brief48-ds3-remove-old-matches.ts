@@ -10,10 +10,10 @@
 // It prints counts and ids only, never a note. It uses the DATABASE_URL in its
 // environment only (it doesn't load .env).
 //
-//   npx tsx scripts/brief48-ds3-remove-old-matches.ts                                   # dry run: counts and the --expect number
-//   npx tsx scripts/brief48-ds3-remove-old-matches.ts --apply --expect <n> --i-mean-live [--allow-referenced]
+//   npx tsx scripts/brief48-ds3-remove-old-matches.ts                                   # dry run: counts, the --expect number, the plan fingerprint
+//   npx tsx scripts/brief48-ds3-remove-old-matches.ts --apply --expect <n> --plan <fingerprint> --i-mean-live [--allow-referenced]
 //   npx tsx scripts/brief48-ds3-remove-old-matches.ts --check <before-copy>
-//   npx tsx scripts/brief48-ds3-remove-old-matches.ts --restore <before-copy> [--apply --expect <n> --i-mean-live]
+//   npx tsx scripts/brief48-ds3-remove-old-matches.ts --restore <before-copy> [--apply --expect <n> --plan <fingerprint> --i-mean-live]
 // The before-copy goes to ~/dev/brief48-dealflow-fixes/private/ (or --preimage-dir <dir>).
 import { resolve } from 'node:path'
 import { databaseName, maintenanceApply } from '../lib/dbGuard'
@@ -27,8 +27,8 @@ import { ds3Step } from '../lib/dataSteps/ds3LegacyMatches'
 const APPLY = maintenanceApply(process.env.DATABASE_URL, 'scripts/brief48-ds3-remove-old-matches.ts (DATABASE_URL)')
 
 // Its own client: Prisma logs nothing (a query error can quote row values) and
-// a dead connection times out (lib/dataSteps/client.ts).
-const db = dataStepClient(process.env.DATABASE_URL)
+// a dead connection times out; without --apply it can only read (lib/dataSteps/client.ts).
+const db = dataStepClient(process.env.DATABASE_URL, { readOnly: !APPLY })
 
 runStep(ds3Step, {
   db, argv: process.argv, apply: APPLY, database: databaseName(process.env.DATABASE_URL), repoRoot: resolve(__dirname, '..'),

@@ -4,7 +4,8 @@
 // A restore puts back what one run did, in one transaction:
 //   1. every removed row is inserted again, whole (parents first);
 //   2. every changed row gets its old values back, if it still has the run's values;
-//   3. every row the run created is deleted, if it is still as created.
+//   3. every row the run created is deleted, if it is still as created, with the
+//      rows the nightly made from it since (Brief 48 review: DerivedOnCreated).
 // It refuses (writing nothing) when a row moved on since the run: a removed id
 // is back already, a unique key is taken, a changed row has other values now,
 // or a created row is gone or changed. It skips, with a count, call-list rows
@@ -13,7 +14,7 @@
 import type { BeforeCopy, Row } from './common'
 import { sum } from './common'
 import {
-  CHANGE_COLUMNS, applyChanges, assertTable, callListGenerations, deleteRows, fetchRows, insertRows, json,
+  CHANGE_COLUMNS, applyChanges, assertTable, callListGenerations, deleteRows, fetchRows, inIds, insertRows, json,
   type Change, type Table, type Tx,
 } from './rows'
 
@@ -46,6 +47,19 @@ export interface RestoreFacts {
   generationsNow: string[] // the org's call-list generation ids now
   uniqueTaken: Record<string, string[]> // table → ids of copy rows whose unique key another row holds now
   reportsOnCreated: number // Report rows whose subject is a created row (deleting it would change them)
+  derived?: DerivedOnCreated // rows made since the run from created buyers (the nightly's)
+}
+
+// Brief 48 review (engineering precaution): once the nightly has used DS-2's test
+// buyers, deleting them alone would leave their matches (and the call list's ids
+// of those matches, dismissals and feedback about them) pointing at buyers that
+// no longer exist; the CRM's morning copy would show those as unnamed buyers. These
+// rows exist only because of the created buyers, so the restore removes them too.
+export interface DerivedOnCreated {
+  matches: string[] // Match ids naming a created buyer
+  queue: { id: string; primaryMatchId: string | null; contributingMatchIds: string[] }[] // call-list rows naming one of those matches
+  dismissals: string[] // MatchDismissal ids naming a created buyer
+  feedback: { id: string; opportunityId: string | null; matchId: string | null }[] // OutcomeFeedback naming a created buyer or one of those matches
 }
 
 export interface RestorePlan {
@@ -124,6 +138,27 @@ export function planRestore(copy: BeforeCopy, facts: RestoreFacts): RestorePlan 
     if (ids.length) { plan.remove.push({ table: t, ids }); tally(t).delete += ids.length }
   }
 
+  // Brief 48 review: what the nightly made from the created buyers goes with them (DerivedOnCreated).
+  const d = facts.derived
+  const deleting = new Set(plan.remove.filter(r => r.table === 'ExtractedOpportunity').flatMap(r => r.ids))
+  if (d && deleting.size > 0) {
+    const gone = new Set(d.matches)
+    if (d.matches.length) { plan.remove.push({ table: 'Match', ids: [...d.matches] }); tally('Match').delete += d.matches.length }
+    const queue: Change[] = d.queue.map(q => ({
+      id: q.id,
+      from: { primaryMatchId: q.primaryMatchId, contributingMatchIds: q.contributingMatchIds },
+      to: { primaryMatchId: q.primaryMatchId && gone.has(q.primaryMatchId) ? null : q.primaryMatchId, contributingMatchIds: q.contributingMatchIds.filter(id => !gone.has(id)) },
+    }))
+    if (queue.length) { plan.revert.push({ table: 'CallQueueEntry', changes: queue }); tally('CallQueueEntry').revert += queue.length }
+    if (d.dismissals.length) { plan.remove.push({ table: 'MatchDismissal', ids: [...d.dismissals] }); tally('MatchDismissal').delete += d.dismissals.length }
+    const feedback: Change[] = d.feedback.map(f => ({
+      id: f.id,
+      from: { opportunityId: f.opportunityId, matchId: f.matchId },
+      to: { opportunityId: f.opportunityId && deleting.has(f.opportunityId) ? null : f.opportunityId, matchId: f.matchId && gone.has(f.matchId) ? null : f.matchId },
+    }))
+    if (feedback.length) { plan.revert.push({ table: 'OutcomeFeedback', changes: feedback }); tally('OutcomeFeedback').revert += feedback.length }
+  }
+
   plan.writes = sum(plan.insert.map(i => i.rows.length)) + sum(plan.revert.map(r => r.changes.length)) + sum(plan.remove.map(r => r.ids.length))
   return plan
 }
@@ -165,7 +200,27 @@ export async function loadRestoreFacts(tx: Tx, copy: BeforeCopy): Promise<Restor
   const createdOpps = (copy.created.ExtractedOpportunity ?? []).map(r => r.id)
   const reportsOnCreated = createdOpps.length === 0 ? 0 : (await tx.$queryRawUnsafe<{ n: number }[]>(
     'SELECT count(*)::int AS n FROM "Report" WHERE "opportunityId" IN (SELECT jsonb_array_elements_text($1::jsonb))', json(createdOpps)))[0].n
-  return { current, generationsNow: await callListGenerations(tx, copy.organizationId), uniqueTaken, reportsOnCreated }
+  const derived = createdOpps.length === 0 ? undefined : await loadDerived(tx, createdOpps)
+  return { current, generationsNow: await callListGenerations(tx, copy.organizationId), uniqueTaken, reportsOnCreated, derived }
+}
+
+// Brief 48 review: rows that name a created buyer now (DerivedOnCreated). Ids only.
+async function loadDerived(tx: Tx, created: string[]): Promise<DerivedOnCreated> {
+  const C = json(created)
+  const matches = (await tx.$queryRawUnsafe<{ id: string }[]>(`SELECT id FROM "Match"
+WHERE ("counterpartType" = 'opportunity' AND "counterpartId" ${inIds(1)}) OR ("opportunityType" = 'opportunity' AND "opportunityId" ${inIds(1)})
+ORDER BY id`, C)).map(r => r.id)
+  const M = json(matches)
+  return {
+    matches,
+    queue: matches.length === 0 ? [] : await tx.$queryRawUnsafe<DerivedOnCreated['queue']>(`
+SELECT id, "primaryMatchId", "contributingMatchIds" FROM "CallQueueEntry"
+WHERE "primaryMatchId" ${inIds(1)} OR "contributingMatchIds" && ARRAY(SELECT jsonb_array_elements_text($1::jsonb)) ORDER BY id`, M),
+    dismissals: (await tx.$queryRawUnsafe<{ id: string }[]>(
+      `SELECT id FROM "MatchDismissal" WHERE "partyId" ${inIds(1)} OR "listingId" ${inIds(1)} ORDER BY id`, C)).map(r => r.id),
+    feedback: await tx.$queryRawUnsafe<DerivedOnCreated['feedback']>(
+      `SELECT id, "opportunityId", "matchId" FROM "OutcomeFeedback" WHERE "opportunityId" ${inIds(1)} OR "matchId" ${inIds(2)} ORDER BY id`, C, M),
+  }
 }
 
 // The writes of a restore, inside the caller's transaction.

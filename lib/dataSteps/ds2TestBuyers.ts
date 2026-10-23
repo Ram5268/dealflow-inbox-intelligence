@@ -1,5 +1,7 @@
-// Brief 48 data step DS-2: top up Ryan's test buyers to 250 [Ryan 1.12,
-// 2026-10-19: add 45 test buyers aimed at the CRM's seller pool].
+// Brief 48 data step DS-2: add 45 test buyers to Ryan's organization [Ryan 1.12,
+// 2026-10-19: add 45 test buyers aimed at the CRM's seller pool]. With today's
+// 205 that makes 250. Exactly 45 are added even if the count has moved; the dry
+// run then says so and reports the total [Brief 48 executor, 2026-10-23].
 //
 // Based on the generator of the closed PR #4 (Brief 34 prep,
 // scripts/seed-brief34-bk-multifamily-buyers.ts, commit 989943b): BUYER_ISO
@@ -7,8 +9,9 @@
 // weighted to the CRM lead pool's Brooklyn/Ridgewood ZIPs, hanging off the
 // shared 2020 seed anchor email so they never move the inbox sync's resume
 // point. Changes from that generator [engineering precaution]:
-//   - it counts only Ryan's organization's test buyers (PR #4 counted every
-//     BUYER_ISO in the database, including 45 in fixture organizations);
+//   - it counts only Ryan's organization's test buyers (PR #4's count had no
+//     organization filter; a Sep 26 note says rows in fixture organizations
+//     made up part of its 250);
 //   - its own tag, [TEST_48], and ids test48-buyer-opp-NNN, so --restore can
 //     delete exactly these;
 //   - the agent names are obviously made up (PR #4 drew from a pool that
@@ -26,8 +29,9 @@ export const DS2_ACTION = 'BRIEF48_DS2_TEST_BUYERS_ADDED'
 export const DS2_RESTORE_ACTION = 'BRIEF48_DS2_RESTORED'
 export const TAG = '[TEST_48]'
 export const ID_PREFIX = 'test48-buyer-opp-'
-export const TARGET_TOTAL = 250 // test buyers in Ryan's organization afterwards [Ryan 1.12]
-export const EXPECTED_TODAY = 205 // the count Ryan's OK was based on (Sep 26 note), so 45 are added
+export const TOP_UP = 45 // [Ryan 1.12; exactly 45: Brief 48 executor, 2026-10-23]
+export const EXPECTED_TODAY = 205 // the count Ryan's OK was based on (Sep 26 note)
+export const TARGET_TOTAL = EXPECTED_TODAY + TOP_UP // 250, the total when today's count is 205
 export const ANCHOR_GRAPH_ID = '[TEST_10]-anchor-email' // scripts/seed-stress-common.ts getOrgAndAnchor
 export const SEED_DOMAIN = 'seed-test-48.dealflow.local'
 const SEED = 0x48b
@@ -231,7 +235,7 @@ export async function loadDs2Facts(tx: Tx, orgId: string): Promise<Ds2Facts> {
 }
 
 export interface Ds2Plan {
-  topUp: number
+  topUp: number // always TOP_UP
   buyers: TestBuyer[]
   notices: string[] // printed loudly; not refusals
   refusals: string[] // --apply refuses
@@ -239,17 +243,16 @@ export interface Ds2Plan {
 
 // Pure.
 export function planDs2(f: Ds2Facts): Ds2Plan {
-  const topUp = Math.max(0, TARGET_TOTAL - f.testBuyers)
+  const topUp = TOP_UP
   const notices: string[] = []
   const refusals: string[] = []
   if (f.testBuyers !== EXPECTED_TODAY) {
-    notices.push(`Today's count is ${f.testBuyers} test buyers, not the ${EXPECTED_TODAY} Ryan's OK was based on, so the top-up to ${TARGET_TOTAL} is ${topUp}, not ${TARGET_TOTAL - EXPECTED_TODAY}. --apply needs --expect ${topUp}.`)
+    notices.push(`Today's count is ${f.testBuyers} test buyers, not the ${EXPECTED_TODAY} Ryan's OK was based on: adding ${TOP_UP} makes ${f.testBuyers + TOP_UP}, not ${TARGET_TOTAL}.`)
   }
   if (f.alreadyThere > 0) refusals.push(`${f.alreadyThere} ${TAG} test buyer(s) are already there: this step ran before (restore it first).`)
   if (!f.anchorId) refusals.push(`The shared seed anchor email isn't in this organization, so there's nothing for test buyers to hang off.`)
-  if (topUp === 0) refusals.push(`There are already ${f.testBuyers} test buyers (target ${TARGET_TOTAL}): nothing to add.`)
   // Built for the dry run too (with a stand-in anchor id when it's missing), so it can show the split.
-  const buyers = topUp > 0 ? buildTestBuyers(topUp, f.orgId, f.anchorId ?? '(none)') : []
+  const buyers = buildTestBuyers(topUp, f.orgId, f.anchorId ?? '(none)')
   return { topUp, buyers, notices, refusals }
 }
 
@@ -258,9 +261,9 @@ export function ds2Summary(p: Ds2Plan, f: Ds2Facts) {
   return {
     testBuyersToday: f.testBuyers,
     expectedToday: EXPECTED_TODAY,
-    target: TARGET_TOTAL,
-    topUp: p.topUp,
+    adds: p.topUp,
     afterwards: f.testBuyers + p.topUp,
+    expectedAfterwards: TARGET_TOTAL,
     leftAlone: { realBuyersInRyansOrganization: f.realBuyers, testBuyersInOtherOrganizations: f.testBuyersElsewhere },
     byArchetype: tally(b => String(b.buyerArchetype)),
     byPrimaryNeighborhood: tally(b => b.neighborhood),
@@ -304,7 +307,7 @@ WHERE id ${inIds(1)} AND "isTestData" AND category = 'BUYER_ISO' AND "organizati
 
 export const ds2Step: Step<Ds2Plan> = {
   id: 'DS-2',
-  title: `add test buyers to Ryan's organization, up to ${TARGET_TOTAL}`,
+  title: `add ${TOP_UP} test buyers to Ryan's organization`,
   unit: 'test buyers',
   restoreAction: DS2_RESTORE_ACTION,
   async plan(tx, orgId) {
@@ -313,6 +316,8 @@ export const ds2Step: Step<Ds2Plan> = {
     return { plan, expect: plan.topUp, summary: ds2Summary(plan, facts), refusals: plan.refusals, notices: plan.notices, mentions: null }
   },
   newCopy: (database, orgId, now, r) => newDs2Copy(database, orgId, now, r.plan, r.summary),
+  // The restore deletes what the nightly made from these buyers too (lib/dataSteps/restore.ts DerivedOnCreated).
+  lockTables: ['Match', 'MatchDismissal', 'OutcomeFeedback', 'CallQueueEntry'],
   apply: (tx, r, copy, save) => applyDs2(tx, r.plan, copy, save),
   check: checkDs2,
 }

@@ -45,19 +45,32 @@ const TX = { maxWait: 10_000, timeout: 600_000 }
 const LIMITS = ["SET LOCAL lock_timeout = '10s'", "SET LOCAL statement_timeout = '300s'"]
 
 // A read-only transaction: any write in it fails. Dry runs and checks use it.
+// Brief 48 review: repeatable read, so every count in a dry run comes from one
+// snapshot, as the write transaction's re-made plan does.
 export async function readOnly<T>(db: PrismaClient, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.$transaction(async tx => {
     await tx.$executeRawUnsafe('SET TRANSACTION READ ONLY')
     for (const s of LIMITS) await tx.$executeRawUnsafe(s)
     return fn(tx)
-  }, TX)
+  }, { ...TX, isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
 }
 
 // The one write transaction of a run. Repeatable read: if a row it changes is
 // changed by someone else meanwhile, it fails and rolls back whole.
-export async function writeTransaction<T>(db: PrismaClient, fn: (tx: Tx) => Promise<T>): Promise<T> {
+// Brief 48 review (engineering precaution): `lock` names tables without a
+// foreign key to the rows a step removes (Match, MatchDismissal,
+// OutcomeFeedback, the call list's match ids), where another session could add
+// a row naming them after this transaction's snapshot. They are locked against
+// writes (reads go on) before the first query, so the snapshot is taken after
+// the lock and nothing can be added until the commit. A writer holding one of
+// them makes this wait at most 10 s, then fail with nothing changed.
+export async function writeTransaction<T>(db: PrismaClient, fn: (tx: Tx) => Promise<T>, lock: readonly Table[] = []): Promise<T> {
   return db.$transaction(async tx => {
     for (const s of LIMITS) await tx.$executeRawUnsafe(s)
+    if (lock.length) {
+      lock.forEach(t => assertTable(t))
+      await tx.$executeRawUnsafe(`LOCK TABLE ${lock.map(t => `"${t}"`).join(', ')} IN SHARE ROW EXCLUSIVE MODE`)
+    }
     return fn(tx)
   }, { ...TX, isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
 }
