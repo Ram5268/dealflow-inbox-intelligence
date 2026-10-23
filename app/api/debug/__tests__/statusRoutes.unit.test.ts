@@ -20,7 +20,9 @@ const handlers: Record<string, Record<string, Handler>> = {
   auditLog: {
     findFirst: ({ where }) => {
       const action = (where as Row).action
-      const hit = (a: string) => (typeof action === 'string' ? a === action : a.includes(String((action as Row).contains)))
+      const hit = (a: string) => (typeof action === 'string' ? a === action
+        : Array.isArray((action as Row).in) ? ((action as Row).in as string[]).includes(a)
+        : a.includes(String((action as Row).contains)))
       const newest = auditRows.filter(r => hit(r.action)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
       return newest ?? null
     },
@@ -71,7 +73,10 @@ test('GET /api/debug/health: the retired Zapier block is gone, the other blocks 
   const { body } = await health()
   assert.ok(!('recentIngest' in body), 'no recentIngest')
   assert.ok(!touched.has('zapierIngestLog'), 'the Zapier log is not read')
-  for (const k of ['orgId', 'flags', 'graphToken', 'lastSync', 'recentMatches', 'recentDismissals', 'recentPush', 'subsystemLastSuccess']) {
+  // Brief 48 (PR 16, Revision 1): orgId (an internal id) is gone; the older blocks
+  // show counts and times only (healthOlderSections.unit.test.ts).
+  assert.ok(!('orgId' in body), 'no orgId')
+  for (const k of ['flags', 'graphToken', 'lastSync', 'recentMatches', 'recentDismissals', 'recentPush', 'subsystemLastSuccess']) {
     assert.ok(k in body, `existing block ${k} kept`)
   }
 })
