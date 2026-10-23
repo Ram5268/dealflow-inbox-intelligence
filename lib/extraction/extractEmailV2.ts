@@ -18,6 +18,7 @@ import { Category, TransactionType, type ExtractedOpportunity } from '@prisma/cl
 import { EXTRACTION_SPEC_BY_CATEGORY, type MapCtx, type OppRowData, type ExtractionSpec } from './schemas'
 import { extractWithSonnet, type SonnetUsage } from './sonnetExtractor'
 import { buildOpportunityText, upsertOpportunityEmbedding } from '../embeddings'
+import { deleteListingsAndMatches, matchesOfListings } from './listingMatches'
 
 const VALID_CATEGORY = new Set<string>(Object.values(Category))
 const VALID_TX = new Set<string>(Object.values(TransactionType))
@@ -327,7 +328,10 @@ export async function extractEmailV2(
         ],
       },
     })
-    // Match rows cascade-delete with the opportunity (onDelete: Cascade).
+    // Brief 48 (PR 15): the old listings' matches go too. Nothing cascades: Brief 32
+    // dropped the Match → listing foreign key (lib/extraction/listingMatches.ts), and
+    // the comment here used to say they cascade-deleted [engineering precaution].
+    if (priorIds.length) await tx.match.deleteMany({ where: matchesOfListings(priorIds) })
     await tx.extractedOpportunity.deleteMany({ where: { organizationId, rawEmailId } })
 
     const rows: ExtractedOpportunity[] = []
@@ -435,10 +439,16 @@ export async function recoverAndPersistBuriedLead(
   const transactionType: TransactionType =
     (lead.category === 'RENTER_INQUIRY' || lead.category === 'LANDLORD_LEAD') ? 'RENTAL' : 'SALE'
 
-  // Idempotency: replace any prior recovered rows for this email.
-  await prisma.extractedOpportunity.deleteMany({
-    where: { organizationId, rawEmailId, provenance: { in: ['buried_recovery', 'comp_reference'] } },
-  }).catch(() => {})
+  // Idempotency: replace any prior recovered rows for this email. Brief 48 (PR 15):
+  // with their matches, in one transaction (nothing cascades; lib/extraction/listingMatches.ts)
+  // [engineering precaution]. Non-fatal, as before.
+  try {
+    await prisma.$transaction(tx => deleteListingsAndMatches(tx, {
+      organizationId, rawEmailId, provenance: { in: ['buried_recovery', 'comp_reference'] },
+    }))
+  } catch (e) {
+    console.error(`[extractV2] ${rawEmailId}: clearing the old recovered rows failed: ${(e as Error).message}`)
+  }
 
   // A recovered lead keeps its own words, estate, probate or divorce details
   // included. Ryan's decision, 2026-10-17: saved seller notes may keep these

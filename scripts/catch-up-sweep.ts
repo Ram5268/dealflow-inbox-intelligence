@@ -8,7 +8,7 @@
 //   npx tsx scripts/catch-up-sweep.ts --apply 200
 //
 // Budget gate (lib/streetEasySync.ts:checkAndIncrementQuota) hard-pauses
-// at 4900/5000 calls/month. QuotaExhaustedError caught here for a clean
+// at 9,500 of the 10,000 calls a month. QuotaExhaustedError caught here for a clean
 // exit when the cap is hit mid-batch.
 
 import 'dotenv/config'

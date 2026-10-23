@@ -62,7 +62,7 @@ test('sweepDateExpirations does exactly what dateExpiryFor says', async () => {
     r('staleOh', 'OPEN_HOUSE', { availabilityDate: isoDay(2), processingStatus: 'stale' }),
   ]
   const written = new Map<string, unknown>()
-  ;(globalThis as unknown as { prisma: unknown }).prisma = {
+  const db = {
     extractedOpportunity: {
       findMany: async ({ where }: { where: Filter }) => rows.filter((row) => matches(row, where)).map((row) => ({ id: row.id })),
       update: async ({ where, data }: { where: { id: string }; data: { processingStatus: string } }) => {
@@ -70,7 +70,12 @@ test('sweepDateExpirations does exactly what dateExpiryFor says', async () => {
         return {}
       },
     },
+    // Brief 48 (PR 15): a 90-day listing also gets a Review Queue item, in a
+    // transaction (lib/__tests__/agedReviewItems.unit.test.ts covers the items).
+    reviewQueueItem: { findMany: async () => [], create: async () => ({}) },
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   }
+  ;(globalThis as unknown as { prisma: unknown }).prisma = db
   const now = new Date()
   const { sweepDateExpirations } = await import('../streetEasySync')
   const count = await sweepDateExpirations()

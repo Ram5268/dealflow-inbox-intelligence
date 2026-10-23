@@ -193,9 +193,13 @@ test("the buried-lead second pass saves a recovered seller lead's own words", as
     linkedResource: { findMany: async () => [] },
     attachment: { findMany: async () => [] },
     extractedOpportunity: {
+      // Brief 48 (PR 15): the old recovered rows are read, then deleted with their matches.
+      findMany: async () => [],
       deleteMany: async () => ({ count: 0 }),
       create: async ({ data }: { data: Record<string, unknown> }) => { created.push(data); return { id: 'opp-test', ...data } },
     },
+    match: { deleteMany: async () => ({ count: 0 }) },
+    $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
   })
   const summary = 'Estate sale of a Park Slope townhouse; the executor is handling it'
   const reason = 'The sender says the estate will sell the townhouse in the spring.'

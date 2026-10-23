@@ -7,6 +7,7 @@ import { buildOpportunityText, upsertOpportunityEmbedding } from '@/lib/embeddin
 import { Category, Prisma, TransactionType } from '@prisma/client'
 import { maintenanceEnabled, MAINTENANCE_OFF_BODY } from '@/lib/config/maintenance'
 import { REEXTRACT_TRANSACTION_TYPES, forceRequested, listingEntries, reextractSwapDecision } from '@/lib/reextractGuard'
+import { matchesOfListings } from '@/lib/extraction/listingMatches'
 
 export const maxDuration = 300
 
@@ -103,13 +104,16 @@ export async function POST(req: NextRequest) {
 
         // Brief 41.1 (F12): an answer with no listings in it (only noise,
         // irrelevant or malformed entries) never wipes the saved ones.
-        const saved = await prisma.extractedOpportunity.count({ where: { rawEmailId: email.id } })
-        const decision = reextractSwapDecision({ saved, fresh: fresh.length, force })
+        const savedIds = (await prisma.extractedOpportunity.findMany({ where: { rawEmailId: email.id }, select: { id: true } })).map(o => o.id)
+        const decision = reextractSwapDecision({ saved: savedIds.length, fresh: fresh.length, force })
         if (decision.swap) {
           // Swap: delete the old listings and create the new ones in one
-          // transaction, so a failure leaves the old ones in place.
-          const [{ count: deleted }, ...opps] = await prisma.$transaction([
-            prisma.extractedOpportunity.deleteMany({ where: { rawEmailId: email.id } }),
+          // transaction, so a failure leaves the old ones in place. Brief 48
+          // (PR 15): the old listings' matches go in the same transaction; nothing
+          // cascades (lib/extraction/listingMatches.ts) [engineering precaution].
+          const [, { count: deleted }, ...opps] = await prisma.$transaction([
+            prisma.match.deleteMany({ where: matchesOfListings(savedIds) }),
+            prisma.extractedOpportunity.deleteMany({ where: { id: { in: savedIds }, rawEmailId: email.id } }),
             ...fresh.map(f => prisma.extractedOpportunity.create({ data: f.data })),
           ])
           const created = opps.length

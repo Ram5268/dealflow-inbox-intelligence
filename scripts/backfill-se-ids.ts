@@ -8,7 +8,7 @@
 //
 // Cost: 1-3 RapidAPI calls per record (one per area search attempt). Budget
 // gate (lib/streetEasySync.ts:checkAndIncrementQuota) hard-pauses at
-// 4900/5000 calls/month and throws QuotaExhaustedError; this script catches
+// 9,500 of the 10,000 calls a month and throws QuotaExhaustedError; this script catches
 // that and exits cleanly so the run doesn't blow past the cap.
 
 import 'dotenv/config'

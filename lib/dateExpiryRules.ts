@@ -9,7 +9,7 @@
 //   already handled;
 // - a sale, rental, off-market, back-on-market or price-drop listing more
 //   than 90 days old that StreetEasy has never checked goes to 'needs_review',
-//   not 'stale'.
+//   not 'stale', with a Review Queue item (Brief 48 PR 15; once per listing).
 //
 // availabilityDate is text ("YYYY-MM-DD" from the extractors). As in the
 // sweep's SQL, it is compared as text with an ISO timestamp.
@@ -23,6 +23,13 @@ export const AGED_REVIEW_CATEGORIES: readonly string[] = [
   'ACTIVE_SALE_LISTING', 'RENTAL_LISTING', 'OFF_MARKET_SALE', 'BACK_ON_MARKET', 'PRICE_DROP',
 ]
 export const AGED_REVIEW_DAYS = 90
+// Brief 48 (PR 15): the Review Queue item a 90-day listing gets with its
+// 'needs_review' (/review lists queue items, not statuses). Ryan answers once: a
+// listing that already has one of these, whatever its status, isn't flagged again.
+export const AGED_REVIEW_FLAG = 'aged_unverified'
+export const AGED_REVIEW_SUGGESTION =
+  "This listing is over 90 days old and StreetEasy has never checked it, so it may have sold, rented or been withdrawn. " +
+  'Approve shows it again; Stale keeps it hidden.'
 
 export interface DateExpiryCutoffs {
   pastEventBefore: string  // an open house or showing dated before this has passed

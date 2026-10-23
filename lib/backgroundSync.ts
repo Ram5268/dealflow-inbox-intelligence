@@ -13,7 +13,6 @@ import { isMatchingTestModeOnly } from './config/matchingTestMode'
 import { SUPPLY_SALE, SUPPLY_RENTAL } from './domain/Categories'
 import { sendPushToAll } from './pushNotifications'
 import { maybeFireHotAlert } from './push/hotAlert'
-import { checkStreetEasyStatuses } from './streetEasyStatus'
 import { Category, MatchTier, TransactionType } from '@prisma/client'
 import type { ValidationFlag } from './ingestion/types'
 
@@ -444,10 +443,12 @@ export async function runIncrementalSync(): Promise<{
       await maybeFireHotAlert({ organizationId, matchId: topHot.id }).catch(() => {})
     }
 
-    // Check StreetEasy status on existing listings (background, non-blocking)
-    checkStreetEasyStatuses(25).catch(e =>
-      console.error('[DealFlow sync] StreetEasy status check error:', (e as Error).message)
-    )
+    // Brief 48 (PR 15): the StreetEasy page check (lib/streetEasyStatus.ts) that ran
+    // here is removed. It picked listings whose email's webLink contained
+    // "streeteasy.com", but webLink is Outlook's own link to the email, so it never
+    // picked any; making it work would mean fetching StreetEasy's pages with Ryan's
+    // StreetEasy login cookies. The RapidAPI status check (lib/streetEasySync.ts)
+    // does that job [engineering precaution].
 
     return { fetched: messages.length, newEmails, newOpps, skipped: false, matches: matchCount }
   } catch (err) {

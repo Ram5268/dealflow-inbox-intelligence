@@ -8,7 +8,7 @@ import { loadReviewQueue, sendReviewAction } from '@/lib/review/send'
 
 type FlagReason = 'low_confidence' | 'ambiguous_category' | 'missing_address' | 'possible_duplicate'
   | 'conflicting_category' | 'schema_validation_failed' | 'multi_listing_ambiguity'
-  | 'missing_date' | 'price_sanity' | 'streeteasy_not_found'
+  | 'missing_date' | 'price_sanity' | 'streeteasy_not_found' | 'aged_unverified'
 
 interface ReviewItem {
   id: string
@@ -59,6 +59,7 @@ const FLAG_LABELS: Record<FlagReason, string> = {
   missing_date:            'Missing date',
   price_sanity:            'Price issue',
   streeteasy_not_found:    'Not on StreetEasy', // Brief 41.1: a listing an old StreetEasy miss had hidden
+  aged_unverified:         'Over 90 days old', // Brief 48 (PR 15): the StreetEasy sweep's 90-day rule
 }
 
 const FLAG_COLORS: Record<FlagReason, string> = {
@@ -72,6 +73,7 @@ const FLAG_COLORS: Record<FlagReason, string> = {
   missing_date:            'rgba(230,140,80,0.85)',
   price_sanity:            'rgba(220,100,100,0.85)',
   streeteasy_not_found:    'rgba(130,200,230,0.85)',
+  aged_unverified:         'rgba(130,200,230,0.85)',
 }
 
 function timeAgo(iso: string): string {
