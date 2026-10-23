@@ -39,8 +39,9 @@ export async function recommendedAdjustmentSection(
 
   if (!client) {
     // Deterministic fallback — never blocks report generation on a missing key.
+    // Brief 43 PR 14 (Q38): no em-dash in the prose (feel standard).
     const prose = hot.length > 0
-      ? `The criteria are clearing inventory — ${hot.length} clear fit${hot.length === 1 ? '' : 's'} on the board. No change needed this period; focus on getting showings booked.`
+      ? `The criteria are clearing inventory, with ${hot.length} clear fit${hot.length === 1 ? '' : 's'} on the board. No change needed this period; focus on getting showings booked.`
       : `Nothing tiers as a clear fit yet. The tightest constraint is usually price or neighborhood; widening one of them modestly is the fastest way to surface fits. (Narrative unavailable without the model.)`
     return { key: 'recommended-adjustment', title: 'Recommended adjustment', content: { prose }, sources }
   }

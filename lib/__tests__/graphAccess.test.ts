@@ -120,7 +120,8 @@ test('Drift is told Outlook is paused on every turn, as its own block', () => {
   assert.match(GRAPH_PAUSED_CALENDAR_BLOCK, /^\n\nCALENDAR: Outlook is paused/)
   assert.match(GRAPH_PAUSED_CALENDAR_BLOCK, /Never offer to book/)
   const fetcher = readFileSync(join(ROOT, 'lib/chat/context/calendar.ts'), 'utf8')
-  assert.match(firstStatement(fetcher, /export const calendarFetcher: ContextFetcher = async \([^)]*\) => \{\s*\n/), /^if \(!graphEnabled\(\)\) return \{ block: GRAPH_PAUSED_CALENDAR_BLOCK \}/)
+  // Brief 43 PR 14: the paused block also carries today's date and the email-paused note.
+  assert.match(firstStatement(fetcher, /export const calendarFetcher: ContextFetcher = async \([^)]*\) => \{\s*\n/), /^if \(!graphEnabled\(\)\) return \{ block: [^\n]*GRAPH_PAUSED_CALENDAR_BLOCK[^\n]*\}/)
   const route = readFileSync(join(ROOT, 'app/api/chat/route.ts'), 'utf8')
   assert.match(route, /if \(!graphEnabled\(\)\) aiResult\.pendingEvent = null\n\s*const guardEnabled/)
 })

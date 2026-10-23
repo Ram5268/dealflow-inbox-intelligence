@@ -86,7 +86,6 @@ export async function POST(req: NextRequest) {
 
     let messageId: string | undefined
     if (writeToChat) {
-      const suggestions = ['Show the near-misses', 'Widen the criteria']
       const msg = await prisma.chatMessage.create({
         data: {
           organizationId: session.organizationId,
@@ -98,11 +97,10 @@ export async function POST(req: NextRequest) {
           // the content JSON (lib/chat/storedReply.ts): no migration.
           content: encodeStoredReply({
             response: `Here's the ${template.name} for ${generated.subject}.`,
-            suggestions,
             shown: footerFromTurn({ buyerId, reportId: report.id, summary: reportSummaryLines(generated.sections) }),
           }),
           attachedReport: attachedReport as object,
-          suggestions: suggestions as object,
+          // Brief 43 PR 14 (D7, a Brief 42 default): no follow-up suggestions stored.
         },
         select: { id: true },
       })
