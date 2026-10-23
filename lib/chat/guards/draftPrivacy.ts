@@ -28,6 +28,7 @@ import { extractAddressFromText } from '../../acris'
 import { SELLER_CIRCUMSTANCES } from '../../matching/fitReason'
 import { PRICE_ON_REQUEST } from '../../matching/outreachPrice'
 import { normalizeDraft, type Draft, type DraftAudience, type DraftChannel } from '../draft'
+import { readStoredReply } from '../storedReply'
 
 export type { Draft, DraftAudience, DraftChannel } from '../draft'
 
@@ -58,6 +59,11 @@ export interface DraftContext {
   // Review r1 (optional): Ryan's message is about a homeowner's home ("about her
   // house", "one of my sellers"), so figures in the draft get the homeowner rule.
   homeownerHomeAsked?: boolean
+  // Brief 43 PR 12 (optional): our estimate's figures (value, low, high) from this
+  // turn's tools or said in an earlier reply. A draft never carries one, whoever it
+  // is for and whatever else it is about: our values stay out of anything a buyer
+  // or homeowner could see [Ryan, 2026-10-17]; D9 keeps them to chat.
+  ourFigures?: number[]
 }
 
 export type DraftFlagKind =
@@ -239,6 +245,14 @@ function moneyValue(s: string): number | null {
 }
 // A listing's own price, allowing for rounding ("$1.3M" for $1,295,000).
 const isListingPrice = (v: number | null, prices: number[]) => v != null && prices.some(p => p > 0 && Math.abs(v - p) <= p * 0.01)
+// Brief 43 PR 12: a figure of our estimate's, with the same rounding ("$1.83M" for
+// $1,834,000). Checked first, so it goes even when it equals a listing's price.
+const isOurFigure = (v: number | null, ours: number[]) => isListingPrice(v, ours)
+// A figure that reads "price on request" (or goes, to a homeowner).
+const blockedFigure = (s: string, p: Prepared, homeowner: boolean) => {
+  const v = moneyValue(s)
+  return isOurFigure(v, p.ours) || (homeowner && !isListingPrice(v, p.prices))
+}
 
 // Review r1: a price hint with no "$" figure, in a draft about a homeowner's home
 // [engineering precaution; the brief's "price on request"]: "about two million",
@@ -345,6 +359,7 @@ interface Prepared {
   notes: string[]
   cores: string[]
   prices: number[]
+  ours: number[]
 }
 
 function prepare(ctx: DraftContext): Prepared {
@@ -368,6 +383,7 @@ function prepare(ctx: DraftContext): Prepared {
     notes: identity.map(h => h.notes ?? '').filter(Boolean),
     cores: uniq([...homeownerCores, ...typedCores, ...contextCores]),
     prices: ctx.listingPrices ?? [],
+    ours: ctx.ourFigures ?? [],
   }
 }
 
@@ -402,7 +418,7 @@ function scan(text: string, audience: DraftAudience, p: Prepared, homeowner: boo
   hits.push(...addressHits(text, p.cores))
   if (homeowner) all('seller_circumstance', MOTIVATION)
   for (const m of text.matchAll(MONEY)) {
-    if (audience === 'homeowner' || (homeowner && !isListingPrice(moneyValue(m[0]), p.prices))) {
+    if (audience === 'homeowner' || blockedFigure(m[0], p, homeowner)) {
       hits.push({ kind: 'homeowner_price', match: m[0].trim(), index: m.index ?? 0 })
     }
   }
@@ -476,7 +492,7 @@ function replacePrices(line: string, p: Prepared, homeowner: boolean): string {
   const parts: string[] = []
   let last = 0
   for (const m of line.matchAll(PRICE_PHRASE)) {
-    if (![...m[0].matchAll(MONEY)].some(f => homeowner && !isListingPrice(moneyValue(f[0]), p.prices))) continue
+    if (![...m[0].matchAll(MONEY)].some(f => blockedFigure(f[0], p, homeowner))) continue
     const at = m.index ?? 0
     let before = line.slice(last, at)
     // "in Bed-Stuy around $1.9M." → "in Bed-Stuy, price on request." (The text
@@ -631,6 +647,49 @@ export function homeownersInContextBlock(block: string | null | undefined): Home
   return out
 }
 
+// Brief 43 PR 12: our estimate's figures, from any `internalEstimate` in this
+// turn's tool results (find_seller's match, get_seller_matches' seller;
+// lib/chat/valuation.ts) ...
+function estimateFigures(toolResults: ReadonlyArray<ToolOutput>): number[] {
+  const out: number[] = []
+  const seen = new Set<object>()
+  const visit = (v: unknown, depth: number): void => {
+    if (!v || typeof v !== 'object' || depth > 8 || seen.has(v)) return
+    seen.add(v)
+    if (Array.isArray(v)) { for (const x of v) visit(x, depth + 1); return }
+    const o = v as Record<string, unknown>
+    const e = o.internalEstimate
+    if (e && typeof e === 'object') {
+      for (const k of ['value', 'low', 'high']) {
+        const n = (e as Record<string, unknown>)[k]
+        if (typeof n === 'number' && n > 0) out.push(n)
+      }
+    }
+    for (const x of Object.values(o)) visit(x, depth + 1)
+  }
+  for (const r of toolResults) visit(r.output, 0)
+  return out
+}
+
+// ... and every figure in a sentence of an earlier reply that names an estimate
+// ("Our internal estimate is $1.83M, likely $1.52M–$2.14M, as of Oct 1."), so a
+// draft asked for a turn later can't carry it either [engineering precaution].
+const ESTIMATE_WORD = /\bestimate/gi
+function estimateFiguresSaid(history: ReadonlyArray<{ role: string; content: string }>): number[] {
+  const out: number[] = []
+  for (const m of history) {
+    if (m.role !== 'assistant') continue
+    const text = readStoredReply(m.content ?? '').response
+    for (const w of text.matchAll(ESTIMATE_WORD)) {
+      for (const f of sentenceAround(text, w.index ?? 0, w[0].length).matchAll(MONEY)) {
+        const v = moneyValue(f[0])
+        if (v != null && v > 0) out.push(v)
+      }
+    }
+  }
+  return out
+}
+
 /**
  * What a draft is checked against this turn: the CRM homeowners in the tool
  * outputs, the street addresses Ryan typed (this message and his earlier turns
@@ -681,6 +740,7 @@ export function buildDraftContext(input: {
     contextHomeowners: [...collectHomeowners([{ output: earlier }]), ...homeownersInContextBlock(input.contextBlock)],
     toHomeownerAsked: TO_HOMEOWNER_ASK.test(input.userMessage ?? ''),
     homeownerHomeAsked: ABOUT_HOMEOWNER_ASK.test(input.userMessage ?? ''),
+    ourFigures: uniq([...estimateFigures(input.toolResults), ...estimateFiguresSaid(input.history)]),
   }
 }
 

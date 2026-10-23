@@ -6,7 +6,8 @@
 //
 // Each buyer's /matches link travels as data, never in Drift's text: any URL
 // there trips the guard (Q19). No server imports here, so the page can use
-// these types and helpers too. PR 12 adds our estimate to `seller` (CONTRACT.md).
+// these types and helpers too. PR 12 adds our estimate to the tool result's
+// `seller` for Drift, never to this card (CONTRACT.md; lib/chat/valuation.ts).
 import { HOT_MIN_FIT, WARM_MIN_FIT } from '@/lib/matching/tiers'
 
 export type MatchTier = 'HOT' | 'WARM' | 'POSSIBLE'

@@ -103,8 +103,10 @@ test('only this seller\'s own matches, without the pair Ryan dismissed; the coun
   assert.deepEqual(r.tiers, { hot: 4, warm: 2, possible: 1 })
   assert.equal(r.matchesUrl, '/matches?m=m_a')
   // The seller, shaped so Brief 43 PR 3's draft check knows this homeowner.
+  // Brief 43 PR 12: plus our estimate and the prior listing (none in this fixture).
   assert.deepEqual(r.seller, {
     kind: 'crm_seller', id: 'mc_pat', name: 'Pat Example', address: '88 Example Ave', neighborhood: 'Bedford-Stuyvesant', doNotContact: false,
+    internalEstimate: null, priorListingStatus: null, priorListingPrice: null,
   })
 })
 

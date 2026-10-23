@@ -27,7 +27,9 @@ import { plainFitReason } from '@/lib/matching/fitReason'
 import {
   buyerWants, matchLink, tierOf, type BuyerFacts, type SellerMatchBuyer, type SellerMatches, type SellerMatchesSeller,
 } from '@/lib/chat/sellerMatchesCard'
-import type { SellerCandidate, SellerCard } from '@/lib/chat/sellerCard'
+import type { SellerCandidate } from '@/lib/chat/sellerCard'
+import type { SellerMatch } from '@/lib/chat/crmSellers'
+import { sellerFactsForModel, type SellerPriceFacts } from '@/lib/chat/valuation'
 import { findSeller, type FindSellerInput } from './findSeller'
 
 // The nightly keeps at most 10 buyers per seller (lib/matching/nightly/select.ts
@@ -38,8 +40,14 @@ export const MAX_BUYERS_SHOWN = 10
 // neighborhood picks one of several same-name sellers, Brief 43 PR 5).
 export type GetSellerMatchesInput = FindSellerInput
 
+// Brief 43 PR 12 (D9): the result's seller carries our internal estimate and the
+// prior listing for Drift; the matches card the page shows leaves them out
+// (crmSellerTools.ts). Our values stay out of anything a buyer or homeowner could
+// see [Ryan, 2026-10-17].
+export type MatchesSeller = SellerMatchesSeller & SellerPriceFacts
+
 export type GetSellerMatchesResult =
-  | SellerMatches
+  | (SellerMatches & { seller: MatchesSeller })
   | { candidates: SellerCandidate[] }
   | { none: true }
 
@@ -51,9 +59,9 @@ export async function getSellerMatches(rawInput: GetSellerMatchesInput): Promise
 }
 
 // The seller as the matches result carries it (no phone, no CRM link).
-export function sellerOf(card: SellerCard): SellerMatchesSeller {
-  const { id, name, address, neighborhood, doNotContact } = card
-  return { kind: 'crm_seller', id, name, address, neighborhood, doNotContact }
+export function sellerOf(card: SellerMatch): MatchesSeller {
+  const { id, name, address, neighborhood, doNotContact, internalEstimate, priorListingStatus, priorListingPrice } = card
+  return { kind: 'crm_seller', id, name, address, neighborhood, doNotContact, internalEstimate, priorListingStatus, priorListingPrice }
 }
 
 const MATCH_SELECT = {
@@ -62,7 +70,7 @@ const MATCH_SELECT = {
 } as const satisfies Prisma.MatchSelect
 type MatchRow = Prisma.MatchGetPayload<{ select: typeof MATCH_SELECT }>
 
-export async function loadSellerMatches(organizationId: string, seller: SellerMatchesSeller): Promise<SellerMatches> {
+export async function loadSellerMatches<S extends SellerMatchesSeller>(organizationId: string, seller: S): Promise<SellerMatches & { seller: S }> {
   const rows = await prisma.match.findMany({
     where: { organizationId, opportunityType: 'contact', opportunityId: seller.id },
     select: MATCH_SELECT,
@@ -165,7 +173,8 @@ async function loadBuyerFacts(rows: MatchRow[]): Promise<Map<string, BuyerFacts 
 export function getSellerMatchesForModel(result: GetSellerMatchesResult): unknown {
   if (!('seller' in result)) return result
   return {
-    seller: result.seller,
+    // Brief 43 PR 12: our estimate as the line to say ("Oct 1", no run id).
+    seller: sellerFactsForModel(result.seller),
     count: result.count,
     tiers: result.tiers,
     buyers: result.buyers.map(b => ({ tier: b.tier, score: b.score, wants: b.wants, fit: b.fit, ...(b.isTestData ? { testBuyer: true } : {}) })),

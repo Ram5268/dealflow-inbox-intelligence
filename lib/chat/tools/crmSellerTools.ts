@@ -8,6 +8,10 @@
 // buyers; Drift reads them without the /matches links, getSellerMatchesForModel),
 // count_matches and count_sellers_with_buyers (counts only).
 //   matchesCard  that seller's buyers, as the card the page shows
+// Brief 43 PR 12 (D9: Brief 42 default D9, restated in Brief 46 §4.2): `output` and
+// `forModel` carry our internal estimate and the prior listing; `card` and
+// `matchesCard` (sent to the page and stored with the reply) never do: our values
+// stay out of anything a buyer or homeowner could see [Ryan, 2026-10-17].
 import { findSeller, findSellerForModel, type FindSellerInput, type FindSellerResult } from './findSeller'
 import { countSellers, type CountSellersInput } from './countSellers'
 import { getSellerMatchesForModel, loadSellerMatches, sellerOf, type GetSellerMatchesInput, type GetSellerMatchesResult } from './sellerMatches'
@@ -15,6 +19,7 @@ import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { countMatches, countSellersWithBuyers, type CountMatchesInput } from './countMatches'
 import type { SellerCard } from '@/lib/chat/sellerCard'
 import type { SellerMatchesCard } from '@/lib/chat/sellerMatchesCard'
+import { withoutPriceFacts } from '@/lib/chat/valuation'
 
 export const CRM_SELLER_TOOL_NAMES = new Set(['find_seller', 'count_sellers', 'get_seller_matches', 'count_matches', 'count_sellers_with_buyers'])
 
@@ -58,7 +63,7 @@ export async function runCrmSellerTool(name: string, input: unknown, turn: CrmSe
         output = { candidates: [{ kind: 'crm_seller', id, name: sellerName, neighborhood }], note: ONE_SELLER_PER_MESSAGE }
       }
     }
-    const card = 'match' in output ? output.match : null
+    const card = 'match' in output ? withoutPriceFacts(output.match) : null
     const totalMatched = 'match' in output ? 1 : 'candidates' in output ? output.candidates.length : 0
     return { output, forModel: findSellerForModel(output), card, matchesCard: null, totalMatched }
   }
@@ -76,7 +81,9 @@ export async function runCrmSellerTool(name: string, input: unknown, turn: CrmSe
       output = { candidates: [{ kind: 'crm_seller', id, name: sellerName, neighborhood }], note: ONE_SELLER_PER_MESSAGE }
     } else output = await loadSellerMatches(await getCurrentOrgId(), sellerOf(found.match))
     // A card only when there are buyers to show; "none yet" is Drift's one line.
-    const matchesCard: SellerMatchesCard | null = 'seller' in output && output.count > 0 ? { kind: 'seller_matches', ...output } : null
+    const matchesCard: SellerMatchesCard | null = 'seller' in output && output.count > 0
+      ? { kind: 'seller_matches', ...output, seller: withoutPriceFacts(output.seller) }
+      : null
     const totalMatched = 'seller' in output ? output.count : 'candidates' in output ? output.candidates.length : 0
     return { output, forModel: getSellerMatchesForModel(output), card: null, matchesCard, totalMatched }
   }

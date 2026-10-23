@@ -7,9 +7,10 @@ import { z } from 'zod'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import {
-  findSellersByAddress, findSellersByName, sameNeighborhood, toSellerCandidate, toSellerCard,
-  type CrmSellerRow, type SellerCandidate, type SellerCard,
+  findSellersByAddress, findSellersByName, sameNeighborhood, toSellerCandidate, toSellerMatch,
+  type CrmSellerRow, type SellerCandidate, type SellerMatch,
 } from '@/lib/chat/crmSellers'
+import { loadInternalEstimate, sellerFactsForModel } from '@/lib/chat/valuation'
 
 export const findSellerInputSchema = z.object({
   name: z.string().optional(),
@@ -20,8 +21,10 @@ export const findSellerInputSchema = z.object({
 
 export type FindSellerInput = z.infer<typeof findSellerInputSchema>
 
+// Brief 43 PR 12: the match carries our internal estimate and the prior listing
+// for Drift (D9); the card the page shows leaves them out (crmSellerTools.ts).
 export type FindSellerResult =
-  | { match: SellerCard }
+  | { match: SellerMatch }
   | { candidates: SellerCandidate[] }
   | { none: true }
 
@@ -64,7 +67,8 @@ export async function findSeller(rawInput: FindSellerInput): Promise<FindSellerR
     if (picked.length > 0) rows = picked
   }
 
-  if (rows.length === 1) return { match: toSellerCard(rows[0]) }
+  // Brief 43 PR 12 (D9): one seller, so one read of our estimate for that seller.
+  if (rows.length === 1) return { match: toSellerMatch(rows[0], await loadInternalEstimate(organizationId, rows[0].id)) }
   if (rows.length > 1) return { candidates: rows.slice(0, MAX_CANDIDATES).map(toSellerCandidate) }
   return { none: true }
 }
@@ -72,9 +76,10 @@ export async function findSeller(rawInput: FindSellerInput): Promise<FindSellerR
 // What Drift reads back: the same result without the CRM link (the page shows
 // it as the "Open in CRM" button). A URL Drift copied into its text would trip
 // the guard's external_url check and end in the stock reply (Q19)
-// [engineering precaution].
+// [engineering precaution]. Brief 43 PR 12: our estimate as the line to say, with
+// the date as "Oct 1" and no run id (lib/chat/valuation.ts estimateForModel).
 export function findSellerForModel(result: FindSellerResult): unknown {
   if (!('match' in result)) return result
   const { crmUrl, ...card } = result.match
-  return { match: { ...card, openInCrmButton: crmUrl != null }, shownToRyanAs: 'a contact card with an Open in CRM button' }
+  return { match: { ...sellerFactsForModel(card), openInCrmButton: crmUrl != null }, shownToRyanAs: 'a contact card with an Open in CRM button' }
 }

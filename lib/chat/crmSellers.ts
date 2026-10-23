@@ -6,13 +6,14 @@
 // Every lookup is a database query over the WHOLE pool, never the newest-500
 // window the old search_parties read (N2), so the oldest seller is found as
 // readily as the newest. Brief 43 PR 6 (matches by seller) reuses these lookups,
-// and PR 12 adds our estimate to the card (CONTRACT.md).
+// and PR 12 adds our estimate to the match, never to the page's card (CONTRACT.md).
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { crmLeadUrl } from '@/lib/crmLink'
 import { normalizeStreet } from '@/lib/crm-sync/addressNormalize'
 import { BOROUGHS, NEIGHBORHOODS, fromRaw } from '@/lib/domain/Neighborhood'
 import { formatPhone, isOptOutWording, type SellerCandidate, type SellerCard } from './sellerCard'
+import type { InternalEstimate, SellerPriceFacts } from './valuation'
 
 export type { SellerCard, SellerCandidate } from './sellerCard'
 
@@ -230,6 +231,22 @@ export function toSellerCard(row: CrmSellerRow): SellerCard {
     status: row.status ?? null,
     doNotContact: doNotContact(row),
     crmUrl: crmLeadUrl(row.metadata),
+  }
+}
+
+// Brief 43 PR 12 (D9: Brief 42 default D9, restated in Brief 46 §4.2): find_seller's
+// one match is the card plus what only Drift reads: our internal estimate and the
+// prior listing (Q27; lib/chat/valuation.ts). The page gets the card without them
+// (withoutPriceFacts): our values stay out of anything a buyer or homeowner could
+// see [Ryan, 2026-10-17].
+export type SellerMatch = SellerCard & SellerPriceFacts
+
+export function toSellerMatch(row: CrmSellerRow, internalEstimate: InternalEstimate | null): SellerMatch {
+  return {
+    ...toSellerCard(row),
+    internalEstimate,
+    priorListingStatus: row.priorListingStatus ?? null,
+    priorListingPrice: row.priorListingPrice ?? null,
   }
 }
 
