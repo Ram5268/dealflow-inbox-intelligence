@@ -14,7 +14,9 @@ import { composeContext } from '@/lib/chat/context/composeContext'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
 import { searchParties, type SearchPartiesInput } from '@/lib/chat/tools/searchParties'
-import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL } from '@/lib/chat/tools/schemas'
+import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, FIND_SELLER_TOOL, COUNT_SELLERS_TOOL } from '@/lib/chat/tools/schemas'
+import { CRM_SELLER_TOOL_NAMES, newCrmSellerTurn, runCrmSellerTool } from '@/lib/chat/tools/crmSellerTools'
+import type { SellerCard } from '@/lib/chat/sellerCard'
 import { getTemplate } from '@/lib/reports/templates'
 import { getGenerator, type SectionResult } from '@/lib/reports/generators'
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
@@ -365,7 +367,12 @@ export async function POST(req: NextRequest) {
     type AttachedReport = { reportId: string; templateId: string; templateName: string; subject: string; sectionCount: number; matchCount?: number }
     type AttachedFragment = { templateId: string; sectionKey: string; title: string; content: SectionResult['content']; sources: SectionResult['sources'] }
     type AiResult = { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[]; attachedReport?: AttachedReport; attachedFragment?: AttachedFragment }
-    const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, responseTool]
+    const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, FIND_SELLER_TOOL, COUNT_SELLERS_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, responseTool]
+    // Brief 43 PR 5 (D11 [Ryan, 2026-10-18]): the one named CRM seller find_seller
+    // returned this turn, as structured cards for the page (name, phone, address,
+    // Open in CRM link). Never put in Drift's text: any URL there trips the guard (Q19).
+    const sellerCards: SellerCard[] = []
+    const crmSellerTurn = newCrmSellerTurn() // one seller contact per message (crmSellerTools.ts)
     // Brief 27.0 — server-authoritative capture of the report/fragment produced
     // this turn. We persist + return THESE (not whatever Sonnet echoes) so ids
     // are always correct and the attachment survives guard rewrites.
@@ -506,7 +513,7 @@ export async function POST(req: NextRequest) {
       const toolUses = completion.content.filter(
         (b): b is Anthropic.Messages.ToolUseBlock =>
           b.type === 'tool_use' &&
-          (b.name === 'search_listings' || b.name === 'search_parties' || REPORT_TOOL_NAMES.has(b.name)),
+          (b.name === 'search_listings' || b.name === 'search_parties' || REPORT_TOOL_NAMES.has(b.name) || CRM_SELLER_TOOL_NAMES.has(b.name)),
       )
       if (toolUses.length === 0) break  // shouldn't happen under tool_choice='any'
 
@@ -524,6 +531,21 @@ export async function POST(req: NextRequest) {
               return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify(output) }
             } catch (e) {
               console.error(`[chat] report tool ${tu.name} failed:`, e)
+              return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify({ error: String(e) }), is_error: true }
+            }
+          }
+
+          // Brief 43 PR 5: find_seller / count_sellers. The guard (and PR 3's
+          // draft check) get the full result; Drift reads it without the CRM link.
+          if (CRM_SELLER_TOOL_NAMES.has(tu.name)) {
+            try {
+              const run = await runCrmSellerTool(tu.name, tu.input, crmSellerTurn)
+              allToolCalls.push({ name: tu.name, input: tu.input, totalMatched: run.totalMatched, cardIds: run.card ? [run.card.id] : [] })
+              toolResultsForGuard.push({ name: tu.name, input: tu.input, output: run.output })
+              if (run.card && !sellerCards.some(c => c.id === run.card!.id)) sellerCards.push(run.card)
+              return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify(run.forModel) }
+            } catch (e) {
+              console.error(`[chat] tool ${tu.name} failed:`, e)
               return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify({ error: String(e) }), is_error: true }
             }
           }
@@ -860,9 +882,9 @@ export async function POST(req: NextRequest) {
       .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
 
     // ── Hydrate the cards Sonnet's tools returned into full rows for the UI ──
-    // Only ExtractedOpportunity-backed cards render as `deals`; Mojo CRM leads
-    // (MOJO_LEAD ids belong to MojoContact) surface in Sonnet's text (name+phone),
-    // matching the prior pipeline where Mojo was context, not a card.
+    // Only ExtractedOpportunity-backed cards render as `deals`. CRM buyers from
+    // search_parties (MojoContact ids) stay in Drift's text; a CRM seller only ever
+    // comes back as a seller card from find_seller (Brief 43 PR 5, `sellerCards`).
     const oppCardIds = [...seenCardIds].filter(id => id.length > 0)
     const hydrated = oppCardIds.length > 0
       ? await prisma.extractedOpportunity.findMany({ where: { id: { in: oppCardIds } }, include: oppIncludeForCards })
@@ -893,7 +915,10 @@ export async function POST(req: NextRequest) {
         organizationId,
         sessionId: session.id,
         role: 'assistant', content: storedAssistantContent,
-        dealsJson: deals as unknown as object[],
+        // Brief 43 PR 5: seller cards ride along in dealsJson (no migration), tagged
+        // kind 'crm_seller', so a reopened chat shows the card again; the page
+        // splits them back out (components/chat/sellerCardView.ts).
+        dealsJson: [...deals, ...sellerCards] as unknown as object[],
         suggestions: (aiResult.suggestions ?? []) as unknown as string[],
         // Brief 27.0 — server-captured report attachments (authoritative), so the
         // chat page can rehydrate a preview card / inline fragment in Phase 1b.
@@ -978,6 +1003,8 @@ export async function POST(req: NextRequest) {
       suggestions:  aiResult.suggestions ?? [],
       seListings:   composed.liveSeListings,
       seFilterUrl:  composed.seFilterUrl,
+      // Brief 43 PR 5: the CRM seller card(s) from find_seller ([] when none).
+      sellerCards,
       // Brief 27.0 — report attachments (server-captured). null when the turn
       // produced no report/fragment.
       attachedReport:   serverAttachedReport,
