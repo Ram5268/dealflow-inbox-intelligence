@@ -227,6 +227,9 @@ function partiesFor(match: string, before: string, d: DeedContext): Array<Set<st
   return [d.owner, d.seller]
 }
 
+// "<Name> bought / purchased / acquired …" (regexGuard's second owner pattern).
+const BUYER_FIRST = /^(?!(?:owned|owner|purchased|bought|sold|acquired|transferred|previous)\b)[A-Z][^ ]{0,40}(?: [A-Z][^ ]{0,40}){0,3} (?:bought|purchased|acquired) /
+
 // The verb words of an owner claim, so what's left is the name it gives.
 const OWNER_VERB_WORDS = /\b(?:owned|owner|is|purchased|bought|sold|it|to|acquired|transferred|from|previous|by|them|the|was|were|are|listed|recorded|shown|as|named|being|still|now|currently)\b/gi
 
@@ -245,8 +248,11 @@ const OWNER_VERB_WORDS = /\b(?:owned|owner|is|purchased|bought|sold|it|to|acquir
 function bindDeedFlag(f: RegexFlag, d: DeedContext | null): boolean {
   if (!d || !d.hasDeeds) return false
   if (f.pattern !== 'ownership_assertion' && !d.hasSale) return false
-  // The name is in the match: after the verb, or before "bought it".
-  const named = f.pattern === 'ownership_assertion' ? nameTokens(f.match.replace(OWNER_VERB_WORDS, ' ')) : []
+  // The name is in the match: after the verb, or before "bought it". Brief 43
+  // PR 10 review r2: in "<Name> bought the 3-family", what was bought isn't
+  // part of the name.
+  const nameText = BUYER_FIRST.test(f.match) ? f.match.replace(/ (?:bought|purchased|acquired) .*$/, '') : f.match
+  const named = f.pattern === 'ownership_assertion' ? nameTokens(nameText.replace(OWNER_VERB_WORDS, ' ')) : []
   const spots = occurrences(d.text, straightApostrophes(f.match))
   if (!spots || spots.length === 0) return false
   return spots.every(at => {

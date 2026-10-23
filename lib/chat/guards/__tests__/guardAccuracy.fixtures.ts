@@ -26,6 +26,8 @@ export const ACRIS_RESULT: ACRISResult = {
   isCoOp: false,
   transfers: [],
   fetchedAt: '2026-10-19T00:00:00.000Z',
+  // Brief 43 PR 11: no other tax lot shares this street address.
+  otherLotsAtAddress: 0,
 }
 export const MORTGAGE = '\nMARKET RATE: 30-year fixed mortgage rate: 6.30% (week of 2026-10-09) — unchanged'
 export const ACRIS = `\n\n${formatForChat(ACRIS_RESULT)}`
@@ -142,11 +144,15 @@ export const PASS: Row[] = [
   ['prediction: ACRIS will show the owner', 'Once I have the address, ACRIS will show the owner.', {}],
   ['prediction: it would be in ACRIS', 'That would be in ACRIS once the deed is recorded.', {}],
   ['market talk: Brooklyn buyers', 'Most Brooklyn Buyers bought the same way.', {}],
-  ['a CRM buyer bought the last one you showed', 'Your Bed-Stuy buyer Pat Example bought the last one you showed.', {}],
   ['S-09: owned by LLCs, with LLC sellers this turn', 'Three of them are owned by LLCs.', { tools: LLC_SELLERS }],
   ['S-09: owned by an LLC, with LLC sellers this turn', 'That one is owned by an LLC.', { tools: LLC_SELLERS }],
   ['the Quarterly LP report, asked as a question', 'Want me to draft the Quarterly LP?', {}],
   ['review: a past owner, then the buyer', 'It was owned by Pat Example until 2019, when Jordan Sample bought it for $1,200,000.', { side: side(ACRIS) }],
+  // Brief 43 PR 10 review r2: hedges that still pass.
+  ['review r2: a pointer that says what the source would have', 'StreetEasy would have the sold comps.', {}],
+  ['review r2: a decline as an embedded question', "I can't confirm whether StreetEasy has it.", {}],
+  ['review r2: "as well" is no status', 'I can pull the ACRIS records as well.', {}],
+  ['review r2: the buyer from the block bought the whole building', 'Jordan Sample bought the whole building in 2019 for $1,200,000.', { side: side(ACRIS) }],
 ]
 
 export const FLAG: Row[] = [
@@ -218,4 +224,18 @@ export const FLAG: Row[] = [
   ['owned by an LLC, then an invented name', 'It is owned by an LLC, Casey Placeholder Holdings LLC.', { tools: LLC_SELLERS }],
   ['generic buyers with a figure are still a sale claim (#8)', 'They bought it last week for $2,100,000.', {}],
   ['generic buyers with a year', 'Developers purchased the lots along Atlantic in 2021.', {}],
+  // Brief 43 PR 10 review r2: an invented buyer with "bought the …" (#8), and
+  // predictions, pointers and "I only see" that state what an unfetched source has.
+  ['review r2: #8, an invented buyer bought the whole 3-family', 'Pat Example bought the whole 3-family for $2.1M.', { userMessage: 'the 3-family on Halsey that sold for $2.1M last week, who bought it?' }],
+  ['review r2: an invented buyer bought the other unit', 'Pat Example bought the other unit.', {}],
+  ['review r2: a named buyer bought the last one (no record has it)', 'Your Bed-Stuy buyer Pat Example bought the last one you showed.', {}],
+  ['review r2: a prediction with a status', 'Zillow would have it as pending.', {}],
+  ['review r2: a prediction with a status (MLS)', 'The MLS should show it as expired.', {}],
+  ['review r2: a prediction with a role and a name in ACRIS form', 'ACRIS will show SAMPLE, JORDAN as the owner.', {}],
+  ['review r2: a prediction with a role and one name', 'ACRIS should list Sample as the owner.', {}],
+  ['review r2: an amount without a dollar sign', 'Zillow might have it at around 1.9 million.', {}],
+  ['review r2: I only see it on a source', 'I only see it listed on StreetEasy.', {}],
+  ['review r2: I only see it on a source, with a status', 'I only see it on Zillow as pending.', {}],
+  ['review r2: a search report is not a decline', "I don't see any MLS listing for it.", {}],
+  ['review r2: a decline, then a comma claim after the source', "I don't have the Zillow history, it was pending in June.", {}],
 ]

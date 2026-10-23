@@ -87,8 +87,10 @@ const PATTERNS: NamedPattern[] = [
   },
   {
     name: 'ownership_assertion',
-    // Not "bought the same way" or "bought the last one you showed".
-    regex: /\b[A-Z][A-Za-z'-]{1,30}(?: [A-Z][A-Za-z'-]{1,30}){0,3} (?:bought|purchased|acquired) (?:it|them|the (?!(?:same|most|rest|first|last|next|other|whole|best|worst|one)\b)[\w-]{1,20})\b/g,
+    // Not "bought the same way" or "bought the most units". Brief 43 PR 10
+    // review r2: "Pat Example bought the whole 3-family" or "…the other unit"
+    // still names a buyer (DRIFT_SCRIPT #8).
+    regex: /\b[A-Z][A-Za-z'-]{1,30}(?: [A-Z][A-Za-z'-]{1,30}){0,3} (?:bought|purchased|acquired) (?:it|them|the (?!(?:same|most)\b)[\w-]{1,20})\b/g,
   },
   {
     // Historical transaction claims.
@@ -176,8 +178,9 @@ const DECLINE: RegExp[] = [
   // see what's in your inbox, not the MLS". Not "I don't see it on StreetEasy",
   // which reports a search.
   /\bwithout\s{1,3}(?:[\w.-]{1,30}\s{1,3}){0,2}?(?:access|a\s{1,3}connection|a\s{1,3}feed|a\s{1,3}login)\b/i,
-  new RegExp(`\\b(?:don't|do\\s{1,3}not)\\s{1,3}(?:(?:have|get)\\s{1,3}(?:the\\s{1,3}|any\\s{1,3})?|see\\s{1,3}(?:the|any)\\s{1,3})(?=(?:${SOURCE_NAMES})\\b)`, 'i'),
-  /\bI\s{1,3}only\s{1,3}(?:see|have|read|get)\b/i,
+  new RegExp(`\\b(?:don't|do\\s{1,3}not)\\s{1,3}(?:(?:have|get)\\s{1,3}(?:the\\s{1,3}|any\\s{1,3})?|see\\s{1,3}the\\s{1,3})(?=(?:${SOURCE_NAMES})\\b(?!\\s{1,3}(?:listings?|records?|entry|entries|page|history)\\b))`, 'i'),
+  // Brief 43 PR 10 review r2: about what Drift reads, not "I only see it on Zillow as pending".
+  /\bI\s{1,3}only\s{1,3}(?:see|have|read|get)\s{1,3}(?:what\b|your\b|the\s{1,3}(?:inbox|listings|records|cards|data|emails)\b|(?:listings|records|cards|data|emails)\b)/i,
   /\b(?:isn't|is\s{1,3}not|aren't|are\s{1,3}not)\s{1,3}(?:something|anything|a\s{1,3}source|sources?|one)\s{1,3}I\s{1,3}(?:can|have)\b/i,
   /\b(?:isn't|is\s{1,3}not|aren't|are\s{1,3}not)\s{1,3}(?:connected|hooked\s{1,3}up|linked|available\s{1,3}to\s{1,3}me)\b/i,
   /\boutside\s{1,3}what\s{1,3}I\s{1,3}can\b/i,
@@ -194,6 +197,18 @@ const REFERRAL = /\b(?:point(?:ing)?\s{1,3}you\s{1,3}(?:to|toward|towards)|I(?:'
 const FUTURE = /\b(?:will|would|should|could|may|might)\s{1,3}(?:(?:only|also|then|probably)\s{1,3})?(?:show|have|list|be\s{1,3}in|know|include|reflect)\b/i
 const MODAL_VERB = /\b(?:will|would|should|could|may|might|can|can't|cannot|won't|wouldn't|couldn't|don't|doesn't|didn't)\s{1,3}(?:(?:only|also|then|probably)\s{1,3})?(?:show|list|have|say|report|indicate|record|confirm|note|put|give)\b/gi
 const NAME_PAIR = /\b[A-Z][a-z'-]{1,30}\s{1,3}[A-Z][a-z'-]{1,30}\b/
+// Brief 43 PR 10 review r2: what a hedge, a prediction or a pointer must not
+// carry after the source [engineering precaution]:
+// - a status or role stated with "as": "Zillow would have it as pending", "the
+//   MLS should show it as expired", "ACRIS will show SAMPLE, JORDAN as the owner";
+// - a new claim after a comma: "I don't have the Zillow history, it was pending";
+// - an amount written without "$": "StreetEasy would have it around 1.9 million".
+const STATED_AS = /^\s{1,3}as\s{1,3}(?!well\b|a\s{1,3}source\b|far\b|such\b|much\b|I\b|you\b)\w|\b(?:it|them)\s{1,3}as\s{1,3}\w|\bas\s{1,3}(?:the\s{1,3})?(?:current\s{1,3}|deed\s{1,3}|new\s{1,3})?(?:owner|buyer|seller)s?\b/i
+const ROLE_NAMED = /\b(?:[Oo]wner|[Bb]uyer|[Ss]eller)s?\s{1,3}(?:as|is|was)\s{1,3}[A-Z0-9]/
+const AFTER_CLAIM = /,\s{1,4}(?:it|it's|they|they're|this|that|the\s{1,3}(?:listing|house|home|building|property|unit|place))\s{0,3}(?:is|was|were|are|went|has|had|sold|closed|expired|shows?|showed|lists|listed|asks|asked|pending|active)\b/i
+const BARE_AMOUNT = /\b\d{1,3}(?:\.\d{1,2})?\s?(?:million|M|K|thousand)\b|\b\d{1,3}(?:,\d{3}){1,3}\b/
+// "I can't confirm whether StreetEasy has it": an embedded question.
+const WHETHER_BEFORE = /\b(?:whether|if)\s{1,3}(?:the\s{1,3})?(?:live\s{1,3})?$/i
 // Brief 43 PR 10 review: a new subject after a comma ends what a hedge governs:
 // "I can't confirm the price, it's active on StreetEasy" cites StreetEasy.
 const NEW_SUBJECT = /,\s{1,4}(?:it|it's|its|they|they're|there's|that's|this|he|she|the\s{1,3}(?:listing|house|home|building|property|unit|place))\b/i
@@ -226,7 +241,9 @@ function sourceNotCited(text: string, start: number, end: number, breaks: Breaks
   const clause = c.before + text.slice(start, end) + c.after
   // "ACRIS will show the owner" predicts and "I can't confirm" declines;
   // neither says what the source shows.
-  if (FIGURE.test(clause) || CITED_FROM.test(c.before) || SOURCE_SAYS.test(c.after.replace(MODAL_VERB, ' '))) return false
+  if (FIGURE.test(clause) || BARE_AMOUNT.test(clause) || CITED_FROM.test(c.before)) return false
+  if (STATED_AS.test(c.after) || ROLE_NAMED.test(c.after) || AFTER_CLAIM.test(c.after)) return false
+  if (!WHETHER_BEFORE.test(c.before) && SOURCE_SAYS.test(c.after.replace(MODAL_VERB, ' '))) return false
   if (FUTURE.test(clause) && NAME_PAIR.test(c.after)) return false
   const hedgeAt = firstIndex([...DECLINE, OFFER, REFERRAL, FUTURE], clause)
   if (hedgeAt < 0) return c.question && !CLAIM_BEFORE.test(c.before)
