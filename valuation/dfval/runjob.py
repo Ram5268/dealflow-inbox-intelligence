@@ -87,6 +87,14 @@ def match_targets(sellers: pd.DataFrame, pluto: pd.DataFrame, ix: AddressIndex) 
     return pd.DataFrame(out)
 
 
+def lead_unit_count(targets: dict) -> int | None:
+    """Brief 49 PR 5: how many sellers' unit numbers DealFlow took from the lead's own fields. A
+    count, never a value. Anything but a whole number >= 0 (an older DealFlow sends none) counts as
+    missing, so a report-only field can't stop the run."""
+    n = targets.get("unitsFromLeadFields")
+    return n if isinstance(n, int) and not isinstance(n, bool) and n >= 0 else None
+
+
 def gate_checks(m_all: float, m_top: float, cover: float, valued: int) -> tuple[bool, list[dict]]:
     vals = {"typical_miss_all": m_all, "typical_miss_top8_2to4": m_top, "range_coverage": cover, "sellers_valued": valued}
     checks = []
@@ -110,7 +118,8 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
     for c in ["contactId", "address", "city", "state", "zip", "unitCount", "buildingSqft", "cachedBbl"]:
         if c not in sellers:
             sellers[c] = None
-    log(f"targets: {len(sellers):,} CRM sellers")
+    units_from_lead = lead_unit_count(targets)
+    log(f"targets: {len(sellers):,} CRM sellers" + (f"; {units_from_lead:,} with a unit number from the lead's own fields" if units_from_lead is not None else ""))
     inp = Inputs(raw, screen="name-free", log=log)
     asof = inp.end
     data_through = asof - pd.Timedelta(days=1)
@@ -203,6 +212,8 @@ def run(data_dir: str, out_dir: str, dry_run: bool = True, targets: dict | None 
         "training_sales": int(tr.sum()),
         "screen_min_price_to_market_value": config.MIN_PRICE_TO_MARKET_VALUE,
         "sales_gap_months": inp.sales_info.get("gap_months"),
+        "sales_gap_rebuilt_from_deeds": inp.sales_info.get("gap_sales_rebuilt"),  # Brief 49 PR 6
+        "units_from_lead_fields": units_from_lead,  # Brief 49 PR 5
         "value_vs_city": {"sellers_with_city_value": int(len(ratio)), "over_3x": int((ratio > 3).sum()), "under_one_third": int((ratio < 1 / 3).sum()),
                           "median_ratio": round(float(np.median(ratio)), 3) if len(ratio) else None},
         "seconds": round(time.time() - t0),

@@ -1,5 +1,6 @@
 'use client'
 
+import PushDevices from '@/components/settings/PushDevices'
 import { useState, useEffect } from 'react'
 import TopNav from '@/components/TopNav'
 import { digestScheduleLabel } from '@/lib/time/newYork'
@@ -232,6 +233,11 @@ export default function SettingsPage() {
           ) : (
             <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>Loading…</p>
           )}
+        </Section>
+
+        {/* Brief 48 (PR 5): the devices that get notifications, each with Remove. */}
+        <Section title="Notification Devices">
+          <PushDevices />
         </Section>
 
         {/* Outlook is paused (Brief 41) unless GRAPH_ENABLED is on: then no connect, token or preview controls. */}

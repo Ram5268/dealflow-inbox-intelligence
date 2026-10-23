@@ -7,27 +7,30 @@ import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { graphEnabled } from '@/lib/graphAccess'
-import { recentHistoryQuery, oldestFirst, startAtUserTurn } from '@/lib/chat/history'
+import { recentHistoryQuery, oldestFirst, historyForModel } from '@/lib/chat/history'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
+import { lookupQuestion } from '@/lib/chat/context/lookupQuestion'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
 import { searchParties, type SearchPartiesInput } from '@/lib/chat/tools/searchParties'
-import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, FIND_SELLER_TOOL, COUNT_SELLERS_TOOL } from '@/lib/chat/tools/schemas'
+import { SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, FIND_SELLER_TOOL, COUNT_SELLERS_TOOL, GET_SELLER_MATCHES_TOOL, COUNT_MATCHES_TOOL, COUNT_SELLERS_WITH_BUYERS_TOOL } from '@/lib/chat/tools/schemas'
 import { CRM_SELLER_TOOL_NAMES, newCrmSellerTurn, runCrmSellerTool } from '@/lib/chat/tools/crmSellerTools'
 import type { SellerCard } from '@/lib/chat/sellerCard'
+import type { SellerMatchesCard } from '@/lib/chat/sellerMatchesCard'
 import { getTemplate } from '@/lib/reports/templates'
 import { getGenerator, type SectionResult } from '@/lib/reports/generators'
+import { unresolvedBuyer, shownIdsInChat } from '@/lib/chat/tools/reportBuyerGate'
 import { scanForStructuralHallucinations } from '@/lib/chat/guards/regexGuard'
 import { verifyResponse, type ToolResultForVerify } from '@/lib/chat/guards/llmVerifier'
-import { buildGroundingCorpus, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
+import { buildGuardGrounding, filterToolBoundFlags } from '@/lib/chat/guards/toolBinding'
 import { logGuardFireEvent, timedOutGuardInput, streetEasyLog } from '@/lib/chat/guards/instrumentation'
 import { factCheckNeeded } from '@/lib/chat/guards/factFree'
 import { newUsageTally, addUsage, turnCostUsd, usageRecord, countingClient } from '@/lib/chat/turnCost'
 import { cacheLastToolResult } from '@/lib/chat/promptCache'
 import { createTurnBudget, deadlineSignal, withTimeout, isTimedOut, LOOKUP_TIMEOUT_MS, TURN_SOFT_MS, TURN_HARD_MS, TURN_CEILING_MS, TIMED_OUT_REPLY } from '@/lib/chat/turnBudget'
-import { buildSystemBlocks, RYAN_MD } from '@/lib/chat/systemBlocks'
+import { buildSystemBlocks } from '@/lib/chat/systemBlocks'
 import { SYSTEM_PROMPT, VOICE_INSTRUCTION } from '@/lib/chat/systemPrompt'
 import {
   MAX_GUARD_RETRIES,
@@ -41,8 +44,10 @@ import {
   type GuardTelemetry,
 } from '@/lib/chat/guards/retry'
 import { DRAFT_FIELD_SCHEMA, buildDraftContext, draftAsText, enforceDraftPrivacy } from '@/lib/chat/guards/draftPrivacy'
-import { encodeStoredReply, readStoredReply, storedReplyForModel } from '@/lib/chat/storedReply'
+import { encodeStoredReply, readStoredReply } from '@/lib/chat/storedReply'
 import { normalizeDraft } from '@/lib/chat/draft'
+import { cleanReplyText } from '@/lib/chat/replyText'
+import { pickShownCards, orderShownDeals, footerFromTurn, reportBuyerId, SHOWN_NOTE_ECHO } from '@/lib/chat/shownFooter'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -63,7 +68,8 @@ export const maxDuration = 60
 // claim could reference (address, price, beds, category, neighborhood, and for
 // parties name/phone/title).
 function trimCardForGuard(card: Record<string, unknown>): Record<string, unknown> {
-  const keep = ['id', 'category', 'title', 'address', 'neighborhood', 'beds', 'price', 'priceRange', 'name', 'phone', 'role', 'units', 'propertyType', 'squareFeet', 'availabilityDate', 'sourceBrokerage'] as const
+  // Brief 43 PR 9: a party's agent and buyer type (Q41) are facts Drift may cite.
+  const keep = ['id', 'category', 'title', 'address', 'neighborhood', 'beds', 'price', 'priceRange', 'name', 'phone', 'role', 'units', 'propertyType', 'squareFeet', 'availabilityDate', 'sourceBrokerage', 'agentName', 'archetype'] as const
   const out: Record<string, unknown> = {}
   for (const k of keep) {
     if (card[k] !== undefined && card[k] !== null) out[k] = card[k]
@@ -138,6 +144,10 @@ export async function POST(req: NextRequest) {
 
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
+    // Brief 43 PR 13 (Q22): the side lookups read Ryan's own question only, not
+    // a long paste or an attached file (lib/chat/context/lookupQuestion.ts).
+    const lookup = lookupQuestion(userMessage)
+    const lookupText = lookup.text.toLowerCase()
 
     // ── Brief 3.0: lightweight parse drives the side-channels only ───────────
     // The lossy parseQuery → rigid-SQL → 25-cap card retrieval (runRetrieval) is
@@ -147,7 +157,7 @@ export async function POST(req: NextRequest) {
     // orthogonal features preserved from the old pipeline.
     let parsed: ParsedQuery
     try {
-      parsed = await parseQuery(queryText)
+      parsed = await parseQuery(lookupText, { modelFallback: !lookup.pasted })
     } catch (err) {
       console.error('[chat] parseQuery error (side-channels degrade gracefully):', err)
       parsed = {
@@ -185,6 +195,8 @@ export async function POST(req: NextRequest) {
           organizationId,
           sessionId: confirmSession.id,
           userMessage,
+          // Brief 43 PR 14 (F9): when the proposal was made, for its expiry check.
+          proposedAt: lastAssistantMsg?.createdAt ?? null,
           pendingEvent: {
             subject:  lastPendingEvent.subject,
             startISO: lastPendingEvent.startISO,
@@ -216,14 +228,14 @@ export async function POST(req: NextRequest) {
             touchSession:   (id) => prisma.chatSession.update({ where: { id }, data: { updatedAt: new Date() } }),
           },
         })
-        return NextResponse.json({ sessionId: confirmSession.id, response: result.text, deals: [], suggestions: [] })
+        return NextResponse.json({ sessionId: confirmSession.id, response: result.text, deals: [] })
       } catch (err) {
         // Brief 41 (M17): never fall through to the AI after a failed confirm (it
         // could claim the event was booked). runCalendarConfirm only throws
         // before the calendar write (after it, failures are logged and the
         // "Done" reply still goes out), so nothing was booked.
         console.error('[DealFlow] Calendar confirm error:', err)
-        return NextResponse.json({ sessionId: confirmSession.id, response: CALENDAR_CONFIRM_FAILED, deals: [], suggestions: [] })
+        return NextResponse.json({ sessionId: confirmSession.id, response: CALENDAR_CONFIRM_FAILED, deals: [] })
       }
     }
 
@@ -232,9 +244,13 @@ export async function POST(req: NextRequest) {
     // Each fetcher has its own try/catch; per-fetcher failures are isolated.
     const composed = await composeContext({
       parsed,
-      userMessage,
-      queryText,
+      userMessage: lookup.text,
+      queryText: lookupText,
       isConfirmMessage,
+      pastedText: lookup.pasted,
+      // Reviewer patch (PR 13 r1, with PR 11): on a paste turn, "who owns this
+      // one?" above the paste points at the pasted text, not the message before.
+      previousUserMessage: lookup.pasted ? userMessage : history.filter(m => m.role === 'user').slice(-1)[0]?.content ?? null,
     })
 
     // Cards are hydrated AFTER the tool_use loop (from the ids Sonnet's tools
@@ -294,29 +310,29 @@ export async function POST(req: NextRequest) {
         properties: {
           response: {
             type: 'string',
-            description: 'Plain text response. No markdown, no bold, no italics, no bullet dashes, no em-dashes.',
+            description: 'Plain text response. No markdown, no bold, no italics, no bullet dashes, no em-dashes, no exclamation marks.',
           },
-          suggestions: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Exactly 2 specific follow-up questions.',
-          },
-          pendingEvent: {
-            type: 'object',
-            description: "Calendar event proposal awaiting Ryan's confirm. Omit entirely on non-calendar turns.",
-            properties: {
-              subject:  { type: 'string' },
-              startISO: { type: 'string', description: 'ISO 8601 datetime' },
-              endISO:   { type: 'string', description: 'Optional ISO 8601 datetime; defaults to startISO + 30min' },
-              location: { type: 'string' },
-              notes:    { type: 'string' },
+          // Brief 43 PR 14: no follow-up suggestions (D7, a Brief 42 default),
+          // and a calendar proposal only while Outlook is on (D8, Q33).
+          ...(graphEnabled() ? {
+            pendingEvent: {
+              type: 'object',
+              description: "Calendar event proposal awaiting Ryan's confirm. Omit entirely on non-calendar turns.",
+              properties: {
+                subject:  { type: 'string' },
+                startISO: { type: 'string', description: 'ISO 8601 datetime' },
+                endISO:   { type: 'string', description: 'Optional ISO 8601 datetime; defaults to startISO + 30min' },
+                location: { type: 'string' },
+                notes:    { type: 'string' },
+              },
+              required: ['subject', 'startISO'],
             },
-            required: ['subject', 'startISO'],
-          },
+          } : {}),
           referencedDeals: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Exact card ids you mentioned (e.g. SEED_SALE_06). Traceability only — does not gate which cards Ryan sees.',
+            // Brief 43 PR 8 (Q14): these are the cards the page shows, in this order.
+            description: 'The ids of every card your reply tells Ryan about, in the order you bring them up (e.g. SEED_SALE_06), including ones you only count: "Two sales; the stronger is X" lists both, X first. Ryan sees only these cards, in this order, so "the second one" is the second card here. Leave it empty only when your reply is about no card.',
           },
           // Brief 27.0 — report attachments. Fill attachedReport ONLY on a turn you
           // just called generate_report; fill attachedFragment ONLY on a turn you
@@ -349,31 +365,34 @@ export async function POST(req: NextRequest) {
           // its rules are in the field's description (lib/chat/guards/draftPrivacy.ts).
           draft: DRAFT_FIELD_SCHEMA,
         },
-        required: ['response', 'suggestions', 'referencedDeals'],
+        required: ['response', 'referencedDeals'],
       } as Anthropic.Messages.Tool.InputSchema,
     }
 
     // Brief 41: the model's conversation must start with a user turn.
     // Brief 43 PR 3 (review r1): a reply stored as JSON (a draft) goes to the model
     // as its text plus the draft, the way the draft rewrite shows it, not as JSON.
-    const anthropicHistory: Anthropic.Messages.MessageParam[] = startAtUserTurn(history).map(m => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.role === 'assistant' ? storedReplyForModel(m.content) : m.content,
-    }))
+    // Brief 43 PR 8 (Q14): and the note of the cards, buyer and report it showed.
+    const anthropicHistory: Anthropic.Messages.MessageParam[] = historyForModel(history)
+    // Brief 43 PR 8 x PR 9 (#16): the buyers and cards earlier replies showed.
+    const shownInChat = shownIdsInChat(history)
 
     // ── Sonnet 4.6 tool_use loop ─────────────────────────────────────────────
     // tool_choice='any' forces a tool call every turn, so the loop deterministically
     // terminates on drift_response (Sonnet's structured final reply) rather than a
-    // free-text end_turn. This preserves suggestions + calendar pendingEvent.
+    // free-text end_turn. This preserves the calendar pendingEvent.
     type AttachedReport = { reportId: string; templateId: string; templateName: string; subject: string; sectionCount: number; matchCount?: number }
     type AttachedFragment = { templateId: string; sectionKey: string; title: string; content: SectionResult['content']; sources: SectionResult['sources'] }
-    type AiResult = { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[]; attachedReport?: AttachedReport; attachedFragment?: AttachedFragment }
-    const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, FIND_SELLER_TOOL, COUNT_SELLERS_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, responseTool]
+    type AiResult = { response: string; pendingEvent?: Record<string, string> | null; referencedDeals?: string[]; attachedReport?: AttachedReport; attachedFragment?: AttachedFragment }
+    const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, FIND_SELLER_TOOL, COUNT_SELLERS_TOOL, GET_SELLER_MATCHES_TOOL, COUNT_MATCHES_TOOL, COUNT_SELLERS_WITH_BUYERS_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, responseTool]
     // Brief 43 PR 5 (D11 [Ryan, 2026-10-18]): the one named CRM seller find_seller
     // returned this turn, as structured cards for the page (name, phone, address,
     // Open in CRM link). Never put in Drift's text: any URL there trips the guard (Q19).
     const sellerCards: SellerCard[] = []
     const crmSellerTurn = newCrmSellerTurn() // one seller contact per message (crmSellerTools.ts)
+    // Brief 43 PR 6 (N1): the one named seller's buyers get_seller_matches returned,
+    // as a card for the page (each buyer with its /matches link, kept out of Drift's text).
+    const sellerMatches: SellerMatchesCard[] = []
     // Brief 27.0 — server-authoritative capture of the report/fragment produced
     // this turn. We persist + return THESE (not whatever Sonnet echoes) so ids
     // are always correct and the attachment survives guard rewrites.
@@ -425,6 +444,11 @@ export async function POST(req: NextRequest) {
       const generator = getGenerator(templateId)
       if (!generator) return { error: `No generator registered for ${templateId}` }
       const buyerId = typeof params.buyerId === 'string' ? params.buyerId : null
+      // Brief 43 PR 9 (Q15): only for a buyer a search_parties call returned
+      // earlier this turn, or one DealFlow showed earlier in this chat (PR 8's
+      // Shown notes); otherwise a tool error: search first, or ask Ryan.
+      const unresolved = unresolvedBuyer(buyerId, allToolCalls, shownInChat)
+      if (unresolved) return unresolved
 
       if (tu.name === 'generate_report') {
         const generated = await generator.full({ ...params, prisma, anthropic: reportAnthropic })
@@ -547,6 +571,7 @@ export async function POST(req: NextRequest) {
               allToolCalls.push({ name: tu.name, input: tu.input, totalMatched: run.totalMatched, cardIds: run.card ? [run.card.id] : [] })
               toolResultsForGuard.push({ name: tu.name, input: tu.input, output: run.output })
               if (run.card && !sellerCards.some(c => c.id === run.card!.id)) sellerCards.push(run.card)
+              if (run.matchesCard && !sellerMatches.some(c => c.seller.id === run.matchesCard!.seller.id)) sellerMatches.push(run.matchesCard)
               return { type: 'tool_result' as const, tool_use_id: tu.id, content: JSON.stringify(run.forModel) }
             } catch (e) {
               console.error(`[chat] tool ${tu.name} failed:`, e)
@@ -608,7 +633,7 @@ export async function POST(req: NextRequest) {
       const forcedUse = forced?.content.find(
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
       )
-      if (forced) aiResult = (forcedUse?.input as AiResult) ?? { response: 'Sorry, I had trouble pulling that together. Try rephrasing?', suggestions: [], referencedDeals: [] }
+      if (forced) aiResult = (forcedUse?.input as AiResult) ?? { response: 'Sorry, I had trouble pulling that together. Try rephrasing?', referencedDeals: [] }
     }
 
     // ── Brief 43 PR 4 (Q4): out of time before Drift had a reply ──────────────
@@ -625,10 +650,18 @@ export async function POST(req: NextRequest) {
       if (serverAttachedReport || serverAttachedFragment || creatingSession) {
         const reportSession = await ensureSession()
         const storedUserMsg = files.length > 0 ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]` : userMessage
+        // Brief 43 PR 8 (review r1): the reply keeps the note of the report it saved
+        // (its buyer id and report id), so "just the near-misses for that buyer"
+        // keeps the same buyer after a slow report (#15, #16).
+        const timedOutShown = footerFromTurn({
+          buyerId:  reportBuyerId(toolResultsForGuard),
+          reportId: (serverAttachedReport as AttachedReport | null)?.reportId ?? null,
+        })
         await prisma.chatMessage.create({ data: { organizationId, sessionId: reportSession.id, role: 'user', content: storedUserMsg } })
         await prisma.chatMessage.create({
           data: {
-            organizationId, sessionId: reportSession.id, role: 'assistant', content: TIMED_OUT_REPLY,
+            organizationId, sessionId: reportSession.id, role: 'assistant',
+            content: encodeStoredReply({ response: TIMED_OUT_REPLY, shown: timedOutShown }),
             attachedReport:   (serverAttachedReport ?? undefined) as unknown as object | undefined,
             attachedFragment: (serverAttachedFragment ?? undefined) as unknown as object | undefined,
           },
@@ -663,7 +696,7 @@ export async function POST(req: NextRequest) {
       turnDeadline.clear()
       return NextResponse.json({
         sessionId: timedOutSessionId, interactionId: timedOutInteractionId, response: TIMED_OUT_REPLY,
-        deals: [], suggestions: [], seListings: [], seFilterUrl: null,
+        deals: [], seListings: [], seFilterUrl: null,
         attachedReport: serverAttachedReport, attachedFragment: serverAttachedFragment, draft: null,
       })
     }
@@ -698,7 +731,6 @@ export async function POST(req: NextRequest) {
     const guardHistory: GuardAttempt[] = []
     let fellbackToCanned = false
     let guardFinalAttempt = 0
-    let latestSuggestions: string[] | undefined
     let latestReferenced: string[] | undefined
 
     // Brief 11.0 Fix #1 — grounding corpus for tool-output binding. A structural
@@ -712,12 +744,13 @@ export async function POST(req: NextRequest) {
     // isn't flagged as a hallucination and forced to the canned fallback.
     // Extracted once here so the same text is reused across both guard calls and
     // every retry-loop iteration below.
-    // Brief 29.0 — RYAN_MD is always-on grounded evidence too (same principle):
-    // vocabulary Sonnet draws from the personal glossary ("hot matches",
-    // "off-market", neighborhood shorthand) must not be flagged as hallucinated.
-    // Fold it in ahead of the per-turn dynamic block.
-    const sideChannelText = [RYAN_MD, dynamicSystemBlock].filter(Boolean).join('\n\n') || null
-    const groundingCorpus = buildGroundingCorpus(toolResultsForGuard, priorDealCards, sideChannelText)
+    // Brief 29.0 folded RYAN_MD in here too. Brief 43 PR 10 (Q17) took it out of
+    // the regex guard's grounding, and Brief 43 PR 15 (Q31) out of the
+    // fact-check: RYAN_MD names ACRIS, DOB and StreetEasy, so every invented
+    // "per ACRIS" used to look grounded. Both checks now read this turn's tool
+    // results and side-lookup blocks; deed facts bind to this turn's ACRIS block
+    // (toolBinding.ts) [engineering precaution].
+    const groundingCorpus = buildGuardGrounding(toolResultsForGuard, priorDealCards, dynamicSystemBlock || null)
 
     if (guardApplies) {
       let attempt = 0
@@ -727,6 +760,7 @@ export async function POST(req: NextRequest) {
           // "Done" after a send request ("send it") as a claim.
           scanForStructuralHallucinations(currentResponse, { userMessage }),
           groundingCorpus,
+          currentResponse,
         )
         // Brief 43 PR 2: a repeated action claim gets NEVER_SENT_REPLY whatever
         // the fact-check says, so skip that paid call. Brief 43 PR 3: the
@@ -755,6 +789,9 @@ export async function POST(req: NextRequest) {
           ? skippedVerification()
           : checked && !isTimedOut(checked) ? checked : { isGrounded: true, flags: [], costUsd: 0, latencyMs: 0 }
         guardHistory.push({ attempt, regexFlags, verifierFlags: verifier.flags, ...(factFree ? { verifierSkipped: 'fact_free' as const } : {}), verifierCost: verifier.costUsd })
+        // Brief 43 PR 10 (Q32): a fact-check that failed or answered garbage
+        // accepts the reply (the regex check above still ran); log it here.
+        if (verifier.error) guardHistory[guardHistory.length - 1].verifierError = verifier.error
         if (regexFlags.length === 0 && verifier.isGrounded) break
 
         attempt++
@@ -806,7 +843,6 @@ export async function POST(req: NextRequest) {
         if (retryResult) {
           currentResponse   = retryResult.response ?? currentResponse
           currentDraft      = (retryResult as { draft?: unknown }).draft ?? currentDraft
-          latestSuggestions = retryResult.suggestions ?? latestSuggestions
           latestReferenced  = retryResult.referencedDeals ?? latestReferenced
         }
       }
@@ -817,7 +853,6 @@ export async function POST(req: NextRequest) {
     aiResult = {
       ...aiResult,
       response:        currentResponse,
-      suggestions:     latestSuggestions ?? aiResult.suggestions,
       referencedDeals: latestReferenced ?? aiResult.referencedDeals,
     }
 
@@ -894,10 +929,9 @@ export async function POST(req: NextRequest) {
     const draft = draftResult.draft
     aiResult = { ...aiResult, response: draftResult.response }
 
-    const cleanResponse = (aiResult.response ?? '')
-      .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
-      .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
-      .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
+    // Brief 43 PR 14 (Q38): markdown, stray deal tags, em-dashes and "!" out (lib/chat/replyText.ts).
+    // Brief 43 PR 8: never Drift's copy of a Shown note; stripped first so no stray comma is left.
+    const cleanResponse = cleanReplyText((aiResult.response ?? '').replace(SHOWN_NOTE_ECHO, ''))
 
     // ── Hydrate the cards Sonnet's tools returned into full rows for the UI ──
     // Only ExtractedOpportunity-backed cards render as `deals`. CRM buyers from
@@ -907,15 +941,20 @@ export async function POST(req: NextRequest) {
     const hydrated = oppCardIds.length > 0
       ? await prisma.extractedOpportunity.findMany({ where: { id: { in: oppCardIds } }, include: oppIncludeForCards })
       : []
+    // Brief 43 PR 8 (Q14): the page shows the cards Drift named, in its order, so
+    // "the second one" is the second card Ryan sees. A reply that named none shows
+    // every card found, best match first, as before (lib/chat/shownFooter.ts).
+    // Review r1: only a card the page can show counts as named (a CRM contact from
+    // search_parties has none), so a reply naming only those keeps the cards found.
+    const shownPick = pickShownCards(hydrated.map(d => d.id), aiResult.referencedDeals)
     // matchScore: fractional price overlap when the model filtered by budget,
     // else the extraction confidenceScore (unknown-fit fallback, same as before).
-    const deals = hydrated
+    const deals = orderShownDeals(hydrated
       .map(d => ({
         ...d,
         matchScore: cardOverlap.has(d.id) ? (cardOverlap.get(d.id) ?? 0) : d.confidenceScore,
         streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
-      }))
-      .sort((a, b) => b.matchScore - a.matchScore)
+      })), shownPick)
 
     const storedMsg = files.length > 0
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`
@@ -924,7 +963,15 @@ export async function POST(req: NextRequest) {
     // Store pendingEvent in assistant message content as JSON so confirm flow can read it.
     // Brief 43 PR 3: a draft is stored the same way (no migration); GET reads it back.
     const pendingEvent = aiResult.pendingEvent ?? null
-    const storedAssistantContent = encodeStoredReply({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent, draft })
+    // Brief 43 PR 8 (Q14; #5, #16): and the note of what Ryan saw with this reply,
+    // for Drift's next turn: the cards in the order shown, the buyer of a report
+    // or report section, and the report id.
+    const shown = footerFromTurn({
+      deals,
+      buyerId:  reportBuyerId(toolResultsForGuard),
+      reportId: (serverAttachedReport as AttachedReport | null)?.reportId ?? null,
+    })
+    const storedAssistantContent = encodeStoredReply({ response: cleanResponse, pendingEvent, draft, shown })
 
     // Save messages to this session
     await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'user', content: storedMsg } })
@@ -936,8 +983,8 @@ export async function POST(req: NextRequest) {
         // Brief 43 PR 5: seller cards ride along in dealsJson (no migration), tagged
         // kind 'crm_seller', so a reopened chat shows the card again; the page
         // splits them back out (components/chat/sellerCardView.ts).
-        dealsJson: [...deals, ...sellerCards] as unknown as object[],
-        suggestions: (aiResult.suggestions ?? []) as unknown as string[],
+        // Brief 43 PR 6: the matches card rides along the same way, tagged kind 'seller_matches'.
+        dealsJson: [...deals, ...sellerCards, ...sellerMatches] as unknown as object[],
         // Brief 27.0 — server-captured report attachments (authoritative), so the
         // chat page can rehydrate a preview card / inline fragment in Phase 1b.
         attachedReport:   (serverAttachedReport ?? undefined) as unknown as object | undefined,
@@ -973,7 +1020,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Brief 2.5 — Drift interaction logging (non-fatal; never breaks chat) ──
-    // topCards = the cards actually shown to Ryan (already sorted by matchScore),
+    // topCards = the cards actually shown to Ryan (in the order shown; Brief 43 PR 8),
     // capped at 20. We await the insert inside try/catch so we can return the
     // interactionId for client-side click/feedback wiring, while any logging
     // failure is swallowed and chat still responds.
@@ -1023,11 +1070,12 @@ export async function POST(req: NextRequest) {
       interactionId,
       response:     cleanResponse,
       deals,
-      suggestions:  aiResult.suggestions ?? [],
       seListings:   composed.liveSeListings,
       seFilterUrl:  composed.seFilterUrl,
       // Brief 43 PR 5: the CRM seller card(s) from find_seller ([] when none).
       sellerCards,
+      // Brief 43 PR 6: the one named seller's buyers from get_seller_matches ([] when none).
+      sellerMatches,
       // Brief 27.0 — report attachments (server-captured). null when the turn
       // produced no report/fragment.
       attachedReport:   serverAttachedReport,

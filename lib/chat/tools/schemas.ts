@@ -7,6 +7,8 @@
 // Keep these in lockstep with the Zod schemas — the Zod .parse() is the runtime
 // guard, this is the model-facing contract.
 import type Anthropic from '@anthropic-ai/sdk'
+import { CREATED_AFTER_DESCRIPTION } from './createdAfter'
+import { BUYER_ARCHETYPES } from './partyFilters'
 
 // Brief 43 PR 7 (Q11-Q13, Q40; N6): "under" is a hard ceiling, an area is that
 // area, an address is that address, and building facts are on the card.
@@ -75,6 +77,8 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
         type: 'boolean',
         description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
+      // Brief 43 PR 14 (Q29, M21).
+      createdAfter: { type: 'string', description: CREATED_AFTER_DESCRIPTION },
       limit: {
         type: 'number',
         // Brief 43 PR 15 (Q31): default 20 (was 50); each card is paid for again on every later round.
@@ -93,7 +97,7 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
 export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
   name: 'generate_report',
   description:
-    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for Sarah", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for Sarah"), use generate_report_section instead. Only unlocked templates work (currently: buyer-match). For buyer-match, params must be { buyerId }, where buyerId is a BUYER_ISO or RENTER_INQUIRY opportunity id — call search_parties first to resolve a name to an id.',
+    'Generate a FULL report using a report template. Use when the user asks for a complete report ("draft me a buyer match report for [buyer]", "generate a buyer match report"). Returns a saved report id + summary metadata; report content renders to the user via a preview card. For a specific piece of a report inline in chat (e.g. "just the near-misses for [buyer]"), use generate_report_section instead. Only unlocked templates work (currently: buyer-match). For buyer-match, params must be { buyerId }, where buyerId is the id of a buyer or renter that search_parties returned in this turn, or one in the Shown note of an earlier reply in this chat; any other id is refused. Call search_parties first, and if nothing matches exactly, ask Ryan which buyer he means.',
   input_schema: {
     type: 'object',
     properties: {
@@ -101,7 +105,7 @@ export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
       params: {
         type: 'object',
         description: 'Template-specific params, e.g. { buyerId: "abc123" } for buyer-match.',
-        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties).' } },
+        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties this turn, or an earlier Shown note).' } },
       },
     },
     required: ['templateId', 'params'],
@@ -111,7 +115,7 @@ export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
 export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
   name: 'generate_report_section',
   description:
-    'Generate a SINGLE SECTION of a report template, for inline chat display. Use when the user asks about a specific piece ("what are the near-misses for Sarah", "give me the budget check on this buyer", "curated matches for the Soho buyer"). Cheaper and faster than a full report and NOT saved. Returns structured section content that you should restate in full in your reply so the user sees it. For buyer-match, sectionKey is one of: criteria, matching-inventory, curated-matches, near-misses, off-market, budget-reality, showing-schedule, recommended-adjustment; params is { buyerId }.',
+    'Generate a SINGLE SECTION of a report template, for inline chat display. Use when the user asks about a specific piece ("what are the near-misses for [buyer]", "give me the budget check on this buyer", "curated matches for the Soho buyer"). Cheaper and faster than a full report and NOT saved. Returns structured section content that you should restate in full in your reply so the user sees it. For buyer-match, sectionKey is one of: criteria, matching-inventory, curated-matches, near-misses, off-market, budget-reality, showing-schedule, recommended-adjustment; params is { buyerId }, a buyer id that search_parties returned in this turn, or one in the Shown note of an earlier reply in this chat (any other id is refused).',
   input_schema: {
     type: 'object',
     properties: {
@@ -120,7 +124,7 @@ export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
       params: {
         type: 'object',
         description: 'Template-specific params, e.g. { buyerId: "abc123" }.',
-        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties).' } },
+        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties this turn, or an earlier Shown note).' } },
       },
     },
     required: ['templateId', 'sectionKey', 'params'],
@@ -163,7 +167,19 @@ export const SEARCH_PARTIES_TOOL: Anthropic.Messages.Tool = {
         type: 'boolean',
         description: 'Default true. Set false only if the user explicitly asks for production/real listings only.',
       },
+      // Brief 43 PR 14 (Q29, M21).
+      createdAfter: { type: 'string', description: CREATED_AFTER_DESCRIPTION },
       limit: { type: 'number', description: 'Max cards to return (default 20, max 200).' }, // Brief 43 PR 15: was 50
+      // Brief 43 PR 9 (Q15, Q41): lib/chat/tools/partyFilters.ts.
+      query: {
+        type: 'string',
+        description: 'A buyer\'s or renter\'s name, their agent\'s name, or a distinctive word from their request\'s title. Every word (up to 8) must appear as a whole word in the request\'s title, the agent\'s name or the buyer\'s name; no results means nobody by that name is on file. Put an area, beds or budget in neighborhoods, bedsMin/bedsMax or priceRangeOverlaps, never in query (a title may spell an area differently). Cards carry agentName.',
+      },
+      archetype: {
+        type: 'string',
+        enum: Object.keys(BUYER_ARCHETYPES),
+        description: 'Buyer type: CASH_BUYER, EXCHANGE_1031 (1031-exchange buyers), TRADITIONAL_FINANCING, INVESTOR_LANDLORD, FIRST_TIME_FHA, LUXURY_ALL_CASH or LUXURY_FINANCED. Matches the stored type, or a request with none stored that names it ("1031", "FHA"). Cards carry archetype in plain words.',
+      },
     },
     required: [],
   } as Anthropic.Messages.Tool.InputSchema,
@@ -199,4 +215,52 @@ export const COUNT_SELLERS_TOOL: Anthropic.Messages.Tool = {
     },
     required: [],
   } as Anthropic.Messages.Tool.InputSchema,
+}
+
+// Brief 43 PR 6 (N1; D11 [Ryan, 2026-10-18]: buyers-for-a-seller questions are
+// allowed for one seller Ryan names; by address D13 [Ryan, 2026-10-19]).
+export const GET_SELLER_MATCHES_TOOL: Anthropic.Messages.Tool = {
+  name: 'get_seller_matches',
+  description:
+    'The buyers DealFlow matched to ONE of Ryan\'s CRM sellers, named by Ryan or given by street address. Use it for "which buyers match [a seller or an address]?". ' +
+    'Never use it to list, browse or search sellers. ' +
+    'Returns { seller, count, tiers, buyers } with the same buyers, order and HOT/WARM labels as that seller\'s CRM card and the Matches page: count is every match the seller has, buyers are the best first (each with what they want, the tier, the score and why it fits; testBuyer marks test data). ' +
+    'Ryan sees the buyers as a card with an Open in Matches link for each, so never write a link. ' +
+    'Or { candidates } (up to 3 names; ask Ryan which one), or { none: true } (no seller by that name or address in his CRM). ' +
+    'seller.doNotContact true means the homeowner asked not to be contacted.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'The seller\'s name as Ryan gave it, e.g. "Pat Example".' },
+      address: { type: 'string', description: 'The street address as Ryan gave it, e.g. "88 Example Ave". The house number must match exactly.' },
+      // Brief 43 PR 5 round 2's pick, the same as find_seller's.
+      neighborhood: { type: 'string', description: 'Only with a name, when Ryan picks one of several candidates with that name: the neighborhood he chose, e.g. "Bushwick".' },
+    },
+    required: [],
+  } as Anthropic.Messages.Tool.InputSchema,
+}
+
+// Brief 43 PR 6 (Q26): the NEW MATCHES note holds only the top 20 unseen.
+export const COUNT_MATCHES_TOOL: Anthropic.Messages.Tool = {
+  name: 'count_matches',
+  description:
+    'Count all of DealFlow\'s buyer matches, for listings and Ryan\'s sellers together, by tier: HOT (fit 80 or more), WARM (65 to 79), POSSIBLE (under 65) or ALL. ' +
+    'Use it for "how many HOT matches do I have?". Returns { tier, count, unseen } (unseen = not yet opened on the Matches page).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      tier: { type: 'string', enum: ['HOT', 'WARM', 'POSSIBLE', 'ALL'], description: 'Which tier to count. Default ALL.' },
+    },
+    required: [],
+  } as Anthropic.Messages.Tool.InputSchema,
+}
+
+// Brief 43 PR 6 (S-11; D14 [Ryan, 2026-10-19]: a count, plus "they're ranked in
+// your CRM Queue"; never a list, D11 [Ryan, 2026-10-18]).
+export const COUNT_SELLERS_WITH_BUYERS_TOOL: Anthropic.Messages.Tool = {
+  name: 'count_sellers_with_buyers',
+  description:
+    'Count Ryan\'s CRM sellers that have at least one HOT or WARM buyer waiting (the ones his CRM Queue ranks). Use it for "which of my sellers have buyers waiting?". ' +
+    'Returns { count, withHot } only, never names. Answer with the count and say they\'re ranked in his CRM Queue; never list or name the sellers.',
+  input_schema: { type: 'object', properties: {}, required: [] } as Anthropic.Messages.Tool.InputSchema,
 }

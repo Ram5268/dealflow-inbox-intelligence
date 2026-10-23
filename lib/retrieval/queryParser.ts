@@ -9,10 +9,11 @@ import { classifyIntent } from './intentClassifier'
 import type { ParsedQuery } from './types'
 import { NEIGHBORHOODS, BOROUGHS } from '../domain/Neighborhood'
 import { withTimeout, isTimedOut, LOOKUP_TIMEOUT_MS } from '../chat/turnBudget'
+import { extractAddressFromText, SALE_WORDS } from '../acris'
 
 // Pre-built variant→canonical index used by extractNeighborhoods. Built once
 // at module load. Each variant is lowercased and stored with its canonical;
-// substring containment scan returns the canonicals that appear in input.
+// a whole-word scan returns the canonicals that appear in input (Brief 43 PR 13).
 // Replaces the old hand-maintained NYC_NEIGHBORHOODS array — every spelling
 // in lib/domain/Neighborhood.ts variants is now recognized, including
 // shorthand like "bedstuy", "fidi", "ues", "uws", "lic".
@@ -56,11 +57,23 @@ const EMAIL_CAMPAIGN_PATTERN = /\bemail\s+(repl(?:ies|y)|open|campaign)\b|\binst
 // + its variant spellings). See lib/retrieval/queryPlanner.ts.
 const BROADEN_PATTERNS = /\b(near|around|close to|nearby|by\s+\w+|or\s+(similar|adjacent|surrounding|nearby)|in or (around|near)|and\s+(similar|nearby))\b/i
 
-function parsePrice(raw: string): number | null {
+// Brief 43 PR 13 (Q23): Ryan writes sale prices in millions without the M
+// ("under 1.6", "up to 1.8"). A bare number under 100 with no k or m counts as
+// millions when the message has no rental words, and the number ends the
+// message or is followed only by punctuation, "million", or a joining word
+// ("under 1.6 in Bed-Stuy", "up to 1.8 for my buyer"). Anything else after it
+// ("5 units", "3 bdrm", "6 cap", "3.5 a month", "4 apts") keeps the number as
+// written, as before, and so does a rate before the qualifier ("cap rate over
+// 6"). It used to round to $2 [engineering precaution].
+const MILLIONS_AFTER = /^\s*(?:$|[,.;:!?)]|(?:million|millions|mil|mill|mm|dollars|cash|all|tops|max|ish|or|and|but|in|for|with|on|at|if|so|please|pls|budget|range|ideally|maybe|is|near|around)\b)/i
+const BUILDING_SALE = /\b\d+[\s-]?(?:family|fam|families|unit|units)\b|\bmulti[\s-]?family\b|\bbuildings?\b|\bstabilized\b|\brent roll\b|\bcap rate\b/
+const RATE_BEFORE = /\b(?:cap(?:\s+rate)?|rate|yield|roi|return|interest|ltv|dscr|down(?:\s+payment)?)\s+(?:is\s+|of\s+)?$/i
+
+function parsePrice(raw: string, bareIsMillions = false): number | null {
   const m = raw.replace(/,/g, '').match(/\$?([\d.]+)\s*([kKmM]?)/)
   if (!m) return null
   const base = parseFloat(m[1])
-  const mult = PRICE_MULTIPLIERS[m[2]] ?? 1
+  const mult = PRICE_MULTIPLIERS[m[2]] ?? (bareIsMillions && base < 100 ? 1_000_000 : 1)
   return Math.round(base * mult)
 }
 
@@ -143,6 +156,17 @@ function extractFreshnessHours(text: string): number | null {
 
 function extractPrices(text: string): { minPrice: number | null; maxPrice: number | null } {
   const lower = text.toLowerCase()
+  // Brief 43 PR 13 (Q23): a bare number in a sale ask is millions (see parsePrice).
+  // Reviewer patch (PR 13 r1): a multifamily or building purchase ("3 family
+  // with two rentals upstairs", "rent stabilized 6 unit") is a sale ask even
+  // with rental words in it [engineering precaution].
+  const rental = RENTAL_WORDS.test(lower) && !BUILDING_SALE.test(lower)
+  const price = (m: RegExpMatchArray) => {
+    const at = m.index ?? 0
+    const after = text.slice(at + m[0].length)
+    const bare = !rental && (/[.,]$/.test(m[0]) || MILLIONS_AFTER.test(after)) && !RATE_BEFORE.test(text.slice(Math.max(0, at - 40), at))
+    return parsePrice(m[0], bare)
+  }
 
   // "$1.5M-$2M" / "$1.5M to $2M" — also "1.5M to 3M" without $. The trailing
   // [kKmM] (NOT [kKmM]?) is required on both sides to avoid matching bare
@@ -156,30 +180,30 @@ function extractPrices(text: string): { minPrice: number | null; maxPrice: numbe
   // "under $X" / "under X" — qualifier word disambiguates the number so $ is
   // optional. Same pattern for over/around/budgetMatch below.
   const underMatch = text.match(/(?:under|below|max|maximum|up to)\s+\$?[\d.,]+[kKmM]?/i)
-  if (underMatch) return { minPrice: null, maxPrice: parsePrice(underMatch[0]) }
+  if (underMatch) return { minPrice: null, maxPrice: price(underMatch) }
 
   // "budget of X" or "budget X" — price may not have $ sign
   const budgetMatch = text.match(/budget\s+(?:of\s+)?\$?[\d.,]+[kKmM]?/i)
   if (budgetMatch) {
-    const p = parsePrice(budgetMatch[0])
+    const p = price(budgetMatch)
     if (p) return { minPrice: null, maxPrice: p }
   }
 
   // "over $X" or "above $X" or "min $X"
   const overMatch = text.match(/(?:over|above|min|minimum|at least)\s+\$?[\d.,]+[kKmM]?/i)
-  if (overMatch) return { minPrice: parsePrice(overMatch[0]), maxPrice: null }
+  if (overMatch) return { minPrice: price(overMatch), maxPrice: null }
 
   // "around $X" or "about $X" — treat as ±20% range
   const aroundMatch = text.match(/(?:around|about|~|approximately)\s+\$?[\d.,]+[kKmM]?/i)
   if (aroundMatch) {
-    const p = parsePrice(aroundMatch[0])
+    const p = price(aroundMatch)
     if (p) return { minPrice: Math.round(p * 0.8), maxPrice: Math.round(p * 1.2) }
   }
 
   // Single $X — use as rough upper bound for rental queries, exact for sale
   const singleMatch = text.match(/\$[\d.,]+[kKmM]?/i)
   if (singleMatch) {
-    const p = parsePrice(singleMatch[0])
+    const p = price(singleMatch)
     // If price < 50k it's probably monthly rent, else sale price
     if (p && p < 50_000) return { minPrice: null, maxPrice: p }
     if (p) return { minPrice: null, maxPrice: p }
@@ -188,12 +212,27 @@ function extractPrices(text: string): { minPrice: number | null; maxPrice: numbe
   return { minPrice: null, maxPrice: null }
 }
 
+// Brief 43 PR 13 (Q20): a neighborhood name counts only as a whole word. The
+// substring scan read "less", "sales", "rules" and "miles" as the Lower East
+// Side ("les"), "values", "requests" and "tuesday" as the Upper East Side
+// ("ues"), and "public" as Long Island City ("lic"), which set off the CRM-seller
+// block and StreetEasy searches for the wrong area. Every variant, not just the
+// short ones, so "confiding" isn't FiDi and "nomadic" isn't NoMad either
+// [engineering precaution]. Plain indexOf, no regex, so any length is linear.
+const isLetter = (c: string | undefined) => c !== undefined && c >= 'a' && c <= 'z'
+function hasWholeWord(lower: string, word: string): boolean {
+  for (let i = lower.indexOf(word); i !== -1; i = lower.indexOf(word, i + 1)) {
+    if (!isLetter(lower[i - 1]) && !isLetter(lower[i + word.length])) return true
+  }
+  return false
+}
+
 function extractNeighborhoods(text: string): string[] {
   const lower = text.toLowerCase()
   const hits = new Set<string>()
   for (const { lower: variant, canonical } of VARIANT_INDEX) {
     if (hits.has(canonical)) continue            // already matched this canonical via a longer variant
-    if (lower.includes(variant)) hits.add(canonical)
+    if (hasWholeWord(lower, variant)) hits.add(canonical)
   }
   return [...hits]
 }
@@ -311,7 +350,7 @@ async function llmParse(query: string): Promise<Partial<ParsedQuery>> {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export async function parseQuery(query: string): Promise<ParsedQuery> {
+export async function parseQuery(query: string, opts: { modelFallback?: boolean } = {}): Promise<ParsedQuery> {
   const text = query.trim()
 
   // Deterministic pass
@@ -325,7 +364,10 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
   const isRental      = detectRentalSale(text)
   const lower         = text.toLowerCase()
   const isCalendar    = /\b(schedule|book|calendar|appointment|today|tomorrow|this week|next week|monday|tuesday|wednesday|thursday|friday)\b/.test(lower)
-  const isACRIS       = /\b(who owns|acris|deed|sold for|ownership|mortgage|lien)\b/.test(lower)
+  // Brief 43 PR 11 (Q25): "when did 418 Example St last sell?" is a records
+  // question too, when the message has an address [engineering precaution].
+  const isACRIS       = /\b(who owns|acris|deed|sold for|ownership|mortgage|lien)\b/.test(lower) ||
+                        (SALE_WORDS.test(lower) && extractAddressFromText(text) !== null)
   const isDOB         = /\b(permit|violation|dob|building department|air rights|certificate of occupancy|co |c\.o\.)\b/.test(lower)
   const isMyBuyer       = MY_BUYER_PATTERN.test(lower)
   const isSellerLead    = SELLER_LEAD_PATTERN.test(lower)
@@ -353,6 +395,11 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
   }
 
   const detConf = deterministicConfidence(partial)
+
+  // Brief 43 PR 13 (Q22): no model call when there is nothing to parse (a
+  // paste with no question of Ryan's, or a file sent alone), or when the caller
+  // says so (the chat route, on a paste turn) [engineering precaution].
+  if (!text || opts.modelFallback === false) return { ...partial, usedLLM: false, confidence: detConf }
 
   // Force LLM fallback when the query syntactically references a place but our
   // deterministic neighborhood list didn't catch it. Common for shorthand:
