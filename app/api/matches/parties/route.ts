@@ -7,6 +7,7 @@ import { resolveSourceBadge } from '@/lib/matching/engine'
 import { formatPriceRange } from '@/lib/utils'
 import { Category } from '@prisma/client'
 import { inChunks, loadDismissedPairs } from '@/lib/matching/dismissals'
+import { partyBand } from '@/lib/matching/matchesList'
 
 // Brief 7.4 (Section B) — party-grouped view of /matches. Instead of one card per
 // match, aggregate matches by the DEMAND/LEAD party they involve, so Ryan sees
@@ -18,8 +19,10 @@ import { inChunks, loadDismissedPairs } from '@/lib/matching/dismissals'
 // either side depending on which record arrived first). Listings never land in
 // the party set, so there's no false attribution.
 //
-// "tier" is null on the live matcher, so hot/warm/possible are derived from score
-// (>=90 / 70-89 / <70), consistent with the /matches GOLD·STRONG·ALL bands.
+// "tier" is null on the live matcher, so hot/warm/possible are derived from score.
+// Brief 48 (PR 12): by the stored tiers' thresholds (>=80 / 65-79 / <65,
+// lib/matching/tiers.ts), the same as the /matches HOT and WARM tabs; they were
+// 90 and 70.
 
 type Role = 'BUYER' | 'RENTER' | 'SELLER'
 
@@ -38,12 +41,6 @@ interface PartyAgg {
   tierBreakdown: { hot: number; warm: number; possible: number }
   topMatchId: string
   topScore: number
-}
-
-function bandOf(score: number): 'hot' | 'warm' | 'possible' {
-  if (score >= 90) return 'hot'
-  if (score >= 70) return 'warm'
-  return 'possible'
 }
 
 // Brief 35: a Mojo contact's role is its intent, not its list name.
@@ -118,7 +115,7 @@ export async function GET(req: NextRequest) {
     let a = aggs.get(partyId)
     if (!a) { a = make(); aggs.set(partyId, a) }
     a.matchCount++
-    a.tierBreakdown[bandOf(score)]++
+    a.tierBreakdown[partyBand(score)]++
     if (score > a.topScore) { a.topScore = score; a.topMatchId = matchId }
   }
 
