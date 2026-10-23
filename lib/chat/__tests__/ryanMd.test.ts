@@ -31,10 +31,11 @@ test('RYAN_MD is a non-empty string with the expected section headers', () => {
   assert.match(RYAN_MD, /SHORT CONTINUATIONS/)
 })
 
-// Brief 48 PR 19 [Ryan 1.11]: the Buyer Match report is the only one; the 20
-// locked templates' routing (the old Section 6b list) is gone, and another
-// report request gets one line saying so (lib/reports/__tests__/oneTemplate.unit.test.ts
-// checks every place that names a template).
+// Brief 48 PR 19: the Buyer Match report is the only one, and the 20 locked
+// templates' routing (the old Section 6b list) is gone [Ryan 1.11]; another
+// report request gets one line saying so [engineering precaution]
+// (lib/reports/__tests__/oneTemplate.unit.test.ts checks every place that names
+// a template).
 test('RYAN_MD routes reports to the Buyer Match report only', () => {
   assert.match(RYAN_MD, /templateId: buyer-match\. The only report DealFlow makes\./)
   assert.match(RYAN_MD, /"DealFlow makes one report, the Buyer Match report\./)

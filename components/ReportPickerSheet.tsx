@@ -10,7 +10,8 @@ import { REPORT_TEMPLATES, type ReportTemplate } from '@/lib/reports/templates'
 // reuse the DraftOutreachSheet pattern (Brief 7.3/23).
 // Brief 48 PR 19 [Ryan 1.11]: the 20 locked templates are gone, so the list is
 // the reports that can be made (today the Buyer Match report), with no
-// discipline tabs and no locked cards.
+// discipline tabs and no locked cards. Listing only templates that can be made
+// is an engineering precaution.
 
 interface Props {
   open: boolean

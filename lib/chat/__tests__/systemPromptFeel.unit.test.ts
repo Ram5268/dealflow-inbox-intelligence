@@ -104,10 +104,15 @@ test('D8: while Outlook is off, Drift says so and keeps the details in chat', ()
   assert.match(GRAPH_ON_CALENDAR_NOTE, /plain yes/)
 })
 
-// Brief 48 PR 19 [Ryan 1.11]: the locked templates are gone; the reply to a
-// request for another report is the line checked now.
+// Brief 48 PR 19: the locked templates are gone [Ryan 1.11]; the reply to a
+// request for another report, and its wording, are the line checked now
+// [engineering precaution].
 test('RYAN_MD\'s other-report reply has no em-dash', () => {
   const line = RYAN_MD.split('\n').find(l => l.startsWith('"DealFlow makes one report'))
   assert.ok(line, 'the other-report reply line')
   assert.ok(!line.includes('—'), line)
+  // Review r1: records come only from Ryan's own message with the address, so
+  // the reply never offers to pull them on a "yes" (lib/chat/context/acris.ts).
+  assert.ok(!/deed|permit/i.test(line), line)
+  assert.match(RYAN_MD, /never offer to pull them on a "yes"/)
 })

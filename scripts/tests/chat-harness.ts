@@ -152,13 +152,20 @@ const PROMPTS: Prompt[] = [
     msg: 'what about that buyer we were talking about', expect: ['which buyer', '?'] },
 
   // Block B — another report (RYAN_MD Section 6b must respond, not fabricate).
-  // Brief 48 PR 19 [Ryan 1.11]: the 20 locked templates are gone. A request for
-  // another report gets "DealFlow makes one report, the Buyer Match report";
-  // a plain question ("how's the market in tribeca") is answered from the tools.
+  // Brief 48 PR 19: the 20 locked templates are gone [Ryan 1.11]. A request for
+  // another report gets "DealFlow makes one report, the Buyer Match report",
+  // and a plain question ("how's the market in tribeca") is answered from the
+  // tools [engineering precaution].
   { label: 'B30/P01 CMA: one report', sessionKey: 'b30-p01',
     msg: 'run a CMA on 30 Park Place', expect: ['one report', 'buyer match'] },
   { label: 'B30/M01 seller update: one report', sessionKey: 'b30-m01',
     msg: 'seller update for 30 Park Place', expect: ['one report', 'buyer match'] },
+  // Review r1: a plain question is answered from the tools, not sent to the
+  // one-report line (RYAN_MD Section 6b's last line).
+  { label: 'B30/P02 drop the price: answered, not a report', sessionKey: 'b30-p02',
+    msg: 'should we drop the price on 12 Sample St', expect: [], notExpect: ['one report', 'unlocked', 'roadmap'] },
+  { label: 'B30/O02 market in tribeca: answered, not a report', sessionKey: 'b30-o02',
+    msg: "how's the market in tribeca", expect: ['tribeca'], notExpect: ['one report', 'unlocked', 'roadmap'] },
 
   // Block C — non-report workflow patterns (Section 7 + 8).
   { label: 'B30/inbox review recent', sessionKey: 'b30-inbox',
