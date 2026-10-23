@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { limit } from '@/lib/spendGuard'
+import { readStoredReply } from '@/lib/chat/storedReply'
 import OpenAI from 'openai'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -31,22 +32,31 @@ export async function POST() {
     const userMsg   = session.messages.find((m: { role: string }) => m.role === 'user')
     const assistMsg = session.messages.find((m: { role: string }) => m.role === 'assistant')
     if (!userMsg) continue
+    // Brief 43 PR 16 (Q36): a reply stored as JSON (a draft, a calendar
+    // proposal, a Shown note) is read as its text, never as raw JSON.
+    const reply = readStoredReply(assistMsg?.content ?? '').response
 
+    let title: string | undefined
     try {
       const completion = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: 'Generate a 4-7 word title that summarizes this real estate conversation. Title case, no punctuation at end, no quotes. Examples: "Brooklyn Buyer ISO Matches", "Coming Soon Under 2M", "Off Market Tribeca Search"' },
-          { role: 'user', content: `User asked: ${userMsg.content.slice(0, 300)}\nAssistant replied: ${(assistMsg?.content ?? '').slice(0, 300)}` },
+          { role: 'user', content: `User asked: ${userMsg.content.slice(0, 300)}\nAssistant replied: ${reply.slice(0, 300)}` },
         ],
         max_tokens: 20,
         temperature: 0.3,
       })
-      const title = completion.choices[0].message.content?.trim().replace(/^["']|["']$/g, '')
-      if (title) {
-        await prisma.chatSession.update({ where: { id: session.id }, data: { title } })
-        updated++
-      }
+      title = completion.choices[0].message.content?.trim().replace(/^["']|["']$/g, '')
+    } catch { /* non-fatal per session: the stand-in title below */ }
+
+    // Brief 43 PR 16 (Q36; U-08) [engineering precaution]: each chat is titled
+    // once. When the title call fails or gives nothing back, the chat keeps a
+    // plain stand-in (the start of Ryan's first message), so it isn't tried
+    // again on every History open.
+    try {
+      await prisma.chatSession.update({ where: { id: session.id }, data: { title: title || userMsg.content.slice(0, 48).trim() || 'New conversation' } })
+      updated++
     } catch { /* non-fatal per session */ }
   }
 

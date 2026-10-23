@@ -13,6 +13,7 @@ import VoiceConversation from '@/components/VoiceConversation'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
 import { chatErrorReply } from '@/lib/chat/chatErrorReply'
+import { FILE_TOO_BIG_NOTE, fileKind, filesTooBig } from '@/lib/chat/fileSize'
 import ReportPickerSheet from '@/components/ReportPickerSheet'
 import BuyerPickerSheet from '@/components/BuyerPickerSheet'
 import ReportModal from '@/components/ReportModal'
@@ -284,12 +285,15 @@ function Composer({
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [files, setFiles] = useState<File[]>([])
+  // Brief 43 PR 16 (Q42): "That file is too big (limit about 4 MB)." under the box.
+  const [fileNote, setFileNote] = useState<string | null>(null)
   const voiceEnabled = process.env.NEXT_PUBLIC_VOICE_ENABLED === 'true'
 
   function submit() {
     if ((!value.trim() && files.length === 0) || isLoading) return
     onSubmit(files)
     setFiles([])
+    setFileNote(null)
     if (fileRef.current) fileRef.current.value = ''
   }
 
@@ -314,6 +318,9 @@ function Composer({
             </div>
           ))}
         </div>
+      )}
+      {fileNote && (
+        <div role="status" style={{ marginBottom: 6, fontSize: 12, color: 'rgba(255,255,255,0.7)' }}>{fileNote}</div>
       )}
 
       <div style={{
@@ -366,7 +373,14 @@ function Composer({
           cursor: 'pointer', opacity: 0.7,
         }} aria-label="Attach file">
           <input ref={fileRef} type="file" multiple onChange={e => {
-            if (e.target.files) setFiles(p => [...p, ...Array.from(e.target.files!)])
+            if (!e.target.files) return
+            const picked = Array.from(e.target.files)
+            e.target.value = '' // so the same file can be picked again
+            // Brief 43 PR 16 (Q42; E-06): a file that would pass Vercel's 4.5 MB
+            // cap is held back here, before anything is sent (lib/chat/fileSize.ts).
+            if (filesTooBig([...files, ...picked])) { setFileNote(FILE_TOO_BIG_NOTE); return }
+            setFileNote(null)
+            setFiles(p => [...p, ...picked])
           }} style={{ display: 'none' }} />
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round">
             <path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3L15 7" />
@@ -1018,7 +1032,9 @@ function RaisedView({
 async function processFile(file: File): Promise<{ name: string; mimeType: string; type: 'image' | 'text' | 'binary'; content: string }> {
   return new Promise(resolve => {
     const reader = new FileReader()
-    if (file.type.startsWith('image/')) {
+    // Brief 43 PR 16: the same split the size check uses (lib/chat/fileSize.ts).
+    const kind = fileKind(file)
+    if (kind === 'image') {
       reader.onload = e => {
         const img = new Image()
         img.onload = () => {
@@ -1036,7 +1052,7 @@ async function processFile(file: File): Promise<{ name: string; mimeType: string
         img.src = e.target?.result as string
       }
       reader.readAsDataURL(file)
-    } else if (file.type.startsWith('text/') || /\.(txt|csv|md|json|xml|yaml|yml)$/i.test(file.name)) {
+    } else if (kind === 'text') {
       reader.onload = e => resolve({ name: file.name, mimeType: file.type, type: 'text', content: e.target?.result as string })
       reader.readAsText(file)
     } else {

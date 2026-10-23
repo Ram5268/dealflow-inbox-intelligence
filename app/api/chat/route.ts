@@ -7,7 +7,8 @@ import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { graphEnabled } from '@/lib/graphAccess'
-import { recentHistoryQuery, oldestFirst, historyForModel } from '@/lib/chat/history'
+import { recentHistoryQuery, historyWindow, historyForModel } from '@/lib/chat/history'
+import { buildUserBlocks, type FileData } from '@/lib/chat/fileBlocks'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
@@ -74,13 +75,6 @@ function trimCardForGuard(card: Record<string, unknown>): Record<string, unknown
   return out
 }
 
-interface FileData {
-  name: string
-  mimeType: string
-  type: 'image' | 'text' | 'binary'
-  content: string // base64 for image/binary, plain text for text
-}
-
 async function parseBinary(buffer: Buffer, filename: string, mimeType: string): Promise<string> {
   try {
     if (/\.docx$/i.test(filename) || mimeType.includes('wordprocessingml')) {
@@ -137,7 +131,8 @@ export async function POST(req: NextRequest) {
 
     // Load conversation history for this session only: the newest 30 messages,
     // oldest first (Brief 41: it used to be the oldest 30).
-    const history = session ? oldestFirst(await prisma.chatMessage.findMany(recentHistoryQuery(session.id))) : []
+    // Brief 43 PR 16 (Q43): and whether older messages were left out, so the model is told.
+    const { history, earlierNotShown } = historyWindow(session ? await prisma.chatMessage.findMany(recentHistoryQuery(session.id)) : [])
 
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
@@ -245,39 +240,12 @@ export async function POST(req: NextRequest) {
     // actually returned), not pre-fetched from a retrieval pool.
     const oppIncludeForCards = { rawEmail: { select: { receivedDateTime: true, bodyContent: true, attachmentsText: true } } }
 
-    // ── Process files into text + Anthropic image blocks ────────────────────
-    // Anthropic image source is raw base64 (NOT a data: URL) and requires
-    // media_type ∈ {image/jpeg, image/png, image/gif, image/webp}.
-    type AImagePart = {
-      type: 'image'
-      source: { type: 'base64'; media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'; data: string }
-    }
-    type ATextPart = { type: 'text'; text: string }
-    type AUserPart = ATextPart | AImagePart
-
-    const imageParts: AImagePart[] = []
-    let textContent = userMessage || '(Please analyze the attached file.)'
-
-    for (const file of files) {
-      if (file.type === 'image') {
-        const mt = file.mimeType as AImagePart['source']['media_type']
-        const media_type: AImagePart['source']['media_type'] =
-          mt === 'image/jpeg' || mt === 'image/png' || mt === 'image/gif' || mt === 'image/webp' ? mt : 'image/png'
-        imageParts.push({
-          type: 'image',
-          source: { type: 'base64', media_type, data: file.content },
-        })
-      } else if (file.type === 'text') {
-        textContent += `\n\n--- File: ${file.name} ---\n${file.content.slice(0, 15000)}\n---`
-      } else if (file.type === 'binary') {
-        const buffer = Buffer.from(file.content, 'base64')
-        const extracted = await parseBinary(buffer, file.name, file.mimeType)
-        textContent += `\n\n--- File: ${file.name} ---\n${extracted.slice(0, 15000)}\n---`
-      }
-    }
+    // ── Process files into Anthropic text, image and PDF blocks ─────────────
+    // Brief 43 PR 16 (Q30, Q42; N9, E-03): a PDF goes as a document block Claude
+    // reads, and a file cut at 15,000 characters says so (lib/chat/fileBlocks.ts).
+    const userBlocks = await buildUserBlocks(userMessage, files, parseBinary)
 
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-    const userBlocks: AUserPart[] = [{ type: 'text', text: textContent }, ...imageParts]
 
     // ── System prompt: SYSTEM_PROMPT + RYAN_MD cached; dynamic side-channel block uncached ──
     // The dynamic block carries composeContext's side-channels (live StreetEasy,
@@ -362,7 +330,8 @@ export async function POST(req: NextRequest) {
     // Brief 43 PR 3 (review r1): a reply stored as JSON (a draft) goes to the model
     // as its text plus the draft, the way the draft rewrite shows it, not as JSON.
     // Brief 43 PR 8 (Q14): and the note of the cards, buyer and report it showed.
-    const anthropicHistory: Anthropic.Messages.MessageParam[] = historyForModel(history)
+    // Brief 43 PR 16 (Q43): a long chat's first turn says "(earlier messages not shown)".
+    const anthropicHistory: Anthropic.Messages.MessageParam[] = historyForModel(history, { earlierNotShown })
     // Brief 43 PR 8 x PR 9 (#16): the buyers and cards earlier replies showed.
     const shownInChat = shownIdsInChat(history)
 

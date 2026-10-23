@@ -5,7 +5,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { EARLIER_IN_CHAT, HISTORY_LIMIT, oldestFirst, recentHistoryQuery, startAtUserTurn } from '../history'
+import { EARLIER_IN_CHAT, HISTORY_LIMIT, historyWindow, recentHistoryQuery, startAtUserTurn } from '../history'
 
 const ROOT = join(__dirname, '..', '..', '..')
 
@@ -39,7 +39,8 @@ function findMany(args: { where: { sessionId: string }; orderBy: unknown; take: 
 }
 
 test('Drift remembers the newest 30 messages, oldest first', () => {
-  const history = oldestFirst(findMany(recentHistoryQuery('s1')))
+  // Brief 43 PR 16: the query reads one row past the window; historyWindow trims it.
+  const { history } = historyWindow(findMany(recentHistoryQuery('s1')))
   assert.equal(HISTORY_LIMIT, 30)
   assert.equal(history.length, 30)
   assert.equal(history[0].content, 'user turn 6')
@@ -64,7 +65,8 @@ test('same-millisecond messages keep one order (id breaks the tie)', () => {
 test('the chat route loads history through these helpers', () => {
   const route = readFileSync(join(ROOT, 'app/api/chat/route.ts'), 'utf8')
   // Brief 43 PR 4: a new chat has no row (and no history) until its first save.
-  assert.match(route, /const history = (?:session \? )?oldestFirst\(await prisma\.chatMessage\.findMany\(recentHistoryQuery\(session\.id\)\)\)/)
+  // Brief 43 PR 16: through historyWindow, which also says whether older messages were left out.
+  assert.match(route, /const \{ history, earlierNotShown \} = historyWindow\(session \? await prisma\.chatMessage\.findMany\(recentHistoryQuery\(session\.id\)\) : \[\]\)/)
   assert.doesNotMatch(route, /orderBy: \{ createdAt: 'asc' \},\s*take: 30/)
 })
 
@@ -75,7 +77,7 @@ test("the model's conversation starts at a user turn, even when the window start
     const saved = messages.splice(0, messages.length, ...withReport)
     try { return findMany(args) } finally { messages.splice(0, messages.length, ...saved) }
   }
-  const history = oldestFirst(fake(recentHistoryQuery('s1')))
+  const { history } = historyWindow(fake(recentHistoryQuery('s1')))
   assert.equal(history[0].role, 'assistant') // the raw window starts on Drift's message
   const forModel = startAtUserTurn(history)
   assert.deepEqual(forModel[0], { role: 'user', content: EARLIER_IN_CHAT }) // a placeholder, so nothing is lost
@@ -87,7 +89,7 @@ test("the model's conversation starts at a user turn, even when the window start
   assert.deepEqual(startAtUserTurn([]), [])
   const route = readFileSync(join(ROOT, 'app/api/chat/route.ts'), 'utf8')
   // Brief 43 PR 8: the route's history builder starts with startAtUserTurn too (historyForModel).
-  assert.match(route, /const anthropicHistory: Anthropic\.Messages\.MessageParam\[\] = historyForModel\(history\)/)
+  assert.match(route, /const anthropicHistory: Anthropic\.Messages\.MessageParam\[\] = historyForModel\(history(?:, \{ earlierNotShown \})?\)/)
   const history2 = readFileSync(join(ROOT, 'lib/chat/history.ts'), 'utf8')
   assert.match(history2, /export function historyForModel[\s\S]*const turns = startAtUserTurn\(messages\)/)
 })
