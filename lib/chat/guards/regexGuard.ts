@@ -46,6 +46,10 @@ interface NamedPattern {
   regex: RegExp
 }
 
+// The outside sources Drift may name (real_estate_source_citation). Brief 43
+// PR 10 reads the list in its decline check too.
+const SOURCE_NAMES = 'ACRIS|PropertyShark|PLUTO|DOB|StreetEasy|Zillow|Trulia|Realtor\\.com|MLS|RLS|REBNY|Redfin|CoreLogic|RealtyTrac|Naked Apartments|OneKey'
+
 // Each pattern is global so we can enumerate every match; names mirror the
 // Brief 5.1 spec table. `i` where casing varies in real prose.
 const PATTERNS: NamedPattern[] = [
@@ -61,7 +65,7 @@ const PATTERNS: NamedPattern[] = [
   {
     // Named external data sources Drift never queries.
     name: 'real_estate_source_citation',
-    regex: /\b(ACRIS|PropertyShark|PLUTO|DOB|StreetEasy|Zillow|Trulia|Realtor\.com|MLS|RLS|REBNY|Redfin|CoreLogic|RealtyTrac|Naked Apartments|OneKey)\b/gi,
+    regex: new RegExp(`\\b(${SOURCE_NAMES})\\b`, 'gi'),
   },
   {
     // LLC / Inc / Corp entity names => ownership invention.
@@ -83,7 +87,8 @@ const PATTERNS: NamedPattern[] = [
   },
   {
     name: 'ownership_assertion',
-    regex: /\b[A-Z][A-Za-z'-]{1,30}(?: [A-Z][A-Za-z'-]{1,30}){0,3} (?:bought|purchased|acquired) (?:it|them|the [\w-]{1,20})\b/g,
+    // Not "bought the same way" or "bought the last one you showed".
+    regex: /\b[A-Z][A-Za-z'-]{1,30}(?: [A-Z][A-Za-z'-]{1,30}){0,3} (?:bought|purchased|acquired) (?:it|them|the (?!(?:same|most|rest|first|last|next|other|whole|best|worst|one)\b)[\w-]{1,20})\b/g,
   },
   {
     // Historical transaction claims.
@@ -135,6 +140,7 @@ export function scanForStructuralHallucinations(response: string, opts: ActionCl
         continue
       }
       if (name === 'ownership_assertion' || name === 'historical_sale_verb') {
+        if (name === 'ownership_assertion' && genericBuyers(m[0]) && !figureFollows(text, start, end, clauses())) continue
         if (deedNotAsserted(text, start, end, clauses())) continue
         if (name === 'ownership_assertion') {
           flags.push({ pattern: name, match: response.slice(start, end + ownerNameAfter(text, end).length).trim() })
@@ -154,9 +160,24 @@ export function scanForStructuralHallucinations(response: string, opts: ActionCl
 // isn't something I can check".
 const DECLINE: RegExp[] = [
   /\bI(?:\s{1,3}(?:(?:just|simply|currently)\s{1,3})?(?:can't|cannot|can\s{1,3}not|am\s{1,3}unable\s{1,3}to|am\s{1,3}not\s{1,3}able\s{1,3}to|have\s{1,3}no\s{1,3}way\s{1,3}to|don't\s{1,3}have\s{1,3}(?:a|any)\s{1,3}way\s{1,3}to)|'m\s{1,3}(?:unable|not\s{1,3}able)\s{1,3}to)\b/i,
-  /\b(?:don't|do\s{1,3}not)\s{1,3}have\s{1,3}(?:[\w.-]{1,30}\s{1,3}){0,3}?(?:access|connection|feed|login|subscription|account)\b/i,
+  /\b(?:don't|do\s{1,3}not)\s{1,3}have\s{1,3}(?:[\w.'-]{1,30}\s{1,3}){0,4}?(?:access|connection|feed|login|subscription|account|data|records|listings|history|comps)\b/i,
+  // Brief 43 PR 10 review: more ways Drift says it can't or won't check a
+  // source, or what a lookup needs ("I'd need the house number to check ACRIS",
+  // "I won't be able to check StreetEasy", "ACRIS needs an exact address",
+  // "Recent sales can take a few weeks to show up in ACRIS") [engineering precaution].
+  /\bI(?:'ll|'d|\s{1,3}(?:will|would))?\s{1,3}(?:need|have\s{1,3}to)\b/i,
+  /\b(?:won't|will\s{1,3}not)\s{1,3}be\s{1,3}able\s{1,3}to\b/i,
+  /\b(?:not|never)\s{1,3}(?:connected|hooked\s{1,3}up|linked)\s{1,3}(?:to|with)\b/i,
+  /\b(?:needs?|requires?|works\s{1,3}(?:off|from))\s{1,3}(?:(?:a|an|the)\s{1,3})?(?:(?:exact|full|street)\s{1,3})?(?:address(?:es)?|house\s{1,3}numbers?)\b/i,
+  /\b(?:can|may|might|could)\s{1,3}take\s{1,3}(?:(?:a\s{1,3}few|several|some|up\s{1,3}to)\s{1,3})?(?:days|weeks|months|time)\b/i,
   /\bhave\s{1,3}no\s{1,3}(?:[\w.-]{1,30}\s{1,3}){0,3}?(?:access|connection|feed|way)\b/i,
-  /\bno\s{1,3}(?:[\w.-]{1,30}\s{1,3}){0,2}?(?:access|connection|feed)\s{1,3}(?:to|into|for)\b/i,
+  /\bno\s{1,3}(?:[\w.-]{1,30}\s{1,3}){0,2}?(?:access|connection|feed)\b/i,
+  // "Without MLS access I can't confirm it", "I don't have the MLS", "I only
+  // see what's in your inbox, not the MLS". Not "I don't see it on StreetEasy",
+  // which reports a search.
+  /\bwithout\s{1,3}(?:[\w.-]{1,30}\s{1,3}){0,2}?(?:access|a\s{1,3}connection|a\s{1,3}feed|a\s{1,3}login)\b/i,
+  new RegExp(`\\b(?:don't|do\\s{1,3}not)\\s{1,3}(?:(?:have|get)\\s{1,3}(?:the\\s{1,3}|any\\s{1,3})?|see\\s{1,3}(?:the|any)\\s{1,3})(?=(?:${SOURCE_NAMES})\\b)`, 'i'),
+  /\bI\s{1,3}only\s{1,3}(?:see|have|read|get)\b/i,
   /\b(?:isn't|is\s{1,3}not|aren't|are\s{1,3}not)\s{1,3}(?:something|anything|a\s{1,3}source|sources?|one)\s{1,3}I\s{1,3}(?:can|have)\b/i,
   /\b(?:isn't|is\s{1,3}not|aren't|are\s{1,3}not)\s{1,3}(?:connected|hooked\s{1,3}up|linked|available\s{1,3}to\s{1,3}me)\b/i,
   /\boutside\s{1,3}what\s{1,3}I\s{1,3}can\b/i,
@@ -166,10 +187,19 @@ const DECLINE: RegExp[] = [
 const OFFER = /\b(?:I(?:\s{1,3}(?:can|could|will)|'ll)|let\s{1,3}me|want\s{1,3}me\s{1,3}to|shall\s{1,3}I|should\s{1,3}I|would\s{1,3}you\s{1,3}like\s{1,3}me\s{1,3}to|happy\s{1,3}to)\s{1,3}(?:(?:also|then|quickly|now|still|just|go)\s{1,3})?(?:look|check|pull|search|run|fetch|get|bring|dig|try|query|open)\b/i
 // Pointing Ryan to a source: "I'd point you toward StreetEasy's neighborhood
 // guides", "You could check Zillow".
-const REFERRAL = /\b(?:point(?:ing)?\s{1,3}you\s{1,3}(?:to|toward|towards)|I(?:'d|\s{1,3}would)?\s{1,3}(?:suggest|recommend)|you\s{1,3}(?:can|could|might|may|should)\s{1,3}(?:(?:also|still|always)\s{1,3})?(?:check|try|look|use|search|browse|pull)|worth\s{1,3}checking)\b/i
+const REFERRAL = /\b(?:point(?:ing)?\s{1,3}you\s{1,3}(?:to|toward|towards)|I(?:'d|\s{1,3}would)?\s{1,3}(?:suggest|recommend)|you\s{1,3}(?:can|could|might|may|should)\s{1,3}(?:(?:also|still|always)\s{1,3})?(?:check|try|look|use|search|browse|pull)|worth\s{1,3}checking|would\s{1,3}(?:have|know))\b|^\s{0,3}(?:try|check|see)\b/i
+// A prediction about a source: "Once I have the address, ACRIS will show the
+// owner", "That would be in ACRIS once the deed is recorded". With a name after
+// it ("ACRIS should list Pat Example as the owner") it's still a claim.
+const FUTURE = /\b(?:will|would|should|could|may|might)\s{1,3}(?:(?:only|also|then|probably)\s{1,3})?(?:show|have|list|be\s{1,3}in|know|include|reflect)\b/i
+const MODAL_VERB = /\b(?:will|would|should|could|may|might|can|can't|cannot|won't|wouldn't|couldn't|don't|doesn't|didn't)\s{1,3}(?:(?:only|also|then|probably)\s{1,3})?(?:show|list|have|say|report|indicate|record|confirm|note|put|give)\b/gi
+const NAME_PAIR = /\b[A-Z][a-z'-]{1,30}\s{1,3}[A-Z][a-z'-]{1,30}\b/
+// Brief 43 PR 10 review: a new subject after a comma ends what a hedge governs:
+// "I can't confirm the price, it's active on StreetEasy" cites StreetEasy.
+const NEW_SUBJECT = /,\s{1,4}(?:it|it's|its|they|they're|there's|that's|this|he|she|the\s{1,3}(?:listing|house|home|building|property|unit|place))\b/i
 // The source says something, anywhere after it in the clause: "StreetEasy
 // shows …", "ACRIS lists Pat …", "Zillow, which has it at …".
-const SOURCE_SAYS = /\b(?:shows?|showed|showing|lists|listed|says|said|reports?|reported|indicates?|recorded|confirms?|notes|(?:has|had|puts|gives|estimates?|values?|prices?)\s{1,3}(?:it|them|the|a|an|this|that|two|three|\d))\b/i
+const SOURCE_SAYS = /\b(?:shows?|showed|showing|lists|listed|says|said|reports?|reported|indicates?|confirms?|notes|(?:recorded|has|had|puts|gives|estimates?|values?|prices?)\s{1,3}(?:it|them|the|a|an|this|that|two|three|\d))\b/i
 // A claim earlier in the clause: "It shows as expired on MLS, which …".
 const CLAIM_BEFORE = /\b(?:shows?|showed|showing|lists|listed|says|said|reported|recorded|expired|sold|asking|priced|has\s{1,3}it|had\s{1,3}it)\b/i
 // The source cited as where a fact came from: "per ACRIS", "according to MLS".
@@ -194,12 +224,16 @@ function firstIndex(res: RegExp[], s: string): number {
 function sourceNotCited(text: string, start: number, end: number, breaks: Breaks): boolean {
   const c = clauseAround(text, start, end, breaks)
   const clause = c.before + text.slice(start, end) + c.after
-  if (FIGURE.test(clause) || CITED_FROM.test(c.before) || SOURCE_SAYS.test(c.after)) return false
-  const hedgeAt = firstIndex([...DECLINE, OFFER, REFERRAL], clause)
+  // "ACRIS will show the owner" predicts and "I can't confirm" declines;
+  // neither says what the source shows.
+  if (FIGURE.test(clause) || CITED_FROM.test(c.before) || SOURCE_SAYS.test(c.after.replace(MODAL_VERB, ' '))) return false
+  if (FUTURE.test(clause) && NAME_PAIR.test(c.after)) return false
+  const hedgeAt = firstIndex([...DECLINE, OFFER, REFERRAL, FUTURE], clause)
   if (hedgeAt < 0) return c.question && !CLAIM_BEFORE.test(c.before)
   // "Zillow isn't something I can check" is fine; "It shows as expired on MLS,
   // which isn't something I can check" is a claim first.
-  return hedgeAt < c.before.length || !CLAIM_BEFORE.test(c.before)
+  if (hedgeAt < c.before.length) return !NEW_SUBJECT.test(c.before.slice(hedgeAt))
+  return !CLAIM_BEFORE.test(c.before)
 }
 
 // What can make an owner or sale verb a non-claim, when it governs the verb:
@@ -240,6 +274,7 @@ function deedNotAsserted(text: string, start: number, end: number, breaks: Break
   const hedged = hedgeGoverns(c.before) || c.question || NEGATED_OBJECT.test(c.after)
   if (!hedged) return false
   if (YEAR_OR_FIGURE.test(text.slice(start, end)) || YEAR_OR_FIGURE.test(c.after)) return false
+  if (guessFollows(text, end)) return false
   // The "<Name> bought it" form carries its name in the match.
   if (/^[A-Z]/.test(text.slice(start, end)) && !/^(?:owned|owner|purchased|bought|sold|acquired|transferred|previous)\b/i.test(text.slice(start, end))) {
     return !text.slice(start, end).split(' ').some(w => /^[A-Z]/.test(w) && !NOT_A_NAME.has(w.toLowerCase()))
@@ -247,10 +282,50 @@ function deedNotAsserted(text: string, start: number, end: number, breaks: Break
   return ownerNameAfter(text, end, { skipNegation: true }).trim() === ''
 }
 
+// Brief 43 PR 10 review: "<Name> bought it" needs a name. Market talk
+// ("Developers purchased the lots", "Cash Buyers acquired the most units") and
+// "Ryan bought it" name no one [engineering precaution]. With a year or a
+// dollar figure in the clause it's still a sale claim ("They bought it last
+// week for $2,100,000", DRIFT_SCRIPT #8), so figureFollows keeps the flag.
+const GENERIC_BUYER = new Set(['buyers', 'buyer', 'investors', 'investor', 'developers', 'developer', 'sellers', 'owners', 'landlords',
+  'families', 'people', 'agents', 'brokers', 'cash', 'first-time', 'foreign', 'local', 'institutional', 'others', 'someone', 'nobody',
+  'brooklyn', 'manhattan', 'queens', 'bronx', 'nyc'])
+function figureFollows(text: string, start: number, end: number, breaks: Breaks): boolean {
+  const c = clauseAround(text, start, end, breaks)
+  return YEAR_OR_FIGURE.test(text.slice(start, end) + c.after)
+}
+function genericBuyers(match: string): boolean {
+  const verb = match.search(/ (?:bought|purchased|acquired) /)
+  if (verb < 1 || /^(?:owned|owner|purchased|bought|sold|acquired|transferred|previous)\b/i.test(match)) return false
+  return match.slice(0, verb).split(' ').every(w => NOT_A_NAME.has(w.toLowerCase()) || GENERIC_BUYER.has(w.toLowerCase()))
+}
+
+// Brief 43 PR 10 review: a guess later in the same sentence makes a hedged
+// owner or sale verb a claim after all: "I'm not sure who it was sold to, maybe
+// Pat Example", "I don't know who bought it, but I believe it was an investor",
+// "…; likely 2019" (DRIFT_SCRIPT #8: it must not name a buyer) [engineering
+// precaution]. The guess must point at a name, a buyer type, a figure or a year,
+// so "…, so I'd probably start with the deed records" stays a hedge.
+const GUESS = /\b(?:maybe|possibly|probably|likely|perhaps|presumably|apparently|reportedly|supposedly|rumou?red|I\s{1,3}(?:think|believe|suspect|heard|hear)|other\s{1,3}than|except(?:\s{1,3}for)?)\b/gi
+const GUESSED = /^(?:\s{1,3}(?:it|it's|that|this|they|was|were|is|by|to|the|a|an|been|be|have|has|had|may|might|could|would|sold|bought|went))*,?\s{1,3}(?:([A-Z][\w'&-]{0,40})|(?:investors?|developers?|buyers?|LLC|landlords?|families|family|cash)\b|\$\s?\d|(?:19|20)\d{2}\b)/
+function guessFollows(text: string, end: number): boolean {
+  const rest = text.slice(end, end + 240)
+  const stop = rest.search(/[.!?](?=\s|$)/)
+  const sentence = stop === -1 ? rest : rest.slice(0, stop)
+  GUESS.lastIndex = 0
+  for (const m of sentence.matchAll(GUESS)) {
+    const g = sentence.slice((m.index ?? 0) + m[0].length).match(GUESSED)
+    // "maybe I can look it up" or "maybe Ryan knows" names no one.
+    if (g && !(g[1] && NOT_A_NAME.has(g[1].toLowerCase()))) return true
+  }
+  return false
+}
+
 // The name an owner verb gives: "owner is Pat Example", "sold to the Example
 // Family Trust", "previous owner: SAMPLE". Up to 8 capitalized words, after
 // "is", "was", "listed as", "the" and the like; it stops at a comma or a
 // lowercase word, so "previous owner of 88 Example Ave" gives none.
+const COMPANY_TYPES = new Set(['llc', 'llcs', 'inc', 'corp', 'corporation', 'corporations', 'trust', 'trusts', 'holdings', 'partners', 'lp', 'lps', 'company', 'companies', 'entity', 'entities'])
 // A dot stays inside a word only before a letter or digit ("L.L.C"), so a
 // sentence end stops the name.
 const OWNER_NAME = /^(?:\s{0,2}:)?(?:\s{1,3}(?:is|was|were|are|listed\s{1,3}as|recorded\s{1,3}as|shown\s{1,3}as|named|being|a|an|the|still|now|currently|to|by))*\s{1,3}([A-Z0-9](?:[\w'&-]|\.(?=\w)){0,40}(?:\s{1,3}(?:(?:&|and)\s{1,3})?[A-Z0-9](?:[\w'&-]|\.(?=\w)){0,40}){0,7})/
@@ -264,8 +339,10 @@ function ownerNameAfter(text: string, end: number, opts: { skipNegation?: boolea
   const m = after.match(OWNER_NAME)
   if (!m) return ''
   const words = m[1].split(/\s+/)
-  // "is The" or "Ryan" alone is no name.
-  if (!words.some(w => /[A-Za-z0-9]/.test(w) && !NOT_A_NAME.has(w.toLowerCase().replace(/[^a-z0-9']/g, '')))) return ''
+  // "is The" or "Ryan" alone is no name, and neither is a company type alone
+  // ("owned by LLCs", "owned by an LLC").
+  const word = (w: string) => w.toLowerCase().replace(/[^a-z0-9']/g, '')
+  if (!words.some(w => /[A-Za-z0-9]/.test(w) && !NOT_A_NAME.has(word(w)) && !COMPANY_TYPES.has(word(w)))) return ''
   return text.slice(end, end + skipped + m[0].length)
 }
 
@@ -275,11 +352,11 @@ function ownerNameAfter(text: string, end: number, opts: { skipNegation?: boolea
  * Holdings"); the entity is the run of capitalized words before the suffix,
  * minus openers ("Two LLC-owned sellers", "The LLC" and "an LLC" name none),
  * plus a legal suffix right after ("Example Street Holdings LLC"). Not "LP" as
- * a noun ("the Quarterly LP Update report").
+ * a noun ("the Quarterly LP Update report", "draft the Quarterly LP?").
  */
 function namedEntity(text: string, start: number, end: number, suffix: string): string | null {
   const m = text.slice(start, end)
-  if (/^L\.?P\.?$/.test(suffix) && /^\s{1,3}(?:update|updates|report|reports|letter|letters|investors?|meeting|capital)\b/i.test(text.slice(end, end + 30))) return null
+  if (/^L\.?P\.?$/.test(suffix) && (/^\s{1,3}(?:update|updates|report|reports|letter|letters|investors?|meeting|capital)\b/i.test(text.slice(end, end + 30)) || /\b(?:quarterly|annual|monthly|yearly)\s{1,3}$/i.test(m.slice(0, m.length - suffix.length)))) return null
   const namePart = m.slice(0, m.length - suffix.length)
   const words = [...namePart.matchAll(/\S+/g)]
   let i = words.length

@@ -186,11 +186,13 @@ function occurrences(text: string, match: string): number[] | null {
 interface DeedContext {
   text: string
   breaks: Breaks
-  blockWords: Set<string>
   blockYears: Set<string>
   blockAmounts: number[]
   hasDeeds: boolean
   hasSale: boolean
+  /** Name words of the current owner and of the last sale's seller ("sold by"). */
+  owner: Set<string> | null
+  seller: Set<string> | null
 }
 
 function deedContext(acris: string | null, response: string): DeedContext | null {
@@ -200,12 +202,29 @@ function deedContext(acris: string | null, response: string): DeedContext | null
   return {
     text,
     breaks: clauseBreaks(text),
-    blockWords: new Set(nameTokens(block)),
     blockYears: new Set(yearsIn(block)),
     blockAmounts: dollarAmounts(block).map(a => a.value),
     hasDeeds: /^(?:Current owner|Last sale|Prior sale):/m.test(block),
     hasSale: /^(?:Last sale|Prior sale):/m.test(block),
+    owner: partyWords(block.match(/^Current owner:[ \t]{0,3}([^\n]{1,300})/m)?.[1]),
+    seller: partyWords(block.match(/\(sold by ([^)\n]{1,300})\)/)?.[1]),
   }
+}
+
+function partyWords(name: string | undefined): Set<string> | null {
+  const words = name ? nameTokens(name) : []
+  return words.length > 0 ? new Set(words) : null
+}
+
+// Brief 43 PR 10 review: which party an owner claim names. "The owner is …" /
+// "owned by …" (not "was owned by", "the previous owner is …") is the current
+// owner; "previous owner …" / "transferred from …" is the last sale's seller;
+// a buyer verb ("sold to", "bought by", "<Name> bought it") may be either.
+const PAST_BEFORE = /\b(?:previous|prior|former|original|old|earlier|was|were|been|previously|formerly|once|originally)\s{1,3}$/i
+function partiesFor(match: string, before: string, d: DeedContext): Array<Set<string> | null> {
+  if (/^(?:previous\s{1,3}owner|transferred\s{1,3}from)\b/i.test(match)) return [d.seller]
+  if (/^(?:owner\s{1,3}is|owned\s{1,3}by)\b/i.test(match) && !PAST_BEFORE.test(before.slice(-24))) return [d.owner]
+  return [d.owner, d.seller]
 }
 
 // The verb words of an owner claim, so what's left is the name it gives.
@@ -214,9 +233,11 @@ const OWNER_VERB_WORDS = /\b(?:owned|owner|is|purchased|bought|sold|it|to|acquir
 /**
  * Brief 43 PR 10 — a deed fact is grounded when this turn's ACRIS block has the
  * deed records it describes:
- * - an owner claim's name ("owner is Jordan Sample") has every word in the
- *   block, in any order (ACRIS writes "SAMPLE, JORDAN"); with no name ("the
- *   owner is an LLC") the block must have deed records;
+ * - an owner claim's name ("owner is Jordan Sample") has every word in one
+ *   party's name in the block, in any order (ACRIS writes "SAMPLE, JORDAN"):
+ *   the current owner for "owner is", the seller for "previous owner", either
+ *   for a buyer verb; with no name ("the owner is an LLC") the block must have
+ *   deed records;
  * - every dollar figure and year in the claim's clause is in the block ("$1.2M"
  *   for $1,200,000 is fine; the prompt asks for exact prices);
  * - a sale claim needs a sale in the block.
@@ -224,20 +245,36 @@ const OWNER_VERB_WORDS = /\b(?:owned|owner|is|purchased|bought|sold|it|to|acquir
 function bindDeedFlag(f: RegexFlag, d: DeedContext | null): boolean {
   if (!d || !d.hasDeeds) return false
   if (f.pattern !== 'ownership_assertion' && !d.hasSale) return false
-  if (f.pattern === 'ownership_assertion') {
-    // The name is in the match: after the verb, or before "bought it".
-    if (!nameTokens(f.match.replace(OWNER_VERB_WORDS, ' ')).every(w => d.blockWords.has(w))) return false
-  }
+  // The name is in the match: after the verb, or before "bought it".
+  const named = f.pattern === 'ownership_assertion' ? nameTokens(f.match.replace(OWNER_VERB_WORDS, ' ')) : []
   const spots = occurrences(d.text, straightApostrophes(f.match))
   if (!spots || spots.length === 0) return false
   return spots.every(at => {
     const end = at + f.match.length
+    // Brief 43 PR 10 review: every name word must belong to one party the block
+    // names, in the role the claim gives it: not words gathered from the whole
+    // block (its address, the lender, labels), and not the seller called the
+    // current owner [engineering precaution].
+    if (named.length > 0 && !partiesFor(f.match, d.text.slice(Math.max(0, at - 24), at), d)
+      .some(p => p !== null && named.every(w => p.has(w)))) return false
     const c = clauseAround(d.text, at, end, d.breaks)
     const clause = c.before + d.text.slice(at, end) + c.after
     if (!yearsIn(clause).every(y => d.blockYears.has(y))) return false
     return dollarAmounts(clause).every(a =>
       d.blockAmounts.some(b => (a.rounded ? Math.abs(a.value - b) <= b * 0.005 : a.value === b)))
   })
+}
+
+// Brief 43 PR 10 (S-09): "Three of them are owned by LLCs" about this turn's
+// CRM sellers. An owner claim that names no one and only says "an LLC" or
+// "LLCs" is grounded when this turn's results or lookups hold an LLC; with none
+// it's still a claim with no source [engineering precaution].
+const LLC_AFTER = /^\s{1,3}(?:(?:an?|the|two|three|four|several|separate|different)\s{1,3})?(?:LLCs?|L\.L\.C\.?)(?!\w)/i
+function llcOwnedGrounded(f: RegexFlag, g: GuardGrounding, response: string): boolean {
+  if (f.pattern !== 'ownership_assertion' || !/^(?:owned\s{1,3}by|owner\s{1,3}is)$/i.test(f.match) || !/\bllc\b/.test(g.corpus)) return false
+  const text = straightApostrophes(response)
+  const spots = occurrences(text, f.match)
+  return !!spots && spots.length > 0 && spots.every(at => LLC_AFTER.test(text.slice(at + f.match.length, at + f.match.length + 40)))
 }
 
 /**
@@ -263,7 +300,7 @@ export function filterToolBoundFlags(flags: RegexFlag[], grounding: string | Gua
       const key = `${f.pattern}\u0000${f.match}`
       if (!bound.has(key)) {
         if (deed === undefined) deed = deedContext(g.lookups.acris, response)
-        bound.set(key, bindDeedFlag(f, deed))
+        bound.set(key, bindDeedFlag(f, deed) || llcOwnedGrounded(f, g, response))
       }
       return !bound.get(key)
     }
