@@ -6,7 +6,7 @@
 // DriftInteraction.parsedFilters.guard. The actual API orchestration lives in
 // the route (it needs the live Anthropic client + systemBlocks closures).
 import type { RegexFlag } from './regexGuard'
-import type { VerifierFlag, VerifierResult } from './llmVerifier'
+import type { VerifierError, VerifierFlag, VerifierResult } from './llmVerifier'
 
 // total attempts = 1 initial + MAX_GUARD_RETRIES informed retries.
 export const MAX_GUARD_RETRIES = 2
@@ -22,13 +22,21 @@ export const MAX_GUARD_RETRIES = 2
 // (public-records citations, then finance math) are matched before the softer
 // self-description and generic buckets. Brief 43 PR 2 puts the never-sent
 // reply ahead of all four.
-export const CANNED_PUBLIC_RECORDS = `I'm afraid I can't give you a verified answer on that one. This system doesn't reach into public records, MLS, RLS, StreetEasy, or the external property databases; only your inbox listings and parties are in view. If you'd like, rephrase around a listing or party in the system and I'll pick it up.`
+//
+// Brief 43 PR 10 (Q18; N11): the four texts say what Drift really can do. They
+// used to deny the deed and permit lookups it has ("This system doesn't reach
+// into public records") and to name its tools. Deed owners may be named: D1
+// [Ryan, 2026-10-17]. Wording follows the feel standard (Brief 42 TEST_PLAN
+// §3): calm, short, one useful offer, no em-dashes, no "I'm afraid", no tool or
+// system names; the self-description follows DRIFT_SCRIPT #2 and D3 ("Drift,
+// DealFlow's assistant").
+export const CANNED_PUBLIC_RECORDS = `I couldn't confirm that from the records I have, so I'd rather not guess. I can look up deed and permit records for an exact address, but I can't browse other websites or the MLS. Which address should I check?`
 
-export const CANNED_FINANCE = `I'm afraid the math isn't something I can verify from what's in the system. The figures I would need — square footage, maintenance, purchase price, tax details — are not in the data. Share the missing inputs and I'll run the calculation, or the offering plan and managing agent should have them on hand.`
+export const CANNED_FINANCE = `I couldn't check that math against the figures on file, so I'd rather not give a number. Share the price, the down payment and any monthly charges, and I'll run the numbers.`
 
-export const CANNED_SELF_DESCRIPTION = `A quick summary. I search your listings and your parties through two tools, search_listings and search_parties, against the database. I can find matches, compare them, and draft outreach. I can't send email, and I don't have live public-records access. Ask me about a listing, a buyer, or a match, and I'll pick it up.`
+export const CANNED_SELF_DESCRIPTION = `I'm Drift, DealFlow's assistant. I can search your listings and buyer and renter requests, look up one of your CRM sellers by name or address, build Buyer Match reports, draft emails and texts for you to send, and look up deed and permit records and today's mortgage rate. I can't send anything, make calls, book your calendar while Outlook is off, or browse other websites. Where would you like to start?`
 
-export const CANNED_GENERIC = `I'm afraid I couldn't verify that one. If you'd like, rephrase around a specific listing, party, or match in the system and I'll take another pass.`
+export const CANNED_GENERIC = `I couldn't verify part of that answer, so I'd rather not guess. Ask me about a specific listing, buyer or address and I'll take another pass.`
 
 // Brief 43 PR 2 (Q2) — the fixed reply when Drift claims a second time that it
 // sent, texted, called or booked something (an `action_claim` flag on the
@@ -83,6 +91,9 @@ export interface GuardAttempt {
   regexFlags: RegexFlag[]
   verifierFlags: VerifierFlag[]
   verifierCost: number
+  // Brief 43 PR 10 (Q32): the fact-check failed or answered garbage on this
+  // attempt, so its reply was accepted on the regex check alone.
+  verifierError?: VerifierError
 }
 
 /**
@@ -137,14 +148,19 @@ const ACTION_CLAIM_FEEDBACK = `Nothing was sent. You can't send, text, email or 
 
 // The user turn appended on an informed retry. Compact by design — every token
 // here is paid on each retry.
+//
+// Brief 43 PR 10 (Q18): it no longer tells Drift to deny public records. The
+// deed, permit and live StreetEasy blocks in the system prompt are real data;
+// what's missing is a source this turn didn't fetch. Links reach Ryan as
+// buttons, so the rewrite never writes a URL.
 export function buildFeedbackPrompt(flagLines: string[]): string {
-  const prompt = `Your previous response contained claims not supported by tool results:
+  const prompt = `Your previous response contained claims that this turn's tool results and record blocks don't support:
 
 <flags>
 ${flagLines.map(l => `- ${l}`).join('\n')}
 </flags>
 
-Regenerate the response. Remove those claims. Only state facts present in the tool results above. If the user is asking for data outside what your tools return (public records, MLS, external sites, ownership history, comps), say plainly that this system doesn't have that data — do not invent alternatives.`
+Regenerate the response. Remove those claims, or restate them exactly as the tool results or the record blocks above give them. Name a source (city records, StreetEasy) only when its block is above, and never write a URL: links reach Ryan as buttons. If Ryan asked for something you don't have this turn (another website, the MLS, comps, or records for an address that wasn't looked up), say so in one short sentence and offer one next step. Don't invent alternatives.`
   // formatFlagLines renders a regex flag as "Structural: '<match>' (<pattern>)".
   if (!flagLines.some(l => l.endsWith('(action_claim)'))) return prompt
   return `${prompt}\n\n${ACTION_CLAIM_FEEDBACK}`
