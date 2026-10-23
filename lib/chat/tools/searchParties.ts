@@ -25,6 +25,7 @@ import { BUYER_ARCHETYPE_CODES, archetypeLabel, fieldHasAllWords, mentionsArchet
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import { wantedHoods } from './neighborhoodMatch'
+import { createdAfterInput, createdAfterWhere } from './createdAfter'
 
 export const searchPartiesInputSchema = z.object({
   role: z.enum(['buyer', 'renter', 'seller', 'landlord']).optional(),
@@ -36,6 +37,8 @@ export const searchPartiesInputSchema = z.object({
   bedsMax: z.number().optional(),
   priceRangeOverlaps: z.object({ min: z.number(), max: z.number() }).optional(),
   includeTestData: z.boolean().optional(),
+  // Brief 43 PR 14 (Q29): only parties added on or after this date (./createdAfter.ts).
+  createdAfter: createdAfterInput,
   limit: z.number().int().positive().max(200).optional(),
   // Brief 43 PR 9 (Q15, Q41): a name or description, and a buyer type (partyFilters.ts).
   query: z.string().optional(),
@@ -202,6 +205,7 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
       // would exclude every normal direct-extraction lead. The OR keeps null +
       // buried_recovery, excludes only comp_reference. (6.3 hotfix; proven by probe.)
       OR: [{ provenance: null }, { provenance: { not: 'comp_reference' } }],
+      ...createdAfterWhere(input.createdAfter), // Brief 43 PR 14 (Q29)
     }
     if (!includeTestData) where.isTestData = false
     // TEST_MODE_ONLY hard gate: force seed data on the demand side.
@@ -266,7 +270,8 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
   // inbox side above. No phone on the card: Ryan asked about demand, and this
   // keeps contact details to the one seller he names (D11) [engineering precaution].
   const intents = wantOppRoles.map(r => (r === 'buyer' ? 'BUYER' : 'RENTER'))
-  const crmWhere: Prisma.MojoContactWhereInput = { organizationId, intent: { in: intents } }
+  // Brief 43 PR 14 (Q29): createdAfter applies here too (when the CRM row first reached DealFlow).
+  const crmWhere: Prisma.MojoContactWhereInput = { organizationId, intent: { in: intents }, ...createdAfterWhere(input.createdAfter) }
   if (!includeTestData) crmWhere.isTestData = false
   if (isTestModeOnly()) crmWhere.isTestData = true
   const crmParties = await prisma.mojoContact.findMany({

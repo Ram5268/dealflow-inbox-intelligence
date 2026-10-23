@@ -26,10 +26,17 @@ export function deriveVerdict(t: GuardTelemetry): GuardVerdict {
 
 // Flag text from the final attempt — the reason this turn tripped the guard (if
 // it did). Empty string when the turn passed clean.
+//
+// Brief 43 PR 10 (Q32): plus a note for any attempt whose fact-check failed or
+// answered garbage, so a reply accepted on the regex check alone shows in the
+// guard log even when it passed.
 export function summarizeReason(t: GuardTelemetry): string {
   const last = t.history[t.history.length - 1]
   if (!last) return ''
-  return formatFlagLines(last.regexFlags, last.verifierFlags).join(' | ')
+  const errors = t.history
+    .filter(h => h.verifierError)
+    .map(h => `Fact-check: ${h.verifierError} (attempt ${h.attempt})`)
+  return [...formatFlagLines(last.regexFlags, last.verifierFlags), ...errors].join(' | ')
 }
 
 export interface GuardFireEventInput {

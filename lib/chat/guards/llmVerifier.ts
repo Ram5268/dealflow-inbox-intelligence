@@ -19,11 +19,16 @@ export interface VerifierFlag {
   reason: string // why it isn't supported by tool results
 }
 
+// Brief 43 PR 10 (Q32): why a fact-check gave no verdict. The reply is then
+// accepted (the regex check has already run) and the attempt is logged with it.
+export type VerifierError = 'verifier_api_error' | 'verifier_parse_error'
+
 export interface VerifierResult {
   isGrounded: boolean
   flags: VerifierFlag[]
   costUsd: number
   latencyMs: number
+  error?: VerifierError
 }
 
 export interface ToolResultForVerify {
@@ -52,7 +57,7 @@ ALLOWED — do NOT flag these:
 - Neighborhood name inferred from an address that IS in the tool results (e.g., a card at "200 E 33rd St" → "Murray Hill / Midtown South"; "461 6th St" → "Park Slope"). Inferring the neighborhood/sub-neighborhood/borough of a known address is broker knowledge, not a fabricated fact.
 - Transit adjacency for an address in the tool results (e.g., "175 Kent is near the Bedford Ave L", naming nearby subway lines/stops like "Lorimer" or "Graham").
 - Building-era or block-character context tied to an address in the tool results ("W 19th and W 20th are prewar Chelsea", "Willow St is a brownstone row", "Astoria Blvd is near the Hell Gate waterfront strip").
-- Descriptions of the assistant's OWN capabilities and architecture — its tools (search_listings, search_parties), that it reads the broker's inbox/extracted listings, Mojo CRM leads, calendar, that it can draft outreach but cannot send email or read public records. These describe the system itself, not property facts. The assistant may freely explain what it can and cannot do.
+- Descriptions of the assistant's OWN capabilities: it searches the broker's listings and buyer and renter requests, looks up a CRM seller the broker names, builds Buyer Match reports, drafts emails and texts for the broker to send, and looks up city deed and permit records and today's mortgage rate; it can't send anything, make calls or browse other websites. These describe the system itself, not property facts. The assistant may freely explain what it can and cannot do.
 - Subjective commentary ("great value", "priced to sell", "family-friendly").
 - In a draft message the response carries ("Draft (email, buyer_side): ..."), its greeting, its sign-off ("Ryan Martin"), pleasantries and offers to show the home or share more. The draft's facts about a property are checked like any other claim.
 - Obvious NYC general knowledge ("Park Slope is in Brooklyn", "the UWS is uptown", "prewar buildings are older").
@@ -64,7 +69,7 @@ STILL FLAG — these are hallucinations, do NOT let them pass:
 - URLs of any kind — the assistant has no URL-returning tool, so ANY URL is fabricated.
 - Sale-history claims ("last sold in 2019 for $X").
 - Zoning designations, DOB violations, or tax-history claims for a property.
-- Named external data sources cited as if read from them ("per ACRIS", "PropertyShark shows…", "on StreetEasy at $Y", "MLS/RLS records").
+- Named external data sources cited as if read from them ("per ACRIS", "PropertyShark shows…", "on StreetEasy at $Y", "MLS/RLS records"). A sentence saying the assistant can't check a source ("I can't check Zillow") is an honest decline, not a citation: do not flag it.
 - Cross-party match claims that VIOLATE a party's stated constraints in the tool results (e.g., matching a buyer whose card says "Chelsea, budget $2M" to a Park Slope listing, or to a listing above their budget).
 
 Method:
@@ -112,8 +117,8 @@ function buildUserMessage(
 }
 
 // Strict-ish JSON parse: try direct, then a fenced/embedded-object fallback,
-// then fail safe. Fail-safe = treat as UNGROUNDED so a parser failure never
-// lets an unverified response through.
+// then (Brief 43 PR 10, Q32) a second, lenient read of an answer cut off
+// mid-list (salvageVerdict). null = no verdict at all.
 function parseVerdict(text: string): { isGrounded: boolean; flags: VerifierFlag[] } | null {
   const attempts: string[] = []
   const trimmed = text.trim()
@@ -144,13 +149,42 @@ function parseVerdict(text: string): { isGrounded: boolean; flags: VerifierFlag[
       /* try next */
     }
   }
-  return null
+  return salvageVerdict(trimmed)
+}
+
+// Brief 43 PR 10 (Q32): the second parse. A verdict cut off mid-list (e.g. by
+// max_tokens) still says whether the reply is grounded, and its finished flags
+// still name the claims. "Not grounded" with no finished flag keeps one generic
+// flag, so the rewrite still happens [engineering precaution].
+function salvageVerdict(text: string): { isGrounded: boolean; flags: VerifierFlag[] } | null {
+  const verdict = text.match(/"isGrounded"\s{0,5}:\s{0,5}(true|false)\b/)
+  if (!verdict) return null
+  const flags: VerifierFlag[] = []
+  const FLAG = /\{\s{0,5}"claim"\s{0,5}:\s{0,5}"((?:[^"\\]|\\.){0,2000})"\s{0,5},\s{0,5}"reason"\s{0,5}:\s{0,5}"((?:[^"\\]|\\.){0,2000})"\s{0,5}\}/g
+  for (const m of text.matchAll(FLAG)) {
+    try {
+      flags.push({ claim: JSON.parse(`"${m[1]}"`), reason: JSON.parse(`"${m[2]}"`) })
+    } catch {
+      /* skip a malformed one */
+    }
+  }
+  if (verdict[1] === 'true') return { isGrounded: true, flags }
+  if (flags.length === 0) {
+    flags.push({ claim: 'unnamed claim', reason: 'The fact-check found unsupported claims, but its list was cut off. Keep only facts the search results and record blocks give.' })
+  }
+  return { isGrounded: false, flags }
 }
 
 /**
  * Fact-check a candidate Drift response against the tool results it was built
  * from. Returns isGrounded + any unsupported claims, plus cost/latency for
- * telemetry. Never throws — API/parse failures fail SAFE (ungrounded).
+ * telemetry. Never throws.
+ *
+ * Brief 43 PR 10 (Q32): an API error or an answer with no readable verdict
+ * accepts the reply, with `error` set for the guard log. It used to fail safe
+ * to "ungrounded", which turned good replies into two paid rewrites and then a
+ * stock reply whenever the fact-check had trouble; the regex check has already
+ * run on the reply by then [engineering precaution].
  */
 export async function verifyResponse(
   userQuery: string,
@@ -187,13 +221,9 @@ export async function verifyResponse(
     const verdict = textBlock ? parseVerdict(textBlock.text) : null
 
     if (!verdict) {
-      // Fail safe: unparseable verifier output => treat response as ungrounded.
-      return {
-        isGrounded: false,
-        flags: [{ claim: 'verifier_parse_error', reason: 'Verifier returned unparseable output; failing safe to ungrounded.' }],
-        costUsd,
-        latencyMs: Date.now() - t0,
-      }
+      // Brief 43 PR 10 (Q32): no readable verdict: accept, and log it.
+      console.warn('[guard] fact-check gave no readable verdict; reply accepted on the regex check')
+      return { isGrounded: true, flags: [], costUsd, latencyMs: Date.now() - t0, error: 'verifier_parse_error' }
     }
 
     return {
@@ -203,12 +233,8 @@ export async function verifyResponse(
       latencyMs: Date.now() - t0,
     }
   } catch (err) {
-    // API error => fail safe (ungrounded), but don't crash the chat route.
-    return {
-      isGrounded: false,
-      flags: [{ claim: 'verifier_api_error', reason: `Verifier call failed: ${String(err)}` }],
-      costUsd: 0,
-      latencyMs: Date.now() - t0,
-    }
+    // Brief 43 PR 10 (Q32): API error: accept, and log it. Never crash the route.
+    console.warn('[guard] fact-check call failed; reply accepted on the regex check:', String(err).slice(0, 200))
+    return { isGrounded: true, flags: [], costUsd: 0, latencyMs: Date.now() - t0, error: 'verifier_api_error' }
   }
 }

@@ -4,11 +4,22 @@ import { buildStreetEasyFilterUrl } from '@/lib/chat/streetEasyUrls'
 // Triggered when Ryan has a buyer/rental intent + at least one neighborhood.
 // Returns both an LLM-facing context block AND structured payloads (liveSeListings + seFilterUrl)
 // that route.ts forwards in the JSON response so the UI can render live SE cards.
-export const liveStreetEasyFetcher: ContextFetcher = async ({ parsed }) => {
+//
+// Brief 43 PR 13 (Q21, Q22): this search is paid (RapidAPI quota), so it runs
+// only when Ryan asks for listings: "my buyer", rental listings or coming-soon
+// rentals, plus a neighborhood. A question about renter demand ("how many
+// renters in Astoria") is about his inbox, not StreetEasy, so RENTER_INQUIRY no
+// longer sets it off; and it never runs on a turn whose message is a long
+// paste (lib/chat/context/lookupQuestion.ts) [engineering precaution].
+const SEARCH_CATEGORIES = ['RENTAL_LISTING', 'COMING_SOON_RENTAL']
+
+export const liveStreetEasyFetcher: ContextFetcher = async ({ parsed, pastedText }) => {
+  if (pastedText) return { block: null }
   const isRentalIntent = parsed.categories.some(c =>
     ['RENTAL_LISTING','COMING_SOON_RENTAL','RENTER_INQUIRY'].includes(c)
   )
-  const shouldSearch = (parsed.isMyBuyer || isRentalIntent) && parsed.neighborhoods.length > 0
+  const asksForListings = parsed.isMyBuyer || parsed.categories.some(c => SEARCH_CATEGORIES.includes(c))
+  const shouldSearch = asksForListings && parsed.neighborhoods.length > 0
   if (!shouldSearch) return { block: null }
 
   const lowerHoods = parsed.neighborhoods.map(n => n.toLowerCase())

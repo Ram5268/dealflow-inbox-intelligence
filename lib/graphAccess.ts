@@ -23,9 +23,27 @@ export class GraphDisabledError extends Error {
 export const GRAPH_PAUSED_BODY = { ok: false, paused: true, error: GRAPH_PAUSED_MESSAGE } as const
 
 // Drift's context block while the switch is off (lib/chat/context/calendar.ts),
-// on every turn: its prompt otherwise asks it to propose events.
+// on every turn. Brief 43 PR 14: D8 [Brief 42 default], calendar off, so Drift
+// says so and keeps the details in chat (DRIFT_SCRIPT #24 wording). The reply
+// tool has no pendingEvent field while the switch is off (Q33).
 export const GRAPH_PAUSED_CALENDAR_BLOCK =
-  "\n\nCALENDAR: Outlook is paused, so you can't see or add calendar events right now. If asked, say that plainly. Never offer to book or schedule anything, and leave pendingEvent empty."
+  "\n\nCALENDAR: Outlook is paused, so you can't see or add calendar events right now. Never offer to book or schedule anything. If asked what's on the calendar, say you can't see it right now. If asked to book something, say \"Your calendar isn't connected right now, so I can't book it. I'll keep the details here:\" and then give what, where, the day and the time in one line, so they stay in the chat."
+
+// Brief 43 PR 14 (dormant until Outlook returns): only while the switch is on,
+// Drift proposes an event and Ryan's plain yes books it (lib/chat/calendarConfirm.ts).
+export const GRAPH_ON_CALENDAR_NOTE =
+  "\n\nCALENDAR: To book something, propose it in pendingEvent and wait for Ryan's plain yes. Never say it's booked until a calendar confirmation appears in the conversation."
+
+// Brief 43 PR 14 (Q29, M21): email comes in through Outlook too, so while the
+// switch is off nothing new arrives. Drift is told so on every turn, with the
+// date of the newest email on file (null when there is none).
+export function graphPausedEmailBlock(newestEmailAt: Date | null): string {
+  const base = '\n\nEMAIL: Email reading is paused (Outlook is off), so no new emails, listings or buyer requests are coming in from email.'
+  if (!newestEmailAt) return `${base} If asked what came in, say that plainly.`
+  const long = newestEmailAt.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'long', day: 'numeric', year: 'numeric' })
+  const short = newestEmailAt.toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'long', day: 'numeric' })
+  return `${base} The newest email on file arrived on ${long}. If asked what came in today or this week, or how many came in, say that plainly first: "Email reading is paused, so nothing new has come in since ${short}."`
+}
 
 export interface StoredGraphToken {
   accessTokenEncrypted: string | null
