@@ -7,7 +7,7 @@ import { parseQuery } from '@/lib/retrieval/queryParser'
 import type { ParsedQuery } from '@/lib/retrieval/types'
 import { createCalendarEvent } from '@/lib/microsoftCalendar'
 import { graphEnabled } from '@/lib/graphAccess'
-import { recentHistoryQuery, oldestFirst, startAtUserTurn } from '@/lib/chat/history'
+import { recentHistoryQuery, oldestFirst, historyForModel } from '@/lib/chat/history'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
@@ -38,8 +38,9 @@ import {
   type GuardTelemetry,
 } from '@/lib/chat/guards/retry'
 import { DRAFT_FIELD_SCHEMA, buildDraftContext, draftAsText, enforceDraftPrivacy } from '@/lib/chat/guards/draftPrivacy'
-import { encodeStoredReply, readStoredReply, storedReplyForModel } from '@/lib/chat/storedReply'
+import { encodeStoredReply, readStoredReply } from '@/lib/chat/storedReply'
 import { normalizeDraft } from '@/lib/chat/draft'
+import { pickShownCards, orderShownDeals, footerFromTurn, reportBuyerId, SHOWN_NOTE_ECHO } from '@/lib/chat/shownFooter'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -234,6 +235,7 @@ export async function POST(req: NextRequest) {
       userMessage,
       queryText,
       isConfirmMessage,
+      previousUserMessage: history.filter(m => m.role === 'user').slice(-1)[0]?.content ?? null,
     })
 
     // Cards are hydrated AFTER the tool_use loop (from the ids Sonnet's tools
@@ -315,7 +317,8 @@ export async function POST(req: NextRequest) {
           referencedDeals: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Exact card ids you mentioned (e.g. SEED_SALE_06). Traceability only — does not gate which cards Ryan sees.',
+            // Brief 43 PR 8 (Q14): these are the cards the page shows, in this order.
+            description: 'The ids of every card your reply tells Ryan about, in the order you bring them up (e.g. SEED_SALE_06), including ones you only count: "Two sales; the stronger is X" lists both, X first. Ryan sees only these cards, in this order, so "the second one" is the second card here. Leave it empty only when your reply is about no card.',
           },
           // Brief 27.0 — report attachments. Fill attachedReport ONLY on a turn you
           // just called generate_report; fill attachedFragment ONLY on a turn you
@@ -355,10 +358,8 @@ export async function POST(req: NextRequest) {
     // Brief 41: the model's conversation must start with a user turn.
     // Brief 43 PR 3 (review r1): a reply stored as JSON (a draft) goes to the model
     // as its text plus the draft, the way the draft rewrite shows it, not as JSON.
-    const anthropicHistory: Anthropic.Messages.MessageParam[] = startAtUserTurn(history).map(m => ({
-      role: m.role as 'user' | 'assistant',
-      content: m.role === 'assistant' ? storedReplyForModel(m.content) : m.content,
-    }))
+    // Brief 43 PR 8 (Q14): and the note of the cards, buyer and report it showed.
+    const anthropicHistory: Anthropic.Messages.MessageParam[] = historyForModel(history)
 
     // ── Sonnet 4.6 tool_use loop ─────────────────────────────────────────────
     // tool_choice='any' forces a tool call every turn, so the loop deterministically
@@ -620,10 +621,18 @@ export async function POST(req: NextRequest) {
       if (serverAttachedReport || serverAttachedFragment || creatingSession) {
         const reportSession = await ensureSession()
         const storedUserMsg = files.length > 0 ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]` : userMessage
+        // Brief 43 PR 8 (review r1): the reply keeps the note of the report it saved
+        // (its buyer id and report id), so "just the near-misses for that buyer"
+        // keeps the same buyer after a slow report (#15, #16).
+        const timedOutShown = footerFromTurn({
+          buyerId:  reportBuyerId(toolResultsForGuard),
+          reportId: (serverAttachedReport as AttachedReport | null)?.reportId ?? null,
+        })
         await prisma.chatMessage.create({ data: { organizationId, sessionId: reportSession.id, role: 'user', content: storedUserMsg } })
         await prisma.chatMessage.create({
           data: {
-            organizationId, sessionId: reportSession.id, role: 'assistant', content: TIMED_OUT_REPLY,
+            organizationId, sessionId: reportSession.id, role: 'assistant',
+            content: encodeStoredReply({ response: TIMED_OUT_REPLY, suggestions: [], shown: timedOutShown }),
             attachedReport:   (serverAttachedReport ?? undefined) as unknown as object | undefined,
             attachedFragment: (serverAttachedFragment ?? undefined) as unknown as object | undefined,
           },
@@ -882,6 +891,7 @@ export async function POST(req: NextRequest) {
       .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
       .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
       .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
+      .replace(SHOWN_NOTE_ECHO, '')         // Brief 43 PR 8: never Drift's copy of a Shown note
 
     // ── Hydrate the cards Sonnet's tools returned into full rows for the UI ──
     // Only ExtractedOpportunity-backed cards render as `deals`. CRM buyers from
@@ -891,15 +901,20 @@ export async function POST(req: NextRequest) {
     const hydrated = oppCardIds.length > 0
       ? await prisma.extractedOpportunity.findMany({ where: { id: { in: oppCardIds } }, include: oppIncludeForCards })
       : []
+    // Brief 43 PR 8 (Q14): the page shows the cards Drift named, in its order, so
+    // "the second one" is the second card Ryan sees. A reply that named none shows
+    // every card found, best match first, as before (lib/chat/shownFooter.ts).
+    // Review r1: only a card the page can show counts as named (a CRM contact from
+    // search_parties has none), so a reply naming only those keeps the cards found.
+    const shownPick = pickShownCards(hydrated.map(d => d.id), aiResult.referencedDeals)
     // matchScore: fractional price overlap when the model filtered by budget,
     // else the extraction confidenceScore (unknown-fit fallback, same as before).
-    const deals = hydrated
+    const deals = orderShownDeals(hydrated
       .map(d => ({
         ...d,
         matchScore: cardOverlap.has(d.id) ? (cardOverlap.get(d.id) ?? 0) : d.confidenceScore,
         streetEasyUrl: getStreetEasyUrl(d.streetEasyId, d.category, d.rawEmail?.bodyContent, d.rawEmail?.attachmentsText),
-      }))
-      .sort((a, b) => b.matchScore - a.matchScore)
+      })), shownPick)
 
     const storedMsg = files.length > 0
       ? `${userMessage} [📎 ${files.map(f => f.name).join(', ')}]`
@@ -908,7 +923,15 @@ export async function POST(req: NextRequest) {
     // Store pendingEvent in assistant message content as JSON so confirm flow can read it.
     // Brief 43 PR 3: a draft is stored the same way (no migration); GET reads it back.
     const pendingEvent = aiResult.pendingEvent ?? null
-    const storedAssistantContent = encodeStoredReply({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent, draft })
+    // Brief 43 PR 8 (Q14; #5, #16): and the note of what Ryan saw with this reply,
+    // for Drift's next turn: the cards in the order shown, the buyer of a report
+    // or report section, and the report id.
+    const shown = footerFromTurn({
+      deals,
+      buyerId:  reportBuyerId(toolResultsForGuard),
+      reportId: (serverAttachedReport as AttachedReport | null)?.reportId ?? null,
+    })
+    const storedAssistantContent = encodeStoredReply({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent, draft, shown })
 
     // Save messages to this session
     await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'user', content: storedMsg } })
@@ -957,7 +980,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ── Brief 2.5 — Drift interaction logging (non-fatal; never breaks chat) ──
-    // topCards = the cards actually shown to Ryan (already sorted by matchScore),
+    // topCards = the cards actually shown to Ryan (in the order shown; Brief 43 PR 8),
     // capped at 20. We await the insert inside try/catch so we can return the
     // interactionId for client-side click/feedback wiring, while any logging
     // failure is swallowed and chat still responds.

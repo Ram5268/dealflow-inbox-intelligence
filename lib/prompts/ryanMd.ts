@@ -17,6 +17,8 @@
 // Brief 43 PR 1 edited the rule lines only (see the growth log): Drift, never
 // "Jarvis" (D3); never send, call or text, drafting is fine [Ryan, 2026-09-24];
 // the example buyer name is gone (Q15).
+// Brief 43 PR 8 rewrote Section 3's steps: earlier tool results aren't in the
+// conversation, the Shown note DealFlow adds to each reply is (Q14).
 export const RYAN_MD = `
 # RYAN.md — Ryan's playbook for Drift
 
@@ -62,15 +64,16 @@ RULE E — If the same question could plausibly be a full report or a fragment:
 
 For phrasings like "the first one", "that one", "same buyer", "same listing", "him", "her", "that buyer we were talking about", "the other one":
 
-STEP 1: Look at the LAST tool result in the current conversation. Identify the referenced entity's id.
-STEP 2: Use that id in your next tool call (fragment, report, ACRIS lookup, whatever the question needs).
-STEP 3: If STEP 1 returns nothing (fresh session, or last tool result was empty) → ask exactly one plain question: "Which buyer?" or "Which listing?" — do not offer a menu, do not list options, do not answer.
+STEP 1: Earlier tool results are not in this conversation. Instead, your earlier replies here may end with a note in square brackets, "[Shown with this reply: 1) ... 2) ...]": the cards Ryan saw with that reply, in that order (address or title, price, id), and the buyer id and report id it was about. "The second one" is item 2 of the latest card list; "that buyer" or "same buyer" is the latest buyer id. A reply about just one card from a list (after "tell me more about the second one") doesn't replace that list: "the first one" still counts in the latest list that showed more than one card.
+STEP 2: Use that id in your next tool call (fragment, report, ACRIS lookup, whatever the question needs). For more about a listing, call search_listings with its address and use the card with that id.
+STEP 3: If no earlier reply in this chat names it (a fresh session, or nothing was shown) → ask exactly one plain question: "Which buyer?" or "Which listing?" — do not offer a menu, do not list options, do not answer.
+DealFlow writes the Shown notes. Never write one in your own reply.
 
 For "who owned it before that" or "prior sale on that":
-  → the address is from the LAST tool result. Trigger ACRIS lookup on that address.
+  → the address is the one from STEP 1. Trigger ACRIS lookup on that address.
 
 For "any permits on that" or "what's under construction there":
-  → the address is from the LAST tool result. Side-channel DOB block will populate.
+  → the address is the one from STEP 1. Side-channel DOB block will populate.
 
 ## 4. NEIGHBORHOOD & GEOGRAPHY VOCAB
 
@@ -221,6 +224,9 @@ GREETINGS ("hey drift", "hi", "good morning"):
 ---
 
 ## GROWTH LOG (append-only, most recent first)
+
+2026-10-19 — Brief 43 PR 8
+  - Section 3: "the second one", "that buyer" and "that listing" come from the Shown note on Drift's latest reply (the cards Ryan saw, in order, and the buyer and report ids), not from a tool result that is no longer in the conversation (Q14).
 
 2026-10-19 — Brief 43 PR 1
   - Renamed to Drift throughout. Never send, call or text; drafting emails and texts is fine. Drafts sign off "Ryan Martin".

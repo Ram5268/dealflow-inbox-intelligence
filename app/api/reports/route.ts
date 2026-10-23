@@ -5,6 +5,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { getTemplate } from '@/lib/reports/templates'
 import { getGenerator } from '@/lib/reports/generators'
+import { encodeStoredReply } from '@/lib/chat/storedReply'
+import { footerFromTurn, reportSummaryLines } from '@/lib/chat/shownFooter'
 
 export const maxDuration = 60
 
@@ -84,14 +86,23 @@ export async function POST(req: NextRequest) {
 
     let messageId: string | undefined
     if (writeToChat) {
+      const suggestions = ['Show the near-misses', 'Widen the criteria']
       const msg = await prisma.chatMessage.create({
         data: {
           organizationId: session.organizationId,
           sessionId: session.id,
           role: 'assistant',
-          content: `Here's the ${template.name} for ${generated.subject}.`,
+          // Brief 43 PR 8 (Q14, N13): the one line the page shows, stored with the
+          // report's buyer id, report id and a 3-line summary, so Drift's follow-ups
+          // ("just the near-misses for that buyer") keep the same buyer. Stored in
+          // the content JSON (lib/chat/storedReply.ts): no migration.
+          content: encodeStoredReply({
+            response: `Here's the ${template.name} for ${generated.subject}.`,
+            suggestions,
+            shown: footerFromTurn({ buyerId, reportId: report.id, summary: reportSummaryLines(generated.sections) }),
+          }),
           attachedReport: attachedReport as object,
-          suggestions: ['Show the near-misses', 'Widen the criteria'] as object,
+          suggestions: suggestions as object,
         },
         select: { id: true },
       })
