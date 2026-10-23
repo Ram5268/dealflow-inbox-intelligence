@@ -4,7 +4,7 @@
 // vs property street and city (crm-sync/addressNormalize.ts). Only when it's null
 // do we compare the mailing street with the property street ourselves, normalised
 // the same way. A raw string compare never matched a CRM mailing address
-// ("361 Degraw Street, Brooklyn, NY" vs "361 Degraw St # 3"), so every CRM seller
+// ("88 Example Street, Brooklyn, NY" vs "88 Example St # 3"), so every CRM seller
 // with a mailing address looked absentee.
 import { normalizeStreet } from '../crm-sync/addressNormalize'
 import type { ListingData } from './scorerTypes'

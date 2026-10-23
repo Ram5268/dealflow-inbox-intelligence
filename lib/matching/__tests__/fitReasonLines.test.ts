@@ -81,7 +81,7 @@ test('a stored reason is shown without the retired wording', () => {
 test('a homeowner row shows only our own wording, and never price', () => {
   const home = (r: string) => plainFitReason(r, { homeowner: true })
   // The legacy engine's line names the homeowner; any other text becomes the generic line.
-  assert.equal(home('Mojo lead Jane Q Homeowner at 361 Degraw St may match ISO: Investor buyer'), GENERIC_FIT_REASON)
+  assert.equal(home('Mojo lead Jane Q Homeowner at 88 Example St may match ISO: Investor buyer'), GENERIC_FIT_REASON)
   assert.equal(home('Good block, quiet street, owner open to offers'), GENERIC_FIT_REASON)
   assert.equal(home('goldenHandcuff + Bushwick'), GENERIC_FIT_REASON)
   // Our wording is kept, minus price and the retired words.

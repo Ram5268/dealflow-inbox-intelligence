@@ -27,7 +27,7 @@ test('existing entries are unchanged, canonicalized', () => {
 test('exact 5-digit lookup: ZIP+4 accepted, junk and unknown ZIPs → null', () => {
   assert.equal(zipToNeighborhood('11231-0959'), 'Carroll Gardens')
   assert.equal(zipToNeighborhood(' 11222 '), 'Greenpoint')
-  assert.equal(zipToNeighborhood('361 Degraw St'), null)
+  assert.equal(zipToNeighborhood('88 Example St'), null)
   assert.equal(zipToNeighborhood('1122'), null)
   assert.equal(zipToNeighborhood('99999'), null)
   assert.equal(zipToNeighborhood(null), null)

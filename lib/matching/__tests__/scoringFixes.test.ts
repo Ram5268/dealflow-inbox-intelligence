@@ -186,22 +186,22 @@ test('M7: the archetype feature uses the same classes', () => {
 
 test('M8: an owner-occupied CRM seller (mailing = property street) is not absentee in either feature', () => {
   const row = (over: Record<string, unknown>) => mojoContactToListingData(contact({
-    address: '361 Degraw St # 3', neighborhood: 'Carroll Gardens', zipCode: '11231',
+    address: '88 Example St # 3', neighborhood: 'Carroll Gardens', zipCode: '11231',
     propertyTypeDetail: 'Duplex', unitCount: 2, propertyBeds: 6, propertyBaths: 4, ...over,
   }))
-  const ownerOcc = row({ alternateAddress: '361 Degraw Street, Brooklyn, NY', ownerOccupied: true })
+  const ownerOcc = row({ alternateAddress: '88 Example Street, Brooklyn, NY', ownerOccupied: true })
   const noMailing = row({ alternateAddress: null, ownerOccupied: null })
   const investorCG = makeBuyer({ neighborhoods: ['Carroll Gardens'], bedsMin: 3, bedsMax: 6, buyerArchetype: 'INVESTOR_LANDLORD' })
   assert.equal(computeAbsenteeOwner(ownerOcc).score, 0.4)
   assert.equal(computeBuyerArchetypeSituation(ownerOcc, investorCG).score, 0.85)
   assert.equal(computeBuyerArchetypeSituation(noMailing, investorCG).score, 0.85)
   // ownerOccupied unknown: the mailing street is compared normalised (St = Street, unit suffix ignored)
-  const sameStreet = row({ alternateAddress: '361 Degraw Street, Brooklyn, NY', ownerOccupied: null })
+  const sameStreet = row({ alternateAddress: '88 Example Street, Brooklyn, NY', ownerOccupied: null })
   assert.equal(computeAbsenteeOwner(sameStreet).score, 0.4)
   assert.equal(computeBuyerArchetypeSituation(sameStreet, investorCG).score, 0.85)
   // A mailing address with no property street counts as absentee (the CRM rule).
-  assert.equal(computeAbsenteeOwner(row({ address: null, alternateAddress: '9 Palm Ave, Miami, FL', ownerOccupied: null })).score, 1)
-  const elsewhere = row({ alternateAddress: '9 Palm Ave, Miami, FL', ownerOccupied: null })
+  assert.equal(computeAbsenteeOwner(row({ address: null, alternateAddress: '9 Sample Ave, Miami, FL', ownerOccupied: null })).score, 1)
+  const elsewhere = row({ alternateAddress: '9 Sample Ave, Miami, FL', ownerOccupied: null })
   assert.equal(computeAbsenteeOwner(elsewhere).score, 1)
   assert.equal(computeBuyerArchetypeSituation(elsewhere, investorCG).score, 1)
   assert.equal(computeBuyerArchetypeSituation(row({ ownerOccupied: false }), investorCG).score, 1)
@@ -229,9 +229,9 @@ test('M9: an identical CRM seller + buyer pair keeps its score and tier as the i
 test('M9: a CRM seller keeps its matchFit confidence level (recency is left out, not counted unknown)', () => {
   // A well-documented CRM seller: on main this pair had 8 abstentions (MEDIUM).
   const seller = mojoContactToListingData(contact({
-    neighborhood: 'Carroll Gardens', zipCode: '11231', address: '361 Degraw St # 3', propertyTypeDetail: 'Duplex', unitCount: 2,
-    propertyBeds: 7, propertyBaths: 4, ownerOccupied: true, alternateAddress: '361 Degraw Street, Brooklyn, NY',
-    lastSaleDate: new Date('2007-09-29T00:00:00Z'), yearBuilt: 1899, buildingSqft: 2848, mojoList: 'Absentee Owners',
+    neighborhood: 'Carroll Gardens', zipCode: '11231', address: '88 Example St # 3', propertyTypeDetail: 'Duplex', unitCount: 2,
+    propertyBeds: 7, propertyBaths: 4, ownerOccupied: true, alternateAddress: '88 Example Street, Brooklyn, NY',
+    lastSaleDate: new Date('2005-06-15T00:00:00Z'), yearBuilt: 1901, buildingSqft: 2400, mojoList: 'Absentee Owners',
   }))
   const r = scorePair(seller, investor, ctx(CREATED)).matchFit
   assert.ok(!r.unknownFactors.includes('recency'))

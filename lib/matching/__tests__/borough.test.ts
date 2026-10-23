@@ -23,7 +23,7 @@ test('ZIP prefixes (ZIP+4 accepted)', () => {
     ['10451', 'Bronx'], ['11221-1230', 'Brooklyn'], ['11004', 'Queens'], ['11101', 'Queens'],
     ['11385', 'Queens'], ['11432', 'Queens'], ['11691', 'Queens'],
   ]) assert.equal(boroughFromZip(zip), borough, zip)
-  for (const zip of ['11501', '07030', '361 Degraw St', '1122', '', null]) assert.equal(boroughFromZip(zip), null, String(zip))
+  for (const zip of ['11501', '07030', '88 Example St', '1122', '', null]) assert.equal(boroughFromZip(zip), null, String(zip))
 })
 
 test('seller borough order: canonical neighborhood → ZIP prefix → borough label', () => {
