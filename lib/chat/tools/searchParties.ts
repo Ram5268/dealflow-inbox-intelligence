@@ -23,11 +23,13 @@ import { Category, Prisma } from '@prisma/client'
 import { fromRaw, getBorough } from '@/lib/domain/Neighborhood'
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
 import { isTestModeOnly } from '@/lib/config/testMode'
+import { wantedHoods } from './neighborhoodMatch'
 
 export const searchPartiesInputSchema = z.object({
   role: z.enum(['buyer', 'renter', 'seller', 'landlord']).optional(),
   borough: z.string().optional(),
   neighborhoods: z.array(z.string()).optional(),
+  nearby: z.boolean().optional(), // Brief 43 PR 7 (Q13): add the adjacent areas
   beds: z.number().optional(),
   bedsMin: z.number().optional(),
   bedsMax: z.number().optional(),
@@ -96,10 +98,9 @@ function geoMatches(
       const c = canon(h)
       if (c) rowHoods.add(c)
     }
-    const hit = wantHoods.some(w =>
-      rowHoods.has(w) || [...rowHoods].some(r => r.includes(w) || w.includes(r)),
-    )
-    if (!hit) return false
+    // Brief 43 PR 7 (Q13): exact canonical names, so Williamsburg no longer pulls
+    // in East Williamsburg (nor Harlem East Harlem); nearby adds adjacent areas.
+    if (!wantHoods.some(w => rowHoods.has(w))) return false
   }
   return true
 }
@@ -138,6 +139,17 @@ export function bedsMatches(
   return rLo <= qHi && qLo <= rHi
 }
 
+// Brief 43 PR 7 (Q10): does a party's budget fit the asked price (or range)?
+// Scores the asked price nearest the budget against the budget itself, so a
+// $1.0M-$2.0M buyer is a full fit for $1.8M and a max-only $2.0M buyer too (the
+// old test compared the budget's midpoint). Up to 5% past the budget is a near
+// fit (priceOverlapScore's default tolerance); no budget at all is no fit.
+export function budgetOverlap(range: { min: number; max: number }, budgetMin: number | null, budgetMax: number | null): number {
+  const lo = Math.min(range.min, range.max), hi = Math.max(range.min, range.max)
+  const asked = hi < (budgetMin ?? 0) ? hi : lo > (budgetMax ?? Number.POSITIVE_INFINITY) ? lo : Math.max(lo, budgetMin ?? 0)
+  return priceOverlapScore(asked, budgetMin, budgetMax)
+}
+
 export async function searchParties(rawInput: SearchPartiesInput): Promise<SearchPartiesResult> {
   const input = searchPartiesInputSchema.parse(rawInput)
   const organizationId = await getCurrentOrgId()
@@ -145,7 +157,7 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
   const limit = input.limit ?? 50
   const includeTestData = input.includeTestData ?? true  // seed-only test mode: default on
   const wantBorough = input.borough ?? null
-  const wantHoods = (input.neighborhoods ?? []).map(canon).filter((c): c is string => c != null)
+  const wantHoods = wantedHoods(input.neighborhoods, input.nearby)
   const range = input.priceRangeOverlaps ?? null
 
   // Brief 43 PR 5 (D11 [Ryan, 2026-10-18]): no seller or landlord lists.
@@ -205,10 +217,7 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
 
       let overlap: number | undefined
       if (range) {
-        // Party budget midpoint vs the queried range — reuses the listing helper.
-        const mid = p.minPrice != null && p.maxPrice != null ? (p.minPrice + p.maxPrice) / 2
-          : p.maxPrice ?? p.minPrice
-        overlap = priceOverlapScore(mid ?? null, range.min, range.max)
+        overlap = budgetOverlap(range, p.minPrice, p.maxPrice)
         if (overlap === 0) continue
       }
 
@@ -255,10 +264,8 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
 
     let overlap: number | undefined
     if (range) {
-      // Same budget test as the inbox side above.
-      const mid = m.budgetMin != null && m.budgetMax != null ? (m.budgetMin + m.budgetMax) / 2
-        : m.budgetMax ?? m.budgetMin
-      overlap = priceOverlapScore(mid ?? null, range.min, range.max)
+      // Same budget test as the inbox side above (Brief 43 PR 7, Q10).
+      overlap = budgetOverlap(range, m.budgetMin, m.budgetMax)
       if (overlap === 0) continue
     }
 
