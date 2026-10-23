@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { listingChanges, parseCorrections, type ListingCorrections } from '@/lib/review/corrections'
+import { SAVE_FAILED } from '@/lib/review/send'
 
 // GET /api/review — list pending review items with joined opportunity + email data
 export async function GET(req: NextRequest) {
@@ -65,22 +67,51 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ items: enriched, pendingCount })
 }
 
+const ACTIONS = ['approve', 'correct', 'reject', 'mark_duplicate', 'mark_stale', 'reprocess'] as const
+type ReviewAction = (typeof ACTIONS)[number]
+const isReviewAction = (a: string): a is ReviewAction => (ACTIONS as readonly string[]).includes(a)
+
+// Brief 48 (PR 3): a refusal is { ok: false, error } with a plain-English
+// message, which the Review Queue page shows under the item.
+const refuse = (status: number, error: string) => NextResponse.json({ ok: false, error }, { status })
+
 // PATCH /api/review — update status, apply corrections
+//
+// Brief 48 (PR 3, items 4.7 and 4.16b) [engineering precaution]: a correction is
+// read into the listing's column types before anything is written, and refused
+// input writes nothing (lib/review/corrections.ts). The listing is saved first and
+// the item closed second, in one transaction, so a failed save leaves the item
+// pending. Before this the item was closed first; a price or beds correction then
+// reached the listing as text, Prisma refused it, and the item had already left
+// the queue. A new category also gets a plain new title.
 export async function PATCH(req: NextRequest) {
-  const body = await req.json()
-  const { id, action, corrections, notes } = body as {
-    id:           string
-    action:       'approve' | 'correct' | 'reject' | 'mark_duplicate' | 'mark_stale' | 'reprocess'
-    corrections?: Record<string, unknown>
-    notes?:       string
+  const body = await req.json().catch(() => null)
+  const { id, action, corrections, notes } = (body ?? {}) as {
+    id:           unknown
+    action:       unknown
+    corrections?: unknown
+    notes?:       unknown
   }
 
-  if (!id || !action) {
-    return NextResponse.json({ error: 'id and action required' }, { status: 400 })
+  if (typeof id !== 'string' || !id || typeof action !== 'string' || !action) {
+    return refuse(400, 'id and action required')
+  }
+  // An unknown action is refused. It used to close the item as "approved" and
+  // leave the listing alone.
+  if (!isReviewAction(action)) {
+    return refuse(400, "That isn't an action the Review Queue knows.")
+  }
+  if (notes != null && typeof notes !== 'string') return refuse(400, 'Notes must be text.')
+
+  let fields: ListingCorrections = {}
+  if (action === 'correct') {
+    const read = parseCorrections(corrections)
+    if (!read.ok) return refuse(400, read.error)
+    fields = read.fields
   }
 
   const item = await prisma.reviewQueueItem.findUnique({ where: { id } })
-  if (!item) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (!item) return refuse(404, "This item isn't in the queue any more. Reload the page to see the current list.")
 
   let newStatus: string = 'approved'
   let processingStatus: string | null = null
@@ -113,42 +144,56 @@ export async function PATCH(req: NextRequest) {
       break
   }
 
-  await prisma.reviewQueueItem.update({
-    where: { id },
-    data: {
-      status:              newStatus,
-      reviewedAt:          new Date(),
-      reviewNotes:         notes ?? null,
-      userCorrectedFields: corrections ? (corrections as object) : undefined,
-    },
-  })
+  // The listing behind the item, read before anything is written. An item can
+  // outlive its listing (re-reading an email replaces its listings and leaves the
+  // review items), so approve, reject and the marks still close such an item, but
+  // there's nothing to correct.
+  const listing = item.opportunityId && processingStatus
+    ? await prisma.extractedOpportunity.findUnique({
+        where:  { id: item.opportunityId },
+        select: { id: true, category: true, address: true, neighborhood: true, beds: true },
+      })
+    : null
+  if (action === 'correct' && !listing) {
+    return refuse(409, "There's no listing behind this item to correct, so nothing was saved. Approve or reject it to clear it from the queue.")
+  }
+  const listingData = listing && processingStatus
+    ? { processingStatus, ...(isDuplicate !== null ? { isDuplicate } : {}), ...listingChanges(listing, fields) }
+    : null
 
-  if (item.opportunityId && processingStatus) {
-    const updateData: Record<string, unknown> = { processingStatus }
-    if (isDuplicate !== null) updateData.isDuplicate = isDuplicate
-
-    // Apply field corrections from user
-    if (corrections && action === 'correct') {
-      const allowed = ['address', 'neighborhood', 'borough', 'price', 'minPrice', 'maxPrice',
-                       'beds', 'baths', 'units', 'squareFeet', 'propertyType', 'availabilityDate',
-                       'extractedTitle', 'extractedSummary', 'category', 'status']
-      for (const key of allowed) {
-        if (corrections[key] !== undefined) updateData[key] = corrections[key]
+  try {
+    await prisma.$transaction(async tx => {
+      if (listing && listingData) {
+        await tx.extractedOpportunity.update({ where: { id: listing.id }, data: listingData })
       }
-    }
-
-    await prisma.extractedOpportunity.update({
-      where: { id: item.opportunityId },
-      data:  updateData as Parameters<typeof prisma.extractedOpportunity.update>[0]['data'],
+      await tx.reviewQueueItem.update({
+        where: { id },
+        data: {
+          status:              newStatus,
+          reviewedAt:          new Date(),
+          reviewNotes:         notes ?? null,
+          // What the correction asked for, as stored (a new title it brought isn't listed).
+          userCorrectedFields: action === 'correct' ? fields : undefined,
+        },
+      })
     })
+  } catch (e) {
+    console.error(`[review] ${action} on ${id} didn't save; the item stays pending:`, (e as Error).message)
+    return refuse(500, SAVE_FAILED)
+  }
 
-    // Trigger embedding if approving/correcting (making record active)
-    if (action === 'approve' || action === 'correct') {
+  // Trigger embedding if approving/correcting (making record active)
+  if (listing && (action === 'approve' || action === 'correct')) {
+    // Brief 48 (PR 3): the save above is committed, so a failure here is logged and
+    // no longer turns the reply into an error.
+    try {
       const { buildOpportunityText, upsertOpportunityEmbedding } = await import('@/lib/embeddings')
-      const opp = await prisma.extractedOpportunity.findUnique({ where: { id: item.opportunityId } })
+      const opp = await prisma.extractedOpportunity.findUnique({ where: { id: listing.id } })
       if (opp) {
         upsertOpportunityEmbedding(opp.id, buildOpportunityText(opp)).catch(() => {})
       }
+    } catch (e) {
+      console.error(`[review] embedding refresh for ${listing.id} failed:`, (e as Error).message)
     }
   }
 
