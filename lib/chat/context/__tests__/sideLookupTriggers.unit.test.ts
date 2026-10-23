@@ -117,7 +117,7 @@ test('which part of a message counts as Ryan\'s question', async () => {
   // A long one that starts with the email itself has no question of Ryan's.
   assert.deepEqual(lookupQuestion(BLAST), { text: '', pasted: true })
   assert.deepEqual(lookupQuestion('anything for this?\nFrom: Pat Example\n' + BLAST), { text: '', pasted: true })
-  assert.deepEqual(lookupQuestion('x'.repeat(500)), { text: '', pasted: true })
+  assert.deepEqual(lookupQuestion('x\n'.repeat(250)), { text: '', pasted: true })
   // Windows line breaks count as paragraph breaks too.
   assert.deepEqual(lookupQuestion('any buyers for this one?\r\n\r\n' + 'Listing text. '.repeat(40)), { text: 'any buyers for this one?', pasted: true })
   // An empty message (a file alone) has no question; the file's name isn't one.
@@ -133,4 +133,21 @@ test('splitting a very long paste stays fast', async () => {
     const ms = performance.now() - t0
     assert.ok(ms < 500, `took ${ms.toFixed(0)} ms`)
   }
+})
+
+// Reviewer patch (PR 13 r1): a long question Ryan types (Enter sends, so it is
+// one line) or speaks in voice mode is his question, not a paste.
+test('a long one-line question of Ryan\'s keeps its side lookups', async () => {
+  const lookupQuestion = await loadLookupQuestion()
+  const own = 'ok so my buyer called back and she is still set on Bed-Stuy, ideally a 3 family with a garden unit she can live in and two rentals upstairs to carry the mortgage, she is flexible on condition but does not want a full gut, and she wants to stay under 1.8 all in, can you check what is coming soon in Bed-Stuy for her and also tell me who owns 88 Example Ave and whether it has any open permits or violations?'
+  assert.ok(own.length > 400)
+  assert.deepEqual(lookupQuestion(own), { text: own, pasted: false })
+  const { parsed, block } = await sideLookups(own)
+  assert.ok(parsed.neighborhoods.includes('Bedford-Stuyvesant'))
+  assert.equal(parsed.maxPrice, 1_800_000)
+  assert.match(block, /STREETEASY/)
+  assert.ok(outside.some(u => u.includes('8h5j-fqxa')), 'the deed lookup runs')
+  // A one-line paste that starts like an email, or a very long line, is still a paste.
+  assert.equal(lookupQuestion('From: Pat Example ' + 'listing text '.repeat(40)).pasted, true)
+  assert.equal(lookupQuestion('word '.repeat(400)).pasted, true)
 })

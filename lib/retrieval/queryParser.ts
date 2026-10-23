@@ -59,10 +59,15 @@ const BROADEN_PATTERNS = /\b(near|around|close to|nearby|by\s+\w+|or\s+(similar|
 
 // Brief 43 PR 13 (Q23): Ryan writes sale prices in millions without the M
 // ("under 1.6", "up to 1.8"). A bare number under 100 with no k or m counts as
-// millions, unless the message has rental words or a unit follows it ("up to 5
-// units", "at least 3 beds", "under 10 minutes"). It used to round to $2
-// [engineering precaution].
-const UNIT_AFTER = /^\s*-?\s*(?:%|(?:percent|br|bd|beds?|bedrooms?|baths?|bathrooms?|units?|fam|family|families|stor(?:y|ies)|floors?|rooms?|years?|yrs?|months?|mos?|weeks?|wks?|days?|hours?|hrs?|minutes?|mins?|miles?|mi|blocks?|ft|feet|foot|sq|sf|people|cars?|stops?|am|pm|x)\b)/i
+// millions when the message has no rental words, and the number ends the
+// message or is followed only by punctuation, "million", or a joining word
+// ("under 1.6 in Bed-Stuy", "up to 1.8 for my buyer"). Anything else after it
+// ("5 units", "3 bdrm", "6 cap", "3.5 a month", "4 apts") keeps the number as
+// written, as before, and so does a rate before the qualifier ("cap rate over
+// 6"). It used to round to $2 [engineering precaution].
+const MILLIONS_AFTER = /^\s*(?:$|[,.;:!?)]|(?:million|millions|mil|mill|mm|dollars|cash|all|tops|max|ish|or|and|but|in|for|with|on|at|if|so|please|pls|budget|range|ideally|maybe|is|near|around)\b)/i
+const BUILDING_SALE = /\b\d+[\s-]?(?:family|fam|families|unit|units)\b|\bmulti[\s-]?family\b|\bbuildings?\b|\bstabilized\b|\brent roll\b|\bcap rate\b/
+const RATE_BEFORE = /\b(?:cap(?:\s+rate)?|rate|yield|roi|return|interest|ltv|dscr|down(?:\s+payment)?)\s+(?:is\s+|of\s+)?$/i
 
 function parsePrice(raw: string, bareIsMillions = false): number | null {
   const m = raw.replace(/,/g, '').match(/\$?([\d.]+)\s*([kKmM]?)/)
@@ -152,9 +157,16 @@ function extractFreshnessHours(text: string): number | null {
 function extractPrices(text: string): { minPrice: number | null; maxPrice: number | null } {
   const lower = text.toLowerCase()
   // Brief 43 PR 13 (Q23): a bare number in a sale ask is millions (see parsePrice).
-  const rental = RENTAL_WORDS.test(lower)
-  const price = (m: RegExpMatchArray) =>
-    parsePrice(m[0], !rental && !UNIT_AFTER.test(text.slice((m.index ?? 0) + m[0].length)))
+  // Reviewer patch (PR 13 r1): a multifamily or building purchase ("3 family
+  // with two rentals upstairs", "rent stabilized 6 unit") is a sale ask even
+  // with rental words in it [engineering precaution].
+  const rental = RENTAL_WORDS.test(lower) && !BUILDING_SALE.test(lower)
+  const price = (m: RegExpMatchArray) => {
+    const at = m.index ?? 0
+    const after = text.slice(at + m[0].length)
+    const bare = !rental && (/[.,]$/.test(m[0]) || MILLIONS_AFTER.test(after)) && !RATE_BEFORE.test(text.slice(Math.max(0, at - 40), at))
+    return parsePrice(m[0], bare)
+  }
 
   // "$1.5M-$2M" / "$1.5M to $2M" — also "1.5M to 3M" without $. The trailing
   // [kKmM] (NOT [kKmM]?) is required on both sides to avoid matching bare

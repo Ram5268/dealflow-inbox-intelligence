@@ -244,7 +244,9 @@ export async function POST(req: NextRequest) {
       queryText: lookupText,
       isConfirmMessage,
       pastedText: lookup.pasted,
-      previousUserMessage: history.filter(m => m.role === 'user').slice(-1)[0]?.content ?? null,
+      // Reviewer patch (PR 13 r1, with PR 11): on a paste turn, "who owns this
+      // one?" above the paste points at the pasted text, not the message before.
+      previousUserMessage: lookup.pasted ? userMessage : history.filter(m => m.role === 'user').slice(-1)[0]?.content ?? null,
     })
 
     // Cards are hydrated AFTER the tool_use loop (from the ids Sonnet's tools

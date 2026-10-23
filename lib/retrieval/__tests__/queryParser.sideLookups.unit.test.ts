@@ -94,3 +94,29 @@ test('a very long message parses in well under a second', async () => {
   assert.deepEqual(p.neighborhoods, [])
   assert.ok(ms < 1_000, `took ${ms.toFixed(0)} ms`)
 })
+
+// Reviewer patch (PR 13 r1): only a bare number that ends the ask, or is
+// followed by punctuation, "million" or a joining word, reads as millions.
+test('a rate, a unit or a monthly figure after a bare number is not a price in millions', async () => {
+  const max = async (q: string) => (await parseQuery(q.toLowerCase(), { modelFallback: false })).maxPrice
+  const min = async (q: string) => (await parseQuery(q.toLowerCase(), { modelFallback: false })).minPrice
+  assert.equal(await min('my buyer wants a 4 family in bushwick with a cap rate over 6'), 6)
+  assert.equal(await min('my buyer wants bushwick, over 6 cap'), 6)
+  assert.equal(await min('interest rate under 7'), null)
+  assert.equal(await max('interest rate under 7'), 7)
+  assert.equal(await min('at least 3 bdrm in astoria'), 3)
+  assert.equal(await min('at least 4 apts in bed-stuy'), 4)
+  assert.equal(await max('2br in astoria under 3.5 a month'), 4)
+  assert.equal(await max('2br in astoria under 3.5/month'), 4)
+  assert.equal(await max('under 50 per sq ft'), 50)
+  // Still millions: end of the ask, punctuation, "million", a joining word.
+  assert.equal(await max('under 1.6, 3 beds in clinton hill'), 1_600_000)
+  assert.equal(await max('up to 1.8 for my buyer'), 1_800_000)
+  assert.equal(await max('under 1.5 with 20% down'), 1_500_000)
+  assert.equal(await max('under 2 for a 2 family'), 2_000_000)
+  assert.equal(await max('under .9'), 900_000)
+  // A building purchase with rental words in it is still a sale ask.
+  assert.equal(await max('4 family with tenants under 2.5'), 2_500_000)
+  assert.equal(await max('rent stabilized 6 unit in bushwick under 3'), 3_000_000)
+  assert.equal(await max('2br rental under 3.5'), 4)
+})
