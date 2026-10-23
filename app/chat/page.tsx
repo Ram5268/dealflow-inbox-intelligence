@@ -12,6 +12,7 @@ import { AudioLines } from 'lucide-react'
 import VoiceConversation from '@/components/VoiceConversation'
 import { BlurFade } from '@/components/BlurFade'
 import { CATEGORY_LABELS, formatPriceRange } from '@/lib/utils'
+import { chatErrorReply } from '@/lib/chat/chatErrorReply'
 import ReportPickerSheet from '@/components/ReportPickerSheet'
 import BuyerPickerSheet from '@/components/BuyerPickerSheet'
 import ReportModal from '@/components/ReportModal'
@@ -1146,7 +1147,13 @@ function ChatPageInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: msg || '(see attached file)', files: processed, sessionId: currentSessionId }),
       })
-      const data = await res.json()
+      // Brief 43 PR 4 (Q4): Vercel's 504 (60-second limit) and 413 (file too big)
+      // are HTML pages, not JSON; say what happened by status.
+      const data = await res.json().catch(() => null)
+      if (!res.ok || !data) {
+        setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: chatErrorReply(res.status, data), createdAt: new Date().toISOString() }])
+        return
+      }
       if (data.sessionId) setCurrentSessionId(data.sessionId)
       setMessages(p => [...p, { id: crypto.randomUUID(), role: 'assistant', content: data.response ?? data.error ?? 'Something went wrong.', deals: data.deals ?? [], suggestions: data.suggestions ?? [], seListings: data.seListings ?? [], seFilterUrl: data.seFilterUrl ?? null, interactionId: data.interactionId ?? undefined, attachedReport: data.attachedReport ?? null, attachedFragment: data.attachedFragment ?? null, draft: data.draft ?? null, createdAt: new Date().toISOString() }])
     } catch {

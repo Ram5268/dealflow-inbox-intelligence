@@ -12,6 +12,7 @@ export const db = {
   mojoContacts: [] as Row[],
   messages: [] as Row[],
   interactions: [] as Row[],
+  sessions: [] as Row[],
 }
 let seq = 0
 const newId = (p: string) => `${p}_${++seq}`
@@ -19,8 +20,10 @@ const newId = (p: string) => `${p}_${++seq}`
 const models: Record<string, Record<string, (args: Args) => Promise<unknown>>> = {
   organization: { findUnique: async () => ({ id: 'org_pr3' }) },
   chatSession: {
-    findUnique: async () => null,
-    create: async ({ data }) => ({ id: 'sess_pr3', title: null, ...data }),
+    // Brief 43 PR 4: a chat's row exists once it has been created (the route
+    // now creates it only when it saves something), as in a real database.
+    findUnique: async ({ where }) => db.sessions.find(s => s.id === where?.id) ?? null,
+    create: async ({ data }) => { const row = { id: 'sess_pr3', title: null, ...data }; db.sessions.push(row); return row },
     update: async ({ data }) => ({ id: 'sess_pr3', ...data }),
   },
   chatMessage: {
@@ -69,7 +72,7 @@ ai.reply(req => {
 })
 
 export function reset() {
-  db.mojoContacts = []; db.messages = []; db.interactions = []
+  db.mojoContacts = []; db.messages = []; db.interactions = []; db.sessions = []
   script.length = 0; driftCalls.length = 0; verifierCalls.length = 0; verifier = GROUNDED
 }
 

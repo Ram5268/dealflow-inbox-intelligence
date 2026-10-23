@@ -3,6 +3,7 @@
 //   Legals:  8h5j-fqxa  — address → document IDs + block/lot
 //   Master:  bnx9-e6tj  — document IDs → doc type, date, sale amount
 //   Parties: 636b-3b5g  — document IDs → buyer/seller names
+import { fetchWithTimeout } from './chat/turnBudget'
 
 const BASE = 'https://data.cityofnewyork.us/resource'
 
@@ -149,17 +150,19 @@ export function extractAddressFromText(text: string): string | null {
 
 // ─── Socrata API helpers ──────────────────────────────────────────────────────
 
+// Brief 43 PR 4 (M32): each city-records fetch gives up after LOOKUP_TIMEOUT_MS
+// (fetchWithTimeout's default) [engineering precaution].
 async function socrataGet(dataset: string, params: Record<string, string>): Promise<unknown[]> {
   const qs = new URLSearchParams(params).toString()
   const url = `${BASE}/${dataset}.json?${qs}`
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  const res = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(`ACRIS API error ${res.status} on ${dataset}`)
   return res.json()
 }
 
 async function socrataWhere(dataset: string, where: string, limit = 200): Promise<unknown[]> {
   const url = `${BASE}/${dataset}.json?$where=${encodeURIComponent(where)}&$limit=${limit}`
-  const res = await fetch(url, { headers: { Accept: 'application/json' } })
+  const res = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } })
   if (!res.ok) throw new Error(`ACRIS API error ${res.status} on ${dataset}`)
   return res.json()
 }

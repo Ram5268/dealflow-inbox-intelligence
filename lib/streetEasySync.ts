@@ -3,6 +3,7 @@ import { normalizeAddress } from './domain/Address'
 import { isTestModeOnly } from './config/testMode'
 import { statusUpdateFor, SE_CHECKABLE_CATEGORIES } from './streetEasyStatusUpdate'
 import { dateExpiryCutoffs, PAST_EVENT_CATEGORIES, COMING_SOON_EXPIRY_CATEGORIES, AGED_REVIEW_CATEGORIES } from './dateExpiryRules'
+import { fetchWithTimeout, isLookupTimeout, LOOKUP_TIMEOUT_MS } from './chat/turnBudget'
 
 // Brief 3.0 follow-up — trial-mode kill switch. In seed-only trial mode there's
 // no real inbox flow, so the StreetEasy status sweep has no legitimate work and
@@ -165,15 +166,19 @@ async function checkAndIncrementQuota(): Promise<void> {
 }
 
 // ── Core API request ──────────────────────────────────────────────────────────
-async function seRequest(path: string): Promise<unknown> {
+// Brief 43 PR 4 (M32): the live chat search passes timeoutMs, so a slow
+// StreetEasy can't hold up a Drift turn; the sweeps keep their old, unbounded
+// wait [engineering precaution].
+async function seRequest(path: string, timeoutMs?: number): Promise<unknown> {
   await checkAndIncrementQuota()  // throws QuotaExhaustedError at the hard cap
   const url = path.startsWith('http') ? path : `${BASE_URL}${path}`
-  const res = await fetch(url, {
+  const init = {
     headers: {
       'x-rapidapi-key':  RAPIDAPI_KEY,
       'x-rapidapi-host': RAPIDAPI_HOST,
     },
-  })
+  }
+  const res = timeoutMs ? await fetchWithTimeout(url, init, timeoutMs) : await fetch(url, init)
   if (res.status === 429) throw new Rate429Error(path)
   if (!res.ok) throw new Error(`StreetEasy API ${res.status}: ${path}`)
   return res.json()
@@ -238,7 +243,7 @@ export async function searchStreetEasyListings(params: {
     .filter(Boolean) as [number,number,number,number][]
 
   try {
-    const data = await seRequest(`${endpoint}?${qs}`) as { listings?: Record<string, unknown>[] }
+    const data = await seRequest(`${endpoint}?${qs}`, LOOKUP_TIMEOUT_MS) as { listings?: Record<string, unknown>[] }
     const listings = data.listings ?? []
     console.log('[SE search] raw results:', listings.length)
 
@@ -271,7 +276,10 @@ export async function searchStreetEasyListings(params: {
           description:  null,
         }
       })
-  } catch {
+  } catch (e) {
+    // Brief 43 PR 4: a search that ran out of time isn't "no listings"; the
+    // chat fetcher says it didn't answer in time.
+    if (isLookupTimeout(e)) throw e
     return []
   }
 }

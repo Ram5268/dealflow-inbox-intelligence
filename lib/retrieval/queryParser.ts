@@ -8,6 +8,7 @@ import OpenAI from 'openai'
 import { classifyIntent } from './intentClassifier'
 import type { ParsedQuery } from './types'
 import { NEIGHBORHOODS, BOROUGHS } from '../domain/Neighborhood'
+import { withTimeout, isTimedOut, LOOKUP_TIMEOUT_MS } from '../chat/turnBudget'
 
 // Pre-built variant→canonical index used by extractNeighborhoods. Built once
 // at module load. Each variant is lowercased and stored with its canonical;
@@ -213,6 +214,10 @@ function detectRentalSale(text: string): boolean | null {
   return null
 }
 
+// Brief 43 PR 4 (M20): words that make "coming soon" mean rentals too. Whole
+// words, so "currently" or "parent" don't count [engineering precaution].
+const RENTAL_WORDS = /\b(?:rent|rents|rental|rentals|renting|renter|renters|lease|leases|leasing|tenant|tenants|landlord|landlords)\b|per month|\/mo\b/
+
 function detectCategorySignals(text: string): string[] {
   const lower = text.toLowerCase()
   const cats: string[] = []
@@ -225,7 +230,11 @@ function detectCategorySignals(text: string): string[] {
   if (!agentHasBuyer && /\bbuyers?\b/.test(lower)) cats.push('BUYER_ISO')
   if (!agentHasBuyer && /\brenters?\b/.test(lower)) cats.push('RENTER_INQUIRY')
   if (/off.?market|pocket listing/.test(lower)) cats.push('OFF_MARKET_SALE')
-  if (/coming soon/.test(lower)) cats.push('COMING_SOON_SALE','COMING_SOON_RENTAL')
+  // Brief 43 PR 4 (M20): coming-soon sales, plus rentals only when the message
+  // has rental words. "Any coming soon in bedstuy?" used to add rentals too,
+  // which set off the paid live StreetEasy rentals search (spot check #4).
+  // "coming-soon" and "comingsoon" count too.
+  if (/coming[\s-]?soon/.test(lower)) cats.push('COMING_SOON_SALE', ...(RENTAL_WORDS.test(lower) ? ['COMING_SOON_RENTAL'] : []))
   if (/open house|broker preview/.test(lower)) cats.push('OPEN_HOUSE')
   if (/price.?drop|price.?reduction|price.?cut|reduced/.test(lower)) cats.push('PRICE_DROP')
   if (/back on market|back on the market/.test(lower)) cats.push('BACK_ON_MARKET')
@@ -356,8 +365,14 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     return { ...partial, usedLLM: false, confidence: detConf }
   }
 
-  // LLM fallback for ambiguous queries
-  const llmResult = await llmParse(text)
+  // LLM fallback for ambiguous queries. Brief 43 PR 4 (Q4): it gets
+  // LOOKUP_TIMEOUT_MS; past that the deterministic parse stands, so a slow
+  // gpt-4o-mini can't hold up the chat turn [engineering precaution].
+  const llmAnswer = await withTimeout(llmParse(text), LOOKUP_TIMEOUT_MS, 'query parse')
+  const llmResult: Partial<ParsedQuery> = isTimedOut(llmAnswer) ? {} : llmAnswer
+  // Brief 43 PR 4 (M20): the same coming-soon rule for the model's categories.
+  const mergedCategories = [...new Set([...categories, ...(llmResult.categories ?? [])])]
+    .filter(c => c !== 'COMING_SOON_RENTAL' || RENTAL_WORDS.test(lower))
 
   const merged: Omit<ParsedQuery, 'usedLLM' | 'confidence'> = {
     raw:           text,
@@ -371,7 +386,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     minPrice:      priceResult.minPrice    ?? llmResult.minPrice      ?? null,
     maxPrice:      priceResult.maxPrice    ?? llmResult.maxPrice      ?? null,
     isRental:      isRental                ?? llmResult.isRental      ?? null,
-    categories:    [...new Set([...categories, ...(llmResult.categories ?? [])])],
+    categories:    mergedCategories,
     isCalendar:    isCalendar || (llmResult.isCalendar ?? false),
     isACRIS:       isACRIS    || (llmResult.isACRIS    ?? false),
     isDOB:         isDOB      || (llmResult.isDOB      ?? false),
@@ -383,7 +398,7 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
     intent: classifyIntent({
       neighborhoods: [...new Set([...neighborhoods, ...(llmResult.neighborhoods ?? [])])],
       boroughs:      [...new Set([...boroughs,      ...(llmResult.boroughs ?? [])])],
-      categories:    [...new Set([...categories,    ...(llmResult.categories ?? [])])],
+      categories:    mergedCategories,
       isCalendar:    isCalendar || (llmResult.isCalendar ?? false),
       isACRIS:       isACRIS    || (llmResult.isACRIS    ?? false),
       isDOB:         isDOB      || (llmResult.isDOB      ?? false),
