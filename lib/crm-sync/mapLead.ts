@@ -5,7 +5,8 @@ import { zipToNeighborhood } from '../geo/zipNeighborhood'
 // Brief 34: pure mapping of one CRM lead onto MojoContact fields. null means
 // the CRM has nothing, and the upsert only ever fills blanks with these values.
 // Custom fields are read by definition name, as the Mojo XLSX importer made them.
-export type CrmContact = ReturnType<typeof mapLead>
+// Brief 43 PR 5: metadata may also carry crmOptOut (markOptOut below).
+export type CrmContact = ReturnType<typeof mapLead> & { metadata: { crmOptOut?: true } }
 
 const UNITS: Record<string, number> = { Duplex: 2, Triplex: 3, Quadruplex: 4, 'Apartment House (5+ Units)': 5 }
 
@@ -62,4 +63,17 @@ export function mapLead(lead: CrmLeadRow) {
       callAttempts: num('Call Attempts'), lastCallResult, syncVersion: 1 as const,
     },
   }
+}
+
+// Brief 43 PR 5 (D11 [Ryan, 2026-10-18]: opted-out sellers are marked "do not
+// contact"): a lead on the CRM's own opt-out list (crmReader.ts
+// readCrmOptOutLeadIds) gets metadata.crmOptOut = true. The key is only ever
+// written as true, never false, and the upsert merges metadata (old || new), so
+// a mark is never wiped: not by a re-run, a failed opt-out read (null) or a
+// later removal on the CRM side [engineering precaution]. phoneDncFlags is left
+// alone: it drives the call ranking (lib/ranking/hardFilters.ts), which this
+// doesn't change. Chat reads the mark (lib/chat/crmSellers.ts doNotContact).
+export function markOptOut(contact: CrmContact, optedOutLeadIds: ReadonlySet<string> | null): CrmContact {
+  if (!optedOutLeadIds?.has(contact.metadata.crmLeadId)) return contact
+  return { ...contact, metadata: { ...contact.metadata, crmOptOut: true } }
 }

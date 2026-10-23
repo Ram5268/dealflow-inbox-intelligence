@@ -13,6 +13,7 @@ import { mojoFetcher }           from './mojo'
 //
 // Mojo lives in POST because its `⚡ MATCHES BUYER ISO` flag conceptually annotates
 // the BUYER_ISO records that came from retrieval — it reads better positioned after them.
+// (Brief 43 PR 5: that block is now CRM-seller counts only, with no flag.)
 
 export const PRE_RETRIEVAL_FETCHERS:  ContextFetcher[] = [
   mortgageFetcher,
