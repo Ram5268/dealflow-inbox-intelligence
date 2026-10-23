@@ -4,6 +4,8 @@
 // "Recent activity" rows show times and counts only. Every row is invented.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { BACKGROUND_SYNC, LAST_SYNC_ACTIONS, deliveredCount, recentActivityRows } from '../olderSections'
 import { CRM_LEAD_SYNC } from '../lastNight'
 
@@ -43,4 +45,13 @@ test('recentActivityRows: labels, times and counts; unknown shows a dash', () =>
     recentDismissals: null,
   })
   assert.deepEqual(failed.map(r => [r.last24h, r.last7d]), [['—', '—'], ['—', '—'], ['—', '—']])
+})
+
+// The Health page (a client component) imports this file, so it must import nothing at
+// run time: lib/status/lastNight.ts brought a browser copy of Node's crypto into the
+// page's script [engineering precaution].
+test('olderSections.ts has no run-time imports (it ships to the browser)', () => {
+  const src = readFileSync(join(__dirname, '..', 'olderSections.ts'), 'utf8')
+  assert.doesNotMatch(src, /^\s*import\s+(?!type\s)/m)
+  assert.doesNotMatch(src, /\brequire\(/)
 })

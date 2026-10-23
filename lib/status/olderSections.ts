@@ -4,8 +4,14 @@
 // AuditLog row with "SYNC" anywhere in its action name. Now they show counts and times
 // only [planner, Brief 48 Revision 1; engineering precaution: the page is public], and
 // "last sync" is only the CRM copy or the background sync [planner, Brief 48 Revision 1].
-import { CRM_LEAD_SYNC } from './lastNight'
+//
+// No imports: the Health page (a client component) uses recentActivityRows from here.
+// Importing lib/status/lastNight.ts put a browser copy of Node's crypto (through
+// lib/config/maintenance.ts) in the page's script, about 500 KB instead of 5 KB
+// [engineering precaution]. olderSections.unit.test.ts pins CRM_LEAD_SYNC to lastNight.ts's.
 
+// lib/crm-sync/runSync.ts writes this after each CRM copy (the nightly's first step).
+const CRM_LEAD_SYNC = 'CRM_LEAD_SYNC'
 // lib/backgroundSync.ts writes this after each Outlook sync (Check In; paused with Outlook).
 export const BACKGROUND_SYNC = 'BACKGROUND_SYNC'
 // "Last sync": the nightly CRM copy (lib/crm-sync/runSync.ts) or the background sync.
