@@ -25,7 +25,7 @@ import { BUYER_ARCHETYPE_CODES, archetypeLabel, fieldHasAllWords, mentionsArchet
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import { wantedHoods } from './neighborhoodMatch'
-import { createdAfterSchema, createdAfterWhere } from './createdAfter'
+import { createdAfterInput, createdAfterWhere } from './createdAfter'
 
 export const searchPartiesInputSchema = z.object({
   role: z.enum(['buyer', 'renter', 'seller', 'landlord']).optional(),
@@ -38,7 +38,7 @@ export const searchPartiesInputSchema = z.object({
   priceRangeOverlaps: z.object({ min: z.number(), max: z.number() }).optional(),
   includeTestData: z.boolean().optional(),
   // Brief 43 PR 14 (Q29): only parties added on or after this date (./createdAfter.ts).
-  createdAfter: createdAfterSchema.optional(),
+  createdAfter: createdAfterInput,
   limit: z.number().int().positive().max(200).optional(),
   // Brief 43 PR 9 (Q15, Q41): a name or description, and a buyer type (partyFilters.ts).
   query: z.string().optional(),

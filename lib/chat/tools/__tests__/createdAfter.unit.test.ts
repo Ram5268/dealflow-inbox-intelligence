@@ -33,11 +33,14 @@ test('createdAfterDate: a date alone is midnight in New York; a time is taken as
 test('createdAfter must be an ISO date: loose phrases are refused', async () => {
   const { searchListingsInputSchema } = await import('../searchListings')
   const { searchPartiesInputSchema } = await import('../searchParties')
-  for (const bad of ['friday at 3', 'last week', 'today', '10/19/2026', '2026-13-40', '']) {
+  for (const bad of ['friday at 3', 'last week', 'today', '10/19/2026', '2026-13-40']) {
     assert.equal(searchListingsInputSchema.safeParse({ createdAfter: bad }).success, false, bad)
     assert.equal(searchPartiesInputSchema.safeParse({ createdAfter: bad }).success, false, bad)
   }
   assert.equal(searchListingsInputSchema.safeParse({ createdAfter: '2026-10-12' }).success, true)
+  // An empty string means no filter (the model sometimes sends "" for an optional field).
+  assert.equal(searchListingsInputSchema.safeParse({ createdAfter: '' }).success, true)
+  assert.equal(searchPartiesInputSchema.safeParse({ createdAfter: '' }).success, true)
 })
 
 test('search_listings filters by createdAt in the database query', async () => {

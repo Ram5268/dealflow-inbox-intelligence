@@ -36,6 +36,10 @@ function isRealDate(value: string): boolean {
 
 export const createdAfterSchema = z.string().max(40).regex(ISO).refine(isRealDate, 'createdAfter must be a real date')
 
+// The model sometimes sends "" for an optional string; that means no filter,
+// not a tool error (createdAfterWhere('') already adds nothing).
+export const createdAfterInput = z.literal('').or(createdAfterSchema).optional()
+
 // The where-clause piece: { createdAt: { gte } }, or nothing when not asked.
 export function createdAfterWhere(value: string | undefined): { createdAt?: { gte: Date } } {
   return value ? { createdAt: { gte: createdAfterDate(value) } } : {}

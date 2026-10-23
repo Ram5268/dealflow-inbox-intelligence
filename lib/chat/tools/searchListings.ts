@@ -40,7 +40,7 @@ import { isTestModeOnly } from '@/lib/config/testMode'
 import { bedsMatches } from './searchParties'
 import { hoodSqlTerms, hoodsMatch, wantedHoods } from './neighborhoodMatch'
 import { addressMatch, addressSqlTerm, houseNumberSqlTerms, parseStreetAddress } from './addressMatch'
-import { createdAfterSchema, createdAfterWhere } from './createdAfter'
+import { createdAfterInput, createdAfterWhere } from './createdAfter'
 
 // Listing categories this tool exposes (sale + rental supply the chat surfaces).
 const SALE_CATS = ['COMING_SOON_SALE', 'OFF_MARKET_SALE', 'ACTIVE_SALE_LISTING'] as const
@@ -78,7 +78,7 @@ export const searchListingsInputSchema = z.object({
   includeTestData: z.boolean().optional(),
   limit: z.number().int().positive().max(200).optional(),
   // Brief 43 PR 14 (Q29): only items added on or after this date (./createdAfter.ts).
-  createdAfter: createdAfterSchema.optional(),
+  createdAfter: createdAfterInput,
 })
 
 export type SearchListingsInput = z.infer<typeof searchListingsInputSchema>
