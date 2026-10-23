@@ -11,6 +11,7 @@ import { recentHistoryQuery, oldestFirst, startAtUserTurn } from '@/lib/chat/his
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { runCalendarConfirm, isCalendarConfirm, CALENDAR_CONFIRM_FAILED } from '@/lib/chat/calendarConfirm'
 import { composeContext } from '@/lib/chat/context/composeContext'
+import { lookupQuestion } from '@/lib/chat/context/lookupQuestion'
 import { getStreetEasyUrl } from '@/lib/chat/streetEasyUrls'
 import { searchListings, type SearchListingsInput } from '@/lib/chat/tools/searchListings'
 import { searchParties, type SearchPartiesInput } from '@/lib/chat/tools/searchParties'
@@ -137,6 +138,10 @@ export async function POST(req: NextRequest) {
 
     // Normalize query text used for retrieval + side-channel triggers
     const queryText = (userMessage || files.map(f => f.name).join(' ')).toLowerCase().trim()
+    // Brief 43 PR 13 (Q22): the side lookups read Ryan's own question only, not
+    // a long paste or an attached file (lib/chat/context/lookupQuestion.ts).
+    const lookup = lookupQuestion(userMessage)
+    const lookupText = lookup.text.toLowerCase()
 
     // ── Brief 3.0: lightweight parse drives the side-channels only ───────────
     // The lossy parseQuery → rigid-SQL → 25-cap card retrieval (runRetrieval) is
@@ -146,7 +151,7 @@ export async function POST(req: NextRequest) {
     // orthogonal features preserved from the old pipeline.
     let parsed: ParsedQuery
     try {
-      parsed = await parseQuery(queryText)
+      parsed = await parseQuery(lookupText, { modelFallback: !lookup.pasted })
     } catch (err) {
       console.error('[chat] parseQuery error (side-channels degrade gracefully):', err)
       parsed = {
@@ -231,9 +236,10 @@ export async function POST(req: NextRequest) {
     // Each fetcher has its own try/catch; per-fetcher failures are isolated.
     const composed = await composeContext({
       parsed,
-      userMessage,
-      queryText,
+      userMessage: lookup.text,
+      queryText: lookupText,
       isConfirmMessage,
+      pastedText: lookup.pasted,
     })
 
     // Cards are hydrated AFTER the tool_use loop (from the ids Sonnet's tools

@@ -12,7 +12,7 @@ import { withTimeout, isTimedOut, LOOKUP_TIMEOUT_MS } from '../chat/turnBudget'
 
 // Pre-built variant→canonical index used by extractNeighborhoods. Built once
 // at module load. Each variant is lowercased and stored with its canonical;
-// substring containment scan returns the canonicals that appear in input.
+// a whole-word scan returns the canonicals that appear in input (Brief 43 PR 13).
 // Replaces the old hand-maintained NYC_NEIGHBORHOODS array — every spelling
 // in lib/domain/Neighborhood.ts variants is now recognized, including
 // shorthand like "bedstuy", "fidi", "ues", "uws", "lic".
@@ -56,11 +56,18 @@ const EMAIL_CAMPAIGN_PATTERN = /\bemail\s+(repl(?:ies|y)|open|campaign)\b|\binst
 // + its variant spellings). See lib/retrieval/queryPlanner.ts.
 const BROADEN_PATTERNS = /\b(near|around|close to|nearby|by\s+\w+|or\s+(similar|adjacent|surrounding|nearby)|in or (around|near)|and\s+(similar|nearby))\b/i
 
-function parsePrice(raw: string): number | null {
+// Brief 43 PR 13 (Q23): Ryan writes sale prices in millions without the M
+// ("under 1.6", "up to 1.8"). A bare number under 100 with no k or m counts as
+// millions, unless the message has rental words or a unit follows it ("up to 5
+// units", "at least 3 beds", "under 10 minutes"). It used to round to $2
+// [engineering precaution].
+const UNIT_AFTER = /^\s*-?\s*(?:%|(?:percent|br|bd|beds?|bedrooms?|baths?|bathrooms?|units?|fam|family|families|stor(?:y|ies)|floors?|rooms?|years?|yrs?|months?|mos?|weeks?|wks?|days?|hours?|hrs?|minutes?|mins?|miles?|mi|blocks?|ft|feet|foot|sq|sf|people|cars?|stops?|am|pm|x)\b)/i
+
+function parsePrice(raw: string, bareIsMillions = false): number | null {
   const m = raw.replace(/,/g, '').match(/\$?([\d.]+)\s*([kKmM]?)/)
   if (!m) return null
   const base = parseFloat(m[1])
-  const mult = PRICE_MULTIPLIERS[m[2]] ?? 1
+  const mult = PRICE_MULTIPLIERS[m[2]] ?? (bareIsMillions && base < 100 ? 1_000_000 : 1)
   return Math.round(base * mult)
 }
 
@@ -143,6 +150,10 @@ function extractFreshnessHours(text: string): number | null {
 
 function extractPrices(text: string): { minPrice: number | null; maxPrice: number | null } {
   const lower = text.toLowerCase()
+  // Brief 43 PR 13 (Q23): a bare number in a sale ask is millions (see parsePrice).
+  const rental = RENTAL_WORDS.test(lower)
+  const price = (m: RegExpMatchArray) =>
+    parsePrice(m[0], !rental && !UNIT_AFTER.test(text.slice((m.index ?? 0) + m[0].length)))
 
   // "$1.5M-$2M" / "$1.5M to $2M" — also "1.5M to 3M" without $. The trailing
   // [kKmM] (NOT [kKmM]?) is required on both sides to avoid matching bare
@@ -156,30 +167,30 @@ function extractPrices(text: string): { minPrice: number | null; maxPrice: numbe
   // "under $X" / "under X" — qualifier word disambiguates the number so $ is
   // optional. Same pattern for over/around/budgetMatch below.
   const underMatch = text.match(/(?:under|below|max|maximum|up to)\s+\$?[\d.,]+[kKmM]?/i)
-  if (underMatch) return { minPrice: null, maxPrice: parsePrice(underMatch[0]) }
+  if (underMatch) return { minPrice: null, maxPrice: price(underMatch) }
 
   // "budget of X" or "budget X" — price may not have $ sign
   const budgetMatch = text.match(/budget\s+(?:of\s+)?\$?[\d.,]+[kKmM]?/i)
   if (budgetMatch) {
-    const p = parsePrice(budgetMatch[0])
+    const p = price(budgetMatch)
     if (p) return { minPrice: null, maxPrice: p }
   }
 
   // "over $X" or "above $X" or "min $X"
   const overMatch = text.match(/(?:over|above|min|minimum|at least)\s+\$?[\d.,]+[kKmM]?/i)
-  if (overMatch) return { minPrice: parsePrice(overMatch[0]), maxPrice: null }
+  if (overMatch) return { minPrice: price(overMatch), maxPrice: null }
 
   // "around $X" or "about $X" — treat as ±20% range
   const aroundMatch = text.match(/(?:around|about|~|approximately)\s+\$?[\d.,]+[kKmM]?/i)
   if (aroundMatch) {
-    const p = parsePrice(aroundMatch[0])
+    const p = price(aroundMatch)
     if (p) return { minPrice: Math.round(p * 0.8), maxPrice: Math.round(p * 1.2) }
   }
 
   // Single $X — use as rough upper bound for rental queries, exact for sale
   const singleMatch = text.match(/\$[\d.,]+[kKmM]?/i)
   if (singleMatch) {
-    const p = parsePrice(singleMatch[0])
+    const p = price(singleMatch)
     // If price < 50k it's probably monthly rent, else sale price
     if (p && p < 50_000) return { minPrice: null, maxPrice: p }
     if (p) return { minPrice: null, maxPrice: p }
@@ -188,12 +199,27 @@ function extractPrices(text: string): { minPrice: number | null; maxPrice: numbe
   return { minPrice: null, maxPrice: null }
 }
 
+// Brief 43 PR 13 (Q20): a neighborhood name counts only as a whole word. The
+// substring scan read "less", "sales", "rules" and "miles" as the Lower East
+// Side ("les"), "values", "requests" and "tuesday" as the Upper East Side
+// ("ues"), and "public" as Long Island City ("lic"), which set off the CRM-seller
+// block and StreetEasy searches for the wrong area. Every variant, not just the
+// short ones, so "confiding" isn't FiDi and "nomadic" isn't NoMad either
+// [engineering precaution]. Plain indexOf, no regex, so any length is linear.
+const isLetter = (c: string | undefined) => c !== undefined && c >= 'a' && c <= 'z'
+function hasWholeWord(lower: string, word: string): boolean {
+  for (let i = lower.indexOf(word); i !== -1; i = lower.indexOf(word, i + 1)) {
+    if (!isLetter(lower[i - 1]) && !isLetter(lower[i + word.length])) return true
+  }
+  return false
+}
+
 function extractNeighborhoods(text: string): string[] {
   const lower = text.toLowerCase()
   const hits = new Set<string>()
   for (const { lower: variant, canonical } of VARIANT_INDEX) {
     if (hits.has(canonical)) continue            // already matched this canonical via a longer variant
-    if (lower.includes(variant)) hits.add(canonical)
+    if (hasWholeWord(lower, variant)) hits.add(canonical)
   }
   return [...hits]
 }
@@ -311,7 +337,7 @@ async function llmParse(query: string): Promise<Partial<ParsedQuery>> {
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export async function parseQuery(query: string): Promise<ParsedQuery> {
+export async function parseQuery(query: string, opts: { modelFallback?: boolean } = {}): Promise<ParsedQuery> {
   const text = query.trim()
 
   // Deterministic pass
@@ -353,6 +379,11 @@ export async function parseQuery(query: string): Promise<ParsedQuery> {
   }
 
   const detConf = deterministicConfidence(partial)
+
+  // Brief 43 PR 13 (Q22): no model call when there is nothing to parse (a
+  // paste with no question of Ryan's, or a file sent alone), or when the caller
+  // says so (the chat route, on a paste turn) [engineering precaution].
+  if (!text || opts.modelFallback === false) return { ...partial, usedLLM: false, confidence: detConf }
 
   // Force LLM fallback when the query syntactically references a place but our
   // deterministic neighborhood list didn't catch it. Common for shorthand:

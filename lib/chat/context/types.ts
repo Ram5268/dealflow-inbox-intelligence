@@ -5,6 +5,9 @@ export interface ContextInput {
   userMessage:      string             // raw text — needed for address extraction (ACRIS/DOB)
   queryText:        string             // lowercased — for keyword/match-substring checks
   isConfirmMessage: boolean            // true when current message is "confirm" reply (calendar)
+  // Brief 43 PR 13 (Q22): the message is a long paste, so userMessage and
+  // queryText hold only Ryan's own lead-in, and the paid StreetEasy search stays off.
+  pastedText?:      boolean
 }
 
 export interface LiveSeListing {
