@@ -82,7 +82,7 @@ export const PASS: Row[] = [
   ['#21: the sold-by party', 'Pat Example sold it to Jordan Sample in 2019 for $1,200,000.', { side: side(ACRIS) }],
   ['PR 11 nothing-on-file block: no deed records', 'ACRIS has no deed records on file for 88 Example Ave in Brooklyn.', { side: side(ACRIS_NONE) }],
   ['DOB citation with the DOB block', 'DOB shows one permit there, a 2020 plumbing job that was signed off.', { side: side(DOB) }],
-  ['live StreetEasy citation with its block', 'Live StreetEasy shows two rentals that fit, at $3,900 and $4,100 a month. The Search StreetEasy button below opens them.', { side: side(SE) }],
+  ['live StreetEasy citation with its block', 'Live StreetEasy shows two rentals that fit, at $3,900 and $4,100 a month. The Search StreetEasy button below opens the full search.', { side: side(SE) }],
   ['StreetEasy citation with only the fallback browse line', 'StreetEasy has more that fit; the Search StreetEasy button below opens them.', { side: side('\n\nBrowse matching listings on StreetEasy: https://streeteasy.com/for-rent/bedford-stuyvesant') }],
   // §4 table: "I can't check Zillow" and p3b's decline.
   ['table: I can\'t check Zillow', "I can't check Zillow.", {}],
