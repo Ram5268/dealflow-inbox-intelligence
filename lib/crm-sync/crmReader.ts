@@ -4,11 +4,21 @@ import { crmQuery } from './roClient'
 // phones/emails (primary first) and its custom fields keyed by definition name.
 // Timestamps come back as text and are copied as-is: both databases store
 // `timestamp without time zone`.
+// Brief 48 (PR 8, item 4.1): every lead, also those with no Mojo ID (typed in
+// by hand, or from an upload without one), which until now were never copied,
+// matched or ranked. Such a lead (Mojo ID null or empty) comes back under a
+// stand-in key in the mojoId slot: 'crm-' + its CRM lead id, so DealFlow keys
+// it as before with no schema change [planner: prefer no migration]. A lead id
+// never changes, so the key is stable; when a Mojo ID arrives later, planSync
+// finds the seller's row by its CRM lead id and re-keys it (plan.ts).
 export interface CrmFieldValue { t: string | null; n: number | null; d: string | null }
+
+export const STAND_IN_PREFIX = 'crm-'
+export const standInMojoId = (leadId: string) => `${STAND_IN_PREFIX}${leadId}`
 
 export interface CrmLeadRow {
   id: string
-  mojoId: string
+  mojoId: string // the lead's Mojo ID, or its stand-in key (standInMojoId)
   name: string | null
   displayName: string
   primaryAddressFull: string | null
@@ -19,7 +29,7 @@ export interface CrmLeadRow {
   fields: Record<string, CrmFieldValue>
 }
 
-const LEADS_SQL = `
+export const LEADS_SQL = `
 WITH f AS (
   SELECT v."objectId",
          json_object_agg(d.name, json_build_object('t', v."valueText", 'n', v."valueNumber", 'd', v."valueDate"::text)) AS fields
@@ -31,7 +41,7 @@ WITH f AS (
   SELECT "contactId", json_agg(email ORDER BY "isPrimary" DESC, id) AS emails
   FROM "ContactEmail" WHERE NOT "isUnsubscribed" GROUP BY 1
 )
-SELECT l.id, l."mojoId", l.name, l."displayName", l."primaryAddressFull", l."updatedAt"::text AS "updatedAt",
+SELECT l.id, COALESCE(NULLIF(l."mojoId", ''), '${STAND_IN_PREFIX}' || l.id) AS "mojoId", l.name, l."displayName", l."primaryAddressFull", l."updatedAt"::text AS "updatedAt",
        c.name AS "contactName", COALESCE(ph.phones, '[]') AS phones, COALESCE(em.emails, '[]') AS emails,
        COALESCE(f.fields, '{}') AS fields
 FROM "Lead" l
@@ -39,8 +49,7 @@ JOIN "Organization" o ON o.id = l."organizationId" AND o.slug = $1
 LEFT JOIN LATERAL (SELECT id, name FROM "Contact" WHERE "leadId" = l.id ORDER BY "createdAt", id LIMIT 1) c ON true
 LEFT JOIN f ON f."objectId" = l.id
 LEFT JOIN ph ON ph."contactId" = c.id
-LEFT JOIN em ON em."contactId" = c.id
-WHERE l."mojoId" IS NOT NULL`
+LEFT JOIN em ON em."contactId" = c.id`
 
 export function readCrmLeads(orgSlug: string): Promise<CrmLeadRow[]> {
   return crmQuery<CrmLeadRow>(LEADS_SQL, [orgSlug])

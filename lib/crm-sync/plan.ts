@@ -8,6 +8,15 @@ import { normalizeStreet } from './addressNormalize'
 //           re-keyed to the CRM mojoId.
 //   every other csv_* row with that name and street becomes a duplicate of the keeper.
 // A lead whose csv rows are ambiguous is skipped and reported, never inserted.
+// Brief 48 (PR 8, item 4.1): a lead's key can change (a hand-typed lead's
+// stand-in key 'crm-<lead id>' becomes a real Mojo ID when a Mojo export is
+// merged into it, or the other way). So, after the row with its key, the keeper
+// is the one row the copy made for this CRM lead before (metadata.crmLeadId)
+// under a key no lead in this read claims; it is re-keyed like a csv keeper.
+// Any other such row of the lead's becomes a duplicate of its keeper (e.g. the
+// stand-in row, when the new Mojo ID already had an older DealFlow row). Two
+// or more and no keeper by key: the copy goes on as before (csv rows, else a
+// new row) [engineering precaution: never worse than before].
 export interface ExistingRow {
   id: string
   mojoId: string
@@ -19,6 +28,7 @@ export interface ExistingRow {
   additionalPhones: string[] | null
   email: string | null
   additionalEmails: string[] | null
+  crmLeadId?: string | null // Brief 48 (PR 8): metadata.crmLeadId
 }
 
 export interface SyncPlan {
@@ -45,6 +55,11 @@ export function planSync(contacts: CrmContact[], rows: ExistingRow[]): SyncPlan 
     const k = personKey(c.fullName, c.address)
     leadsPerKey.set(k, (leadsPerKey.get(k) ?? 0) + 1)
   }
+  const claimed = new Set(contacts.map(c => c.mojoId))
+  const earlierByLead = new Map<string, ExistingRow[]>()
+  for (const r of rows) {
+    if (r.crmLeadId && !claimed.has(r.mojoId)) earlierByLead.set(r.crmLeadId, [...(earlierByLead.get(r.crmLeadId) ?? []), r])
+  }
 
   for (const contact of contacts) {
     const k = personKey(contact.fullName, contact.address)
@@ -55,6 +70,11 @@ export function planSync(contacts: CrmContact[], rows: ExistingRow[]): SyncPlan 
     const twins = ambiguous ? [] : csvRows
 
     let keeper = byMojoId.get(contact.mojoId) ?? null
+    const earlier = earlierByLead.get(contact.metadata.crmLeadId) ?? []
+    if (!keeper && earlier.length === 1) {
+      keeper = earlier[0]
+      plan.rekeys.push({ id: keeper.id, old_id: keeper.mojoId, new_id: contact.mojoId })
+    }
     if (!keeper && csvRows.length > 0) {
       const intact = twins.filter(isIntact)
       if (intact.length !== 1) {
@@ -65,6 +85,7 @@ export function planSync(contacts: CrmContact[], rows: ExistingRow[]): SyncPlan 
       plan.rekeys.push({ id: keeper.id, old_id: keeper.mojoId, new_id: contact.mojoId })
     }
     for (const t of twins) if (keeper && t.id !== keeper.id) plan.duplicates.push({ id: t.id, keeper_id: keeper.id })
+    for (const e of earlier) if (keeper && e.id !== keeper.id) plan.duplicates.push({ id: e.id, keeper_id: keeper.id })
     plan.upserts.push({ contact, keeper })
   }
   return plan

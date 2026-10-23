@@ -8,7 +8,10 @@
 //
 // The CRM database needs only the columns the copy reads; createCrmTables makes
 // them on an empty *_test database (a database with the CRM's real schema
-// already has them, and the inserts fill every column it requires).
+// already has them, and the inserts fill every column it requires), with the
+// CRM's cascades (a lead's contacts and values, a contact's phones and emails),
+// so Brief 45's scoreImport.integration.test.ts runs on them too (with an
+// ImportBatch table).
 import type { Client } from 'pg'
 import { isTestDatabase } from '../../dbGuard'
 
@@ -29,16 +32,16 @@ export async function createCrmTables(crm: Client) {
     CREATE TABLE IF NOT EXISTS "Organization" (id text PRIMARY KEY, slug text UNIQUE NOT NULL, name text NOT NULL, "createdAt" timestamp(3) NOT NULL DEFAULT now());
     CREATE TABLE IF NOT EXISTS "Lead" (id text PRIMARY KEY, "organizationId" text NOT NULL, "displayName" text NOT NULL, name text, source text,
       "primaryAddressFull" text, "mojoId" text UNIQUE, "createdAt" timestamp(3) NOT NULL DEFAULT now(), "updatedAt" timestamp(3) NOT NULL);
-    CREATE TABLE IF NOT EXISTS "Contact" (id text PRIMARY KEY, "organizationId" text NOT NULL, "leadId" text NOT NULL, "displayName" text NOT NULL,
+    CREATE TABLE IF NOT EXISTS "Contact" (id text PRIMARY KEY, "organizationId" text NOT NULL, "leadId" text NOT NULL REFERENCES "Lead"(id) ON DELETE CASCADE, "displayName" text NOT NULL,
       name text, "createdAt" timestamp(3) NOT NULL DEFAULT now(), "updatedAt" timestamp(3) NOT NULL);
-    CREATE TABLE IF NOT EXISTS "ContactPhone" (id text PRIMARY KEY, "contactId" text NOT NULL, phone text NOT NULL, type text NOT NULL,
+    CREATE TABLE IF NOT EXISTS "ContactPhone" (id text PRIMARY KEY, "contactId" text NOT NULL REFERENCES "Contact"(id) ON DELETE CASCADE, phone text NOT NULL, type text NOT NULL,
       "isPrimary" boolean NOT NULL DEFAULT false, "lineType" text, "createdAt" timestamp(3) NOT NULL DEFAULT now(), "updatedAt" timestamp(3) NOT NULL);
-    CREATE TABLE IF NOT EXISTS "ContactEmail" (id text PRIMARY KEY, "contactId" text NOT NULL, email text NOT NULL, type text NOT NULL,
+    CREATE TABLE IF NOT EXISTS "ContactEmail" (id text PRIMARY KEY, "contactId" text NOT NULL REFERENCES "Contact"(id) ON DELETE CASCADE, email text NOT NULL, type text NOT NULL,
       "isUnsubscribed" boolean NOT NULL DEFAULT false, "isPrimary" boolean NOT NULL DEFAULT false);
     CREATE TABLE IF NOT EXISTS "CustomFieldDefinition" (id text PRIMARY KEY, "organizationId" text NOT NULL, "objectType" text NOT NULL, name text NOT NULL,
       type text NOT NULL, "displayOrder" int NOT NULL, "updatedAt" timestamp(3) NOT NULL);
     CREATE TABLE IF NOT EXISTS "CustomFieldValue" (id text PRIMARY KEY, "organizationId" text NOT NULL, "definitionId" text NOT NULL, "objectType" text NOT NULL,
-      "objectId" text NOT NULL, "valueText" text, "valueNumber" float8, "valueDate" timestamp(3), "valueJson" jsonb);
+      "objectId" text NOT NULL REFERENCES "Lead"(id) ON DELETE CASCADE, "valueText" text, "valueNumber" float8, "valueDate" timestamp(3), "valueJson" jsonb);
     CREATE TABLE IF NOT EXISTS "DncSuppression" (id text PRIMARY KEY, "organizationId" text NOT NULL, phone text NOT NULL, source text NOT NULL,
       "addedAt" timestamp(3) NOT NULL DEFAULT now());`)
 }

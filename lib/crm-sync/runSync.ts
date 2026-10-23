@@ -47,9 +47,10 @@ class DryRunRollback extends Error {
 }
 
 // Exported for the import-scoring route (Brief 45, PR E), which plans its lead
-// copy with the same reads.
+// copy with the same reads. Brief 48 (PR 8): with each row's CRM lead id.
 export const EXISTING_SQL = `
-SELECT id, "mojoId", "fullName", address, state, "zipCode", phone, "additionalPhones", email, "additionalEmails"
+SELECT id, "mojoId", "fullName", address, state, "zipCode", phone, "additionalPhones", email, "additionalEmails",
+  metadata->>'crmLeadId' AS "crmLeadId"
 FROM "MojoContact" WHERE "organizationId" = $1 AND NOT "isTestData"`
 
 // $1 = organizationId. Rows the sync has marked as CRM leads (the removal guard).
