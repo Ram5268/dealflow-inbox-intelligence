@@ -7,7 +7,10 @@ import assert from 'node:assert/strict'
 
 const never = <T>() => new Promise<T>(() => {})
 ;(globalThis as unknown as { prisma: unknown }).prisma = {
-  mojoContact: { findMany: () => never() },
+  // Brief 43 PR 5: the CRM-seller block is a count now (and reads the org id
+  // first); both stand in here so the count is the query that never answers.
+  organization: { findUnique: async () => ({ id: 'org_test' }) },
+  mojoContact: { findMany: () => never(), count: () => never() },
   extractedOpportunity: { findMany: async () => [] },
   match: { findMany: async () => [] },
   rapidApiUsage: {
