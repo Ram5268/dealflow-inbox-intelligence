@@ -88,13 +88,13 @@ test('a report summary: criteria, the match counts, then how many items each lis
 
 test('stored with the reply (JSON, no migration) and read back; a reply with nothing shown stays plain text', () => {
   const shown = footerFromTurn({ deals: [B, C] })
-  const stored = encodeStoredReply({ response: 'Two sales.', suggestions: ['a'], shown })
-  assert.deepEqual(JSON.parse(stored), { response: 'Two sales.', suggestions: ['a'], shown })
+  const stored = encodeStoredReply({ response: 'Two sales.', shown })
+  assert.deepEqual(JSON.parse(stored), { response: 'Two sales.', shown })
   assert.deepEqual(readStoredReply(stored), { response: 'Two sales.', draft: null })
-  assert.equal(encodeStoredReply({ response: 'No cards.', suggestions: [], shown: null }), 'No cards.')
+  assert.equal(encodeStoredReply({ response: 'No cards.', shown: null }), 'No cards.')
   assert.equal(storedReplyForModel(stored), 'Two sales.\n\n[Shown with this reply: 1) 88 Example Ave, $1,850,000 (id opp_88); 2) 12 Sample St, $2,400,000 (id opp_12)]')
   // With a draft: the text, the draft, then the note.
-  const withDraft = encodeStoredReply({ response: "Here's a draft.", suggestions: [], draft: { channel: 'text', audience: 'buyer_side', body: 'Hi. Ryan Martin' }, shown: footerFromTurn({ deals: [B] }) })
+  const withDraft = encodeStoredReply({ response: "Here's a draft.", draft: { channel: 'text', audience: 'buyer_side', body: 'Hi. Ryan Martin' }, shown: footerFromTurn({ deals: [B] }) })
   assert.equal(storedReplyForModel(withDraft), "Here's a draft.\n\nDraft (text, buyer_side):\nHi. Ryan Martin\n\n[Shown with this reply: 1) 88 Example Ave, $1,850,000 (id opp_88)]")
 })
 
@@ -110,7 +110,7 @@ test('older rows still load: plain text, a draft, a calendar proposal, a malform
 })
 
 test('the history builder adds each note; only the newest replies list their cards', () => {
-  const noteFor = (i: number) => encodeStoredReply({ response: `reply ${i}`, suggestions: [], shown: footerFromTurn({ deals: [card(`opp_${i}`, `${i} Example Ave`, null, 1)], buyerId: `buyer_${i}` }) })
+  const noteFor = (i: number) => encodeStoredReply({ response: `reply ${i}`, shown: footerFromTurn({ deals: [card(`opp_${i}`, `${i} Example Ave`, null, 1)], buyerId: `buyer_${i}` }) })
   const rows = Array.from({ length: 7 }, (_, i) => [{ role: 'user', content: `ask ${i}` }, { role: 'assistant', content: noteFor(i) }]).flat()
   const sent = historyForModel(rows)
   assert.equal(sent.length, 14)
@@ -125,7 +125,7 @@ test('the history builder adds each note; only the newest replies list their car
 })
 
 test('N13: a chat that starts with a "+" report still opens on a placeholder user turn, then the report and its buyer', () => {
-  const plus = encodeStoredReply({ response: "Here's the Buyer Match & Search Report for Jordan Sample.", suggestions: [], shown: footerFromTurn({ buyerId: 'buyer_1', reportId: 'report_1' }) })
+  const plus = encodeStoredReply({ response: "Here's the Buyer Match & Search Report for Jordan Sample.", shown: footerFromTurn({ buyerId: 'buyer_1', reportId: 'report_1' }) })
   assert.deepEqual(historyForModel([{ role: 'assistant', content: plus }]), [
     { role: 'user', content: EARLIER_IN_CHAT },
     { role: 'assistant', content: "Here's the Buyer Match & Search Report for Jordan Sample.\n\n[Shown with this reply: Buyer id: buyer_1. Report id: report_1]" },

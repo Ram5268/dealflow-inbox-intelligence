@@ -4,6 +4,9 @@
 // PR 3) is JSON in the same column, so a reopened chat shows the draft with no
 // migration. readStoredReply gives the page and the History list the reply text
 // and the draft back.
+// Brief 43 PR 14 (D7, a Brief 42 default): no follow-up suggestions are stored
+// any more. Older rows that have them still read the same way (the field is
+// ignored).
 // Brief 43 PR 8 (Q14): a reply that showed cards, or was about a buyer or a
 // report, also carries `shown`, the note of what Ryan saw with it
 // (lib/chat/shownFooter.ts); the model's history reads it, the page doesn't.
@@ -12,7 +15,6 @@ import { normalizeShown, shownNoteText, type ShownFooter } from './shownFooter'
 
 export function encodeStoredReply(r: {
   response: string
-  suggestions: string[]
   pendingEvent?: Record<string, string> | null
   draft?: Draft | null
   shown?: ShownFooter | null
@@ -20,7 +22,6 @@ export function encodeStoredReply(r: {
   if (!r.pendingEvent && !r.draft && !r.shown) return r.response
   return JSON.stringify({
     response: r.response,
-    suggestions: r.suggestions,
     ...(r.pendingEvent ? { pendingEvent: r.pendingEvent } : {}),
     ...(r.draft ? { draft: r.draft } : {}),
     ...(r.shown ? { shown: r.shown } : {}),

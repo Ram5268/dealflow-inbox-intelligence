@@ -43,6 +43,7 @@ import {
 import { DRAFT_FIELD_SCHEMA, buildDraftContext, draftAsText, enforceDraftPrivacy } from '@/lib/chat/guards/draftPrivacy'
 import { encodeStoredReply, readStoredReply } from '@/lib/chat/storedReply'
 import { normalizeDraft } from '@/lib/chat/draft'
+import { cleanReplyText } from '@/lib/chat/replyText'
 import { pickShownCards, orderShownDeals, footerFromTurn, reportBuyerId, SHOWN_NOTE_ECHO } from '@/lib/chat/shownFooter'
 import OpenAI from 'openai'
 import Anthropic from '@anthropic-ai/sdk'
@@ -193,6 +194,8 @@ export async function POST(req: NextRequest) {
           organizationId,
           sessionId: confirmSession.id,
           userMessage,
+          // Brief 43 PR 14 (F9): when the proposal was made, for its expiry check.
+          proposedAt: lastAssistantMsg?.createdAt ?? null,
           pendingEvent: {
             subject:  lastPendingEvent.subject,
             startISO: lastPendingEvent.startISO,
@@ -224,14 +227,14 @@ export async function POST(req: NextRequest) {
             touchSession:   (id) => prisma.chatSession.update({ where: { id }, data: { updatedAt: new Date() } }),
           },
         })
-        return NextResponse.json({ sessionId: confirmSession.id, response: result.text, deals: [], suggestions: [] })
+        return NextResponse.json({ sessionId: confirmSession.id, response: result.text, deals: [] })
       } catch (err) {
         // Brief 41 (M17): never fall through to the AI after a failed confirm (it
         // could claim the event was booked). runCalendarConfirm only throws
         // before the calendar write (after it, failures are logged and the
         // "Done" reply still goes out), so nothing was booked.
         console.error('[DealFlow] Calendar confirm error:', err)
-        return NextResponse.json({ sessionId: confirmSession.id, response: CALENDAR_CONFIRM_FAILED, deals: [], suggestions: [] })
+        return NextResponse.json({ sessionId: confirmSession.id, response: CALENDAR_CONFIRM_FAILED, deals: [] })
       }
     }
 
@@ -306,25 +309,24 @@ export async function POST(req: NextRequest) {
         properties: {
           response: {
             type: 'string',
-            description: 'Plain text response. No markdown, no bold, no italics, no bullet dashes, no em-dashes.',
+            description: 'Plain text response. No markdown, no bold, no italics, no bullet dashes, no em-dashes, no exclamation marks.',
           },
-          suggestions: {
-            type: 'array',
-            items: { type: 'string' },
-            description: 'Exactly 2 specific follow-up questions.',
-          },
-          pendingEvent: {
-            type: 'object',
-            description: "Calendar event proposal awaiting Ryan's confirm. Omit entirely on non-calendar turns.",
-            properties: {
-              subject:  { type: 'string' },
-              startISO: { type: 'string', description: 'ISO 8601 datetime' },
-              endISO:   { type: 'string', description: 'Optional ISO 8601 datetime; defaults to startISO + 30min' },
-              location: { type: 'string' },
-              notes:    { type: 'string' },
+          // Brief 43 PR 14: no follow-up suggestions (D7, a Brief 42 default),
+          // and a calendar proposal only while Outlook is on (D8, Q33).
+          ...(graphEnabled() ? {
+            pendingEvent: {
+              type: 'object',
+              description: "Calendar event proposal awaiting Ryan's confirm. Omit entirely on non-calendar turns.",
+              properties: {
+                subject:  { type: 'string' },
+                startISO: { type: 'string', description: 'ISO 8601 datetime' },
+                endISO:   { type: 'string', description: 'Optional ISO 8601 datetime; defaults to startISO + 30min' },
+                location: { type: 'string' },
+                notes:    { type: 'string' },
+              },
+              required: ['subject', 'startISO'],
             },
-            required: ['subject', 'startISO'],
-          },
+          } : {}),
           referencedDeals: {
             type: 'array',
             items: { type: 'string' },
@@ -362,7 +364,7 @@ export async function POST(req: NextRequest) {
           // its rules are in the field's description (lib/chat/guards/draftPrivacy.ts).
           draft: DRAFT_FIELD_SCHEMA,
         },
-        required: ['response', 'suggestions', 'referencedDeals'],
+        required: ['response', 'referencedDeals'],
       } as Anthropic.Messages.Tool.InputSchema,
     }
 
@@ -377,10 +379,10 @@ export async function POST(req: NextRequest) {
     // ── Sonnet 4.6 tool_use loop ─────────────────────────────────────────────
     // tool_choice='any' forces a tool call every turn, so the loop deterministically
     // terminates on drift_response (Sonnet's structured final reply) rather than a
-    // free-text end_turn. This preserves suggestions + calendar pendingEvent.
+    // free-text end_turn. This preserves the calendar pendingEvent.
     type AttachedReport = { reportId: string; templateId: string; templateName: string; subject: string; sectionCount: number; matchCount?: number }
     type AttachedFragment = { templateId: string; sectionKey: string; title: string; content: SectionResult['content']; sources: SectionResult['sources'] }
-    type AiResult = { response: string; suggestions: string[]; pendingEvent?: Record<string, string> | null; referencedDeals?: string[]; attachedReport?: AttachedReport; attachedFragment?: AttachedFragment }
+    type AiResult = { response: string; pendingEvent?: Record<string, string> | null; referencedDeals?: string[]; attachedReport?: AttachedReport; attachedFragment?: AttachedFragment }
     const tools: Anthropic.Messages.Tool[] = [SEARCH_LISTINGS_TOOL, SEARCH_PARTIES_TOOL, FIND_SELLER_TOOL, COUNT_SELLERS_TOOL, GET_SELLER_MATCHES_TOOL, COUNT_MATCHES_TOOL, COUNT_SELLERS_WITH_BUYERS_TOOL, GENERATE_REPORT_TOOL, GENERATE_REPORT_SECTION_TOOL, responseTool]
     // Brief 43 PR 5 (D11 [Ryan, 2026-10-18]): the one named CRM seller find_seller
     // returned this turn, as structured cards for the page (name, phone, address,
@@ -626,7 +628,7 @@ export async function POST(req: NextRequest) {
       const forcedUse = forced?.content.find(
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === 'tool_use' && b.name === RESPONSE_TOOL_NAME,
       )
-      if (forced) aiResult = (forcedUse?.input as AiResult) ?? { response: 'Sorry, I had trouble pulling that together. Try rephrasing?', suggestions: [], referencedDeals: [] }
+      if (forced) aiResult = (forcedUse?.input as AiResult) ?? { response: 'Sorry, I had trouble pulling that together. Try rephrasing?', referencedDeals: [] }
     }
 
     // ── Brief 43 PR 4 (Q4): out of time before Drift had a reply ──────────────
@@ -654,7 +656,7 @@ export async function POST(req: NextRequest) {
         await prisma.chatMessage.create({
           data: {
             organizationId, sessionId: reportSession.id, role: 'assistant',
-            content: encodeStoredReply({ response: TIMED_OUT_REPLY, suggestions: [], shown: timedOutShown }),
+            content: encodeStoredReply({ response: TIMED_OUT_REPLY, shown: timedOutShown }),
             attachedReport:   (serverAttachedReport ?? undefined) as unknown as object | undefined,
             attachedFragment: (serverAttachedFragment ?? undefined) as unknown as object | undefined,
           },
@@ -687,7 +689,7 @@ export async function POST(req: NextRequest) {
       turnDeadline.clear()
       return NextResponse.json({
         sessionId: timedOutSessionId, interactionId: timedOutInteractionId, response: TIMED_OUT_REPLY,
-        deals: [], suggestions: [], seListings: [], seFilterUrl: null,
+        deals: [], seListings: [], seFilterUrl: null,
         attachedReport: serverAttachedReport, attachedFragment: serverAttachedFragment, draft: null,
       })
     }
@@ -722,7 +724,6 @@ export async function POST(req: NextRequest) {
     const guardHistory: GuardAttempt[] = []
     let fellbackToCanned = false
     let guardFinalAttempt = 0
-    let latestSuggestions: string[] | undefined
     let latestReferenced: string[] | undefined
 
     // Brief 11.0 Fix #1 — grounding corpus for tool-output binding. A structural
@@ -830,7 +831,6 @@ export async function POST(req: NextRequest) {
         if (retryResult) {
           currentResponse   = retryResult.response ?? currentResponse
           currentDraft      = (retryResult as { draft?: unknown }).draft ?? currentDraft
-          latestSuggestions = retryResult.suggestions ?? latestSuggestions
           latestReferenced  = retryResult.referencedDeals ?? latestReferenced
         }
       }
@@ -841,7 +841,6 @@ export async function POST(req: NextRequest) {
     aiResult = {
       ...aiResult,
       response:        currentResponse,
-      suggestions:     latestSuggestions ?? aiResult.suggestions,
       referencedDeals: latestReferenced ?? aiResult.referencedDeals,
     }
 
@@ -918,11 +917,9 @@ export async function POST(req: NextRequest) {
     const draft = draftResult.draft
     aiResult = { ...aiResult, response: draftResult.response }
 
-    const cleanResponse = (aiResult.response ?? '')
-      .replace(/\*\*([^*]+)\*\*/g, '$1')   // strip **bold**
-      .replace(/\*([^*]+)\*/g, '$1')        // strip *italic*
-      .replace(/\s*\[DEAL:[^\]]+\]/g, '')   // strip any stray deal tags from AI text
-      .replace(SHOWN_NOTE_ECHO, '')         // Brief 43 PR 8: never Drift's copy of a Shown note
+    // Brief 43 PR 14 (Q38): markdown, stray deal tags, em-dashes and "!" out (lib/chat/replyText.ts).
+    // Brief 43 PR 8: never Drift's copy of a Shown note; stripped first so no stray comma is left.
+    const cleanResponse = cleanReplyText((aiResult.response ?? '').replace(SHOWN_NOTE_ECHO, ''))
 
     // ── Hydrate the cards Sonnet's tools returned into full rows for the UI ──
     // Only ExtractedOpportunity-backed cards render as `deals`. CRM buyers from
@@ -962,7 +959,7 @@ export async function POST(req: NextRequest) {
       buyerId:  reportBuyerId(toolResultsForGuard),
       reportId: (serverAttachedReport as AttachedReport | null)?.reportId ?? null,
     })
-    const storedAssistantContent = encodeStoredReply({ response: cleanResponse, suggestions: aiResult.suggestions ?? [], pendingEvent, draft, shown })
+    const storedAssistantContent = encodeStoredReply({ response: cleanResponse, pendingEvent, draft, shown })
 
     // Save messages to this session
     await prisma.chatMessage.create({ data: { organizationId, sessionId: session.id, role: 'user', content: storedMsg } })
@@ -976,7 +973,6 @@ export async function POST(req: NextRequest) {
         // splits them back out (components/chat/sellerCardView.ts).
         // Brief 43 PR 6: the matches card rides along the same way, tagged kind 'seller_matches'.
         dealsJson: [...deals, ...sellerCards, ...sellerMatches] as unknown as object[],
-        suggestions: (aiResult.suggestions ?? []) as unknown as string[],
         // Brief 27.0 — server-captured report attachments (authoritative), so the
         // chat page can rehydrate a preview card / inline fragment in Phase 1b.
         attachedReport:   (serverAttachedReport ?? undefined) as unknown as object | undefined,
@@ -1057,7 +1053,6 @@ export async function POST(req: NextRequest) {
       interactionId,
       response:     cleanResponse,
       deals,
-      suggestions:  aiResult.suggestions ?? [],
       seListings:   composed.liveSeListings,
       seFilterUrl:  composed.seFilterUrl,
       // Brief 43 PR 5: the CRM seller card(s) from find_seller ([] when none).
