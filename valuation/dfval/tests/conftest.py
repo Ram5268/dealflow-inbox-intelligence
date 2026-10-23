@@ -74,7 +74,7 @@ def make_world(seed: int = 7, n_lots: int = 240, start="2021-01-01", end="2026-0
     return L, Sx.sort_values("date").reset_index(drop=True)
 
 
-def write_folder(root: str, L: pd.DataFrame, Sx: pd.DataFrame, cutover="2025-10-01") -> str:
+def write_folder(root: str, L: pd.DataFrame, Sx: pd.DataFrame, cutover="2025-10-01", annual_end="2026-01-01") -> str:
     raw = os.path.join(root, "raw")
     os.makedirs(os.path.join(raw, "dof_annual"), exist_ok=True)
     files = {}
@@ -97,7 +97,7 @@ def write_folder(root: str, L: pd.DataFrame, Sx: pd.DataFrame, cutover="2025-10-
         return df
 
     cut = pd.Timestamp(cutover)
-    put(config.DATASETS["sales_annual"], sales_cols(Sx[(Sx["date"] < "2026-01-01") & (Sx["date"] >= "2016-01-01")], True))   # overlaps rolling by 3 months
+    put(config.DATASETS["sales_annual"], sales_cols(Sx[(Sx["date"] < annual_end) & (Sx["date"] >= "2016-01-01")], True))   # overlaps rolling by 3 months
     put(config.DATASETS["sales_rolling"], sales_cols(Sx[Sx["date"] >= cut], False))
     put(config.DATASETS["pluto"], pd.DataFrame({
         "bbl": L["bbl"] + ".00000000", "borough": np.where(L["boro"] == 3, "BK", "QN"), "block": L["block"], "lot": L["lot"],

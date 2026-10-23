@@ -21,6 +21,7 @@ import { prisma } from '@/lib/prisma'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { Category, Prisma } from '@prisma/client'
 import { fromRaw, getBorough } from '@/lib/domain/Neighborhood'
+import { BUYER_ARCHETYPE_CODES, archetypeLabel, fieldHasAllWords, mentionsArchetype, partyFilterWhere, queryWords } from './partyFilters'
 import { priceOverlapScore } from '@/lib/matching/priceOverlap'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import { wantedHoods } from './neighborhoodMatch'
@@ -39,6 +40,9 @@ export const searchPartiesInputSchema = z.object({
   // Brief 43 PR 14 (Q29): only parties added on or after this date (./createdAfter.ts).
   createdAfter: createdAfterSchema.optional(),
   limit: z.number().int().positive().max(200).optional(),
+  // Brief 43 PR 9 (Q15, Q41): a name or description, and a buyer type (partyFilters.ts).
+  query: z.string().optional(),
+  archetype: z.enum(BUYER_ARCHETYPE_CODES).optional(),
 })
 
 export type SearchPartiesInput = z.infer<typeof searchPartiesInputSchema>
@@ -56,6 +60,8 @@ export interface PartyCard {
   priceRange: [number, number] | null
   priceOverlapScore?: number
   isTestData: boolean
+  agentName?: string | null // Brief 43 PR 9: the buyer's agent, from their email
+  archetype?: string | null // Brief 43 PR 9 (Q41): the buyer type, in plain words
 }
 
 export interface SearchPartiesResult {
@@ -159,6 +165,12 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
 
   const limit = input.limit ?? 50
   const includeTestData = input.includeTestData ?? true  // seed-only test mode: default on
+  // Brief 43 PR 9 (Q15): no guessing. A query of filler words only ("the buyer")
+  // finds nothing rather than every buyer.
+  // A blank query is no query (the model sometimes sends "").
+  const nameWords = input.query?.trim() ? queryWords(input.query) : null
+  const wantArchetype = input.archetype ?? null
+  if (nameWords?.length === 0) return { cards: [], totalMatched: 0, filtersApplied: input }
   const wantBorough = input.borough ?? null
   const wantHoods = wantedHoods(input.neighborhoods, input.nearby)
   const range = input.priceRangeOverlaps ?? null
@@ -198,6 +210,10 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
     if (!includeTestData) where.isTestData = false
     // TEST_MODE_ONLY hard gate: force seed data on the demand side.
     if (isTestModeOnly()) where.isTestData = true
+    // Brief 43 PR 9: the name and type filters run in the database, so a buyer
+    // older than the newest 500 is still found (T-07).
+    const nameAndType = partyFilterWhere(nameWords, wantArchetype)
+    if (nameAndType.length > 0) where.AND = nameAndType
     // Beds are NOT gated at the Prisma layer: buyer ISOs store their bed criteria
     // as minBeds/maxBeds with the scalar `beds` column null (~90% of rows — this is
     // correct extractor behavior: ISOs are ranges, not scalars). A `where.beds`
@@ -212,6 +228,7 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
         id: true, category: true, extractedTitle: true, neighborhood: true,
         neighborhoods: true, borough: true, beds: true, minBeds: true,
         maxBeds: true, minPrice: true, maxPrice: true, isTestData: true,
+        sourceAgentName: true, buyerArchetype: true, extractedSummary: wantArchetype != null,
       },
     })
 
@@ -238,6 +255,10 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
         priceRange: p.minPrice != null && p.maxPrice != null ? [p.minPrice, p.maxPrice] : null,
         ...(overlap !== undefined ? { priceOverlapScore: overlap } : {}),
         isTestData: p.isTestData,
+        agentName: p.sourceAgentName,
+        // The stored type; or, with none stored, the asked type when the request names it.
+        archetype: archetypeLabel(p.buyerArchetype) ?? (wantArchetype && !p.buyerArchetype &&
+          mentionsArchetype(wantArchetype, [p.extractedTitle, p.extractedSummary]) ? archetypeLabel(wantArchetype) : null),
       })
     }
   }
@@ -260,6 +281,7 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
     select: {
       id: true, fullName: true, intent: true, neighborhood: true, initialNeighborhood: true, city: true,
       bedsMin: true, bedsMax: true, budgetMin: true, budgetMax: true, isTestData: true,
+      cashOnly: true,
     },
   })
   for (const m of crmParties) {
@@ -289,10 +311,21 @@ export async function searchParties(rawInput: SearchPartiesInput): Promise<Searc
       priceRange: m.budgetMin != null && m.budgetMax != null ? [m.budgetMin, m.budgetMax] : null,
       ...(overlap !== undefined ? { priceOverlapScore: overlap } : {}),
       isTestData: m.isTestData,
+      // Brief 43 PR 9 (Q41): the type as matching reads it (adapters.ts mojoContactToBuyerData).
+      archetype: m.cashOnly === true ? archetypeLabel('CASH_BUYER') : null,
     })
   }
 
   if (range) cards.sort((a, b) => (b.priceOverlapScore ?? 0) - (a.priceOverlapScore ?? 0))
+  // Brief 43 PR 9: the exact name and type check, on every card whichever source
+  // built it. Only buyers and renters: a CRM seller is never searched here
+  // (D11 [Ryan, 2026-10-18]).
+  if (nameWords || wantArchetype) {
+    const kept = cards.filter(c => (c.role === 'buyer' || c.role === 'renter') &&
+      (!nameWords || fieldHasAllWords([c.title, c.name, c.agentName], nameWords)) &&
+      (!wantArchetype || c.archetype === archetypeLabel(wantArchetype)))
+    cards.splice(0, cards.length, ...kept)
+  }
 
   const totalMatched = cards.length
   return {

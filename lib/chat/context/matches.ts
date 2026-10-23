@@ -25,6 +25,9 @@ export const matchesFetcher: ContextFetcher = async ({ queryText }) => {
   })
 
   if (unseenMatches.length === 0) return { block: null }
+  // Brief 43 PR 6 (Q26): the header gives the true number these 20 come from
+  // (it said "(20 total)"), so "how many matches?" isn't answered as 20.
+  const unseenTotal = await prisma.match.count({ where: { seen: false, score: { gte: 50 } } })
 
   // Brief 41 (H7): the plain, safe reason (older rows hold raw scorer keys).
   const lines = unseenMatches.map(m =>
@@ -32,7 +35,10 @@ export const matchesFetcher: ContextFetcher = async ({ queryText }) => {
       ? `[SHOWING] ${m.reason}`
       : `[MATCH score:${m.score}] ${plainFitReason(m.reason, { homeowner: m.opportunityType === 'contact' || m.counterpartType === 'mojo' })}`
   )
-  const block = `\n\nNEW MATCHES FROM LAST SYNC (${unseenMatches.length} total):\n` + lines.join('\n')
+  const shown = unseenMatches.length < unseenTotal
+    ? `the ${unseenMatches.length} best-scoring of ${unseenTotal.toLocaleString('en-US')} unseen`
+    : `all ${unseenTotal.toLocaleString('en-US')} unseen`
+  const block = `\n\nNEW MATCHES FROM LAST SYNC (${shown}; count_matches has the exact counts by tier):\n` + lines.join('\n')
 
   return { block }
 }
