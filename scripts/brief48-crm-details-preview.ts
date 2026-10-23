@@ -16,8 +16,10 @@
 // seller (by the copy's own rules for the CRM_WINS switch's current setting, crmWins.ts),
 // scores every seller against buyer demand both ways, builds the call list both ways, and prints counts
 // only: per column the leads with a field, values too unclear to copy, sellers filled and
-// changed; tiers, sellers with matches, sellers left out as currently listed, the call
-// list's length; and of the top 50, how many leave it, the rank correlation, how many have
+// changed; equity and loan balances under $1,000; sellers by listing status and how many newly count as still on the market;
+// tiers, sellers with matches, seller-buyer pairs refused as currently listed, the call
+// list's length; Brief 47's size check on the details alone, and the matches the database
+// holds now; and of the top 50, how many leave it, the rank correlation, how many have
 // a motivation factor known and how many distinct scores it has. Only the detail columns
 // are applied (not the copy's other changes), so the difference is this PR's alone. No
 // name, phone number, address or value is printed. It uses the DATABASE_URL and
@@ -63,8 +65,10 @@ async function preview(db: PrismaClient) {
   const { CURRENT_SQL, countFieldChanges, crmOwnName, crmWinsAfter, crmWinsKeepStatus, keepOldAfter, readCrmWinsSwitch, toCrmWinsRow } = await import('../lib/crm-sync/crmWins')
   const { DETAIL_COLUMNS } = await import('../lib/crm-sync/sellerDetails')
   const {
-    CRM_FIELDS_SQL, CRM_PHONE_TYPES_SQL, detailCoverage, fieldInventory, knownFactors, scoringInputsWithoutOurValues, topSummary, withDetails,
+    CRM_FIELDS_SQL, CRM_PHONE_TYPES_SQL, detailCoverage, fieldInventory, guardWithDetails, knownFactors, listingStatusCounts, pastAuctionDates,
+    scoringInputsWithoutOurValues, smallMoneyValues, topSummary, withDetails,
   } = await import('../lib/crm-sync/detailsPreview')
+  const { EXISTING_MATCH_COUNTS_SQL } = await import('../lib/matching/nightly/sql')
 
   try {
     const org = await db.organization.findUniqueOrThrow({ where: { slug: ORG_SLUG }, select: { id: true } })
@@ -135,10 +139,14 @@ async function preview(db: PrismaClient) {
       matches: n.kept.length,
       tiers: tierCounts(n.kept),
       sellersCovered: new Set(n.kept.map(k => k.sellerId)).size,
-      ineligible: { currentlyListed: n.ineligibleByReason.currently_listed ?? 0, wrongPrice: n.ineligibleByReason.wrong_price ?? 0 },
+      // Seller-buyer pairs, not sellers (scoreAll counts every pair it refuses).
+      ineligiblePairs: { currentlyListed: n.ineligibleByReason.currently_listed ?? 0, wrongPrice: n.ineligibleByReason.wrong_price ?? 0 },
       callList: list.length,
       top50: topSummary(list, id => factors.get(id) ?? 0),
     })
+    const todaySide = side(today, listToday, factorsToday)
+    const withSide = side(withD, listWith, factorsWith)
+    const [existing] = await db.$queryRawUnsafe<{ matches: number; sellers: number }[]>(EXISTING_MATCH_COUNTS_SQL, org.id)
     const includeTestBuyers = process.env.SCORING_INCLUDE_TEST_BUYERS === 'true'
     if (!includeTestBuyers) console.error('Note: SCORING_INCLUDE_TEST_BUYERS is not "true", so test buyers are left out; production counts them.')
     console.log(JSON.stringify({
@@ -154,8 +162,15 @@ async function preview(db: PrismaClient) {
       }])),
       sellers: inputs.sellers.length,
       buyers: inputs.buyers.length,
-      today: side(today, listToday, factorsToday),
-      withDetails: side(withD, listWith, factorsWith),
+      smallMoneyValues: smallMoneyValues(leads),
+      listingStatus: listingStatusCounts(pairs),
+      auctionDatesAlreadyPast: pastAuctionDates(pairs, now),
+      today: todaySide,
+      withDetails: withSide,
+      // Brief 47's size check on the details alone (empty: the night goes ahead), and what the
+      // database holds now (tonight's real check compares against these, priced as tonight is).
+      sizeCheckWithDetails: guardWithDetails({ sellers: inputs.sellers.length, buyers: inputs.buyers.length }, todaySide, withSide),
+      matchesInDatabaseNow: existing,
       top50: compareTop(listToday.map(r => r.contactId), listWith.map(r => r.contactId), 50),
     }, null, 2))
   } finally {

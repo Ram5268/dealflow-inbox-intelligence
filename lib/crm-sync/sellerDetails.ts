@@ -71,25 +71,41 @@ const has = (s: string, ...ws: string[]) => ws.some(w => s.includes(` ${w} `))
 // form (pending, in contract, coming soon) counts as ACTIVE, which matching leaves alone
 // (REBNY: eligibility.ts); taken off without selling (withdrawn, cancelled, temporarily off
 // the market) as WITHDRAWN.
+// Brief 48 (PR 9 review r1) [engineering precaution]: a word that turns the status around
+// ("Not Active", "No longer active", "Never sold") makes it unclear, so blank: ACTIVE takes
+// a seller out of matching, and with the switch off a filled status is never replaced.
+const NEGATED = (s: string) => has(s, 'not', 'no', 'non', 'never', 'was', 'inactive') || s.includes(' no longer ')
+
 export function listingStatusOf(raw: string | null | undefined): string | null {
   const s = words(raw)
+  if (s.includes(' never listed ') || s.includes(' not listed ')) return 'NEVER_LISTED'
+  if (NEGATED(s)) return null
   if (has(s, 'expired')) return 'EXPIRED'
   if (has(s, 'withdrawn', 'cancelled', 'canceled', 'terminated') || s.includes(' temporarily off market ') || s.includes(' temp off market ')) return 'WITHDRAWN'
   if (has(s, 'active', 'pending', 'contingent', 'coming soon') || s.includes(' under contract ') || s.includes(' in contract ')) return 'ACTIVE'
   if (has(s, 'sold', 'closed')) return 'SOLD'
-  if (s.includes(' never listed ') || s.includes(' not listed ')) return 'NEVER_LISTED'
   return null
 }
 
 // DealFlow's pre-foreclosure stages (preForeclosure.ts). A plain yes is a lis pendens: New
 // York forecloses through the courts, so a pre-foreclosure record there starts with one
 // [engineering judgment]; a plain no is NONE, a known negative.
+// Brief 48 (PR 9 review r1) [engineering precaution]: a stage named with a no or an ending
+// ("No auction scheduled", "Lis Pendens released") is unclear, and only a plain no is NONE:
+// "N/A" or "No data" is not knowing, and NONE counts as a known negative.
+const PLAIN_NO = new Set(['no', 'n', 'none', 'false'])
+const PLAIN_YES = new Set(['yes', 'y', 'true'])
+const ENDED_OR_NOT = ['no', 'not', 'none', 'never', 'cancelled', 'canceled', 'released', 'dismissed', 'discharged', 'satisfied', 'withdrawn', 'terminated', 'vacated']
+
 export function preForeclosureOf(raw: string | null | undefined): string | null {
   const s = words(raw)
+  const plain = s.trim()
+  if (PLAIN_NO.has(plain)) return 'NONE'
+  if (PLAIN_YES.has(plain)) return 'LIS_PENDENS'
+  if (has(s, ...ENDED_OR_NOT)) return null
   if (has(s, 'auction')) return 'AUCTION_SCHEDULED'
   if (s.includes(' lis pendens ') || has(s, 'lp')) return 'LIS_PENDENS'
   if (s.includes(' notice of default ') || has(s, 'nod', 'default')) return 'NOTICE_OF_DEFAULT'
-  if (has(s, 'no', 'none', 'false', 'n')) return 'NONE'
   if (has(s, 'yes', 'y', 'true')) return 'LIS_PENDENS'
   return null
 }
@@ -137,8 +153,18 @@ export function dateOf(v: CrmFieldValue | undefined): string | null {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')} 00:00:00`
 }
 
+// Brief 48 (PR 9 review r1) [engineering precaution]: DealFlow's own tag words change what
+// DealFlow does, and a copied tag can never be taken back from the CRM (tags are only added
+// to). ryan_listing means the homeowner agreed to sell, which lets their street address
+// reach buyer notes (lib/buyerFacingSupply.ts) [Ryan, 2026-10-19: no address until they
+// agree]; ryan_buyer marks Ryan's buyers; buyer and renter make a contact demand
+// (lib/matching/engine.ts). So they're never copied; a later brief can bring "agreed to
+// sell" from the CRM in a way the CRM can also take back.
+const DEALFLOW_TAGS = new Set(['ryan_listing', 'ryan_buyer', 'buyer', 'renter'])
+
 export function tagsOf(v: CrmFieldValue | undefined): string[] | null {
   const tags = [...new Set((v?.t ?? '').split(/[,;|]/).map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean))]
+    .filter(tag => !DEALFLOW_TAGS.has(tag.toLowerCase()))
   return tags.length > 0 ? tags : null
 }
 
@@ -146,16 +172,22 @@ const atLeast = (min: number, x: number | null) => (x != null && x >= min ? x : 
 
 // The details for mapLead. Equity may be below zero (owing more than the home is worth); a
 // loan balance of 0 means free and clear; an asking price must be above 0.
+// Brief 48 (PR 9 review r1; executor, 2026-10-23) [engineering precaution]: equity 0 and a
+// loan balance of 0 together say nothing (a home has value, so both can't be 0): a vendor's
+// "unknown". Both are left blank, so freeAndClear and highEquity don't read a guess.
 export function sellerDetails(fields: Fields) {
   const v = (c: DetailColumn) => detailField(fields, c)?.value
+  const equity = money(v('equityBalance'))
+  const loan = atLeast(0, money(v('totalLoanBalance')))
+  const bothZero = equity === 0 && loan === 0
   return {
     priorListingStatus: listingStatusOf(v('priorListingStatus')?.t),
     priorListingPrice: atLeast(1, money(v('priorListingPrice'))),
     preForeclosureStatus: preForeclosureOf(v('preForeclosureStatus')?.t),
     foreclosureAuctionDate: dateOf(v('foreclosureAuctionDate')),
     isVacant: yesNo(v('isVacant')),
-    equityBalance: money(v('equityBalance')),
-    totalLoanBalance: atLeast(0, money(v('totalLoanBalance'))),
+    equityBalance: bothZero ? null : equity,
+    totalLoanBalance: bothZero ? null : loan,
     loanInterestRate: rateOf(v('loanInterestRate')),
     tags: tagsOf(v('tags')),
   }

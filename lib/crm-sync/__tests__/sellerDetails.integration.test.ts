@@ -22,6 +22,8 @@ import { EXISTING_SQL, ORG_SLUG, runCrmLeadSync } from '../runSync'
 import { toUpsertRow } from '../upsert'
 import { CURRENT_SQL, crmOwnName, crmWinsAfter, crmWinsKeepStatus, keepOldAfter, toCrmWinsRow } from '../crmWins'
 import { CRM_LEADS, DF_ORG, DF_ROWS, P, cleanup, createCrmTables, requireTestUrls, seed, type SeedLead } from './crmSyncDb'
+import { runCrmWinsSwitch } from '../crmWins'
+import { applyRestore, readBeforeCopy } from '../crmWinsBackup'
 
 const { crmUrl } = requireTestUrls()
 const SKIP = !crmUrl
@@ -133,4 +135,23 @@ test('switch on: a CRM value replaces DealFlow\'s, a CRM blank never erases, and
   // The do-not-call tag is still the one seller's.
   const [{ n }] = (await df.query(`SELECT count(*)::int AS n FROM "MojoContact" WHERE "organizationId" = $1 AND 'DNC' = ANY(tags)`, [DF_ORG])).rows
   assert.equal(n, 1)
+})
+
+// Brief 48 (PR 9 review r1) [engineering precaution]: tags are only ever added to, whichever
+// way the switch is set, so DS-4's --restore (which undoes the switch) keeps tags added since
+// the before-copy; a do-not-call tag the CRM added must not disappear until the next copy.
+test('a restore keeps tags added since the before-copy (a do-not-call tag stays)', { skip: SKIP }, async () => {
+  await cleanup(df, crm)
+  await seed(df, crm, leads, DF_ROWS)
+  await runCrmLeadSync() // keep-old: mc_blanks gets its CRM tag 'Expired'
+  assert.deepEqual((await detailsOf(`${P}mc_blanks`)).tags, ['Expired'])
+  const copy = await readBeforeCopy(prisma, DF_ORG)
+  await runCrmWinsSwitch(prisma, 'on', true)
+  // Ryan tags the lead do-not-call in the CRM; the next copy adds it.
+  await crm.query(`UPDATE "CustomFieldValue" v SET "valueText" = 'Expired, DNC' FROM "CustomFieldDefinition" d
+    WHERE d.id = v."definitionId" AND d.name = 'Tags' AND v."objectId" = $1`, [`${P}lead_blanks`])
+  await runCrmLeadSync()
+  assert.deepEqual((await detailsOf(`${P}mc_blanks`)).tags, ['Expired', 'DNC'])
+  await applyRestore(prisma, copy)
+  assert.deepEqual((await detailsOf(`${P}mc_blanks`)).tags, ['Expired', 'DNC'])
 })

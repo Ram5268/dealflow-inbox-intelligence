@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { PREIMAGE_DIR_FLAG } from '../privateRecord'
-import { COLUMNS } from './upsert'
+import { COLUMNS, unionExpr } from './upsert'
 import { CRM_WINS, crmWinsKeepStatus, parseCrmWinsArgs } from './crmWins'
 
 // Brief 48 (PR 7 review r1; data step DS-4, Brief 48 §4: every data step has a before-copy
@@ -67,10 +67,12 @@ export function parseBeforeCopy(raw: unknown, organizationId: string): BeforeCop
 }
 
 // The value a column is put back to: the saved one; metadata keeps a do-not-contact mark.
+// Brief 48 (PR 9 review r1) [engineering precaution]: tags are only ever added to, with the
+// switch on or off, so the saved tags plus any added since (a do-not-call tag among them).
 const restoredExpr = (c: string) =>
   c === 'metadata'
     ? `CASE WHEN m.metadata->>'crmOptOut' = 'true' THEN COALESCE(r.metadata, '{}'::jsonb) || '{"crmOptOut": true}'::jsonb ELSE r.metadata END`
-    : `r.${q(c)}`
+    : c === 'tags' ? unionExpr('r."tags"', 'm."tags"') : `r.${q(c)}`
 const recordset = (columns: string[]) =>
   `jsonb_to_recordset($1::jsonb) AS r(id text, ${columns.map(c => `${q(c)} ${TYPES.get(c)}`).join(', ')})`
 const differs = (columns: string[]) =>

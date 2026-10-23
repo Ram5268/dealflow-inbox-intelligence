@@ -1,12 +1,13 @@
 import type { MojoContact, PrismaClient } from '@prisma/client'
 import type { CrmLeadRow } from './crmReader'
 import type { Snapshot } from './crmWins'
-import { DETAIL_COLUMNS, DETAIL_FIELDS, detailField, normName, sellerDetails, type DetailColumn } from './sellerDetails'
+import { DETAIL_COLUMNS, DETAIL_FIELDS, detailField, money, normName, sellerDetails, type DetailColumn } from './sellerDetails'
 import { mojoContactToBuyerData, mojoContactToListingData, opportunityToBuyerData } from '../matching/adapters'
 import { precomputeCompsMedians, precomputeSubstitutionCounts } from '../matching/compsCache'
 import { boroughFromLabel } from '../matching/borough'
 import { fromRaw } from '../domain/Neighborhood'
 import type { ScoringContext } from '../matching/scorerTypes'
+import { scoringRefusal } from '../matching/nightly/guard'
 
 // Brief 48 (PR 9, item 4.10): the pure parts of scripts/brief48-crm-details-preview.ts,
 // which shows, before or after this PR merges, which seller details the CRM holds and how
@@ -33,9 +34,63 @@ GROUP BY 1, 2 ORDER BY 1, 2`
 export interface CrmField { name: string; type: string; leadsWithValue: number }
 
 // Each CRM field with the DealFlow column the copy reads it into (null: not copied).
+// Brief 48 (PR 9 review r1) [engineering precaution]: a label is an upload's column header,
+// but a file uploaded without a header row makes labels of its first row (a name, a phone
+// number, an email). A label with 5 or more digits or an @ is printed as hidden.
+export const looksLikeData = (label: string) => /@/.test(label) || (label.match(/\d/g) ?? []).length >= 5
 export function fieldInventory(fields: CrmField[]) {
   const column = (name: string) => DETAIL_COLUMNS.find(c => DETAIL_FIELDS[c].includes(normName(name))) ?? null
-  return fields.map(f => ({ ...f, copiedTo: column(f.name) }))
+  return fields.map(f => ({ ...f, name: looksLikeData(f.name) ? '(hidden: looks like data)' : f.name, copiedTo: column(f.name) }))
+}
+
+// Brief 48 (PR 9 review r1): sellers (not seller-buyer pairs) by the listing status the next
+// copy leaves them with, and how many it newly marks as still on the market (ACTIVE: left out
+// of matching, eligibility.ts). Counts only.
+export function listingStatusCounts(pairs: Array<{ before: Snapshot; after: Snapshot }>) {
+  const after: Record<string, number> = {}
+  let newlyActive = 0
+  for (const p of pairs) {
+    const status = (p.after.priorListingStatus as string | null) ?? 'blank'
+    after[status] = (after[status] ?? 0) + 1
+    if (p.after.priorListingStatus === 'ACTIVE' && p.before.priorListingStatus !== 'ACTIVE') newlyActive++
+  }
+  return { after, newlyActive }
+}
+
+// Brief 48 (PR 9 review r1): sellers whose auction date (after the copy) has already passed.
+// foreclosureUrgency scores a past date as the most urgent, so these are worth a look.
+export function pastAuctionDates(pairs: Array<{ after: Snapshot }>, now: Date): number {
+  return pairs.filter(p => typeof p.after.foreclosureAuctionDate === 'string' && new Date(`${p.after.foreclosureAuctionDate}Z`) < now).length
+}
+
+// Brief 48 (PR 9 review r1): Brief 47's size check (lib/matching/nightly/guard.ts) applied to
+// the preview's two sides: what the details alone do to the night. A refusal here means the
+// first night after the copy would be refused (nothing written, the call list not rebuilt),
+// and every night after it until someone acts.
+export function guardWithDetails(
+  sizes: { sellers: number; buyers: number },
+  today: { matches: number; sellersCovered: number },
+  withDetails: { matches: number; sellersCovered: number },
+) {
+  return scoringRefusal({
+    sellers: sizes.sellers, buyers: sizes.buyers, kept: withDetails.matches, sellersCovered: withDetails.sellersCovered,
+    existingMatches: today.matches, existingSellersCovered: today.sellersCovered,
+  })
+}
+
+// Brief 48 (PR 9 review r1; executor, 2026-10-23): leads whose equity or loan balance, as
+// written in the CRM, is under $1,000 (0 included): most likely "unknown" or a typo, worth a
+// look before they reach freeAndClear and highEquity. bothZero are left blank by the copy.
+export function smallMoneyValues(leads: Pick<CrmLeadRow, 'fields'>[]) {
+  const out = { equityUnder1000: 0, loanBalanceUnder1000: 0, bothZero: 0 }
+  for (const l of leads) {
+    const e = money(detailField(l.fields, 'equityBalance')?.value)
+    const b = money(detailField(l.fields, 'totalLoanBalance')?.value)
+    if (e != null && e >= 0 && e < 1000) out.equityUnder1000++
+    if (b != null && b >= 0 && b < 1000) out.loanBalanceUnder1000++
+    if (e === 0 && b === 0) out.bothZero++
+  }
+  return out
 }
 
 // Per column: leads with one of its fields, and how many of those values weren't clear

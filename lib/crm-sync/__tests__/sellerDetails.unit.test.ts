@@ -145,11 +145,66 @@ test('the preview script only reads: a read-only connection checked before the f
   assert.doesNotMatch(src, /runCrmLeadSync|runNightlyScoring|buildCallQueue|dryRun/)
 })
 
-test('a CRM 0 loan balance or equity is a fact (free and clear), not "unknown": it lands both ways', () => {
-  const contact = mapLead({ ...lead, fields: { 'Mortgage Balance': n(0), Equity: n(0) } })
+test('a CRM 0 loan balance is a fact (free and clear), not "unknown": it lands both ways; equity 0 and loan 0 together are blank', () => {
+  const contact = mapLead({ ...lead, fields: { 'Mortgage Balance': n(0), Equity: n(600_000) } })
   const before = { fullName: 'Pat Example', totalLoanBalance: 250_000, equityBalance: null }
   const wins = crmWinsAfter(before, toCrmWinsRow({ contact, keeper }, 'Pat Example'), false)
-  assert.deepEqual([wins.totalLoanBalance, wins.equityBalance], [0, 0])
-  assert.deepEqual([keepOldAfter(before, toUpsertRow({ contact, keeper })).equityBalance], [0])
+  assert.deepEqual([wins.totalLoanBalance, wins.equityBalance], [0, 600_000])
+  assert.deepEqual([keepOldAfter({ ...before, totalLoanBalance: null }, toUpsertRow({ contact, keeper })).totalLoanBalance], [0])
   assert.ok(flat(CRM_WINS_UPDATE_SQL).includes(`"totalLoanBalance" = COALESCE(s."totalLoanBalance", m."totalLoanBalance")`))
+  // Review r1 (executor): both 0 is a vendor's "unknown", so both stay blank; one 0 alone is kept.
+  const both = mapLead({ ...lead, fields: { 'Mortgage Balance': n(0), Equity: t('$0') } })
+  assert.deepEqual([both.totalLoanBalance, both.equityBalance], [null, null])
+  assert.deepEqual([mapLead({ ...lead, fields: { Equity: n(0) } }).equityBalance], [0])
+})
+
+test('review r1: the preview counts equity and loan balances under $1,000 (labels and counts only)', async () => {
+  const { smallMoneyValues } = await import('../detailsPreview')
+  assert.deepEqual(smallMoneyValues([
+    { fields: { Equity: n(0), 'Mortgage Balance': n(0) } }, { fields: { Equity: n(500) } }, { fields: { 'Loan Balance': t('$250') } },
+    { fields: { Equity: n(600_000), 'Mortgage Balance': n(0) } }, { fields: { Equity: n(-5_000) } }, { fields: {} },
+  ]), { equityUnder1000: 2, loanBalanceUnder1000: 3, bothZero: 1 })
+})
+
+// Brief 48 (PR 9 review r1): words that turn a status around, and "N/A", are unclear, not a
+// status; DealFlow's own tag words never come from the CRM [engineering precaution].
+test('review r1: a negated or ended status is unclear (blank), and N/A is not a known "no"', () => {
+  for (const raw of ['Not Active', 'No longer active', 'Non-Active', 'Was Active', 'Active? No', 'Not expired', 'Never sold']) {
+    assert.equal(listingStatusOf(raw), null, raw)
+  }
+  for (const [raw, want] of [['Not Listed', 'NEVER_LISTED'], ['Never Listed', 'NEVER_LISTED'], ['Active', 'ACTIVE'], ['Expired', 'EXPIRED']] as const) {
+    assert.equal(listingStatusOf(raw), want, raw)
+  }
+  for (const raw of ['N/A', 'n/a', 'No data', 'No auction scheduled', 'No Auction Date', 'Auction cancelled', 'No default', 'Not in default',
+    'Lis Pendens released', 'LP Dismissed']) {
+    assert.equal(preForeclosureOf(raw), null, raw)
+  }
+  for (const [raw, want] of [['No', 'NONE'], ['N', 'NONE'], ['none', 'NONE'], ['false', 'NONE'], ['Yes', 'LIS_PENDENS'], ['Lis Pendens', 'LIS_PENDENS'],
+    ['Auction Scheduled', 'AUCTION_SCHEDULED'], ['Auction Postponed', 'AUCTION_SCHEDULED'], ['NOD', 'NOTICE_OF_DEFAULT']] as const) {
+    assert.equal(preForeclosureOf(raw), want, raw)
+  }
+})
+
+test('review r1: DealFlow\'s own tag words are never copied from the CRM (ryan_listing would let a street address reach buyer notes)', () => {
+  assert.deepEqual(tagsOf(t('Absentee, ryan_listing, RYAN_LISTING, Buyer, renter, ryan_buyer, DNC')), ['Absentee', 'DNC'])
+  assert.equal(tagsOf(t('ryan_listing')), null)
+})
+
+test('review r1: the preview counts sellers by listing status, applies the size check, and hides labels that look like data', async () => {
+  const { fieldInventory, guardWithDetails, listingStatusCounts, looksLikeData, pastAuctionDates } = await import('../detailsPreview')
+  const at = (d: string | null) => ({ after: { foreclosureAuctionDate: d } })
+  assert.equal(pastAuctionDates([at('2019-01-15T00:00:00'), at('2026-12-01T00:00:00'), at(null)], new Date('2026-10-23T12:00:00Z')), 1)
+  const pairs = [
+    { before: { priorListingStatus: null }, after: { priorListingStatus: 'ACTIVE' } },
+    { before: { priorListingStatus: 'ACTIVE' }, after: { priorListingStatus: 'ACTIVE' } },
+    { before: { priorListingStatus: null }, after: { priorListingStatus: 'EXPIRED' } },
+    { before: { priorListingStatus: null }, after: { priorListingStatus: null } },
+  ]
+  assert.deepEqual(listingStatusCounts(pairs), { after: { ACTIVE: 2, EXPIRED: 1, blank: 1 }, newlyActive: 1 })
+  // Half the sellers with a match passes; fewer than half is refused (Brief 47).
+  assert.deepEqual(guardWithDetails({ sellers: 10, buyers: 5 }, { matches: 40, sellersCovered: 10 }, { matches: 20, sellersCovered: 5 }), [])
+  assert.deepEqual(guardWithDetails({ sellers: 10, buyers: 5 }, { matches: 40, sellersCovered: 10 }, { matches: 30, sellersCovered: 4 }), ['sellers_shrank'])
+  for (const label of ['pat@example.com', '(718) 555-0142', '88 Example Ave 11221']) assert.equal(looksLikeData(label), true, label)
+  for (const label of ['Equity', 'Phone 2', 'Listing Status', 'Property Zip Code']) assert.equal(looksLikeData(label), false, label)
+  assert.deepEqual(fieldInventory([{ name: '(718) 555-0142', type: 'text', leadsWithValue: 1 }]).map(f => [f.name, f.copiedTo]), [['(hidden: looks like data)', null]])
 })
