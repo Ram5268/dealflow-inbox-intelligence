@@ -170,6 +170,28 @@ test('two sellers with the name: candidates (name and neighborhood only); nobody
   assert.deepEqual(await getSellerMatches({}), { none: true })
 })
 
+test('a same-name seller Ryan picks by neighborhood: that one\'s buyers (find_seller\'s neighborhood pick)', async () => {
+  world({ contacts: [contact({ id: 'mc_pat2', fullName: 'Pat Example', address: '12 Sample St', neighborhood: 'Crown Heights' })] })
+  fake.tables.match.push(match({ id: 'm_pat2', opportunityId: 'mc_pat2', counterpartId: 'iso_a', score: 77, tier: 'WARM' }))
+  const { getSellerMatches } = await import('../sellerMatches')
+  const r = await getSellerMatches({ name: 'Pat Example', neighborhood: 'Crown Heights' })
+  assert.ok('seller' in r)
+  assert.equal(r.seller.id, 'mc_pat2')
+  assert.deepEqual(r.buyers.map(b => b.matchId), ['m_pat2'])
+  const other = await getSellerMatches({ name: 'Pat Example', neighborhood: 'Bed-Stuy' })
+  assert.ok('seller' in other)
+  assert.equal(other.seller.id, 'mc_pat')
+  // A neighborhood alone looks up nobody.
+  assert.deepEqual(await getSellerMatches({ neighborhood: 'Crown Heights' }), { none: true })
+})
+
+test('the tool tells Drift it takes the picked neighborhood, as find_seller does', async () => {
+  const { GET_SELLER_MATCHES_TOOL, FIND_SELLER_TOOL } = await import('../schemas')
+  const props = (t: { input_schema: unknown }) => (t.input_schema as { properties: Record<string, { description?: string }> }).properties
+  assert.ok(props(GET_SELLER_MATCHES_TOOL).neighborhood, 'get_seller_matches has a neighborhood field')
+  assert.equal(props(GET_SELLER_MATCHES_TOOL).neighborhood.description, props(FIND_SELLER_TOOL).neighborhood.description)
+})
+
 test('what Drift reads: the buyers and counts, with no link and no match id', async () => {
   world()
   const { getSellerMatches, getSellerMatchesForModel } = await import('../sellerMatches')

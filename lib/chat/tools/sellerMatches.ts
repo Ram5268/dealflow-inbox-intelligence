@@ -34,7 +34,8 @@ import { findSeller, type FindSellerInput } from './findSeller'
 // TOP_PER_SELLER), so this is all of them on a normal night.
 export const MAX_BUYERS_SHOWN = 10
 
-// The same input as find_seller: { name?, address? }.
+// The same input as find_seller: { name?, address?, neighborhood? } (the
+// neighborhood picks one of several same-name sellers, Brief 43 PR 5).
 export type GetSellerMatchesInput = FindSellerInput
 
 export type GetSellerMatchesResult =
