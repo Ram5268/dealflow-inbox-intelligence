@@ -1,18 +1,21 @@
 'use client'
 import { useEffect, useState } from 'react'
+import { recentActivityRows, type Recent, type RecentPush } from '@/lib/status/olderSections'
 
 // Brief 8.0-lite Fix #4 — phone-friendly view of /api/debug/health. Pure
 // instrumentation (green/red dots per subsystem), not a product surface. Fetches
 // client-side; no auth. Brief 47 (PR 4): the retired Zapier "Recent ingest" list is
-// gone, as the API no longer returns it.
+// gone, as the API no longer returns it. Brief 48 (PR 16, Revision 1): the recent
+// matches, notifications and dismissals are one "Recent activity" table of times and
+// counts, since the API no longer lists their rows [planner, Brief 48 Revision 1].
 
 interface Health {
   flags: Record<string, boolean>
   graphToken: { expiresAt: string | null; expiresInMinutes: number | null; status: string }
   lastSync: { at: string | null; opportunitiesCreated: number; matchesCreated: number }
-  recentMatches: Array<{ id: string; score: number; tier: string | null; counterpartType: string; createdAt: string }>
-  recentDismissals: Array<{ partyId: string; listingId: string; reason: string | null; createdAt: string }>
-  recentPush: Array<{ title: string; body: string; deliveredAt: string; success: boolean | null }>
+  recentMatches: Recent | null
+  recentDismissals: Recent | null
+  recentPush: RecentPush | null
   subsystemLastSuccess: { matcher: string | null; extraction: string | null }
 }
 
@@ -107,46 +110,25 @@ export default function HealthPage() {
       </section>
 
       <section>
-        <h2 className="font-medium mb-2 text-gray-700">Recent matches ({data.recentMatches.length})</h2>
+        <h2 className="font-medium mb-2 text-gray-700">Recent activity</h2>
         <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-gray-200 text-gray-500">
+              <th className="py-1 text-left font-normal"></th>
+              <th className="py-1 text-right font-normal">Newest</th>
+              <th className="py-1 text-right font-normal">24 hours</th>
+              <th className="py-1 text-right font-normal">7 days</th>
+            </tr>
+          </thead>
           <tbody>
-            {data.recentMatches.map(m => (
-              <tr key={m.id} className="border-b border-gray-100">
-                <td className="py-1">{m.tier ?? '—'} · {m.score} · {m.counterpartType}</td>
-                <td className="py-1 text-right">{fmt(m.createdAt)}</td>
+            {recentActivityRows(data).map(r => (
+              <tr key={r.label} className="border-b border-gray-100">
+                <td className="py-1">{r.label}</td>
+                <td className="py-1 text-right">{fmt(r.newestAt)}</td>
+                <td className="py-1 text-right">{r.last24h}</td>
+                <td className="py-1 text-right">{r.last7d}</td>
               </tr>
             ))}
-            {data.recentMatches.length === 0 && <tr><td className="py-1 text-gray-400">none</td></tr>}
-          </tbody>
-        </table>
-      </section>
-
-      <section>
-        <h2 className="font-medium mb-2 text-gray-700">Recent push ({data.recentPush.length})</h2>
-        <table className="w-full text-xs">
-          <tbody>
-            {data.recentPush.map((p, i) => (
-              <tr key={i} className="border-b border-gray-100">
-                <td className="py-1"><Dot ok={p.success} /> {p.title} {p.body}</td>
-                <td className="py-1 text-right">{fmt(p.deliveredAt)}</td>
-              </tr>
-            ))}
-            {data.recentPush.length === 0 && <tr><td className="py-1 text-gray-400">none</td></tr>}
-          </tbody>
-        </table>
-      </section>
-
-      <section>
-        <h2 className="font-medium mb-2 text-gray-700">Recent dismissals ({data.recentDismissals.length})</h2>
-        <table className="w-full text-xs">
-          <tbody>
-            {data.recentDismissals.map((d, i) => (
-              <tr key={i} className="border-b border-gray-100">
-                <td className="py-1 font-mono">{d.reason ?? 'skip'}</td>
-                <td className="py-1 text-right">{fmt(d.createdAt)}</td>
-              </tr>
-            ))}
-            {data.recentDismissals.length === 0 && <tr><td className="py-1 text-gray-400">none</td></tr>}
           </tbody>
         </table>
       </section>

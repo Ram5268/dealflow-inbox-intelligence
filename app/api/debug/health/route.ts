@@ -1,11 +1,14 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { isTestModeOnly } from '@/lib/config/testMode'
 import { isMatchingTestModeOnly } from '@/lib/config/matchingTestMode'
 import { isIngestionTestModeOnly } from '@/lib/config/ingestionTestMode'
 import { readStatusWindow } from '@/lib/status/lastNight'
+import {
+  LAST_SYNC_ACTIONS, UNKNOWN_RECENT, UNKNOWN_RECENT_PUSH, deliveredCount,
+  type Recent, type RecentPush,
+} from '@/lib/status/olderSections'
 
 // GET /api/debug/health — Brief 8.0-lite Fix #4. Instrumentation for post-deploy
 // dogfooding: flag posture, Graph token freshness (read from the DB row — NEVER
@@ -16,8 +19,19 @@ import { readStatusWindow } from '@/lib/status/lastNight'
 // happened last night": lastNight, valuationSwitch, switches and rapidApi
 // (lib/status/lastNight.ts: counts, times, booleans and reason codes only). Never
 // cached. The retired Zapier ingest block (recentIngest) is gone.
+//
+// Brief 48 (PR 16, Revision 1): the older sections show counts and times only
+// (lib/status/olderSections.ts). recentMatches, recentDismissals and recentPush used to
+// list rows with match, party and listing ids, and the top-level orgId was the
+// organization's id; they are gone [planner, Brief 48 Revision 1; engineering
+// precaution: the page is public]. "Last sync" is the newest CRM copy or background
+// sync only, no longer any action with "SYNC" in its name, and no longer the newest
+// listing when neither has run [planner, Brief 48 Revision 1].
 
 const DAY_MS = 24 * 60 * 60 * 1000
+// Phone-notification rows read for the 7-day delivered count. About one digest a day,
+// so the cap is never reached; if it were, the count would be a floor, never too high.
+const PUSH_ROWS_CAP = 500
 
 async function safe<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
   try { return await fn() } catch (e) {
@@ -33,7 +47,7 @@ function iso(d: Date | null | undefined): string | null {
 export async function GET() {
   const now = Date.now()
   const since24h = new Date(now - DAY_MS)
-  const orgId = await safe('orgId', () => getCurrentOrgId(), '')
+  const since7d = new Date(now - 7 * DAY_MS)
 
   // ── Flags ──────────────────────────────────────────────────────────────────
   const flags = {
@@ -60,62 +74,51 @@ export async function GET() {
 
   // ── Last sync + 24h creation counts ──────────────────────────────────────────
   const lastSync = await safe('lastSync', async () => {
-    const syncLog = await prisma.auditLog.findFirst({
-      where: { action: { contains: 'SYNC' } },
-      orderBy: { createdAt: 'desc' },
-      select: { createdAt: true },
-    })
-    let at = syncLog?.createdAt ?? null
-    if (!at) {
-      const newestOpp = await prisma.extractedOpportunity.findFirst({
-        orderBy: { createdAt: 'desc' }, select: { createdAt: true },
-      })
-      at = newestOpp?.createdAt ?? null
-    }
-    const [opportunitiesCreated, matchesCreated] = await Promise.all([
+    const [syncLog, opportunitiesCreated, matchesCreated] = await Promise.all([
+      prisma.auditLog.findFirst({
+        where: { action: { in: [...LAST_SYNC_ACTIONS] } },
+        orderBy: { createdAt: 'desc' },
+        select: { createdAt: true },
+      }),
       prisma.extractedOpportunity.count({ where: { createdAt: { gte: since24h } } }),
       prisma.match.count({ where: { createdAt: { gte: since24h } } }),
     ])
-    return { at: iso(at), opportunitiesCreated, matchesCreated }
+    return { at: iso(syncLog?.createdAt), opportunitiesCreated, matchesCreated }
   }, { at: null, opportunitiesCreated: 0, matchesCreated: 0 })
 
-  // ── Recent rows per subsystem ─────────────────────────────────────────────────
-  const recentMatches = await safe('recentMatches', async () => {
-    const rows = await prisma.match.findMany({
-      orderBy: { createdAt: 'desc' }, take: 10,
-      select: { id: true, score: true, tier: true, counterpartType: true, createdAt: true },
-    })
-    return rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() }))
-  }, [] as Array<Record<string, unknown>>)
+  // ── Recent activity per subsystem: the newest time and counts (Brief 48 PR 16) ──
+  const recentMatches = await safe<Recent>('recentMatches', async () => {
+    const [newest, last24h, last7d] = await Promise.all([
+      prisma.match.findFirst({ orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      prisma.match.count({ where: { createdAt: { gte: since24h } } }),
+      prisma.match.count({ where: { createdAt: { gte: since7d } } }),
+    ])
+    return { newestAt: iso(newest?.createdAt), last24h, last7d }
+  }, UNKNOWN_RECENT)
 
-  const recentDismissals = await safe('recentDismissals', async () => {
-    const rows = await prisma.matchDismissal.findMany({
-      orderBy: { dismissedAt: 'desc' }, take: 10,
-      select: { partyId: true, listingId: true, dismissalReason: true, dismissedAt: true },
-    })
-    return rows.map(r => ({
-      partyId: r.partyId, listingId: r.listingId,
-      reason: r.dismissalReason, createdAt: r.dismissedAt.toISOString(),
-    }))
-  }, [] as Array<Record<string, unknown>>)
+  const recentDismissals = await safe<Recent>('recentDismissals', async () => {
+    const [newest, last24h, last7d] = await Promise.all([
+      prisma.matchDismissal.findFirst({ orderBy: { dismissedAt: 'desc' }, select: { dismissedAt: true } }),
+      prisma.matchDismissal.count({ where: { dismissedAt: { gte: since24h } } }),
+      prisma.matchDismissal.count({ where: { dismissedAt: { gte: since7d } } }),
+    ])
+    return { newestAt: iso(newest?.dismissedAt), last24h, last7d }
+  }, UNKNOWN_RECENT)
 
-  const recentPush = await safe('recentPush', async () => {
-    const rows = await prisma.auditLog.findMany({
-      where: { action: 'PUSH_SENT' },
-      orderBy: { createdAt: 'desc' }, take: 10,
-      select: { detailsJson: true, createdAt: true },
-    })
-    return rows.map(r => {
-      const d = (r.detailsJson ?? {}) as Record<string, unknown>
-      const delivered = typeof d.delivered === 'number' ? d.delivered : null
-      return {
-        title: String(d.kind ?? 'push'),
-        body: d.matchId ? `match ${d.matchId}` : d.matchCount != null ? `${d.matchCount} matches` : '',
-        deliveredAt: typeof d.at === 'string' ? d.at : r.createdAt.toISOString(),
-        success: delivered != null ? delivered > 0 : null,
-      }
-    })
-  }, [] as Array<Record<string, unknown>>)
+  const recentPush = await safe<RecentPush>('recentPush', async () => {
+    const where = { action: 'PUSH_SENT' }
+    const [newest, last24h, last7d, week] = await Promise.all([
+      prisma.auditLog.findFirst({ where, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+      prisma.auditLog.count({ where: { ...where, createdAt: { gte: since24h } } }),
+      prisma.auditLog.count({ where: { ...where, createdAt: { gte: since7d } } }),
+      prisma.auditLog.findMany({
+        where: { ...where, createdAt: { gte: since7d } },
+        orderBy: { createdAt: 'desc' }, take: PUSH_ROWS_CAP,
+        select: { detailsJson: true },
+      }),
+    ])
+    return { newestAt: iso(newest?.createdAt), last24h, last7d, last7dDelivered: deliveredCount(week) }
+  }, UNKNOWN_RECENT_PUSH)
 
   const subsystemLastSuccess = await safe('subsystemLastSuccess', async () => {
     const [matcher, extraction] = await Promise.all([
@@ -132,7 +135,6 @@ export async function GET() {
   const status = await readStatusWindow(prisma, safe)
 
   return NextResponse.json({
-    orgId: orgId || null,
     flags,
     graphToken,
     lastSync,
