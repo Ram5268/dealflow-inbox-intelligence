@@ -8,5 +8,11 @@
       "path": "/api/cron/nightly-pipeline",
       "schedule": "0 9 * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "main": true,
+      "**": false
+    }
+  }
 }
