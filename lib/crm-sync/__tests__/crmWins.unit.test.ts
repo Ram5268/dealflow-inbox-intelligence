@@ -225,9 +225,10 @@ test('the preview: counts per field both ways, new sellers, kept notes, kept do-
   assert.deepEqual([p.sellersCompared, p.newSellers, p.heldElsewhere, p.skipped], [1, 1, 0, 0])
   assert.deepEqual([crmWinsPreview(plan, current, new Map(), new Set(['90002'])).heldElsewhere], [1])
   assert.deepEqual(p.withCrmWins.changed, { fullName: 1, email: 1, lastCalled: 1, notes: 1 })
-  assert.deepEqual(p.withCrmWins.filled, {})
+  // Brief 48 (PR 8 review r1): the lead has no ZIP field, so its blank ZIP is filled from its address line.
+  assert.deepEqual(p.withCrmWins.filled, { zipCode: 1 })
   assert.deepEqual([p.withCrmWins.notesKeptBelow, p.withCrmWins.doNotCallKept, p.withCrmWins.phoneListsKept, p.withCrmWins.wentBlank], [1, 1, 1, 0])
-  assert.deepEqual(p.keepOldToday.filled, { additionalPhones: 1, additionalEmails: 1 })
+  assert.deepEqual(p.keepOldToday.filled, { additionalPhones: 1, additionalEmails: 1, zipCode: 1 })
   assert.deepEqual(p.keepOldToday.changed, {})
   assert.doesNotMatch(JSON.stringify(p), /Pat|Example|555|@|Ave|valuation/)
 })

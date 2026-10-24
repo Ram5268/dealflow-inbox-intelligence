@@ -47,10 +47,15 @@ WHERE NOT m."isTestData" AND m."organizationId" = EXCLUDED."organizationId"
 RETURNING new."mojoId", old.id IS NULL AS inserted, ${snapshot('old')} AS before, ${snapshot('new')} AS after`
 
 // $1 = jsonb [{id, old_id, new_id}]: csv keepers take the CRM mojoId.
+// Brief 48 (PR 8): so do rows found by their CRM lead id (plan.ts). A key that
+// another row already holds (test data, another organization) is left as it is
+// rather than failing the whole copy on the unique Mojo ID [engineering
+// precaution].
 export const REKEY_SQL = `
 UPDATE "MojoContact" AS m SET "mojoId" = v.new_id, "updatedAt" = now()
 FROM jsonb_to_recordset($1::jsonb) AS v(id text, old_id text, new_id text)
-WHERE m.id = v.id AND m."mojoId" = v.old_id AND NOT m."isTestData"`
+WHERE m.id = v.id AND m."mojoId" = v.old_id AND NOT m."isTestData"
+  AND NOT EXISTS (SELECT 1 FROM "MojoContact" x WHERE x."mojoId" = v.new_id)`
 
 // $1 = jsonb [{id, keeper_id}]: only metadata changes; rows are never deleted.
 export const DUPLICATES_SQL = `

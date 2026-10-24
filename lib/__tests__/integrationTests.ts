@@ -12,4 +12,5 @@ export const INTEGRATION_TESTS: ReadonlyArray<{ file: string; runner: 'tsx' | 't
   { file: 'lib/crm-sync/__tests__/crmSyncGolden.integration.test.ts', runner: 'tsx' },
   { file: 'lib/crm-sync/__tests__/crmWins.integration.test.ts', runner: 'tsx' },
   { file: 'lib/crm-sync/__tests__/crmWinsRestore.integration.test.ts', runner: 'tsx' },
+  { file: 'lib/crm-sync/__tests__/noMojoId.integration.test.ts', runner: 'tsx' }, // Brief 48 (PR 8)
 ]
