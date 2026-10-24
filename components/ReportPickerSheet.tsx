@@ -1,21 +1,23 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { REPORT_TEMPLATES, DISCIPLINE_NAMES, type ReportTemplate, type Discipline } from '@/lib/reports/templates'
+import { REPORT_TEMPLATES, type ReportTemplate } from '@/lib/reports/templates'
 
 // Brief 28.0 — report picker (Phase 1b). Two screens in one sheet: the template
-// list (with discipline filter) and, for a tapped unlocked template, a detail
-// view. Tapping Generate in the detail view calls onGenerate(templateId); the
-// parent (chat page) then opens the buyer picker. Glass-sheet chrome + drag-to-
-// dismiss + body-scroll lock reuse the DraftOutreachSheet pattern (Brief 7.3/23).
+// list and, for a tapped template, a detail view. Tapping Generate in the
+// detail view calls onGenerate(templateId); the parent (chat page) then opens
+// the buyer picker. Glass-sheet chrome + drag-to-dismiss + body-scroll lock
+// reuse the DraftOutreachSheet pattern (Brief 7.3/23).
+// Brief 48 PR 19 [Ryan 1.11]: the 20 locked templates are gone, so the list is
+// the reports that can be made (today the Buyer Match report), with no
+// discipline tabs and no locked cards. Listing only templates that can be made
+// is an engineering precaution.
 
 interface Props {
   open: boolean
   onClose: () => void
   onGenerate: (templateId: string) => void
 }
-
-const DISC_ORDER: Array<'ALL' | Discipline> = ['ALL', 'P', 'U', 'M', 'C', 'I', 'O']
 
 const LABEL_MONO: React.CSSProperties = {
   fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.14em',
@@ -24,7 +26,6 @@ const LABEL_MONO: React.CSSProperties = {
 
 export default function ReportPickerSheet({ open, onClose, onGenerate }: Props) {
   const [entered, setEntered] = useState(false)
-  const [disc, setDisc] = useState<'ALL' | Discipline>('ALL')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dragOffsetY, setDragOffsetY] = useState(0)
   const [dragging, setDragging] = useState(false)
@@ -32,7 +33,7 @@ export default function ReportPickerSheet({ open, onClose, onGenerate }: Props) 
 
   // Reset to the list whenever the sheet re-opens.
   useEffect(() => {
-    if (open) { setSelectedId(null); setDisc('ALL') }
+    if (open) setSelectedId(null)
   }, [open])
 
   useEffect(() => {
@@ -69,8 +70,8 @@ export default function ReportPickerSheet({ open, onClose, onGenerate }: Props) 
 
   if (!open) return null
 
-  const selected = selectedId ? REPORT_TEMPLATES.find(t => t.id === selectedId) ?? null : null
-  const visible = disc === 'ALL' ? REPORT_TEMPLATES : REPORT_TEMPLATES.filter(t => t.discipline === disc)
+  const visible = REPORT_TEMPLATES.filter(t => t.isUnlocked)
+  const selected = selectedId ? visible.find(t => t.id === selectedId) ?? null : null
 
   return (
     <div
@@ -112,27 +113,10 @@ export default function ReportPickerSheet({ open, onClose, onGenerate }: Props) 
               <button onClick={onClose} aria-label="Close" style={closeBtn}>×</button>
             </div>
 
-            {/* Discipline chips */}
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 18px 12px', WebkitOverflowScrolling: 'touch', flexShrink: 0 }}>
-              {DISC_ORDER.map(d => {
-                const active = disc === d
-                const label = d === 'ALL' ? 'All' : DISCIPLINE_NAMES[d]
-                return (
-                  <button key={d} onClick={() => setDisc(d)} style={{
-                    flexShrink: 0, padding: '7px 14px', borderRadius: 999,
-                    background: active ? 'var(--sr-cream, #f5e9d4)' : 'rgba(255,255,255,0.06)',
-                    border: active ? 'none' : '1px solid rgba(255,255,255,0.12)',
-                    color: active ? '#0a1f2a' : 'rgba(255,255,255,0.7)',
-                    fontFamily: 'var(--font-ui)', fontSize: 13, fontWeight: active ? 600 : 400, cursor: 'pointer',
-                  }}>{label}</button>
-                )
-              })}
-            </div>
-
             {/* Template list */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px calc(20px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 10 }}>
               {visible.map(t => (
-                <TemplateCard key={t.id} template={t} onTap={() => t.isUnlocked && setSelectedId(t.id)} />
+                <TemplateCard key={t.id} template={t} onTap={() => setSelectedId(t.id)} />
               ))}
             </div>
           </>
@@ -149,35 +133,26 @@ const closeBtn: React.CSSProperties = {
 }
 
 function TemplateCard({ template: t, onTap }: { template: ReportTemplate; onTap: () => void }) {
-  const locked = !t.isUnlocked
   return (
     <button
       onClick={onTap}
-      aria-disabled={locked}
       style={{
         textAlign: 'left', width: '100%',
         background: 'rgba(255,255,255,0.05)',
         border: '1px solid rgba(255,255,255,0.12)',
         borderRadius: 16, padding: '13px 15px',
-        cursor: locked ? 'default' : 'pointer',
-        opacity: locked ? 0.5 : 1,
+        cursor: 'pointer',
         display: 'flex', flexDirection: 'column', gap: 4,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.45)' }}>{t.code}</span>
         <span style={{ fontFamily: 'var(--font-ui)', fontSize: 15, fontWeight: 600, color: '#fff', flex: 1 }}>{t.name}</span>
-        {locked && <span aria-label="Locked" style={{ fontSize: 13 }}>🔒</span>}
       </div>
       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>For: {t.forWhom}</div>
       <div style={{ fontFamily: 'var(--font-ui)', fontSize: 12.5, fontWeight: 300, color: 'rgba(255,255,255,0.7)', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
         {t.purpose}
       </div>
-      {locked && (
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.06em', color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-          COMING WHEN {t.dataRequirements.join(' · ').toUpperCase()} DATA LANDS
-        </div>
-      )}
     </button>
   )
 }

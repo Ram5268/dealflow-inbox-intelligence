@@ -31,16 +31,17 @@ test('RYAN_MD is a non-empty string with the expected section headers', () => {
   assert.match(RYAN_MD, /SHORT CONTINUATIONS/)
 })
 
-test('RYAN_MD contains all 21 template ids or names', () => {
-  const templates = ['cma', 'price-adjustment', 'new-dev', 'absorption', 'rental-pricing',
-    'acquisition', 'development-pro-forma', 'committee-memo', 'highest-best',
-    'seller', 'buyer-match', 'launch-plan', 'offer-comparison',
-    'project-status', 'draw-request', 'change-order',
-    'lp-update', 'capital-call', 'disposition',
-    'team-pipeline', 'market-snapshot']
-  const md = RYAN_MD.toLowerCase()
-  const missing = templates.filter(t => !md.includes(t.replace('-', ' ')) && !md.includes(t))
-  assert.ok(missing.length <= 3, `too many missing templates: ${missing.join(', ')}`)
+// Brief 48 PR 19: the Buyer Match report is the only one, and the 20 locked
+// templates' routing (the old Section 6b list) is gone [Ryan 1.11]; another
+// report request gets one line saying so [engineering precaution]
+// (lib/reports/__tests__/oneTemplate.unit.test.ts checks every place that names
+// a template).
+test('RYAN_MD routes reports to the Buyer Match report only', () => {
+  assert.match(RYAN_MD, /templateId: buyer-match\. The only report DealFlow makes\./)
+  assert.match(RYAN_MD, /"DealFlow makes one report, the Buyer Match report\./)
+  for (const gone of ['P-01', 'M-01', 'O-02', 'Seller Activity', 'Market Snapshot', 'LP Update', 'unlocked', 'roadmap']) {
+    assert.ok(!RYAN_MD.slice(0, RYAN_MD.indexOf('## GROWTH LOG')).includes(gone), gone)
+  }
 })
 
 test('buildSystemBlocks: RYAN_MD is block[1], both static blocks cached, dynamic appended uncached', () => {
@@ -76,5 +77,6 @@ test('grounding corpus fed RYAN_MD contains glossary vocabulary', () => {
   assert.ok(corpus.includes('off market'), 'corpus should contain "off market" (off-market vocabulary)')
   // Brief 30.0 — v2 vocabulary must also be grounded so Sonnet quoting it isn't flagged.
   assert.ok(corpus.includes('curated matches'), 'corpus should contain "curated matches" (Section 6a)')
-  assert.ok(corpus.includes('market snapshot'), 'corpus should contain "market snapshot" (Section 6b)')
+  // Brief 48 PR 19: Section 6b names the one report there is.
+  assert.ok(corpus.includes('buyer match report'), 'corpus should contain "buyer match report" (Section 6b)')
 })

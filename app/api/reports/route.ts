@@ -11,8 +11,8 @@ import { footerFromTurn, reportSummaryLines } from '@/lib/chat/shownFooter'
 export const maxDuration = 60
 
 // POST /api/reports — { templateId, params, sessionId, writeToChat? } → generate
-// + save a Report. Phase 1a: only unlocked templates (buyer-match) are
-// generatable; a locked template returns 400.
+// + save a Report. Brief 48 PR 19 [Ryan 1.11]: buyer-match is the only
+// template; any other id returns 400 "Unknown template".
 //
 // Brief 28.0 — writeToChat: after saving the Report, also insert an assistant
 // ChatMessage carrying attachedReport so the + button flow surfaces a preview
