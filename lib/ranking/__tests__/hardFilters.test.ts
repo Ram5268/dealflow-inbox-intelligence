@@ -37,3 +37,15 @@ test('no matches → filtered (no_matches)', () => {
 test('valid setup → not filtered', () => {
   assert.equal(applyHardFilters(base).excluded, false)
 })
+
+// Brief 48 (PR 9 review r1; executor, 2026-10-23): tags now come from the CRM too, written
+// however an upload wrote them, so do-not-call tags are matched by their words.
+test('a do-not-call tag or group in any spelling → filtered; every old spelling still is; other tags are not', () => {
+  for (const tag of ['Do Not Call', 'do-not-call', 'DO_NOT_CALL', 'Opted Out', 'opted_out', 'Opt Out', 'opt-out', 'DNC', 'dnc list', 'Federal DNC']) {
+    assert.equal(withInput({ tags: ['Absentee', tag] }).reason, 'tag_or_group_opt_out', tag)
+    assert.equal(withInput({ groups: [tag] }).reason, 'tag_or_group_opt_out', tag)
+  }
+  for (const tag of ['Absentee', 'Expired', 'Out of State', 'Tired Landlord', 'Call back', 'Do call', 'ryan_listing', 'Optimist']) {
+    assert.equal(withInput({ tags: [tag] }).excluded, false, tag)
+  }
+})

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import type { PrismaClient } from '@prisma/client'
 import type { CrmLeadRow } from './crmReader'
 import type { SyncPlan } from './plan'
-import { COLUMNS, toUpsertRow, type UpsertReturn } from './upsert'
+import { COLUMNS, toUpsertRow, unionExpr, type UpsertReturn } from './upsert'
 import { phoneKey } from './mapLead'
 import { normalizeStreet } from './addressNormalize'
 import { isOptOutWording } from '../chat/sellerCard'
@@ -203,6 +203,7 @@ export function crmWinsExpr(c: string): string {
     case 'status': return `CASE WHEN s."keepStatus" OR (${dncSql('m."status"')} AND NOT ${dncSql('s."status"')}) THEN m."status" ELSE COALESCE(s."status", m."status") END`
     case 'notes': return NOTES_SQL
     case 'metadata': return `COALESCE(m."metadata", '{}'::jsonb) || s."metadata"`
+    case 'tags': return unionExpr('m."tags"', 's."tags"') // Brief 48 (PR 9): only ever added to, either way
     default: return NUMERIC.has(c) ? `COALESCE(NULLIF(s.${q(c)}, 0), m.${q(c)})` : `COALESCE(s.${q(c)}, m.${q(c)})`
   }
 }
@@ -247,6 +248,9 @@ export function asStored(c: string, v: unknown): unknown {
 
 const blank = (v: unknown) => v == null || (Array.isArray(v) && v.length === 0)
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+// unionExpr in memory.
+const union = (old: unknown, next: unknown) =>
+  next == null ? old : [...((old as string[] | null) ?? []), ...(next as string[]).filter(x => !((old as string[] | null) ?? []).includes(x))]
 
 // What CRM_WINS_UPDATE_SQL writes over `before` (an existing seller's row, as
 // its snapshot), given the CRM row and whether the seller has per-phone flags
@@ -265,6 +269,7 @@ export function crmWinsAfter(before: Snapshot, row: CrmWinsRow, flagged: boolean
       case 'status': after[c] = row.keepStatus || (isDoNotCallStatus(m) && !isDoNotCallStatus(s(c))) ? m : s(c) ?? m; break
       case 'notes': after[c] = crmWinsNotes(m as string | null, s(c) as string | null); break
       case 'metadata': after[c] = { ...((m as object | null) ?? {}), ...((s(c) as object | null) ?? {}) }; break
+      case 'tags': after[c] = union(m, s(c)); break
       default: after[c] = (NUMERIC.has(c) && s(c) === 0 ? null : s(c)) ?? m
     }
   }
@@ -281,6 +286,7 @@ export function keepOldAfter(before: Snapshot, row: Record<string, unknown>): Sn
       const old = (m as string[] | null) ?? []
       after[c] = same(old, ((s as string[] | null) ?? []).slice(0, old.length)) ? s : m
     } else if (mode === 'merge') after[c] = { ...((m as object | null) ?? {}), ...((s as object | null) ?? {}) }
+    else if (mode === 'union') after[c] = union(m, s)
     else after[c] = m ?? s
   }
   return after

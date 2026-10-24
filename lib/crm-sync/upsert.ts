@@ -11,7 +11,9 @@ import { appendNew, type SyncPlan } from './plan'
 //   append  phone/email lists: the new list applies only if the old one is its prefix
 //   merge   metadata: COALESCE(old, '{}') || new
 //   insert  written only when the row is created (neighborhood)
-type Mode = 'fill' | 'append' | 'merge' | 'insert'
+//   union   tags (Brief 48 PR 9): new values added after the old ones, none ever
+//           removed [engineering precaution: a tag can mean do not call]
+type Mode = 'fill' | 'append' | 'merge' | 'insert' | 'union'
 export const COLUMNS: [name: string, type: string, mode: Mode][] = [
   ['fullName', 'text', 'fill'], ['coOwnerFullName', 'text', 'fill'],
   ['phone', 'text', 'fill'], ['additionalPhones', 'text[]', 'append'],
@@ -22,14 +24,23 @@ export const COLUMNS: [name: string, type: string, mode: Mode][] = [
   ['yearBuilt', 'int', 'fill'], ['lastSaleDate', 'timestamp', 'fill'], ['alternateAddress', 'text', 'fill'],
   ['ownerOccupied', 'boolean', 'fill'], ['lastDialDate', 'timestamp', 'fill'], ['lastCalled', 'timestamp', 'fill'],
   ['mojoList', 'text', 'fill'], ['status', 'text', 'fill'], ['notes', 'text', 'fill'], ['metadata', 'jsonb', 'merge'],
+  // Brief 48 (PR 9): the seller details (sellerDetails.ts).
+  ['priorListingStatus', 'text', 'fill'], ['priorListingPrice', 'float8', 'fill'], ['preForeclosureStatus', 'text', 'fill'],
+  ['foreclosureAuctionDate', 'timestamp', 'fill'], ['isVacant', 'boolean', 'fill'], ['equityBalance', 'float8', 'fill'],
+  ['totalLoanBalance', 'float8', 'fill'], ['loanInterestRate', 'float8', 'fill'], ['tags', 'text[]', 'union'],
 ]
 const UPDATED = COLUMNS.filter(([, , mode]) => mode !== 'insert')
 
 const q = (c: string) => `"${c}"`
+// Brief 48 (PR 9): `old` with the values of `next` it lacks added in order; no
+// CRM list (NULL) leaves `old` exactly as it is.
+export const unionExpr = (old: string, next: string) =>
+  `CASE WHEN ${next} IS NULL THEN ${old} ELSE COALESCE(${old}, '{}') || ARRAY(SELECT x FROM unnest(${next}) WITH ORDINALITY AS u(x, i) WHERE NOT (x = ANY(COALESCE(${old}, '{}'))) ORDER BY i) END`
 function updateExpr(c: string, mode: Mode): string {
   const old = `m.${q(c)}`, next = `EXCLUDED.${q(c)}`
   if (mode === 'append') return `CASE WHEN COALESCE(${old}, '{}') = ${next}[1:cardinality(COALESCE(${old}, '{}'))] THEN ${next} ELSE ${old} END`
   if (mode === 'merge') return `COALESCE(${old}, '{}'::jsonb) || ${next}`
+  if (mode === 'union') return unionExpr(old, next)
   return `COALESCE(${old}, ${next})`
 }
 const snapshot = (alias: string) => `jsonb_build_object(${UPDATED.map(([c]) => `'${c}', ${alias}.${q(c)}`).join(', ')})`

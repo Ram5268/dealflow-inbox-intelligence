@@ -8,6 +8,9 @@ const contact = (mojoId: string, fullName: string, address: string): CrmContact 
   neighborhood: null, propertyTypeDetail: null, unitCount: null, propertyBeds: null, propertyBaths: null,
   buildingSqft: null, yearBuilt: null, lastSaleDate: null, alternateAddress: null, ownerOccupied: null,
   lastDialDate: null, lastCalled: null, mojoList: null, status: null, notes: null,
+  // Brief 48 (PR 9): the seller details (sellerDetails.ts), none here.
+  priorListingStatus: null, priorListingPrice: null, preForeclosureStatus: null, foreclosureAuctionDate: null, isVacant: null,
+  equityBalance: null, totalLoanBalance: null, loanInterestRate: null, tags: null,
   metadata: { source: 'crm', crmLeadId: `lead_${mojoId}`, crmUpdatedAt: '2026-09-10', callAttempts: 0, lastCallResult: null, syncVersion: 1 },
 })
 const row = (id: string, mojoId: string, fullName: string, address: string, intact = true): ExistingRow => ({
@@ -49,8 +52,8 @@ test('csv-only person with no single intact copy is skipped, never inserted', ()
 
 test('a csv row matching more than one CRM lead is skipped and reported, not marked', () => {
   const plan = planSync(
-    [contact('1', 'Jo Lee', '1 Main St'), contact('2', 'Jo Lee', '1 Main Street')],
-    [row('num1', '1', 'Jo Lee', '1 Main St'), row('csv', 'csv_jo_lee', 'Jo Lee', '1 Main St')],
+    [contact('1', 'Jo Lee', '1 Fictional St'), contact('2', 'Jo Lee', '1 Fictional Street')],
+    [row('num1', '1', 'Jo Lee', '1 Fictional St'), row('csv', 'csv_jo_lee', 'Jo Lee', '1 Fictional St')],
   )
   assert.deepEqual(plan.duplicates, [])
   assert.deepEqual(plan.upserts.map(u => u.keeper?.id ?? null), ['num1']) // lead 2 has no safe keeper
@@ -59,7 +62,7 @@ test('a csv row matching more than one CRM lead is skipped and reported, not mar
 })
 
 test('a genuinely new lead is an insert; numeric rows are never grouped by name', () => {
-  const plan = planSync([contact('90006', 'New Person', '9 New St')], [row('other', '1234', 'New Person', '9 New St')])
+  const plan = planSync([contact('90006', 'New Person', '9 Examplewood St')], [row('other', '1234', 'New Person', '9 Examplewood St')])
   assert.equal(plan.upserts[0].keeper, null)
   assert.deepEqual([plan.duplicates, plan.rekeys, plan.skipped], [[], [], []])
 })

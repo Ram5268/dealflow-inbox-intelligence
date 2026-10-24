@@ -1,11 +1,14 @@
 import type { CrmLeadRow } from './crmReader'
 import { isOwnerOccupied } from './addressNormalize'
 import { zipToNeighborhood } from '../geo/zipNeighborhood'
+import { sellerDetails } from './sellerDetails'
 
 // Brief 34: pure mapping of one CRM lead onto MojoContact fields. null means
 // the CRM has nothing, and the upsert only ever fills blanks with these values.
 // Custom fields are read by definition name, as the Mojo XLSX importer made them.
 // Brief 43 PR 5: metadata may also carry crmOptOut (markOptOut below).
+// Brief 48 (PR 9): plus the seller details the CRM keeps as custom fields
+// (listing status, distress, equity, tags: sellerDetails.ts).
 export type CrmContact = ReturnType<typeof mapLead> & { metadata: { crmOptOut?: true } }
 
 const UNITS: Record<string, number> = { Duplex: 2, Triplex: 3, Quadruplex: 4, 'Apartment House (5+ Units)': 5 }
@@ -69,6 +72,7 @@ export function mapLead(lead: CrmLeadRow) {
     mojoList: text('Dialer List'),
     status: lastCallResult,
     notes: lead.fields['Notes']?.t?.trim() || null,
+    ...sellerDetails(lead.fields),
     metadata: {
       source: 'crm' as const, crmLeadId: lead.id, crmUpdatedAt: lead.updatedAt,
       callAttempts: num('Call Attempts'), lastCallResult, syncVersion: 1 as const,

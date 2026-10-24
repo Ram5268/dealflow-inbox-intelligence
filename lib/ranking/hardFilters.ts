@@ -12,16 +12,22 @@ export interface HardFilterInput {
 }
 
 const STATUS_DNC = ['do_not_call', 'do not call', 'dnc', 'opt-out', 'opted out']
-const TAG_DNC = ['do_not_call', 'dnc', 'opt-out', 'opted_out']
+// Brief 48 (PR 9 review r1; executor, 2026-10-23) [engineering precaution]: tags now come
+// from the CRM too, written however an upload wrote them ("Do Not Call", "Opted Out", "Opt
+// Out"). So a tag or group is compared by its words (case, spaces, _ and - ignored), and one
+// containing any of these phrases excludes. Every tag the exact list matched still does:
+// this only adds exclusions.
+const TAG_DNC_WORDS = ['do not call', 'dnc', 'opt out', 'opted out']
+const words = (s: string) => ` ${s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `
+export const isDoNotCallTag = (tag: string): boolean => TAG_DNC_WORDS.some(w => words(tag).includes(` ${w} `))
 
 export function applyHardFilters(input: HardFilterInput): { excluded: boolean; reason?: string } {
   // 1. status field
   const status = input.status?.toLowerCase() ?? ''
   if (STATUS_DNC.some(s => status.includes(s))) return { excluded: true, reason: 'status_do_not_call' }
 
-  // 2. tags / groups opt-out (case-insensitive membership)
-  const tagset = [...input.tags, ...input.groups].map(t => t.toLowerCase())
-  if (tagset.some(t => TAG_DNC.includes(t))) return { excluded: true, reason: 'tag_or_group_opt_out' }
+  // 2. tags / groups opt-out (by words, Brief 48 PR 9)
+  if ([...input.tags, ...input.groups].some(isDoNotCallTag)) return { excluded: true, reason: 'tag_or_group_opt_out' }
 
   // 3. every known phone is DNC (missing flags treated as false → not excluded)
   const realPhones = input.phones.filter((p): p is string => p != null)
