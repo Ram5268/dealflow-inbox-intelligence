@@ -10,6 +10,7 @@ import DraftOutreachSheet from '@/components/DraftOutreachSheet'
 import PartyCard from '@/components/PartyCard'
 import { showToast as showErrorToast } from '@/components/Toast'
 import { formatPriceRange, timeAgo } from '@/lib/utils'
+import { DEFAULT_MATCH_TAB, MATCH_TABS, countsOf, emptyState, matchesQuery, mergePage, sumCounts, type MatchTab } from '@/lib/matching/matchesList'
 
 function MatchCardSkeleton() {
   return (
@@ -111,6 +112,7 @@ interface Match {
 interface MatchesResponse {
   matches: Match[]
   counts: { total: number; unseen: number; mojo: number; listings: number; showings: number }
+  nextCursor?: string | null // Brief 48 (PR 12): where the next page starts; null on the last page
 }
 
 // Brief 7.4 (Section B) — party grouping
@@ -131,12 +133,11 @@ interface PartiesResponse {
   counts: { total: number; buyers: number; renters: number; sellers: number }
 }
 
-type ScoreBand = 'gold' | 'strong' | 'all'
-const TABS: Array<{ id: ScoreBand; label: string; scoreMin: number | null }> = [
-  { id: 'gold',   label: 'GOLD 90+',   scoreMin: 90 },
-  { id: 'strong', label: 'STRONG 70+', scoreMin: 70 },
-  { id: 'all',    label: 'ALL',        scoreMin: null },
-]
+// Brief 48 (PR 12, item 4.4): the tabs come from lib/matching/matchesList.ts:
+// HOT 80+, WARM 65 to 79, ALL, each one tier (the stored tier, else the score;
+// lib/matching/tiers.ts), with HOT first and the default. They used to start at
+// 90 and 70, which matched no tier.
+type ScoreBand = MatchTab
 
 // Brief 7.1 — qualitative tier chip. Null (legacy sync-path rows) renders nothing.
 function tierChip(tier: Match['tier']): { text: string; tone: string } | null {
@@ -203,7 +204,7 @@ export default function MatchesPage() {
   const [data, setData] = useState<MatchesResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [scoreBand, setScoreBand] = useState<ScoreBand>('strong')
+  const [scoreBand, setScoreBand] = useState<ScoreBand>(DEFAULT_MATCH_TAB)
   const [unseenOnly, setUnseenOnly] = useState<boolean>(true)
   // Brief 7.1 — dismiss flow: which match's reason sheet is open, which card is
   // animating out, and the undo toast holding the last-dismissed match + its slot.
@@ -236,6 +237,11 @@ export default function MatchesPage() {
   // Brief 38 — the ?m=<id> match, fetched by id and pinned above the list.
   const [pinned, setPinned] = useState<Match | null>(null)
   const [pinLoading, setPinLoading] = useState(false)
+  // Brief 48 (PR 12): paging past the first 200. nextCursor is where the next page
+  // starts (null: no more); listSeq drops a reply that belongs to an older tab.
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const listSeq = useRef(0)
 
   // Restore persisted view once on mount. A ?m=<id> deep-link (a push
   // notification tap, or "Open" in the CRM) forces the Matches view and pins that
@@ -270,25 +276,50 @@ export default function MatchesPage() {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 3000)
   }
 
-  const scoreMin = TABS.find(t => t.id === scoreBand)?.scoreMin ?? null
-
   function bandParams(): URLSearchParams {
-    const params = new URLSearchParams()
-    if (unseenOnly)        params.set('unseen', '1')
-    if (scoreMin !== null) params.set('scoreMin', String(scoreMin))
-    return params
+    return new URLSearchParams(matchesQuery({ tab: scoreBand, unseenOnly }))
   }
 
   async function fetchMatches() {
+    const seq = ++listSeq.current
     setLoading(true)
+    setLoadingMore(false) // a "show more" for the old tab is dropped (listSeq)
+    setNextCursor(null)
     try {
       const r = await fetch(`/api/matches?${bandParams().toString()}`)
+      if (!r.ok) throw new Error(`matches ${r.status}`)
       const j = await r.json() as MatchesResponse
+      if (seq !== listSeq.current) return
       setData(j)
+      setNextCursor(j.nextCursor ?? null)
     } catch {
-      showErrorToast("Couldn't load matches")
+      if (seq === listSeq.current) showErrorToast("Couldn't load matches")
     } finally {
-      setLoading(false)
+      if (seq === listSeq.current) setLoading(false)
+    }
+  }
+
+  // Brief 48 (PR 12): the next 200, added below the ones on screen.
+  async function fetchMoreMatches() {
+    if (!nextCursor || loadingMore) return
+    const seq = listSeq.current
+    setLoadingMore(true)
+    try {
+      const r = await fetch(`/api/matches?${matchesQuery({ tab: scoreBand, unseenOnly, cursor: nextCursor })}`)
+      if (!r.ok) throw new Error(`matches ${r.status}`)
+      const j = await r.json() as MatchesResponse
+      if (seq !== listSeq.current) return
+      // Counts only the cards this page adds (a card shown already isn't counted twice).
+      setData(d => {
+        if (!d) return j
+        const matches = mergePage(d.matches, j.matches)
+        return { ...d, matches, counts: sumCounts(d.counts, countsOf(matches.slice(d.matches.length))) }
+      })
+      setNextCursor(j.nextCursor ?? null)
+    } catch {
+      if (seq === listSeq.current) showErrorToast("Couldn't load more matches")
+    } finally {
+      if (seq === listSeq.current) setLoadingMore(false)
     }
   }
 
@@ -535,13 +566,13 @@ export default function MatchesPage() {
                 <MatchCardSkeleton />
                 <MatchCardSkeleton />
               </div>
-            ) : !data || data.matches.length === 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>No matches in this tier.</div>
-                <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Try another tab — or run a Check In to pull fresh matches.</div>
-              </div>
+            ) : !data || (data.matches.length === 0 && !nextCursor) ? (
+              <EmptyState {...emptyState('matches', scoreBand, unseenOnly)} />
             ) : (
-              data.matches.filter(m => m.id !== pinned?.id).map(m => renderMatchCard(m))
+              <>
+                {data.matches.filter(m => m.id !== pinned?.id).map(m => renderMatchCard(m))}
+                {nextCursor && <ShowMoreButton loading={loadingMore} onClick={() => void fetchMoreMatches()} />}
+              </>
             )}
           </>
         ) : (
@@ -554,10 +585,7 @@ export default function MatchesPage() {
           ) : partiesError ? (
             <div style={{ marginTop: 40, textAlign: 'center', fontFamily: 'var(--font-ui)', fontSize: 14, color: 'rgba(255,150,150,0.8)' }}>{partiesError}</div>
           ) : !parties || parties.parties.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40 }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>No parties in this tier.</div>
-              <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>Try another tab or filter — or run a Check In.</div>
-            </div>
+            <EmptyState {...emptyState('parties', scoreBand, unseenOnly)} />
           ) : (
             parties.parties.map(p => (
               <PartyCard
@@ -666,6 +694,34 @@ export default function MatchesPage() {
   )
 }
 
+// Brief 48 (PR 12): the empty list's words (lib/matching/matchesList.ts emptyState).
+function EmptyState({ title, hint }: { title: string; hint: string }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 40, textAlign: 'center', padding: '0 8px' }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontSize: 22, color: 'rgba(255,255,255,0.6)', fontWeight: 300 }}>{title}</div>
+      <div style={{ fontFamily: 'var(--font-ui)', fontSize: 13, color: 'rgba(255,255,255,0.3)', lineHeight: 1.45 }}>{hint}</div>
+    </div>
+  )
+}
+
+// Brief 48 (PR 12): below the last card while there are more matches in the tab.
+function ShowMoreButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      style={{
+        alignSelf: 'center', marginTop: 4, minHeight: 44, padding: '10px 22px', borderRadius: 999,
+        background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.14)',
+        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+        color: loading ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.75)', cursor: loading ? 'default' : 'pointer',
+      }}
+    >
+      {loading ? 'LOADING…' : 'SHOW MORE MATCHES'}
+    </button>
+  )
+}
+
 // ── TabBar: 3 quality-tier tabs with a morphing gooey active-tab indicator ──
 function TabBar({
   active, onChange, rightAction,
@@ -675,7 +731,7 @@ function TabBar({
   rightAction?: React.ReactNode
 }) {
   const wrapRef = useRef<HTMLDivElement>(null)
-  const tabRefs = useRef<Record<ScoreBand, HTMLButtonElement | null>>({ gold: null, strong: null, all: null })
+  const tabRefs = useRef<Record<ScoreBand, HTMLButtonElement | null>>({ hot: null, warm: null, all: null })
   const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null)
 
   useEffect(() => {
@@ -726,7 +782,7 @@ function TabBar({
             </div>
           )}
 
-          {TABS.map(t => {
+          {MATCH_TABS.map(t => {
             const isActive = active === t.id
             return (
               <button

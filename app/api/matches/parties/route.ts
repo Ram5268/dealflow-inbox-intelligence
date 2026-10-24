@@ -7,6 +7,7 @@ import { resolveSourceBadge } from '@/lib/matching/engine'
 import { formatPriceRange } from '@/lib/utils'
 import { Category } from '@prisma/client'
 import { inChunks, loadDismissedPairs } from '@/lib/matching/dismissals'
+import { partyBand, tierParam, tierWhere } from '@/lib/matching/matchesList'
 
 // Brief 7.4 (Section B) — party-grouped view of /matches. Instead of one card per
 // match, aggregate matches by the DEMAND/LEAD party they involve, so Ryan sees
@@ -18,8 +19,10 @@ import { inChunks, loadDismissedPairs } from '@/lib/matching/dismissals'
 // either side depending on which record arrived first). Listings never land in
 // the party set, so there's no false attribution.
 //
-// "tier" is null on the live matcher, so hot/warm/possible are derived from score
-// (>=90 / 70-89 / <70), consistent with the /matches GOLD·STRONG·ALL bands.
+// Brief 48 (PR 12): hot/warm/possible are each match's tier, the stored one
+// (the nightly sets it) or, for old rows with none, by score (>=80 / 65-79 / <65,
+// lib/matching/tiers.ts), the same rule as the /matches HOT and WARM tabs and the
+// morning digest. They were 90 and 70 on the score. ?tier=hot|warm keeps one tier.
 
 type Role = 'BUYER' | 'RENTER' | 'SELLER'
 
@@ -40,12 +43,6 @@ interface PartyAgg {
   topScore: number
 }
 
-function bandOf(score: number): 'hot' | 'warm' | 'possible' {
-  if (score >= 90) return 'hot'
-  if (score >= 70) return 'warm'
-  return 'possible'
-}
-
 // Brief 35: a Mojo contact's role is its intent, not its list name.
 function mojoRole(intent: string | null): Role {
   return intent === 'BUYER' ? 'BUYER' : intent === 'RENTER' ? 'RENTER' : 'SELLER'
@@ -64,6 +61,7 @@ export async function GET(req: NextRequest) {
   const roleParam = (sp.get('role') ?? 'all').toLowerCase()
   const scoreMin  = sp.get('scoreMin') ? parseInt(sp.get('scoreMin')!, 10) : null
   const onlyUnseen = sp.get('unseen') === '1'
+  const tier      = tierParam(sp.get('tier'))
 
   const where: Record<string, unknown> = {
     organizationId,
@@ -71,6 +69,7 @@ export async function GET(req: NextRequest) {
   }
   if (onlyUnseen) where.seen = false
   if (scoreMin !== null && !Number.isNaN(scoreMin)) where.score = { gte: scoreMin }
+  if (tier) where.AND = [tierWhere(tier)]
 
   const matches = await prisma.match.findMany({
     where,
@@ -114,11 +113,11 @@ export async function GET(req: NextRequest) {
   const mojoMap = new Map(mojoEntities.map(m => [m.id, m]))
   const aggs = new Map<string, PartyAgg>()
 
-  function bump(partyId: string, make: () => PartyAgg, matchId: string, score: number) {
+  function bump(partyId: string, make: () => PartyAgg, matchId: string, score: number, tier: string | null) {
     let a = aggs.get(partyId)
     if (!a) { a = make(); aggs.set(partyId, a) }
     a.matchCount++
-    a.tierBreakdown[bandOf(score)]++
+    a.tierBreakdown[partyBand({ tier, score })]++
     if (score > a.topScore) { a.topScore = score; a.topMatchId = matchId }
   }
 
@@ -131,7 +130,7 @@ export async function GET(req: NextRequest) {
   for (const m of live) {
     // Brief 35: a contact-supply seller is a SELLER party.
     const seller = m.opportunityType === 'contact' ? mojoMap.get(m.opportunityId) : undefined
-    if (seller) bump(seller.id, () => mojoParty(seller, m, 'SELLER'), m.id, m.score)
+    if (seller) bump(seller.id, () => mojoParty(seller, m, 'SELLER'), m.id, m.score, m.tier)
     // Opportunity-side party (buyer/renter/seller-lead as opportunityId or counterpartId).
     const eids = m.opportunityType === 'contact' ? [] : [m.opportunityId]
     for (const eid of m.counterpartType === 'mojo' ? eids : [...eids, m.counterpartId]) {
@@ -147,12 +146,12 @@ export async function GET(req: NextRequest) {
         isSEExpert: resolveSourceBadge(opp.sourceBrokerage) === 'streeteasy_expert',
         criteria: [formatPriceRange(opp.minPrice, opp.maxPrice, opp.price), opp.beds ? `${opp.beds}BR` : null, opp.neighborhood].filter(Boolean).join(' · '),
         matchCount: 0, tierBreakdown: { hot: 0, warm: 0, possible: 0 }, topMatchId: m.id, topScore: -1,
-      }), m.id, m.score)
+      }), m.id, m.score, m.tier)
     }
     // Mojo-side party.
     if (m.counterpartType === 'mojo') {
       const mojo = mojoMap.get(m.counterpartId)
-      if (mojo) bump(m.counterpartId, () => mojoParty(mojo, m, mojoRole(mojo.intent)), m.id, m.score)
+      if (mojo) bump(m.counterpartId, () => mojoParty(mojo, m, mojoRole(mojo.intent)), m.id, m.score, m.tier)
     }
   }
 

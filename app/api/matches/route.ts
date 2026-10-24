@@ -9,15 +9,22 @@ import { resolveSupplies } from '@/lib/matching/supplyResolver'
 import { getCurrentOrgId } from '@/lib/auth/orgContext'
 import { crmLeadUrl } from '@/lib/crmLink'
 import { plainFitReason } from '@/lib/matching/fitReason'
+import { MATCHES_ORDER, MATCHES_PAGE_SIZE, afterCursor, countsOf, decodeCursor, splitPage, tierParam, tierWhere } from '@/lib/matching/matchesList'
 
-// GET /api/matches[?unseen=1][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1]
+// GET /api/matches[?unseen=1][&tier=hot|warm][&scoreMin=N][&type=opportunity|mojo|showing_confirmation|all][&includeDismissed=1][&after=<cursor>]
 // List with both sides hydrated. Sort: unseen first, then highest-scoring,
-// then newest. seen rows are returned but visually de-emphasized client-side.
+// then newest (then id, so every row has one place). seen rows are returned but
+// visually de-emphasized client-side.
 // Brief 7.1: dismissed matches (a MatchDismissal row on the party↔listing pair)
 // are excluded by default; ?includeDismissed=1 shows them (debug only, not in UI).
 // Brief 38: GET /api/matches?id=<matchId> returns just that match, org-scoped and
-// in the same shape, ignoring the filters, dismissals and the 200 cap, so a
+// in the same shape, ignoring the filters, dismissals and paging, so a
 // /matches?m=<id> link opens the exact match wherever it sits in the list.
+// Brief 48 (PR 12, item 4.4): 200 a page, past the old cap of 200. The reply's
+// nextCursor (null on the last page) goes back as ?after= for the next page
+// (lib/matching/matchesList.ts). A page can hold fewer than 200 when a pair on
+// it was dismissed; the pages after it are unaffected. ?tier= is one tier, as
+// the tabs show it (stored tier, else score; matchesList.ts tierWhere).
 export async function GET(req: NextRequest) {
   const sp          = req.nextUrl.searchParams
   const id          = sp.get('id')
@@ -27,23 +34,32 @@ export async function GET(req: NextRequest) {
   const typeRaw     = id ? null : sp.get('type')
   const type        = typeRaw && typeRaw !== 'all' ? typeRaw : null
   const includeDismissed = !!id || sp.get('includeDismissed') === '1'
+  const tier        = id ? null : tierParam(sp.get('tier'))
+  const afterRaw    = id ? null : sp.get('after')
+  const after       = decodeCursor(afterRaw)
+  if (afterRaw && !after) {
+    return NextResponse.json({ error: "That page of matches couldn't be read. Reload the page to start again." }, { status: 400 })
+  }
 
   const where: Record<string, unknown> = { organizationId: await getCurrentOrgId() }
   if (id) where.id = id
   if (type) where.counterpartType = type
   if (onlyUnseen)                                    where.seen  = false
   if (scoreMin !== null && !Number.isNaN(scoreMin))  where.score = { gte: scoreMin }
+  const and = [...(tier ? [tierWhere(tier)] : []), ...(after ? [afterCursor(after)] : [])] // each is an OR of its own
+  if (and.length) where.AND = and
 
-  const allMatches = await prisma.match.findMany({
+  const read = await prisma.match.findMany({
     where,
-    orderBy: [{ seen: 'asc' }, { score: 'desc' }, { createdAt: 'desc' }],
-    take: 200,
+    orderBy: MATCHES_ORDER,
+    take: MATCHES_PAGE_SIZE + 1, // one more than a page tells whether there's another
     select: {
       id: true, score: true, reason: true, tier: true, counterpartType: true,
       counterpartId: true, seen: true, createdAt: true,
       opportunityId: true, opportunityType: true,
     },
   })
+  const { page: allMatches, nextCursor } = id ? { page: read, nextCursor: null } : splitPage(read)
 
   // Brief 32 — the supply (listing) side may be an ExtractedOpportunity OR a
   // MojoContact seller; resolve both through the shared helper. `primary` below
@@ -172,15 +188,9 @@ export async function GET(req: NextRequest) {
     }
   })
 
-  const counts = {
-    total:    matches.length,
-    unseen:   matches.filter(m => !m.seen).length,
-    mojo:     matches.filter(m => m.counterpartType === 'mojo').length,
-    listings: matches.filter(m => m.counterpartType === 'opportunity').length,
-    showings: matches.filter(m => m.counterpartType === 'showing_confirmation').length,
-  }
+  const counts = countsOf(matches)
 
-  return NextResponse.json({ matches: enriched, counts })
+  return NextResponse.json({ matches: enriched, counts, nextCursor })
 }
 
 // PATCH /api/matches — mark a match as seen.
