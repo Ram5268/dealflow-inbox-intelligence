@@ -61,6 +61,7 @@ const prisma = {
     findMany: async ({ where }: { where: Where }) => [HOMEOWNER, SECOND_HOMEOWNER, RYAN_LISTING].filter(c => where.id?.in.includes(c.id)),
   },
   match: { findMany: async () => MATCHES },
+  matchDismissal: { findMany: async () => [] }, // Brief 48 PR 13 (M29): the report leaves dismissed matches out
 } as unknown as PrismaClient
 
 // The untagged homeowners' streets ("88 Example Ave", "188 Example Ave"), and

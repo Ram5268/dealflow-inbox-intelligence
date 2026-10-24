@@ -2,10 +2,14 @@ import type { ContextFetcher } from './types'
 import { findPropertyRecords, formatForChat, SALE_WORDS } from '@/lib/acris'
 import { cityRecordsAddress } from './cityRecordsAddress'
 
+// Brief 48 PR 13 (L4; TEST_PLAN P-04): "who owned it before that?" and "the
+// prior sale on it" are records questions too, so the follow-up the playbook
+// describes (the address in Ryan's previous message) has something to fire it.
 const ACRIS_KEYWORDS = [
   'who owns', 'owns', 'ownership', 'acris', 'property record',
   'sold for', 'last sale', 'sale price', 'what did', 'purchase price',
   'deed', 'look up', 'lien', 'mortgage on', 'bought', 'bought for', 'paid for',
+  'who owned', 'previous owner', 'prior owner', 'prior sale', 'previous sale',
 ]
 
 // Triggered by parsed.isACRIS (from queryParser) OR an explicit keyword, or

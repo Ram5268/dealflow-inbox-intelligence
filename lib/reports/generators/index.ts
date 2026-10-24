@@ -14,12 +14,18 @@ export type Generator = {
   section: (args: SectionArgs) => Promise<SectionResult>
 }
 
+// Brief 48 PR 13 (Q44): organizationId scopes every read, and the buyer must
+// belong to it. POST /api/reports and Drift's report tools pass the current
+// organization after the request's params, so a param can't change it. With
+// none (scripts, tests), the buyer's own organization is used.
+const orgOf = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
+
 export const GENERATOR_REGISTRY: Record<string, Generator> = {
   'buyer-match': {
-    full: ({ buyerId, prisma, anthropic }) =>
-      generateBuyerMatchReport({ buyerId: String(buyerId), prisma, anthropic }),
-    section: ({ sectionKey, buyerId, prisma, anthropic }) =>
-      generateBuyerMatchSection({ sectionKey, buyerId: String(buyerId), prisma, anthropic }),
+    full: ({ buyerId, prisma, anthropic, organizationId }) =>
+      generateBuyerMatchReport({ buyerId: String(buyerId), prisma, anthropic, organizationId: orgOf(organizationId) }),
+    section: ({ sectionKey, buyerId, prisma, anthropic, organizationId }) =>
+      generateBuyerMatchSection({ sectionKey, buyerId: String(buyerId), prisma, anthropic, organizationId: orgOf(organizationId) }),
   },
 }
 

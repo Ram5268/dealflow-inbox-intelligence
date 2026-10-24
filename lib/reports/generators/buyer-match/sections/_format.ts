@@ -34,6 +34,18 @@ export function criteriaLine(b: BuyerRecord): string {
 }
 
 // Effective budget ceiling for math (max, else exact price, else null).
+// Brief 48 PR 13 (review r2): `price` counts only when no range was given. mapISO
+// fills it from a lone min or max, so a "$3,000+" renter (minPrice 3000) has no
+// ceiling; reading that minimum as one said "up to $3,000" while the report's
+// fit lines called the matches in budget (listingFitReason reads it the same way).
 export function budgetCeiling(b: BuyerRecord): number | null {
-  return b.maxPrice ?? b.price ?? null
+  return b.maxPrice ?? (b.minPrice == null ? b.price : null)
+}
+
+// " The buyer's budget starts at $1,600,000, with no maximum on file." when only a
+// minimum was given, else the plain "not on file" line (review r2).
+export function noCeilingLine(b: BuyerRecord, who: string, amount: (n: number) => string): string {
+  return b.minPrice != null
+    ? ` The ${who}'s budget starts at ${amount(b.minPrice)}, with no maximum on file.`
+    : ` The ${who}'s budget ${who === 'buyer' ? 'ceiling ' : ''}is not on file.`
 }

@@ -51,6 +51,7 @@ const prisma = {
   extractedOpportunity: { findUnique: async () => BUYER, findMany: async () => [] },
   mojoContact: { findMany: async ({ where }: Args) => [HOMEOWNER, NO_ADDRESS].filter(c => where.id.in.includes(c.id)) },
   match: { findMany: async () => MATCHES },
+  matchDismissal: { findMany: async () => [] }, // Brief 48 PR 13 (M29): the report leaves dismissed matches out
 } as unknown as PrismaClient
 
 const FORBIDDEN: Array<[string, RegExp]> = [

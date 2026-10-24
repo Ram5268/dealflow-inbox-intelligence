@@ -2,11 +2,17 @@
 // across the matched inventory vs. the buyer's number, plus the monthly carry at
 // the current mortgage rate (FRED). Anti-hallucination: if no listing carries SF,
 // $/SF is reported as unavailable rather than guessed.
-import type { GenContext, SectionResult, SourceRef } from '../../types'
+//
+// Brief 48 PR 13 (M29; TEST_PLAN R-08): a renter's budget is a monthly rent, so
+// a renter gets a rent read instead: the matched rentals' asking rents against
+// the budget, with no mortgage maths and no $/SF (it used to say "20% down on
+// $4,000 implies roughly $20 a month").
+import { Category } from '@prisma/client'
+import type { GenContext, MatchedListing, SectionResult, SourceRef } from '../../types'
 import { nowISO } from '../../types'
 // Relative (not @/) so the generator chain runs under ts-node in `npm test`.
 import { getCurrentMortgageRate, estimateMonthlyPayment } from '../../../../mortgageRates'
-import { money, budgetCeiling } from './_format'
+import { money, budgetCeiling, noCeilingLine } from './_format'
 
 function median(xs: number[]): number | null {
   if (!xs.length) return null
@@ -18,6 +24,7 @@ function median(xs: number[]): number | null {
 export async function budgetRealitySection(ctx: GenContext): Promise<SectionResult> {
   const b = ctx.buyer
   const matches = await ctx.matches()
+  if (b.category === Category.RENTER_INQUIRY) return renterBudgetSection(ctx, matches)
 
   // $/SF across matched listings that carry both price and square footage.
   const ppsf = matches
@@ -61,12 +68,54 @@ export async function budgetRealitySection(ctx: GenContext): Promise<SectionResu
 
   const budgetProse = ceiling != null
     ? ` The buyer's ceiling is ${money(ceiling)}.`
-    : ` The buyer's budget ceiling is not on file.`
+    : noCeilingLine(b, 'buyer', money)
 
   return {
     key: 'budget-reality',
     title: 'Budget reality check',
     content: { prose: ppsfProse + budgetProse + rateProse, metrics },
     sources,
+  }
+}
+
+// A homeowner's row has no price shown, so only listings' asking rents count.
+function renterBudgetSection(ctx: GenContext, matches: MatchedListing[]): SectionResult {
+  const rents = matches
+    .map(m => (m.listing.isHomeowner ? null : m.listing.price))
+    .filter((x): x is number => x != null && Number.isFinite(x) && x > 0)
+  const ceiling = budgetCeiling(ctx.buyer)
+  const perMonth = (n: number | null) => `${money(n)} a month`
+  const metrics: SectionResult['content']['metrics'] = []
+
+  let prose: string
+  if (rents.length > 0) {
+    const mid = median(rents)
+    const lo = Math.min(...rents)
+    const hi = Math.max(...rents)
+    prose = `Matched rentals ask a median of ${perMonth(mid)} (${money(lo)}–${money(hi)}).`
+    metrics.push({ label: 'Median asking rent', value: perMonth(mid), source: 'matcher' })
+    metrics.push({ label: 'Rent range', value: `${money(lo)}–${money(hi)} a month`, source: 'matcher' })
+  } else {
+    prose = 'None of the matched rentals carry an asking rent, so a rent read is not available this period.'
+    metrics.push({ label: 'Median asking rent', value: 'not available (no matched rental has an asking rent)', source: 'matcher' })
+  }
+  if (ceiling != null) {
+    prose += ` The renter's budget is up to ${perMonth(ceiling)}`
+    if (rents.length > 0) {
+      const within = rents.filter(r => r <= ceiling).length
+      prose += `; ${within} of the ${rents.length} matched rental${rents.length === 1 ? '' : 's'} ${rents.length === 1 ? 'is' : 'are'} within it`
+      metrics.push({ label: 'Within budget', value: `${within} of ${rents.length}`, source: 'matcher' })
+    }
+    prose += '.'
+    metrics.push({ label: 'Budget ceiling', value: perMonth(ceiling), source: 'inbox' })
+  } else {
+    prose += noCeilingLine(ctx.buyer, 'renter', perMonth)
+  }
+
+  return {
+    key: 'budget-reality',
+    title: 'Budget reality check',
+    content: { prose, metrics },
+    sources: [{ type: 'matcher', at: nowISO() }],
   }
 }

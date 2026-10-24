@@ -93,7 +93,8 @@ export const SEARCH_LISTINGS_TOOL: Anthropic.Messages.Tool = {
 // (preview card, Phase 1b); generate_report_section returns ONE section inline in
 // chat (cheaper, no save). Only unlocked templates are generatable (buyer-match in
 // Phase 1a). For buyer-match, params.buyerId is a BUYER_ISO / RENTER_INQUIRY id —
-// resolve it with search_parties first if you only have a name.
+// resolve it with search_parties first if you only have a name. Brief 48 PR 13
+// (Q8): or a buyer or renter stored in Ryan's CRM table (search_parties' CRM cards).
 export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
   name: 'generate_report',
   description:
@@ -105,7 +106,7 @@ export const GENERATE_REPORT_TOOL: Anthropic.Messages.Tool = {
       params: {
         type: 'object',
         description: 'Template-specific params, e.g. { buyerId: "abc123" } for buyer-match.',
-        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties this turn, or an earlier Shown note).' } },
+        properties: { buyerId: { type: 'string', description: "The id of a buyer or renter card (an email request, or one in Ryan's CRM) from search_parties this turn, or an earlier Shown note." } },
       },
     },
     required: ['templateId', 'params'],
@@ -124,7 +125,7 @@ export const GENERATE_REPORT_SECTION_TOOL: Anthropic.Messages.Tool = {
       params: {
         type: 'object',
         description: 'Template-specific params, e.g. { buyerId: "abc123" }.',
-        properties: { buyerId: { type: 'string', description: 'BUYER_ISO / RENTER_INQUIRY opportunity id (from search_parties this turn, or an earlier Shown note).' } },
+        properties: { buyerId: { type: 'string', description: "The id of a buyer or renter card (an email request, or one in Ryan's CRM) from search_parties this turn, or an earlier Shown note." } },
       },
     },
     required: ['templateId', 'sectionKey', 'params'],
