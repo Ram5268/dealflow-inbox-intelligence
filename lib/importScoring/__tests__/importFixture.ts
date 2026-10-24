@@ -101,6 +101,7 @@ function buyerIso(id: string, over: Row = {}): Row {
     bathsMin: null, bathsMax: null, minPrice: null, maxPrice: null, price: null, mustHaves: null, dealbreakers: null,
     buyerArchetype: 'CASH_BUYER', timeline: null, sourceAgentName: `Test Agent ${id}`, sourceBrokerage: 'Example Realty',
     sourceAgentEmail: 'agent@example.com', monthlyMaintenance: null, monthlyCommonCharges: null, monthlyTaxes: null,
+    isDuplicate: false, processingStatus: 'active', // the column defaults: a request in play (Brief 48 PR 10)
     createdAt: new Date('2026-10-01T12:00:00Z'), ...over,
   }
 }
