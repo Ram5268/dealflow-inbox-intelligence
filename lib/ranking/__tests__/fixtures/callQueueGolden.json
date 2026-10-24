@@ -379,7 +379,8 @@
                 "reachabilityBonus": 0,
                 "motivationSummary": 2
               },
-              "generationRunId": "RUN"
+              "generationRunId": "RUN",
+              "generatedAt": "2026-10-18T12:00:00.000Z"
             },
             {
               "organizationId": "org_golden",
@@ -398,7 +399,8 @@
                 "reachabilityBonus": 0,
                 "motivationSummary": 27
               },
-              "generationRunId": "RUN"
+              "generationRunId": "RUN",
+              "generatedAt": "2026-10-18T12:00:00.000Z"
             },
             {
               "organizationId": "org_golden",
@@ -422,7 +424,8 @@
                 "reachabilityBonus": 1,
                 "motivationSummary": 3
               },
-              "generationRunId": "RUN"
+              "generationRunId": "RUN",
+              "generatedAt": "2026-10-18T12:00:00.000Z"
             },
             {
               "organizationId": "org_golden",
@@ -443,7 +446,8 @@
                 "reachabilityBonus": 3,
                 "motivationSummary": 3
               },
-              "generationRunId": "RUN"
+              "generationRunId": "RUN",
+              "generatedAt": "2026-10-18T12:00:00.000Z"
             },
             {
               "organizationId": "org_golden",
@@ -462,7 +466,8 @@
                 "reachabilityBonus": 1,
                 "motivationSummary": 8
               },
-              "generationRunId": "RUN"
+              "generationRunId": "RUN",
+              "generatedAt": "2026-10-18T12:00:00.000Z"
             },
             {
               "organizationId": "org_golden",
@@ -481,7 +486,8 @@
                 "reachabilityBonus": 1,
                 "motivationSummary": 4
               },
-              "generationRunId": "RUN"
+              "generationRunId": "RUN",
+              "generatedAt": "2026-10-18T12:00:00.000Z"
             },
             {
               "organizationId": "org_golden",
@@ -500,7 +506,8 @@
                 "reachabilityBonus": 5,
                 "motivationSummary": 8
               },
-              "generationRunId": "RUN"
+              "generationRunId": "RUN",
+              "generatedAt": "2026-10-18T12:00:00.000Z"
             },
             {
               "organizationId": "org_golden",
@@ -519,7 +526,8 @@
                 "reachabilityBonus": 1,
                 "motivationSummary": 6
               },
-              "generationRunId": "RUN"
+              "generationRunId": "RUN",
+              "generatedAt": "2026-10-18T12:00:00.000Z"
             }
           ],
           "skipDuplicates": true

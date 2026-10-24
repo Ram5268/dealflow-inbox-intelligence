@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto'
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { prisma } from '../prisma'
 import { resolveDismissKey } from '../matching/dismissKey'
+import { inChunks } from '../matching/dismissals'
 import type { AggregatedContact, AggregatedMatch, Confidence, RankingContext } from './types'
 import { applyHardFilters } from './hardFilters'
 import { composeCallPriority } from './callPriority'
@@ -76,24 +77,38 @@ export class CallQueueRefusedError extends Error {
   }
 }
 
+// Brief 48 (PR 14, item 4.12): rows per insert. A row binds 11 parameters (the
+// 10 fields below, plus the generated id), so 1,000 rows is 11,000,
+// well under Postgres's 32,767 a statement. Prisma 7.8 would split one big insert
+// itself, right at the limit; this doesn't rely on it [engineering precaution].
+const CALL_LIST_WRITE_CHUNK = 1_000
+
 // Brief 35: the persist transaction replaces the org's list and records the run
 // in AuditLog. Brief 47 (PR 1): an empty batch is refused here too (buildCallQueue
-// refuses first; this is the second line of defense).
+// refuses first; this is the second line of defense). Brief 48 (PR 14): the rows
+// go in 1,000 per insert, all in the same array, so the one $transaction still
+// replaces the list all at once or not at all.
 export function persistBatch(
   db: Pick<PrismaClient, 'callQueueEntry' | 'auditLog'>,
   orgId: string, entries: QueueEntry[], generationRunId: string, stats: QueueStats,
 ) {
   if (entries.length === 0) throw new CallQueueRefusedError()
+  // One generatedAt for the whole list, as one insert gave it: Prisma stamps
+  // @default(now()) per insert, so each chunk would get its own time.
+  const generatedAt = new Date()
+  const rows = entries.map(e => ({
+    organizationId: orgId, contactId: e.contactId, rank: e.rank, priorityScore: e.priorityScore,
+    reason: e.reason, primaryMatchId: e.primaryMatchId, contributingMatchIds: e.contributingMatchIds,
+    contributions: e.contributions, generationRunId, generatedAt,
+  }))
+  const deleteOld = db.callQueueEntry.deleteMany({ where: { organizationId: orgId } })
+  const inserts = []
+  for (let i = 0; i < rows.length; i += CALL_LIST_WRITE_CHUNK) {
+    inserts.push(db.callQueueEntry.createMany({ data: rows.slice(i, i + CALL_LIST_WRITE_CHUNK), skipDuplicates: true }))
+  }
   return [
-    db.callQueueEntry.deleteMany({ where: { organizationId: orgId } }),
-    db.callQueueEntry.createMany({
-      data: entries.map(e => ({
-        organizationId: orgId, contactId: e.contactId, rank: e.rank, priorityScore: e.priorityScore,
-        reason: e.reason, primaryMatchId: e.primaryMatchId, contributingMatchIds: e.contributingMatchIds,
-        contributions: e.contributions, generationRunId,
-      })),
-      skipDuplicates: true,
-    }),
+    deleteOld,
+    ...inserts,
     db.auditLog.create({ data: { organizationId: orgId, action: 'CALL_QUEUE_BUILD', detailsJson: { generationRunId, ...stats } } }),
   ]
 }
@@ -183,10 +198,12 @@ export async function loadMatchBuckets(
   // Brief 35: skip dismissed pairs, keyed exactly as /matches keys them.
   const dismissed = new Set((await db.matchDismissal.findMany({ select: { partyId: true, listingId: true } }))
     .map(d => `${d.partyId}|${d.listingId}`))
-  const oppIds = dismissed.size > 0 ? matches.filter(m => m.opportunityType !== 'contact').map(m => m.opportunityId) : []
-  const categories = new Map((oppIds.length > 0
-    ? await db.extractedOpportunity.findMany({ where: { id: { in: oppIds } }, select: { id: true, category: true } })
-    : []).map(o => [o.id, o.category]))
+  // Brief 48 (PR 14, item 4.12): each inbox listing's category is read once, 5,000
+  // ids a query (lib/matching/dismissals.ts inChunks), not in one IN list of every
+  // inbox match [engineering precaution].
+  const oppIds = dismissed.size > 0 ? [...new Set(matches.filter(m => m.opportunityType !== 'contact').map(m => m.opportunityId))] : []
+  const categories = new Map((await inChunks(oppIds, chunk =>
+    db.extractedOpportunity.findMany({ where: { id: { in: chunk } }, select: { id: true, category: true } }))).map(o => [o.id, o.category]))
   const isDismissed = (m: (typeof matches)[number]) => {
     const k = resolveDismissKey({ ...m, opportunityCategory: categories.get(m.opportunityId) ?? null })
     return dismissed.has(`${k.partyId}|${k.listingId}`)
